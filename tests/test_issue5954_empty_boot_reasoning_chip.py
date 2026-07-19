@@ -14,7 +14,7 @@ def _boot_completion_branch() -> str:
     source = (Path(__file__).resolve().parents[1] / "static" / "boot.js").read_text(encoding="utf-8")
     marker = "    if(S.session) syncTopbar();"
     start = source.index(marker)
-    end = source.index("\n  }).catch(e=>", start)
+    end = source.index("\n  });\n  let _modelDropdownReadyFreshness", start)
     return source[start:end]
 
 

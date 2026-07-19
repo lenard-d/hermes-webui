@@ -2326,7 +2326,7 @@ class TestUpdateBannerUx:
         src = read('static/ui.js')
         format_fn = extract_js_function(src, '_formatUpdateTargetStatus')
         instruction_fn = extract_js_function(src, '_formatManualUpdateInstruction')
-        script = f"""
+        script = fr"""
 function t(key, ...args) {{
   const values = {{ settings_update_manual_docker: 'Manual update required: run {{0}}, then recreate the container.' }};
   return (values[key] || key).replace(/\{{(\d+)\}}/g, (_, i) => args[Number(i)] ?? '');
@@ -2354,7 +2354,7 @@ if(_formatUpdateTargetStatus('WebUI', {{ no_git: true, behind: 1 }}) !== null) t
         format_fn = extract_js_function(src, '_formatUpdateTargetStatus')
         instruction_fn = extract_js_function(src, '_formatManualUpdateInstruction')
         show_fn = extract_js_function(src, '_showUpdateBanner')
-        script = f"""
+        script = fr"""
 const state = {{
   updateBanner: {{ classList: {{ added: false, add() {{ this.added = true; }}, remove() {{ this.removed = true; }} }} }},
   updateMsg: {{ textContent: '' }},
@@ -2404,7 +2404,7 @@ if(state.updateBanner.classList.added !== true) throw new Error('manual update m
         instruction_fn = extract_js_function(ui_src, '_formatManualUpdateInstruction')
         error_fn = extract_js_function(ui_src, '_formatUpdateCheckError')
         check_fn = extract_js_function(panels_src, 'checkUpdatesNow')
-        script = f"""
+        script = fr"""
 const state = {{
   btnCheckUpdatesNow: {{ disabled: false }},
   checkUpdatesLabel: {{ textContent: '' }},

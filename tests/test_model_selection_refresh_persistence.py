@@ -44,10 +44,11 @@ def test_load_session_applies_pending_model_before_first_topbar_sync():
     """Reload should project the pending selection before server old metadata wins."""
     body = _body_between(SESSIONS_JS, "async function loadSession", "activeStreamId=S.session.active_stream_id")
 
-    apply_idx = body.index("_applyPendingSessionModelForSession")
-    sync_idx = body.index("syncTopbar()")
+    accepted_idx = body.index("S.session=data.session")
+    apply_idx = body.index("_applyPendingSessionModelForSession", accepted_idx)
+    sync_idx = body.index("if(typeof syncTopbar==='function') syncTopbar();", accepted_idx)
 
-    assert apply_idx < sync_idx
+    assert accepted_idx < apply_idx < sync_idx
 
 
 def test_pending_model_helpers_are_session_scoped_and_expire():
