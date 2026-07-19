@@ -4425,6 +4425,18 @@ _SESSION_VISIT_MODELS_FRESHNESS_SECONDS: float = 300.0
 _available_models_cache_lock = threading.RLock()  # must be RLock: cold path refactoring moved slow work inside this lock, requiring re-entry
 _cache_build_cv = threading.Condition(_available_models_cache_lock)  # shares underlying RLock so notify_all() is safe inside with _available_models_cache_lock
 _cache_build_in_progress = False  # True while a cold path is actively building
+_models_cache_build_generation = 0
+_active_models_cache_build_generation: int | None = None
+
+
+def _invalidate_models_build_locked() -> None:
+    """Revoke publication rights from any detached catalog rebuild."""
+    global _models_cache_build_generation, _active_models_cache_build_generation
+    global _cache_build_in_progress
+    _models_cache_build_generation += 1
+    _active_models_cache_build_generation = None
+    _cache_build_in_progress = False
+    _cache_build_cv.notify_all()
 
 # Memoized (snapshot_ref, {provider_slug: frozenset(model_ids)}) derived from
 # the published models-catalog snapshot. Used by _endpoint_advertised_model_ids
@@ -5829,7 +5841,7 @@ def invalidate_models_cache():
     result from the disk cache because the disk hit is checked before the memory
     cache rebuild runs.
     """
-    global _cache_build_in_progress, _available_models_cache, _available_models_cache_ts
+    global _available_models_cache, _available_models_cache_ts
     global _available_models_live_rebuild_ts, _available_models_cache_source_fingerprint, _cache_build_cv
     with _available_models_cache_lock:
         _available_models_cache = None
@@ -5837,8 +5849,7 @@ def invalidate_models_cache():
         _available_models_live_rebuild_ts = 0.0
         _available_models_cache_source_fingerprint = None
         _sync_models_cache_provenance()
-        _cache_build_in_progress = False
-        _cache_build_cv.notify_all()
+        _invalidate_models_build_locked()
         # Clear the credential pool cache too (all profiles). Without this,
         # tests (and live provider key edits) see a stale CredentialPool from a
         # prior auth_store payload — the test_credential_pool_providers suite was
@@ -5897,6 +5908,7 @@ def invalidate_provider_models_cache(provider_id: str):
         _available_models_live_rebuild_ts = 0.0
         _available_models_cache_source_fingerprint = None
         _sync_models_cache_provenance()
+        _invalidate_models_build_locked()
         _provider_models_invalidated_ts[provider_id] = time.time()
         # Also evict the credential pool so the next cold path re-loads it.
         # Must evict both the original key and its canonical form (load_pool
@@ -6097,6 +6109,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
     """
     global _cache_build_in_progress, _available_models_cache, _available_models_cache_ts
     global _available_models_live_rebuild_ts, _available_models_cache_source_fingerprint, _cache_build_cv
+    global _models_cache_build_generation, _active_models_cache_build_generation
     # Config mtime check — must come before any config reads.
     # (Test #585 verifies _current_mtime appears before active_provider = None)
     try:
@@ -7627,6 +7640,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             _available_models_live_rebuild_ts = 0.0
             _available_models_cache_source_fingerprint = None
             _sync_models_cache_provenance()
+            _invalidate_models_build_locked()
             disk_groups = None
             stale_disk_groups = None
 
@@ -7704,6 +7718,9 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
 
         # Cold path: full rebuild — only one thread reaches here at a time
         with _cache_build_cv:
+            _models_cache_build_generation += 1
+            build_generation = _models_cache_build_generation
+            _active_models_cache_build_generation = build_generation
             _cache_build_in_progress = True
 
         # Capture the active per-request profile (#3957). The live provider
@@ -7745,22 +7762,28 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             except BaseException:
                 # Always reset the flag so waiting threads don't block for 60s
                 with _cache_build_cv:
-                    _cache_build_in_progress = False
-                    _cache_build_cv.notify_all()
+                    if _active_models_cache_build_generation == build_generation:
+                        _active_models_cache_build_generation = None
+                        _cache_build_in_progress = False
+                        _cache_build_cv.notify_all()
                 raise
             with _cache_build_cv:
-                published_at = time.monotonic()
-                _available_models_cache = result
-                _available_models_cache_ts = published_at
-                _available_models_live_rebuild_ts = published_at
-                _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
-                _sync_models_cache_provenance()
-            try:
-                _save_models_cache_to_disk(result)
-            finally:
-                with _cache_build_cv:
-                    _cache_build_in_progress = False
-                    _cache_build_cv.notify_all()
+                if _active_models_cache_build_generation == build_generation:
+                    published_at = time.monotonic()
+                    _available_models_cache = result
+                    _available_models_cache_ts = published_at
+                    _available_models_live_rebuild_ts = published_at
+                    _available_models_cache_source_fingerprint = (
+                        _models_cache_source_fingerprint()
+                    )
+                    _sync_models_cache_provenance()
+                    try:
+                        _save_models_cache_to_disk(result)
+                    finally:
+                        if _active_models_cache_build_generation == build_generation:
+                            _active_models_cache_build_generation = None
+                            _cache_build_in_progress = False
+                            _cache_build_cv.notify_all()
             return copy.deepcopy(result)
 
         # ── Bounded rebuild (defense-in-depth) ───────────────────────────────
@@ -7796,7 +7819,10 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             global _cache_build_in_progress, _available_models_cache
             global _available_models_cache_ts, _available_models_live_rebuild_ts
             global _available_models_cache_source_fingerprint
+            global _active_models_cache_build_generation
             with _cache_build_cv:
+                if _active_models_cache_build_generation != build_generation:
+                    return
                 published_at = time.monotonic()
                 _available_models_cache = result
                 _available_models_cache_ts = published_at
@@ -7805,18 +7831,21 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     _models_cache_source_fingerprint()
                 )
                 _sync_models_cache_provenance()
-            try:
-                _save_models_cache_to_disk(result)
-            except Exception:
-                logger.debug("models cache disk save failed", exc_info=True)
-            finally:
-                with _cache_build_cv:
+                try:
+                    _save_models_cache_to_disk(result)
+                except Exception:
+                    logger.debug("models cache disk save failed", exc_info=True)
+                finally:
+                    _active_models_cache_build_generation = None
                     _cache_build_in_progress = False
                     _cache_build_cv.notify_all()
 
         def _clear_build_in_progress():
-            global _cache_build_in_progress
+            global _cache_build_in_progress, _active_models_cache_build_generation
             with _cache_build_cv:
+                if _active_models_cache_build_generation != build_generation:
+                    return
+                _active_models_cache_build_generation = None
                 _cache_build_in_progress = False
                 _cache_build_cv.notify_all()
 
