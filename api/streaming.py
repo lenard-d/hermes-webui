@@ -2788,13 +2788,28 @@ def _looks_invalid_generated_title(text: str) -> bool:
     )
 
 
+def _structured_visible_text(value, *, depth: int = 0) -> str:
+    """Extract provider text without stringifying metadata-only objects."""
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, dict) or depth >= 4:
+        return ''
+    for key in ('value', 'text', 'content', 'input_text', 'output_text'):
+        text = _structured_visible_text(value.get(key), depth=depth + 1)
+        if text:
+            return text
+    return ''
+
+
 def _message_content_part_text(part) -> str:
     """Extract visible text from a structured content part."""
     if not isinstance(part, dict):
         return ''
-    return str(
-        part.get('text') or part.get('content') or part.get('input_text') or part.get('output_text') or ''
-    )
+    for key in ('text', 'content', 'input_text', 'output_text'):
+        text = _structured_visible_text(part.get(key))
+        if text:
+            return text
+    return ''
 
 
 def _message_text(value) -> str:

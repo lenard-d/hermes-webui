@@ -150,6 +150,59 @@ def _seed_prior_turn(session, *, prior_user: str, prior_assistant: str):
     session.save()
 
 
+def _seed_long_prior_history(session, *, turn_count: int = 228):
+    """Build the incident's 456-message pre-turn history without large payloads."""
+    display_messages = []
+    context_messages = []
+    for index in range(turn_count):
+        user = {"role": "user", "content": f"Earlier request {index}"}
+        assistant = {"role": "assistant", "content": f"Earlier reply {index}"}
+        context_messages.extend((user, assistant))
+        display_messages.extend(
+            (
+                {**user, "timestamp": (index * 2) + 1},
+                {**assistant, "timestamp": (index * 2) + 2},
+            )
+        )
+    assert len(display_messages) == 456
+    session.messages = display_messages
+    session.context_messages = context_messages
+    session.save()
+
+
+def _incident_tool_turn_messages(history, final_content):
+    return list(history) + [
+        {"role": "user", "content": "Please finish the long task"},
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "call_skill",
+                    "name": "skill_view",
+                    "input": {"name": "verification"},
+                }
+            ],
+            "tool_calls": [{"id": "call_skill", "type": "function"}],
+        },
+        {"role": "tool", "tool_call_id": "call_skill", "content": "Skill loaded"},
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "call_terminal",
+                    "name": "terminal",
+                    "input": {"command": "run verification"},
+                }
+            ],
+            "tool_calls": [{"id": "call_terminal", "type": "function"}],
+        },
+        {"role": "tool", "tool_call_id": "call_terminal", "content": "Verification passed"},
+        {"role": "assistant", "content": final_content},
+    ]
+
+
 def _queue_events(fake_queue):
     return [(item[0], item[1]) for item in list(fake_queue.queue)]
 
@@ -573,6 +626,145 @@ def test_completed_assistant_answer_with_stale_partial_flag_settles_done(tmp_pat
     assert saved.messages[-1]["role"] == "assistant"
     assert saved.messages[-1]["content"] == "Completed answer"
     assert not any(msg.get("_error") for msg in saved.messages)
+
+
+@pytest.mark.parametrize(
+    ("case_slug", "terminal_metadata", "final_content"),
+    [
+        pytest.param(
+            "stale_partial_plain_text",
+            {"status": "partial", "partial": True},
+            "Complete answer after tools.",
+            id="stale-partial-plain-text",
+        ),
+        pytest.param(
+            "stale_partial_text_part",
+            {"status": "partial", "partial": True},
+            [{"type": "text", "text": "Complete answer after tools."}],
+            id="stale-partial-text-part",
+        ),
+        pytest.param(
+            "stale_partial_output_text_part",
+            {"status": "partial", "partial": True},
+            [{"type": "output_text", "output_text": "Complete answer after tools."}],
+            id="stale-partial-output-text-part",
+        ),
+        pytest.param(
+            "stale_partial_nested_text_value",
+            {"status": "partial", "partial": True},
+            [
+                {
+                    "type": "text",
+                    "text": {"value": "Complete answer after tools.", "annotations": []},
+                }
+            ],
+            id="stale-partial-nested-text-value",
+        ),
+        pytest.param(
+            "stale_tool_limit_plain_text",
+            {
+                "status": "partial",
+                "partial": True,
+                "turn_exit_reason": "max_iterations_reached(30/30)",
+            },
+            "Complete answer after tools.",
+            id="stale-tool-limit-plain-text",
+        ),
+        pytest.param(
+            "stale_tool_limit_output_text_part",
+            {
+                "status": "partial",
+                "partial": True,
+                "turn_exit_reason": "max_iterations_reached(30/30)",
+            },
+            [{"type": "output_text", "text": "Complete answer after tools."}],
+            id="stale-tool-limit-output-text-part",
+        ),
+    ],
+)
+def test_long_tool_turn_with_completed_answer_never_appends_no_response(
+    tmp_path,
+    monkeypatch,
+    case_slug,
+    terminal_metadata,
+    final_content,
+):
+    session_id = f"long_completed_tool_turn_{case_slug}"
+    stream_id = f"stream_long_completed_tool_turn_{case_slug}"
+    session = _prepare_session(
+        session_id,
+        stream_id,
+        pending_user_message="Please finish the long task",
+    )
+    _seed_long_prior_history(session)
+
+    class CompletedLongToolTurnAgent(MockAgent):
+        def run_conversation(self, **kwargs):
+            history = list(kwargs.get("conversation_history") or [])
+            return {
+                **terminal_metadata,
+                "messages": _incident_tool_turn_messages(history, final_content),
+                "error": "",
+            }
+
+    fake_queue = _run_stream(
+        monkeypatch,
+        session,
+        stream_id,
+        CompletedLongToolTurnAgent,
+        workspace=str(tmp_path),
+    )
+    saved = Session.load(session_id)
+    assert saved is not None
+
+    events = _queue_events(fake_queue)
+    assert any(event == "done" for event, _ in events)
+    assert not any(event == "apperror" for event, _ in events)
+    assert saved.messages[-1]["role"] == "assistant"
+    assert saved.messages[-1]["content"] == final_content
+    assert streaming._message_text(saved.messages[-1]["content"]) == "Complete answer after tools."
+    assert not any(msg.get("_error") for msg in saved.messages)
+
+
+def test_long_tool_turn_with_marker_only_nested_text_still_reports_no_response(
+    tmp_path,
+    monkeypatch,
+):
+    session = _prepare_session(
+        "long_marker_only_tool_turn",
+        "stream_long_marker_only_tool_turn",
+        pending_user_message="Please finish the long task",
+    )
+    _seed_long_prior_history(session)
+
+    class MarkerOnlyLongToolTurnAgent(MockAgent):
+        def run_conversation(self, **kwargs):
+            history = list(kwargs.get("conversation_history") or [])
+            return {
+                "status": "partial",
+                "partial": True,
+                "messages": _incident_tool_turn_messages(
+                    history,
+                    [{"type": "text", "text": {"value": "", "annotations": []}}],
+                ),
+                "error": "",
+            }
+
+    fake_queue = _run_stream(
+        monkeypatch,
+        session,
+        "stream_long_marker_only_tool_turn",
+        MarkerOnlyLongToolTurnAgent,
+        workspace=str(tmp_path),
+    )
+    saved = Session.load("long_marker_only_tool_turn")
+    assert saved is not None
+
+    events = _queue_events(fake_queue)
+    apperrors = [data for event, data in events if event == "apperror"]
+    assert apperrors and apperrors[-1]["type"] == "no_response"
+    assert not any(event == "done" for event, _ in events)
+    assert saved.messages[-1]["_error"] is True
 
 
 def test_stale_partial_with_unfinished_tool_call_still_reports_no_response(tmp_path, monkeypatch):
