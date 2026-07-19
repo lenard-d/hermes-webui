@@ -70,6 +70,41 @@ def test_live_models_cache_expires(monkeypatch):
     assert second["models"][0]["id"] == "openai/model-2"
 
 
+def test_refresh_route_clears_live_models_cache(monkeypatch):
+    import api.config as config
+    import api.routes as routes
+
+    calls = []
+
+    def provider_model_ids(provider):
+        calls.append(provider)
+        return [f"{provider}/model-{len(calls)}"]
+
+    _install_provider_model_ids(monkeypatch, provider_model_ids)
+    _patch_live_models_basics(monkeypatch, routes)
+
+    live_request = urlparse("/api/models/live?provider=openai")
+    first = routes._handle_live_models(object(), live_request)
+    cached = routes._handle_live_models(object(), live_request)
+    assert calls == ["openai"]
+    assert cached == first
+
+    invalidated = []
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *args, **kwargs: False)
+    monkeypatch.setattr(routes, "read_body", lambda _handler: {"provider": "openai"})
+    monkeypatch.setattr(routes, "_guard_request_session_visibility", lambda *args, **kwargs: True)
+    monkeypatch.setattr(config, "invalidate_provider_models_cache", invalidated.append)
+
+    result = routes.handle_post(object(), urlparse("/api/models/refresh"))
+    refreshed = routes._handle_live_models(object(), live_request)
+
+    assert result == {"ok": True, "provider": "openai"}
+    assert invalidated == ["openai"]
+    assert calls == ["openai", "openai"]
+    assert refreshed["models"][0]["id"] == "openai/model-2"
+
+
 def test_live_models_cache_is_profile_scoped(monkeypatch):
     import api.routes as routes
     import api.profiles as profiles
