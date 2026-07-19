@@ -1285,5 +1285,7 @@ def _run_gateway_chat_streaming(
             except Exception:
                 logger.debug("Failed to clear gateway stream state", exc_info=True)
             _cleanup_gateway_pending_mirror(session_id)
-        execution.finish()
-        _STREAM_RUN_IDS.pop(stream_id, None)
+        try:
+            execution.finish()
+        finally:
+            _STREAM_RUN_IDS.pop(stream_id, None)

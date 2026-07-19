@@ -258,3 +258,38 @@ def test_stale_worker_transport_failure_does_not_publish_application_error(
     assert recovered.active_stream_id == current_stream_id
     assert recovered.pending_user_message == current_prompt
     assert recovered.messages == []
+
+
+def test_gateway_run_id_is_released_when_runtime_cleanup_fails(tmp_path, monkeypatch):
+    stream_id = "gateway-finish-cleanup-failure"
+    session = _pending_session(stream_id, "trigger gateway teardown")
+    _registered_events(stream_id, session.session_id)
+    gateway_chat._STREAM_RUN_IDS[stream_id] = "run-awaiting-approval"
+
+    monkeypatch.setattr(
+        gateway_chat.urllib.request,
+        "urlopen",
+        lambda _request, timeout=0: (_ for _ in ()).throw(
+            OSError("gateway connection failed")
+        ),
+    )
+
+    cleanup_error = RuntimeError("runtime cleanup failed")
+
+    def fail_runtime_cleanup(_execution):
+        raise cleanup_error
+
+    monkeypatch.setattr(gateway_chat.TurnExecution, "finish", fail_runtime_cleanup)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        gateway_chat._run_gateway_chat_streaming(
+            session.session_id,
+            "trigger gateway teardown",
+            "test-model",
+            str(tmp_path),
+            stream_id,
+            [],
+        )
+
+    assert exc_info.value is cleanup_error
+    assert stream_id not in gateway_chat._STREAM_RUN_IDS
