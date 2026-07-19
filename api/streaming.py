@@ -36,11 +36,9 @@ from api.config import (
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     append_runtime_partial_text, append_runtime_reasoning_text,
     attach_runtime_agent, finish_runtime_tool_call,
-    initialize_runtime_execution,
-    register_active_run, update_active_run, finish_runtime_run,
-    note_runtime_last_event_id,
+    update_active_run,
     replace_runtime_reasoning_text,
-    runtime_transport, start_runtime_tool_call,
+    start_runtime_tool_call,
     alias_session_agent_lock,
     resolve_model_provider,
     resolve_custom_provider_connection,
@@ -56,10 +54,9 @@ from api.helpers import redact_session_data, _redact_text
 from api.compression_anchor import is_context_compression_marker, visible_messages_for_anchor
 from api.compression_recovery import stamp_compression_exhausted_recovery
 from api.metering import meter
-from api.run_journal import RunJournalWriter
-from api.run_event_sink import RunEventSink
 from api.todo_state import attach_todo_state, emit_todo_state
 from api.turn_journal import append_turn_journal_event_for_stream
+from api.turn_execution import TurnExecution
 from api.usage import prompt_cache_hit_percent
 from api.models import (
     _is_empty_partial_activity_message,
@@ -6934,28 +6931,21 @@ def _run_agent_streaming(
     """
     _turn_route_model = model
     _turn_route_provider = model_provider
-    q = runtime_transport(stream_id)
-    if q is None:
-        # The transport disappeared before the worker started, so its normal
-        # teardown finally will never run. Release every value owned by this
-        # admitted runtime generation, not only the stream-owner projection.
-        finish_runtime_run(stream_id)
-        return
-    register_active_run(
-        stream_id,
+    execution = TurnExecution.start(
+        stream_id=stream_id,
         session_id=session_id,
-        started_at=time.time(),
         phase="starting",
+        logger=logger,
+        log_label="local run",
         workspace=str(workspace),
         model=model,
         provider=model_provider,
         ephemeral=bool(ephemeral),
     )
-    try:
-        run_journal = RunJournalWriter(session_id, stream_id)
-    except Exception:
-        run_journal = None
-        logger.debug("Failed to initialize run journal for stream %s", stream_id, exc_info=True)
+    if execution is None:
+        return
+    cancel_event = execution.cancel_event
+    event_sink = execution.event_sink
     if not ephemeral:
         try:
             append_turn_journal_event_for_stream(
@@ -6979,12 +6969,6 @@ def _run_agent_streaming(
     # (was here at v0.51.30) — the previous placement always read the default
     # profile's mcp_servers because os.environ['HERMES_HOME'] hadn't been
     # rewritten yet.  See https://github.com/nesquena/hermes-webui/issues/1968.
-
-    # Sprint 10: create a cancel event for this stream
-    cancel_event = threading.Event()
-    if not initialize_runtime_execution(stream_id, cancel_event):
-        finish_runtime_run(stream_id)
-        return
 
     agent = None
     _live_prompt_estimate_tokens = [0]
@@ -7287,15 +7271,6 @@ def _run_agent_streaming(
     _metering_thread = threading.Thread(target=_metering_ticker, daemon=True)
 
     _success_writeback_committed = False
-    event_sink = RunEventSink(
-        stream_id=stream_id,
-        transport=q,
-        journal=run_journal,
-        record_runtime_cursor=note_runtime_last_event_id,
-        logger=logger,
-        log_label="local run",
-    )
-
     def put(event, data):
         # If cancelled, drop all further events except the cancel event itself
         if cancel_event.is_set() and not _success_writeback_committed and event not in ('cancel', 'error'):
@@ -10700,7 +10675,7 @@ def _run_agent_streaming(
         # CLI/cron env fallback resumes — same lifecycle slot as the env
         # restore above.
         _reset_turn_session_identity(_turn_session_identity_tokens)
-        finish_runtime_run(stream_id)
+        execution.finish()
         # NOTE: do NOT discard PENDING_GOAL_CONTINUATION here. The marker
         # is set by goal_continue inside the SAME function call and consumed
         # atomically by `_start_chat_stream_for_session` when the next stream

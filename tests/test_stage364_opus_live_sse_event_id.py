@@ -32,10 +32,9 @@ def test_local_producer_delegates_journal_and_cursor_publication_to_sink():
     """The local policy wrapper must delegate publication to RunEventSink."""
     put_def_idx = STREAMING_PY.find("def put(event, data):")
     assert put_def_idx != -1, "put(event, data) not found in api/streaming.py"
-    setup = STREAMING_PY[max(0, put_def_idx - 700):put_def_idx]
     put_body = STREAMING_PY[put_def_idx:put_def_idx + 700]
-    assert "event_sink = RunEventSink(" in setup
-    assert "record_runtime_cursor=note_runtime_last_event_id" in setup
+    sink_idx = STREAMING_PY.find("event_sink = execution.event_sink")
+    assert 0 <= sink_idx < put_def_idx
     assert "event_sink.publish(event, data)" in put_body
 
 
@@ -43,10 +42,9 @@ def test_gateway_producer_delegates_journal_and_cursor_publication_to_sink():
     """Gateway policy must use the same publication owner as local runs."""
     put_def_idx = GATEWAY_CHAT_PY.find("def put_gateway_event(event, data):")
     assert put_def_idx != -1, "put_gateway_event(event, data) not found"
-    setup = GATEWAY_CHAT_PY[max(0, put_def_idx - 700):put_def_idx]
     put_body = GATEWAY_CHAT_PY[put_def_idx:put_def_idx + 700]
-    assert "event_sink = RunEventSink(" in setup
-    assert "record_runtime_cursor=note_runtime_last_event_id" in setup
+    sink_idx = GATEWAY_CHAT_PY.find("event_sink = execution.event_sink")
+    assert 0 <= sink_idx < put_def_idx
     assert "event_sink.publish(event, data)" in put_body
 
 

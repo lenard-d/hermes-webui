@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import threading
 import time
 import urllib.error
 import urllib.request
@@ -19,20 +18,15 @@ from api.config import (
     finish_runtime_tool_call,
     gateway_approval_unavailable_reason,
     gateway_supports_approval,
-    finish_runtime_run,
-    initialize_runtime_execution,
-    note_runtime_last_event_id,
-    register_active_run,
     replace_runtime_partial_text,
     runtime_progress_snapshot,
-    runtime_transport,
     start_runtime_tool_call,
     update_active_run,
 )
 from api.helpers import _redact_text, redact_session_data
 from api.models import clear_process_wakeup_pause, get_session, merge_session_messages_append_only
-from api.run_journal import RunJournalWriter, bound_run_journal_snapshot_args
-from api.run_event_sink import RunEventSink
+from api.run_journal import bound_run_journal_snapshot_args
+from api.turn_execution import TurnExecution
 
 logger = logging.getLogger(__name__)
 
@@ -648,41 +642,23 @@ def _run_gateway_chat_streaming(
     the configured Gateway API server into those local events and persists the
     final user/assistant turn back into the WebUI session.
     """
-    q = runtime_transport(stream_id)
-    if q is None:
-        # The transport disappeared before the worker started, so its normal
-        # teardown finally will never run. Release the complete runtime owner.
-        finish_runtime_run(stream_id)
-        return
-    register_active_run(
-        stream_id,
+    execution = TurnExecution.start(
+        stream_id=stream_id,
         session_id=session_id,
-        started_at=time.time(),
         phase="gateway-starting",
+        logger=logger,
+        log_label="gateway run",
         workspace=str(workspace),
         model=model,
         provider=model_provider,
         backend="gateway",
     )
-    try:
-        run_journal = RunJournalWriter(session_id, stream_id)
-    except Exception:
-        run_journal = None
-        logger.debug("Failed to initialize gateway run journal for stream %s", stream_id, exc_info=True)
-    cancel_event = threading.Event()
-    if not initialize_runtime_execution(stream_id, cancel_event):
-        finish_runtime_run(stream_id)
+    if execution is None:
         return
+    cancel_event = execution.cancel_event
+    event_sink = execution.event_sink
 
     success_writeback_committed = False
-    event_sink = RunEventSink(
-        stream_id=stream_id,
-        transport=q,
-        journal=run_journal,
-        record_runtime_cursor=note_runtime_last_event_id,
-        logger=logger,
-        log_label="gateway run",
-    )
 
     def put_gateway_event(event, data):
         if cancel_event.is_set() and not success_writeback_committed and event not in ("cancel", "error", "apperror"):
@@ -1155,5 +1131,5 @@ def _run_gateway_chat_streaming(
             except Exception:
                 logger.debug("Failed to clear gateway stream state", exc_info=True)
             _cleanup_gateway_pending_mirror(session_id)
-        finish_runtime_run(stream_id)
+        execution.finish()
         _STREAM_RUN_IDS.pop(stream_id, None)

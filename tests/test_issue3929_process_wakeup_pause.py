@@ -20,6 +20,7 @@ import api.profiles as profiles
 import api.providers as providers
 import api.routes as routes
 import api.streaming as streaming
+import api.turn_execution as turn_execution
 from api.models import PROCESS_WAKEUP_PAUSE_ERROR, Session
 
 
@@ -1890,7 +1891,7 @@ def test_gateway_cancel_during_completion_save_restores_process_wakeup_pause(tmp
     session_id = "gateway_pause_save_race"
     stream_queue = queue.Queue()
     config.STREAMS[stream_id] = stream_queue
-    monkeypatch.setattr(gateway_chat, "RunJournalWriter", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(gateway_chat, "gateway_approval_unavailable_reason", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config, "get_config", lambda: {"webui_gateway_base_url": "http://gateway.test"})
 
@@ -1983,7 +1984,7 @@ def test_gateway_late_cancel_preserves_completed_webui_turn(tmp_path, monkeypatc
     session_id = "gateway_webui_late_cancel"
     stream_queue = queue.Queue()
     config.STREAMS[stream_id] = stream_queue
-    monkeypatch.setattr(gateway_chat, "RunJournalWriter", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(gateway_chat, "gateway_approval_unavailable_reason", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config, "get_config", lambda: {"webui_gateway_base_url": "http://gateway.test"})
 
@@ -2077,7 +2078,7 @@ def test_gateway_late_cancel_preserves_existing_pause_for_webui_recovery(tmp_pat
     session_id = "gateway_webui_recovery_late_cancel"
     stream_queue = queue.Queue()
     config.STREAMS[stream_id] = stream_queue
-    monkeypatch.setattr(gateway_chat, "RunJournalWriter", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(gateway_chat, "gateway_approval_unavailable_reason", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config, "get_config", lambda: {"webui_gateway_base_url": "http://gateway.test"})
 
@@ -2182,7 +2183,7 @@ def test_gateway_post_save_cancel_after_success_commit_emits_done(tmp_path, monk
     session_id = "gateway_post_save_success_cancel"
     stream_queue = queue.Queue()
     config.STREAMS[stream_id] = stream_queue
-    monkeypatch.setattr(gateway_chat, "RunJournalWriter", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(gateway_chat, "gateway_approval_unavailable_reason", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(config, "get_config", lambda: {"webui_gateway_base_url": "http://gateway.test"})
 

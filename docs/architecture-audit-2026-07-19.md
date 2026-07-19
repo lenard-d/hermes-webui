@@ -92,6 +92,10 @@ after teardown, and a stable tool-call ID cannot complete a same-name sibling.
 append to the run journal, record the runtime and transport cursors, then queue
 the exact live frame. Local and Gateway wrappers retain only backend policy such
 as cancel suppression and Gateway error-payload enrichment.
+`api/turn_execution.py` now owns their common process-local worker setup and
+teardown. A missing/raced transport or unexpected setup failure releases the
+whole runtime generation; successful workers share the same transport, cancel
+event, journal, and sink construction without duplicating lifecycle steps.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
 the cursor through the runtime owner. `api/turn_admission.py` now owns the
@@ -113,6 +117,7 @@ Relevant areas:
 - `api/models.py`
 - `api/run_journal.py`
 - `api/run_event_sink.py`
+- `api/turn_execution.py`
 - `api/runtime_adapter.py`
 - `docs/rfcs/hermes-run-adapter-contract.md`
 - `docs/rfcs/webui-run-state-consistency-contract.md`

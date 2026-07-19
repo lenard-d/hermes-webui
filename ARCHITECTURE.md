@@ -72,6 +72,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       session_sources.py   Allowlisted source identity for imported session sidecars
       stream_channel.py    Bounded multi-tab live-event broadcast and reconnect replay
       turn_admission.py    Atomic local-turn admission, pending persistence, journal, stream, worker
+      turn_execution.py    Shared Local/Gateway worker resource startup and teardown
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            All GET + POST route handlers (if/elif dispatch, no decorators)
       startup.py           Startup helpers: auto_install_agent_deps()
@@ -204,7 +205,13 @@ larger migration remains incremental:
   journal -> runtime cursor -> transport cursor -> live frame ordering while
   preserving two-tuple legacy queues and best-effort live delivery if the
   journal is unavailable. Backend-specific cancel filtering and payload policy
-  remain outside the sink. Route diagnostics,
+  remain outside the sink. `api/turn_execution.py` owns the shared Local/Gateway
+  worker resource transition: resolve the admitted transport, register worker
+  liveness, initialize the optional journal plus cancellation/recovery buffers,
+  construct the event sink, and compensate the complete runtime owner on every
+  setup failure. Its terminal `finish()` is idempotent and remains retryable if
+  cleanup raises. Provider execution and session writeback stay backend-owned.
+  Route diagnostics,
   SSE attachment, cursor lookup, and model recovery consume immutable registry
   views rather than importing the dictionaries; local and Gateway event
   producers publish their durable cursor through the same owner. This is not
