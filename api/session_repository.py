@@ -8,8 +8,11 @@ and save only after a successful mutation.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import shutil
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable, Iterator
@@ -37,6 +40,19 @@ class SessionDeletionResult:
 
     sidecar_deleted: bool
     state_db_cleanup_failed: bool
+
+
+@dataclass(frozen=True)
+class SessionCleanupResult:
+    """Counts produced by a bounded sidecar/index reconciliation pass."""
+
+    removed_sidecars: int
+    pruned_index_rows: int
+    skipped_active: int
+
+    @property
+    def cleaned(self) -> int:
+        return self.removed_sidecars + self.pruned_index_rows
 
 
 class SessionRepository:
@@ -209,6 +225,122 @@ def session_deleted_for_write(sid: str) -> bool:
         return False
     with config.LOCK:
         return sid not in models.SESSIONS
+
+
+def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
+    """Remove empty sidecars and index-only ghosts as one reconciliation pass."""
+    from api import config, models
+
+    session_dir = models.SESSION_DIR
+    index_file = models.SESSION_INDEX_FILE
+    removed_sidecar_ids: set[str] = set()
+    pruned_index_rows = 0
+    skipped_active = 0
+
+    # Phase 1: remove file-backed empty sessions matching the requested mode.
+    for path in session_dir.glob("*.json"):
+        if path.name.startswith("_"):
+            continue
+        owner_lock = config._get_session_agent_lock(path.stem)
+        removed = False
+        try:
+            with owner_lock:
+                # Reload only after acquiring the same lock as writers. An
+                # initially empty session may have gained messages while this
+                # cleanup pass waited.
+                session = models.Session.load(path.stem)
+                should_delete = bool(
+                    session
+                    and len(session.messages) == 0
+                    and (zero_only or session.title == "Untitled")
+                )
+                if not should_delete:
+                    continue
+                blocking_stream = config.blocking_runtime_stream(
+                    path.stem,
+                    active_stream_id=getattr(session, "active_stream_id", None),
+                    pending_user_message=getattr(session, "pending_user_message", None),
+                    pending_started_at=getattr(session, "pending_started_at", None),
+                )
+                if blocking_stream:
+                    skipped_active += 1
+                    continue
+                with config.LOCK:
+                    models.SESSIONS.pop(path.stem, None)
+                path.unlink(missing_ok=True)
+                removed_sidecar_ids.add(path.stem)
+                removed = True
+                # Startup recovery treats an orphan .bak as recoverable state;
+                # leaving it behind would undo the cleanup on the next boot.
+                path.with_suffix(".json.bak").unlink(missing_ok=True)
+        except Exception:
+            logger.debug("Failed to clean up session file %s", path, exc_info=True)
+        finally:
+            if removed:
+                with config.SESSION_AGENT_LOCKS_LOCK:
+                    if config.SESSION_AGENT_LOCKS.get(path.stem) is owner_lock:
+                        config.SESSION_AGENT_LOCKS.pop(path.stem, None)
+
+    phase2_rewrote_index = False
+    if index_file.exists():
+        try:
+            with models._INDEX_WRITE_LOCK:
+                index_data = json.loads(index_file.read_bytes())
+                if isinstance(index_data, list):
+                    live_ids = {
+                        path.stem
+                        for path in session_dir.glob("*.json")
+                        if not path.name.startswith("_")
+                    }
+                    with config.LOCK:
+                        in_memory_ids = set(models.SESSIONS)
+
+                    survivors = []
+                    for entry in index_data:
+                        sid = entry.get("session_id")
+                        if not sid or sid in live_ids or sid in in_memory_ids:
+                            survivors.append(entry)
+                            continue
+                        if sid in removed_sidecar_ids:
+                            continue
+                        pruned_index_rows += 1
+
+                    if (
+                        removed_sidecar_ids or pruned_index_rows
+                    ) and len(survivors) < len(index_data):
+                        tmp = index_file.with_suffix(
+                            f".tmp.{os.getpid()}.{threading.current_thread().ident}"
+                        )
+                        payload = json.dumps(survivors, ensure_ascii=False, indent=2)
+                        try:
+                            with open(tmp, "w", encoding="utf-8") as handle:
+                                handle.write(payload)
+                                handle.flush()
+                                os.fsync(handle.fileno())
+                            models._safe_replace(tmp, index_file)
+                            phase2_rewrote_index = True
+                        except Exception:
+                            try:
+                                tmp.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            raise
+        except Exception:
+            logger.debug(
+                "Failed to clean up index-only session entries",
+                exc_info=True,
+            )
+
+    # A corrupt index could not be rewritten. Drop it only when Phase 1 made
+    # it stale so the next sidebar read rebuilds it from surviving sidecars.
+    if removed_sidecar_ids and not phase2_rewrote_index and index_file.exists():
+        index_file.unlink(missing_ok=True)
+
+    return SessionCleanupResult(
+        removed_sidecars=len(removed_sidecar_ids),
+        pruned_index_rows=pruned_index_rows,
+        skipped_active=skipped_active,
+    )
 
 
 def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:

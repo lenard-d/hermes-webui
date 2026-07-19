@@ -44,15 +44,17 @@ def mock_env(tmp_path, monkeypatch):
     # Patch at the config source so all importers see the same test paths.
     monkeypatch.setattr(config_mod, "SESSION_DIR", sessions_dir)
     monkeypatch.setattr(config_mod, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(config_mod, "SESSIONS", {})
+    in_memory_sessions = {}
+    monkeypatch.setattr(config_mod, "SESSIONS", in_memory_sessions)
     monkeypatch.setattr(routes, "LOCK", threading.Lock())
     # Also refresh the module-level aliases in routes and models so they
     # pick up the patched config values.
     monkeypatch.setattr(routes, "SESSION_DIR", sessions_dir)
     monkeypatch.setattr(routes, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(routes, "SESSIONS", {})
+    monkeypatch.setattr(routes, "SESSIONS", in_memory_sessions)
     monkeypatch.setattr(models, "SESSION_DIR", sessions_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(models, "SESSIONS", in_memory_sessions)
     return sessions_dir, index_file
 
 
@@ -133,6 +135,30 @@ def test_cleanup_prunes_index_only_ghosts(mock_env):
     assert "sess-ghost-1" not in sids
     assert "sess-a" in sids
     assert "sess-b" in sids
+
+
+def test_repository_cleanup_owns_index_ghost_sweep(mock_env):
+    """The reconciliation owner exposes cleanup without HTTP route internals."""
+    from api.session_repository import cleanup_session_store
+
+    sessions_dir, index_file = mock_env
+    _make_session_file(sessions_dir, "sess-live", "Legit")
+    _write_index(
+        index_file,
+        [
+            {"session_id": "sess-live", "title": "Legit"},
+            {"session_id": "sess-ghost", "title": "Ghost"},
+        ],
+    )
+
+    result = cleanup_session_store(zero_only=False)
+
+    assert result.removed_sidecars == 0
+    assert result.pruned_index_rows == 1
+    assert result.cleaned == 1
+    assert [entry["session_id"] for entry in _read_index(index_file)] == [
+        "sess-live"
+    ]
 
 
 def test_cleanup_keeps_in_memory_ghosts(mock_env):
@@ -330,6 +356,59 @@ def test_cleanup_index_rewritten_when_phase1_removed_files(mock_env):
     # Index exists with zero entries (clean).
     assert index_file.exists()
     assert _read_index(index_file) == []
+
+
+def test_cleanup_removes_recovery_backup_with_empty_sidecar(mock_env):
+    """Cleanup must not leave a backup that startup recovery can resurrect."""
+    sessions_dir, index_file = mock_env
+    from api.session_repository import cleanup_session_store
+
+    _make_session_file(sessions_dir, "sess-backup", "Untitled")
+    backup = sessions_dir / "sess-backup.json.bak"
+    backup.write_text("recoverable", encoding="utf-8")
+    _write_index(
+        index_file,
+        [{"session_id": "sess-backup", "title": "Untitled", "message_count": 0}],
+    )
+
+    result = cleanup_session_store()
+
+    assert result.removed_sidecars == 1
+    assert not backup.exists()
+
+
+def test_cleanup_skips_an_empty_session_with_active_turn(mock_env, monkeypatch):
+    """A pending turn can still have zero messages and must win over cleanup."""
+    sessions_dir, index_file = mock_env
+    import api.config as config
+    from api.session_repository import cleanup_session_store
+
+    sid = "sess-active-empty"
+    sidecar = sessions_dir / f"{sid}.json"
+    _make_session_file(
+        sessions_dir,
+        sid,
+        "Untitled",
+        active_stream_id="stream-active",
+        pending_user_message="about to run",
+        pending_started_at=1784480000,
+    )
+    _write_index(
+        index_file,
+        [{"session_id": sid, "title": "Untitled", "message_count": 0}],
+    )
+    monkeypatch.setattr(
+        config,
+        "blocking_runtime_stream",
+        lambda session_id, **kwargs: "stream-active",
+    )
+
+    result = cleanup_session_store()
+
+    assert result.removed_sidecars == 0
+    assert result.skipped_active == 1
+    assert sidecar.exists()
+    assert _read_index(index_file)[0]["session_id"] == sid
 
 
 def test_cleanup_phase3_deletes_when_phase2_could_not_run(mock_env):

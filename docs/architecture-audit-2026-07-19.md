@@ -161,6 +161,9 @@ index, tombstone, attachment, journal, terminal, completion-deduplication, and
 non-messaging `state.db` cleanup behind one operation. It refuses deletion
 while a turn is active, and admission rechecks the durable delete marker while
 holding the same lock, closing both active-writeback and queued-start races.
+Empty-sidecar and index-only-ghost cleanup is now a repository reconciliation
+operation rather than route logic; it reloads candidates under their owner
+lock, skips live turns, and removes recovery backups with deleted sidecars.
 Recovery, migration,
 reconciliation, and sidebar projections remain distributed.
 
@@ -330,8 +333,8 @@ Priority: high
 Remediation status: in progress. The initial figures below are the audit
 baseline, not the current branch result. Source-shape assumptions touched by
 the runtime/cache/session extraction have been replaced with behavioral tests.
-After the deletion/admission ownership work, a complete run of the current
-13,481-test collection finished in 343.91 seconds with 13,323 passed, 158
+After the deletion/admission and cleanup ownership work, a complete run of the current
+13,484-test collection finished in 335.27 seconds with 13,326 passed, 158
 skipped, 2 xfailed, 1 xpassed, and 34 subtests passed; there were no real
 failures. The broader source-coupled portfolio and missing coverage threshold
 remain open.
@@ -442,7 +445,7 @@ Priority: medium to high
 
 Remediation status: in progress. The root architecture, testing, and README
 snapshots now use the repo test runner, the current 5-shard matrix, the refreshed
-13,481-test/1,282-file count, and the current runtime/session/admission Module map.
+13,484-test/1,282-file count, and the current runtime/session/admission Module map.
 The architecture roadmap now distinguishes initial file extraction from deeper
 ownership. Archiving the embedded sprint logs and consolidating competing
 architecture indexes remain open.
@@ -480,7 +483,7 @@ but contains several stale snapshots:
 The document is approximately 1,981 lines and has accumulated chronological
 sprint guidance:
 
-- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,481
+- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,484
 - it claimed three CI shards; `.github/workflows/tests.yml` uses five shards for
   each of three Python versions
 - its coverage reference reflects early sprints rather than the current suite

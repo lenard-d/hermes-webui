@@ -210,7 +210,10 @@ larger migration remains incremental:
   and the non-messaging `state.db` row are handled by one operation. Deletion
   fails closed while a turn is active, and turn admission checks the durable
   deletion marker while holding the same lock so a queued stale request cannot
-  recreate the session. CLI
+  recreate the session. Empty-sidecar and index-ghost cleanup is also a
+  repository reconciliation operation; it reloads candidates under the owner
+  lock, preserves active turns, and removes recovery backups with their
+  sidecars. CLI
   imports persist allowlisted origin metadata with their initial write. JSON sidecars remain authoritative; the
   repository is the migration seam, not a claim that unified SQLite storage is
   shipped.
