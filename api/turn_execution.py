@@ -16,6 +16,7 @@ from api.config import (
 )
 from api.run_event_sink import RunEventSink
 from api.run_journal import RunJournalWriter
+from api.turn_journal import append_turn_journal_event_for_stream
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ class TurnExecution:
         phase: str,
         logger: logging.Logger | None = None,
         log_label: str = "run",
+        record_worker_started: bool = True,
         **worker_metadata: Any,
     ) -> TurnExecution | None:
         """Claim all common worker resources or release the generation.
@@ -105,6 +107,20 @@ class TurnExecution:
                 logger=active_logger,
                 log_label=log_label,
             )
+            if record_worker_started:
+                try:
+                    append_turn_journal_event_for_stream(
+                        session_id,
+                        stream_id,
+                        {"event": "worker_started", "created_at": time.time()},
+                        require_existing_turn=True,
+                    )
+                except Exception:
+                    active_logger.debug(
+                        "Failed to append %s worker_started turn journal event",
+                        log_label,
+                        exc_info=True,
+                    )
         except Exception:
             finish_runtime_run(stream_id)
             raise

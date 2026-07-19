@@ -1,13 +1,14 @@
 from pathlib import Path
 
 
-def test_streaming_appends_worker_started_before_running_phase():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
-    run_idx = src.index("def _run_agent_streaming(")
-    worker_idx = src.index('"event": "worker_started"', run_idx)
-    running_idx = src.index('update_active_run(stream_id, phase="running"', run_idx)
+def test_turn_execution_owns_worker_started_before_worker_body_runs():
+    execution_src = Path("api/turn_execution.py").read_text(encoding="utf-8")
+    streaming_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    gateway_src = Path("api/gateway_chat.py").read_text(encoding="utf-8")
 
-    assert worker_idx < running_idx
+    assert '"event": "worker_started"' in execution_src
+    assert "record_worker_started=not ephemeral" in streaming_src
+    assert "record_worker_started=True" in gateway_src
 
 
 def test_streaming_appends_assistant_started_before_final_save():

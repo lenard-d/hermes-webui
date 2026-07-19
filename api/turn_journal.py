@@ -29,6 +29,10 @@ class TurnJournalCommitUnknown(RuntimeError):
     """Raised when a journal event cannot be proven durable or absent."""
 
 
+class TurnJournalTurnNotFound(LookupError):
+    """Raised when a stream has no authoritative turn identity."""
+
+
 def _default_session_dir() -> Path:
     from api.models import SESSION_DIR
 
@@ -302,15 +306,23 @@ def append_turn_journal_event_for_stream(
     event: dict,
     *,
     session_dir: Path | None = None,
+    require_existing_turn: bool = False,
 ) -> dict:
     """Append a lifecycle event for the turn associated with ``stream_id``."""
     payload = dict(event)
     payload["stream_id"] = str(stream_id)
-    if not payload.get("turn_id"):
+    supplied_turn_id = str(payload.get("turn_id") or "").strip()
+    if require_existing_turn or not supplied_turn_id:
         journal = read_turn_journal(session_id, session_dir=session_dir)
         turn_id = _latest_turn_id_for_stream(journal.get("events") or [], stream_id)
         if turn_id:
+            if require_existing_turn and supplied_turn_id and supplied_turn_id != turn_id:
+                raise ValueError("supplied turn identity does not match stream journal")
             payload["turn_id"] = turn_id
+        elif require_existing_turn:
+            raise TurnJournalTurnNotFound(
+                f"no turn journal identity found for stream {stream_id!r}"
+            )
     return append_turn_journal_event(session_id, payload, session_dir=session_dir)
 
 

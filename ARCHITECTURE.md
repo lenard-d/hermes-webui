@@ -210,7 +210,11 @@ larger migration remains incremental:
   liveness, initialize the optional journal plus cancellation/recovery buffers,
   construct the event sink, and compensate the complete runtime owner on every
   setup failure. Its terminal `finish()` is idempotent and remains retryable if
-  cleanup raises. Provider execution and session writeback stay backend-owned.
+  cleanup raises. The same transition records `worker_started` for both Local
+  and Gateway workers, but only after resolving the authoritative turn already
+  admitted for that stream; a missing mapping cannot create a second turn.
+  Ephemeral `/btw` execution opts out because it has no durable turn. Provider
+  execution and session writeback stay backend-owned.
   Route diagnostics,
   SSE attachment, cursor lookup, and model recovery consume immutable registry
   views rather than importing the dictionaries; local and Gateway event

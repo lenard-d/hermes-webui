@@ -6941,20 +6941,12 @@ def _run_agent_streaming(
         model=model,
         provider=model_provider,
         ephemeral=bool(ephemeral),
+        record_worker_started=not ephemeral,
     )
     if execution is None:
         return
     cancel_event = execution.cancel_event
     event_sink = execution.event_sink
-    if not ephemeral:
-        try:
-            append_turn_journal_event_for_stream(
-                session_id,
-                stream_id,
-                {"event": "worker_started", "created_at": time.time()},
-            )
-        except Exception:
-            logger.debug("Failed to append worker_started turn journal event", exc_info=True)
     s = None
     _rt = {}
     old_cwd = None

@@ -652,6 +652,7 @@ def _run_gateway_chat_streaming(
         model=model,
         provider=model_provider,
         backend="gateway",
+        record_worker_started=True,
     )
     if execution is None:
         return

@@ -3,14 +3,14 @@ from pathlib import Path
 from api.streaming import _compact_for_echo_compare
 
 
-def test_streaming_claims_turn_execution_before_worker_journal_event():
+def test_streaming_delegates_worker_journal_event_to_turn_execution():
     src = Path("api/streaming.py").read_text(encoding="utf-8")
     execution_idx = src.index("execution = TurnExecution.start(")
     sink_idx = src.index("event_sink = execution.event_sink", execution_idx)
-    worker_event_idx = src.index('"event": "worker_started"', sink_idx)
 
     assert "from api.turn_execution import TurnExecution" in src
-    assert execution_idx < sink_idx < worker_event_idx
+    assert "record_worker_started=not ephemeral" in src[execution_idx:sink_idx]
+    assert '"event": "worker_started"' not in src[execution_idx:sink_idx]
 
 
 def test_streaming_journals_sse_events_before_queue_delivery():

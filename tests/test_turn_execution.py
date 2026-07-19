@@ -7,6 +7,11 @@ import threading
 import pytest
 
 from api import turn_execution
+from api.turn_journal import (
+    append_turn_journal_event,
+    append_turn_journal_event_for_stream,
+    read_turn_journal,
+)
 
 
 class _Sink:
@@ -45,6 +50,13 @@ def _wire_runtime(
         turn_execution,
         "finish_runtime_run",
         lambda stream_id: calls.append(("finish", stream_id)) or True,
+    )
+    monkeypatch.setattr(
+        turn_execution,
+        "append_turn_journal_event_for_stream",
+        lambda session_id, stream_id, event, **kwargs: calls.append(
+            ("turn_event", session_id, stream_id, event, kwargs)
+        ) or event,
     )
     monkeypatch.setattr(turn_execution.time, "time", lambda: 123.0)
 
@@ -148,6 +160,109 @@ def test_start_continues_without_optional_journal(monkeypatch):
     assert execution is not None
     assert execution.journal is None
     assert captured["journal"] is None
+
+
+def test_start_records_worker_started_against_existing_turn(monkeypatch):
+    calls = []
+    _wire_runtime(monkeypatch, calls)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args: object())
+    monkeypatch.setattr(turn_execution, "RunEventSink", lambda **_kwargs: _Sink())
+
+    execution = turn_execution.TurnExecution.start(
+        stream_id="run-1",
+        session_id="session-1",
+        phase="starting",
+    )
+
+    assert execution is not None
+    assert (
+        "turn_event",
+        "session-1",
+        "run-1",
+        {"event": "worker_started", "created_at": 123.0},
+        {"require_existing_turn": True},
+    ) in calls
+
+
+def test_start_preserves_submitted_turn_identity_end_to_end(monkeypatch, tmp_path):
+    calls = []
+    _wire_runtime(monkeypatch, calls)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args: object())
+    monkeypatch.setattr(turn_execution, "RunEventSink", lambda **_kwargs: _Sink())
+    append_turn_journal_event(
+        "session-1",
+        {
+            "event": "submitted",
+            "turn_id": "turn-authoritative",
+            "stream_id": "run-1",
+        },
+        session_dir=tmp_path,
+    )
+
+    def append_in_trial_state(session_id, stream_id, event, **kwargs):
+        return append_turn_journal_event_for_stream(
+            session_id,
+            stream_id,
+            event,
+            session_dir=tmp_path,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(
+        turn_execution,
+        "append_turn_journal_event_for_stream",
+        append_in_trial_state,
+    )
+
+    execution = turn_execution.TurnExecution.start(
+        stream_id="run-1",
+        session_id="session-1",
+        phase="starting",
+    )
+
+    assert execution is not None
+    events = read_turn_journal("session-1", session_dir=tmp_path)["events"]
+    assert [(event["event"], event["turn_id"]) for event in events] == [
+        ("submitted", "turn-authoritative"),
+        ("worker_started", "turn-authoritative"),
+    ]
+
+
+def test_start_can_skip_worker_started_for_ephemeral_turn(monkeypatch):
+    calls = []
+    _wire_runtime(monkeypatch, calls)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args: object())
+    monkeypatch.setattr(turn_execution, "RunEventSink", lambda **_kwargs: _Sink())
+
+    execution = turn_execution.TurnExecution.start(
+        stream_id="run-1",
+        session_id="session-1",
+        phase="starting",
+        record_worker_started=False,
+    )
+
+    assert execution is not None
+    assert not any(call[0] == "turn_event" for call in calls)
+
+
+def test_start_contains_worker_started_journal_failure(monkeypatch):
+    calls = []
+    _wire_runtime(monkeypatch, calls)
+    monkeypatch.setattr(turn_execution, "RunJournalWriter", lambda *_args: object())
+    monkeypatch.setattr(turn_execution, "RunEventSink", lambda **_kwargs: _Sink())
+    monkeypatch.setattr(
+        turn_execution,
+        "append_turn_journal_event_for_stream",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(LookupError("missing turn")),
+    )
+
+    execution = turn_execution.TurnExecution.start(
+        stream_id="run-1",
+        session_id="session-1",
+        phase="starting",
+    )
+
+    assert execution is not None
 
 
 def test_start_compensates_unexpected_setup_failure(monkeypatch):

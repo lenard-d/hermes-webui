@@ -95,7 +95,11 @@ as cancel suppression and Gateway error-payload enrichment.
 `api/turn_execution.py` now owns their common process-local worker setup and
 teardown. A missing/raced transport or unexpected setup failure releases the
 whole runtime generation; successful workers share the same transport, cancel
-event, journal, and sink construction without duplicating lifecycle steps.
+event, journal, sink construction, and `worker_started` lifecycle transition
+without duplicating steps. Local and Gateway now advance the same previously
+submitted turn identity; strict stream lookup prevents a missing journal
+mapping from silently inventing a second turn, while ephemeral `/btw` workers
+skip the durable transition.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
 the cursor through the runtime owner. `api/turn_admission.py` now owns the
