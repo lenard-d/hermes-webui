@@ -21190,17 +21190,21 @@ def _handle_goal_command(handler, body):
                 profile_default_model=_pp_default,
                 profile_config=_pp_cfg,
             )
-        stream_response = _start_chat_stream_for_session(
-            s,
-            msg=kickoff_prompt,
-            attachments=[],
-            workspace=workspace,
-            model=model,
-            model_provider=model_provider,
-            normalized_model=normalized_model,
-            goal_related=True,
-            external_runtime_owned=webui_gateway_chat_enabled(get_config()),
-        )
+        try:
+            stream_response = _start_chat_stream_for_session(
+                s,
+                msg=kickoff_prompt,
+                attachments=[],
+                workspace=workspace,
+                model=model,
+                model_provider=model_provider,
+                normalized_model=normalized_model,
+                goal_related=True,
+                external_runtime_owned=webui_gateway_chat_enabled(get_config()),
+            )
+        except Exception:
+            restore_goal_state(s.session_id, previous_goal_state, profile_home=profile_home)
+            raise
         status = int(stream_response.pop("_status", 200) or 200)
         payload.update(stream_response)
         if status >= 400:

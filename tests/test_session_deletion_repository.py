@@ -1,4 +1,6 @@
+import gc
 import threading
+import weakref
 
 import api.config as config
 import api.models as models
@@ -138,6 +140,49 @@ def test_delete_session_state_waits_for_the_session_owner_lock(tmp_path, monkeyp
     assert not (session_dir / f"{sid}.json").exists()
 
 
+def test_delete_preserves_lock_identity_for_existing_waiters(tmp_path, monkeypatch):
+    from api.session_repository import delete_session_state
+
+    _isolate_session_store(tmp_path, monkeypatch)
+    sid = "deletewaiterlock1"
+    Session(
+        session_id=sid,
+        messages=[{"role": "user", "content": "delete safely"}],
+    ).save()
+    _patch_cleanup_collaborators(monkeypatch, tmp_path)
+    monkeypatch.setattr(models, "delete_cli_session", lambda value: True)
+    waiter_lock = config._get_session_agent_lock(sid)
+
+    delete_session_state(sid, messaging=False)
+
+    assert config._get_session_agent_lock(sid) is waiter_lock
+
+
+def test_session_lock_alias_rejects_a_different_new_session_owner():
+    old_sid = "compression-old-lock"
+    new_sid = "compression-new-lock"
+    old_lock = config._get_session_agent_lock(old_sid)
+    new_lock = config._get_session_agent_lock(new_sid)
+
+    with pytest.raises(RuntimeError, match="another lock owner"):
+        config.alias_session_agent_lock(old_sid, new_sid, old_lock)
+
+    assert config._get_session_agent_lock(old_sid) is old_lock
+    assert config._get_session_agent_lock(new_sid) is new_lock
+
+
+def test_session_lock_registry_releases_unreferenced_lock():
+    sid = "weak-session-lock"
+    lock = config._get_session_agent_lock(sid)
+    reference = weakref.ref(lock)
+
+    del lock
+    gc.collect()
+
+    assert reference() is None
+    assert sid not in config.SESSION_AGENT_LOCKS
+
+
 def test_delete_session_state_refuses_a_live_worker(tmp_path, monkeypatch):
     from api.session_repository import SessionActiveError, delete_session_state
 
@@ -155,10 +200,11 @@ def test_delete_session_state_refuses_a_live_worker(tmp_path, monkeypatch):
         "blocking_runtime_stream",
         lambda session_id, **kwargs: "stream-1",
     )
+    owner_lock = config._get_session_agent_lock(sid)
 
     with pytest.raises(SessionActiveError, match="stream-1"):
         delete_session_state(sid, messaging=False)
 
     assert (session_dir / f"{sid}.json").exists()
-    assert sid in config.SESSION_AGENT_LOCKS
+    assert config._get_session_agent_lock(sid) is owner_lock
     assert sid not in models._load_webui_deleted_session_tombstone()

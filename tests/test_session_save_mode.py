@@ -1,12 +1,15 @@
 """Regression tests for config-driven first-turn session persistence (#1406)."""
 import json
+from types import SimpleNamespace
 
 import pytest
 
 import api.config as config
 import api.models as models
+import api.session_recovery as session_recovery
 import api.streaming as streaming
 import api.turn_admission as turn_admission
+import api.turn_journal as turn_journal
 from api.models import Session, new_session
 
 
@@ -89,6 +92,444 @@ def test_eager_chat_start_checkpoints_first_user_message_before_thread(_isolate_
     assert on_disk["messages"][0]["content"] == "hello eager"
     assert on_disk["messages"][0]["attachments"][0]["name"] == "note.txt"
     assert on_disk["pending_user_message"] == "hello eager"
+
+
+def test_post_commit_submitted_error_keeps_the_confirmed_turn(_isolate_state, monkeypatch):
+    monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
+    session = Session(
+        session_id="post_commit_submitted_error",
+        title="Existing",
+        messages=[{"role": "user", "content": "accepted"}],
+    )
+    session.save()
+    committed = []
+    thread_starts = []
+    real_append = turn_journal.append_turn_journal_event
+
+    def append_then_raise(session_id, event):
+        written = real_append(session_id, event)
+        committed.append(written)
+        raise OSError("simulated close error after fsync")
+
+    class StartedThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            thread_starts.append(True)
+
+    monkeypatch.setattr(turn_admission, "append_turn_journal_event", append_then_raise)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=StartedThread),
+    )
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
+
+    response = turn_admission.start_local_turn(
+        session,
+        turn_admission.LocalTurnRequest(
+            message="durably submitted",
+            attachments=[],
+            workspace="/workspace",
+            model="model",
+        ),
+        worker_target=lambda *_args, **_kwargs: None,
+        clear_stale_stream=lambda _session: False,
+    )
+
+    try:
+        assert thread_starts == [True]
+        assert response["turn_id"] == committed[0]["turn_id"]
+        assert response["stream_id"] == committed[0]["stream_id"]
+        authoritative = models.get_session(session.session_id)
+        assert authoritative.active_stream_id == response["stream_id"]
+        assert authoritative.pending_user_message == "durably submitted"
+    finally:
+        config.finish_runtime_run(response["stream_id"])
+
+
+def test_worker_starts_after_admission_releases_the_session_owner(_isolate_state, monkeypatch):
+    session = Session(
+        session_id="worker_starts_after_owner_release",
+        title="Existing",
+        messages=[{"role": "user", "content": "accepted"}],
+    )
+    session.save()
+
+    class ReentryDetectingLock:
+        def __init__(self):
+            self.held = False
+
+        def __enter__(self):
+            if self.held:
+                raise RuntimeError("session owner was still held")
+            self.held = True
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.held = False
+            return False
+
+    owner_lock = ReentryDetectingLock()
+    worker_acquired_owner = []
+
+    def worker(*_args, **_kwargs):
+        with config._get_session_agent_lock(session.session_id):
+            worker_acquired_owner.append(True)
+
+    class InlineThread:
+        def __init__(self, *, target, args, kwargs, daemon):
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs
+
+        def start(self):
+            self.target(*self.args, **self.kwargs)
+
+    monkeypatch.setattr(config, "_get_session_agent_lock", lambda _sid: owner_lock)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=InlineThread),
+    )
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
+
+    response = turn_admission.start_local_turn(
+        session,
+        turn_admission.LocalTurnRequest(
+            message="start without owner lock",
+            attachments=[],
+            workspace="/workspace",
+            model="model",
+        ),
+        worker_target=worker,
+        clear_stale_stream=lambda _session: False,
+    )
+
+    try:
+        assert worker_acquired_owner == [True]
+    finally:
+        config.finish_runtime_run(response["stream_id"])
+
+
+@pytest.mark.parametrize("failure_stage", ["pending_index", "journal"])
+@pytest.mark.parametrize("preexisting_backup", [False, True])
+def test_failed_eager_admission_cannot_be_restored_from_shrink_backup(
+    _isolate_state,
+    monkeypatch,
+    failure_stage,
+    preexisting_backup,
+):
+    monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
+    session = Session(
+        session_id=f"eager_rollback_{failure_stage}_{int(preexisting_backup)}",
+        title="Existing title",
+        workspace="/previous/workspace",
+        model="previous-model",
+        model_provider="previous-provider",
+        messages=[
+            {"role": "user", "content": "accepted prompt"},
+            {"role": "assistant", "content": "accepted answer"},
+        ],
+    )
+    session.save()
+    baseline = json.loads(session.path.read_text(encoding="utf-8"))
+    backup_path = session.path.with_suffix(".json.bak")
+    expected_backup = None
+    if preexisting_backup:
+        expected_backup = session.path.read_bytes()
+        backup_path.write_bytes(expected_backup)
+
+    if failure_stage == "pending_index":
+        real_write_index = models._write_session_index
+        calls = 0
+
+        def fail_once(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise OSError("index unavailable")
+            return real_write_index(*args, **kwargs)
+
+        monkeypatch.setattr(models, "_write_session_index", fail_once)
+        monkeypatch.setattr(
+            turn_admission,
+            "append_turn_journal_event",
+            lambda *_args, **_kwargs: pytest.fail("journal must not be reached"),
+        )
+        expected_error = "index unavailable"
+    else:
+        monkeypatch.setattr(
+            turn_admission,
+            "append_turn_journal_event",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                OSError("journal unavailable")
+            ),
+        )
+        expected_error = "journal unavailable"
+
+    request = turn_admission.LocalTurnRequest(
+        message="REJECTED MESSAGE",
+        attachments=[],
+        workspace="/new/workspace",
+        model="new-model",
+        model_provider="new-provider",
+    )
+    with pytest.raises(OSError, match=expected_error):
+        turn_admission.start_local_turn(
+            session,
+            request,
+            worker_target=lambda *_args, **_kwargs: pytest.fail("worker started"),
+            clear_stale_stream=lambda _session: False,
+        )
+
+    live = json.loads(session.path.read_text(encoding="utf-8"))
+    assert live["messages"] == baseline["messages"]
+    assert "REJECTED MESSAGE" not in session.path.read_text(encoding="utf-8")
+    assert live["active_stream_id"] is None
+    assert live["pending_user_message"] is None
+    assert live["workspace"] == baseline["workspace"]
+    assert live["model"] == baseline["model"]
+    assert live["model_provider"] == baseline["model_provider"]
+    if expected_backup is None:
+        assert not backup_path.exists()
+    else:
+        assert backup_path.read_bytes() == expected_backup
+
+    index = json.loads(models.SESSION_INDEX_FILE.read_text(encoding="utf-8"))
+    indexed = next(row for row in index if row["session_id"] == session.session_id)
+    assert indexed["message_count"] == 2
+    assert indexed["active_stream_id"] is None
+
+    models.SESSIONS.clear()
+    status = session_recovery.inspect_session_recovery_status(session.path)
+    assert status["recommend"] in {"no_backup", "no_action"}
+    recovery = session_recovery.recover_all_sessions_on_startup(_isolate_state)
+    assert recovery["restored"] == 0
+    reloaded = Session.load(session.session_id)
+    assert reloaded is not None
+    assert reloaded.messages == baseline["messages"]
+    assert reloaded.active_stream_id is None
+    assert reloaded.pending_user_message is None
+
+
+def test_eager_admission_uses_authoritative_session_not_stale_caller(
+    _isolate_state,
+    monkeypatch,
+):
+    monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
+    authoritative = Session(
+        session_id="authoritative_admission",
+        title="Authoritative",
+        messages=[
+            {"role": "user", "content": "q1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ],
+    )
+    authoritative.save()
+    models.cache_full_session(authoritative.session_id, authoritative)
+    stale = Session(
+        session_id=authoritative.session_id,
+        title="Stale",
+        messages=authoritative.messages[:2],
+    )
+
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda session_id, event: {**event, "session_id": session_id},
+    )
+    monkeypatch.setattr(turn_admission, "create_stream_channel", object)
+    monkeypatch.setattr(turn_admission, "register_runtime_stream", lambda *_a, **_k: None)
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
+
+    class StartedThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=StartedThread),
+    )
+
+    result = turn_admission.start_local_turn(
+        stale,
+        turn_admission.LocalTurnRequest(
+            message="q3",
+            attachments=[],
+            workspace="/workspace",
+            model="model",
+        ),
+        worker_target=lambda *_args, **_kwargs: None,
+        clear_stale_stream=lambda _session: False,
+    )
+
+    live = json.loads(authoritative.path.read_text(encoding="utf-8"))
+    assert [message["content"] for message in live["messages"]] == [
+        "q1",
+        "a1",
+        "q2",
+        "a2",
+        "q3",
+    ]
+    assert live["active_stream_id"] == result["stream_id"]
+    assert not authoritative.path.with_suffix(".json.bak").exists()
+
+
+def test_admission_compensation_restores_empty_orphan_pending_baseline(
+    _isolate_state,
+    monkeypatch,
+):
+    monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
+    session = Session(
+        session_id="orphan_pending_admission",
+        title="Existing",
+        messages=[],
+        pending_user_message="older orphan intent",
+    )
+    session.save()
+    models.cache_full_session(session.session_id, session)
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("journal unavailable")),
+    )
+
+    with pytest.raises(OSError, match="journal unavailable"):
+        turn_admission.start_local_turn(
+            session,
+            turn_admission.LocalTurnRequest(
+                message="REJECTED",
+                attachments=[],
+                workspace="/workspace",
+                model="model",
+            ),
+            worker_target=lambda *_args, **_kwargs: None,
+            clear_stale_stream=lambda _session: False,
+        )
+
+    live = json.loads(session.path.read_text(encoding="utf-8"))
+    assert live["messages"] == []
+    assert live["pending_user_message"] == "older orphan intent"
+    assert live["active_stream_id"] is None
+    assert "REJECTED" not in session.path.read_text(encoding="utf-8")
+    assert not session.path.with_suffix(".json.bak").exists()
+
+
+def test_failed_first_turn_does_not_create_an_empty_session_sidecar(
+    _isolate_state,
+    monkeypatch,
+):
+    monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
+    session = new_session(workspace="/workspace")
+    assert not session.path.exists()
+    goal_markers = {session.session_id}
+    background_markers = {session.session_id}
+    monkeypatch.setattr(turn_admission, "PENDING_GOAL_CONTINUATION", goal_markers)
+    monkeypatch.setattr(
+        turn_admission,
+        "PENDING_BG_TASK_COMPLETIONS",
+        background_markers,
+    )
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("journal unavailable")),
+    )
+
+    with pytest.raises(OSError, match="journal unavailable"):
+        turn_admission.start_local_turn(
+            session,
+            turn_admission.LocalTurnRequest(
+                message="REJECTED FIRST TURN",
+                attachments=[],
+                workspace="/workspace",
+                model="model",
+            ),
+            worker_target=lambda *_args, **_kwargs: pytest.fail("worker started"),
+            clear_stale_stream=lambda _session: False,
+        )
+
+    assert not session.path.exists()
+    assert not session.path.with_suffix(".json.bak").exists()
+    assert session.active_stream_id is None
+    assert session.pending_user_message is None
+    assert session.messages == []
+    assert goal_markers == {session.session_id}
+    assert background_markers == {session.session_id}
+    if models.SESSION_INDEX_FILE.exists():
+        index = json.loads(models.SESSION_INDEX_FILE.read_text(encoding="utf-8"))
+        assert all(row["session_id"] != session.session_id for row in index)
+
+
+def test_failed_compensation_keeps_pending_owner_and_markers_consumed(
+    _isolate_state,
+    monkeypatch,
+):
+    monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
+    session = Session(
+        session_id="failed_admission_compensation",
+        title="Existing",
+        messages=[{"role": "user", "content": "accepted"}],
+    )
+    session.save()
+    models.cache_full_session(session.session_id, session)
+    goal_markers = {session.session_id}
+    background_markers = {session.session_id}
+    monkeypatch.setattr(turn_admission, "PENDING_GOAL_CONTINUATION", goal_markers)
+    monkeypatch.setattr(
+        turn_admission,
+        "PENDING_BG_TASK_COMPLETIONS",
+        background_markers,
+    )
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("journal unavailable")),
+    )
+    real_replace = models._safe_replace
+    sidecar_writes = 0
+
+    def fail_compensation_replace(src, dst):
+        nonlocal sidecar_writes
+        if dst == session.path:
+            sidecar_writes += 1
+            if sidecar_writes == 2:
+                raise OSError("compensation replace unavailable")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(models, "_safe_replace", fail_compensation_replace)
+
+    with pytest.raises(OSError, match="journal unavailable"):
+        turn_admission.start_local_turn(
+            session,
+            turn_admission.LocalTurnRequest(
+                message="REJECTED",
+                attachments=[],
+                workspace="/workspace",
+                model="model",
+            ),
+            worker_target=lambda *_args, **_kwargs: None,
+            clear_stale_stream=lambda _session: False,
+        )
+
+    live = json.loads(session.path.read_text(encoding="utf-8"))
+    assert live["active_stream_id"] == session.active_stream_id
+    assert live["active_stream_id"] is not None
+    assert live["pending_user_message"] == session.pending_user_message == "REJECTED"
+    assert [message["content"] for message in live["messages"]] == [
+        "accepted",
+        "REJECTED",
+    ]
+    assert goal_markers == set()
+    assert background_markers == set()
 
 
 def test_eager_wal_repair_does_not_duplicate_checkpointed_user_message(_isolate_state, monkeypatch):

@@ -84,14 +84,24 @@ assistant_started -> interrupted
 ## Write rules
 
 1. On `/api/chat/start` or equivalent turn-submission path:
-   - generate `turn_id`,
-   - append `submitted`,
-   - fsync the journal file,
-   - only then start the worker.
+   - generate a stable `turn_id` before writing,
+   - persist the pending session owner,
+   - append and fsync `submitted`,
+   - if the append result is uncertain, reconcile the exact event in the
+     current-process shard and re-fsync it,
+   - only then register the stream and start the worker outside the session
+     owner lock.
 2. When worker thread enters `_run_agent_streaming`, append `worker_started`.
 3. When assistant output is first persisted or clearly begins, append `assistant_started`.
 4. After the sidecar save that includes the assistant answer succeeds, append `completed`.
 5. On cancellation or known worker exception, append `interrupted` with a reason.
+
+Admission rollback follows the same durability boundary. A proven-absent
+`submitted` event can be compensated. An exact durable `submitted` event may
+proceed even if the append call raised after its fsync. Malformed, conflicting,
+or non-fsyncable journal state is unknown and must retain pending ownership.
+After publication setup fails, pending state is compensated only after the
+matching `interrupted` event is durably confirmed.
 
 ## Synchronous durability design rationale
 

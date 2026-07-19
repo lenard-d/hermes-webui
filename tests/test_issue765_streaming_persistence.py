@@ -7,6 +7,7 @@ Validates:
     (as it would be by on_tool() during real agent execution)
   - Messages stored via pending_user_message survive a simulated server restart
 """
+import gc
 import json
 import threading
 import time
@@ -828,6 +829,7 @@ class TestIssue765FollowupHardening:
         """
         from api.config import (
             _get_session_agent_lock,
+            alias_session_agent_lock,
             SESSION_AGENT_LOCKS,
             SESSION_AGENT_LOCKS_LOCK,
         )
@@ -837,12 +839,9 @@ class TestIssue765FollowupHardening:
         # Acquire the lock under the old ID
         old_lock = _get_session_agent_lock(old_sid)
 
-        # Simulate the migration that streaming.py does during compression:
-        # alias new_sid → held _agent_lock reference, then pop old_sid.
+        # Simulate the migration that streaming.py does during compression.
         _agent_lock = old_lock
-        with SESSION_AGENT_LOCKS_LOCK:
-            SESSION_AGENT_LOCKS[new_sid] = _agent_lock
-            SESSION_AGENT_LOCKS.pop(old_sid, None)
+        alias_session_agent_lock(old_sid, new_sid, _agent_lock)
 
         # Now looking up the new ID must return the exact same Lock object
         new_lock = _get_session_agent_lock(new_sid)
@@ -852,16 +851,17 @@ class TestIssue765FollowupHardening:
             f"got {new_lock!r} vs {old_lock!r}"
         )
 
-        # The old ID entry must no longer exist (it was popped)
+        # Both IDs remain aliases while an old- or new-ID waiter has a strong
+        # reference, preventing a split lock generation during rotation.
         with SESSION_AGENT_LOCKS_LOCK:
-            assert old_sid not in SESSION_AGENT_LOCKS, (
-                f"Old session ID {old_sid!r} must be removed from "
-                f"SESSION_AGENT_LOCKS after rotation"
-            )
+            assert SESSION_AGENT_LOCKS[old_sid] is old_lock
+            assert SESSION_AGENT_LOCKS[new_sid] is old_lock
 
-        # Cleanup
+        del new_lock, old_lock, _agent_lock
+        gc.collect()
         with SESSION_AGENT_LOCKS_LOCK:
-            SESSION_AGENT_LOCKS.pop(new_sid, None)
+            assert old_sid not in SESSION_AGENT_LOCKS
+            assert new_sid not in SESSION_AGENT_LOCKS
 
     def test_lock_rotation_migration_survives_old_id_already_pruned(self):
         """Compression lock migration must not require old_sid to exist in dict.
@@ -872,6 +872,7 @@ class TestIssue765FollowupHardening:
         """
         from api.config import (
             _get_session_agent_lock,
+            alias_session_agent_lock,
             SESSION_AGENT_LOCKS,
             SESSION_AGENT_LOCKS_LOCK,
         )
@@ -882,13 +883,15 @@ class TestIssue765FollowupHardening:
         with SESSION_AGENT_LOCKS_LOCK:
             SESSION_AGENT_LOCKS.pop(old_sid, None)  # simulate concurrent prune
 
-        # Must not raise KeyError even though old_sid is absent.
-        with SESSION_AGENT_LOCKS_LOCK:
-            SESSION_AGENT_LOCKS[new_sid] = _agent_lock
-            SESSION_AGENT_LOCKS.pop(old_sid, None)
+        # Must not raise even though the weak old alias disappeared.
+        alias_session_agent_lock(old_sid, new_sid, _agent_lock)
 
         new_lock = _get_session_agent_lock(new_sid)
         assert new_lock is _agent_lock
+        assert _get_session_agent_lock(old_sid) is _agent_lock
 
+        del new_lock, _agent_lock
+        gc.collect()
         with SESSION_AGENT_LOCKS_LOCK:
-            SESSION_AGENT_LOCKS.pop(new_sid, None)
+            assert old_sid not in SESSION_AGENT_LOCKS
+            assert new_sid not in SESSION_AGENT_LOCKS

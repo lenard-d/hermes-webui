@@ -100,7 +100,11 @@ def test_turn_admission_marks_continuation_and_explicit_goal_streams(
     session = Session()
     if not explicit_goal:
         config.PENDING_GOAL_CONTINUATION.add(session.session_id)
-    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_a, **_k: {})
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda session_id, event: {**event, "session_id": session_id},
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
     try:
         result = turn_admission.start_local_turn(
@@ -121,6 +125,8 @@ def test_turn_admission_marks_continuation_and_explicit_goal_streams(
         config.PENDING_GOAL_CONTINUATION.discard(session.session_id)
         if "result" in locals():
             config.finish_runtime_run(result["stream_id"])
+        with config.LOCK:
+            config.SESSIONS.pop(session.session_id, None)
 
 
 # ---------------------------------------------------------------------------

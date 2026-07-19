@@ -34,8 +34,7 @@ from api.config import (
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     register_active_run, update_active_run, finish_runtime_run,
     note_runtime_last_event_id,
-    unregister_stream_owner,
-    SESSION_AGENT_LOCKS, SESSION_AGENT_LOCKS_LOCK,
+    alias_session_agent_lock,
     resolve_model_provider,
     resolve_custom_provider_connection,
     model_with_provider_context,
@@ -6929,10 +6928,10 @@ def _run_agent_streaming(
     _turn_route_provider = model_provider
     q = STREAMS.get(stream_id)
     if q is None:
-        # The stream was cancelled before the worker started; the route layer
-        # already registered the stream owner, so release it here to avoid
-        # leaking a STREAM_SESSION_OWNERS entry that the teardown finally never sees.
-        unregister_stream_owner(stream_id)
+        # The transport disappeared before the worker started, so its normal
+        # teardown finally will never run. Release every value owned by this
+        # admitted runtime generation, not only the stream-owner projection.
+        finish_runtime_run(stream_id)
         return
     register_active_run(
         stream_id,
@@ -9105,6 +9104,10 @@ def _run_agent_streaming(
                     # over the just-preserved snapshot back to the original fork
                     # parent, losing access to the recoverable history in old_sid.json.
                     s.parent_session_id = old_sid
+                    # Establish the one lock generation before publishing the
+                    # continuation session. A colliding new_sid fails closed
+                    # instead of exposing the same session under two locks.
+                    alias_session_agent_lock(old_sid, new_sid, _agent_lock)
                     with LOCK:
                         cached_old_session = SESSIONS.pop(old_sid, None)
                         if cached_old_session is not None and cached_old_session is not s:
@@ -9121,12 +9124,6 @@ def _run_agent_streaming(
                         SESSIONS[new_sid] = s
                         SESSIONS.move_to_end(new_sid)
                         _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
-                    # Migrate the per-session lock: alias new_sid to the held
-                    # _agent_lock reference directly (not via old_sid lookup),
-                    # then remove the old_sid entry to prevent a leak.
-                    with SESSION_AGENT_LOCKS_LOCK:
-                        SESSION_AGENT_LOCKS[new_sid] = _agent_lock
-                        SESSION_AGENT_LOCKS.pop(old_sid, None)
                     # Migrate cached agent to the new session ID so the turn
                     # count survives context compression.
                     from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK

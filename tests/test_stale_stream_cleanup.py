@@ -2,6 +2,7 @@ import queue
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import api.config as config
 import api.routes as routes
@@ -99,7 +100,7 @@ def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_p
             session.pending_user_message = "prompt already claimed by another start"
             session.pending_started_at = 123.0
             config.STREAMS[existing_stream_id] = queue.Queue()
-            return self
+            return session
 
         def __exit__(self, exc_type, exc, tb):
             return False
@@ -112,11 +113,23 @@ def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_p
         def start(self):
             return None
 
-    monkeypatch.setattr(turn_admission, "_get_session_agent_lock", lambda sid: MutatingSessionLock())
-    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(
+        turn_admission,
+        "admission_write_owner",
+        lambda *args, **kwargs: MutatingSessionLock(),
+    )
+    monkeypatch.setattr(
+        turn_admission,
+        "uuid",
+        SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="new-stream")),
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
     monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=NoopThread),
+    )
 
     try:
         response = routes._start_chat_stream_for_session(
@@ -134,6 +147,8 @@ def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_p
         assert "new-stream" not in config.STREAMS
     finally:
         config.STREAMS.pop(existing_stream_id, None)
+        with config.LOCK:
+            config.SESSIONS.pop(session.session_id, None)
 
 
 def test_chat_start_blocks_same_session_active_run_after_cancel_clears_stream_id(monkeypatch, tmp_path):
@@ -178,10 +193,18 @@ def test_chat_start_blocks_same_session_active_run_after_cancel_clears_stream_id
         def start(self):
             return None
 
-    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(
+        turn_admission,
+        "uuid",
+        SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="new-stream")),
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
     monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=NoopThread),
+    )
 
     try:
         response = routes._start_chat_stream_for_session(
@@ -200,6 +223,8 @@ def test_chat_start_blocks_same_session_active_run_after_cancel_clears_stream_id
         assert "new-stream" not in config.STREAMS
     finally:
         config.unregister_active_run(old_stream_id)
+        with config.LOCK:
+            config.SESSIONS.pop(session.session_id, None)
 
 
 def test_chat_start_allows_same_session_after_active_run_unregisters(monkeypatch, tmp_path):
@@ -236,10 +261,18 @@ def test_chat_start_allows_same_session_after_active_run_unregisters(monkeypatch
         def start(self):
             return None
 
-    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(
+        turn_admission,
+        "uuid",
+        SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="new-stream")),
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
     monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=NoopThread),
+    )
 
     response = routes._start_chat_stream_for_session(
         session,
@@ -256,7 +289,9 @@ def test_chat_start_allows_same_session_after_active_run_unregisters(monkeypatch
         assert session.active_stream_id == "new-stream"
         assert session.pending_user_message == "successor prompt"
     finally:
-        config.STREAMS.pop("new-stream", None)
+        config.finish_runtime_run("new-stream")
+        with config.LOCK:
+            config.SESSIONS.pop(session.session_id, None)
 
 
 def test_chat_start_not_permanently_blocked_by_stale_active_run(monkeypatch, tmp_path):
@@ -311,10 +346,18 @@ def test_chat_start_not_permanently_blocked_by_stale_active_run(monkeypatch, tmp
         def start(self):
             return None
 
-    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(
+        turn_admission,
+        "uuid",
+        SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="new-stream")),
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
     monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=NoopThread),
+    )
 
     try:
         response = routes._start_chat_stream_for_session(
@@ -330,7 +373,9 @@ def test_chat_start_not_permanently_blocked_by_stale_active_run(monkeypatch, tmp
         assert session.active_stream_id == "new-stream"
     finally:
         config.unregister_active_run(stale_stream_id)
-        config.STREAMS.pop("new-stream", None)
+        config.finish_runtime_run("new-stream")
+        with config.LOCK:
+            config.SESSIONS.pop(session.session_id, None)
 
 
 def test_live_worker_past_ceiling_is_not_reaped_from_active_runs():

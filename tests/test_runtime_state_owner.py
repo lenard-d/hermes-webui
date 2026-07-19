@@ -167,6 +167,42 @@ def test_finish_runtime_run_is_idempotent():
     assert config.finish_runtime_run("missing-stream") is False
 
 
+@pytest.mark.parametrize("backend", ["local", "gateway"])
+def test_worker_without_transport_releases_the_complete_runtime_owner(backend):
+    from api import gateway_chat, streaming
+
+    stream_id = f"missing-transport-{backend}"
+    config.register_runtime_stream(
+        stream_id,
+        "session-1",
+        object(),
+        goal_related=True,
+    )
+    config.CANCEL_FLAGS[stream_id] = threading.Event()
+    config.STREAM_PARTIAL_TEXT[stream_id] = "partial"
+    config.STREAM_REASONING_TEXT[stream_id] = "reasoning"
+    config.STREAM_LIVE_TOOL_CALLS[stream_id] = [{"id": "tool-1"}]
+    config.STREAM_LAST_EVENT_ID[stream_id] = f"{stream_id}:7"
+    config.STREAMS.pop(stream_id)
+
+    worker = (
+        streaming._run_agent_streaming
+        if backend == "local"
+        else gateway_chat._run_gateway_chat_streaming
+    )
+    worker(
+        "session-1",
+        "hello",
+        "test-model",
+        "/tmp/workspace",
+        stream_id,
+        [],
+    )
+
+    for name in _STREAM_MAP_NAMES:
+        assert stream_id not in getattr(config, name)
+
+
 def test_begin_cancel_snapshots_progress_and_releases_transport_admission():
     state, stores = _runtime_state(clock=lambda: 100.0)
     channel = object()

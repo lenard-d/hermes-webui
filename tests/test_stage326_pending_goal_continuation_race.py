@@ -73,7 +73,11 @@ def test_turn_admission_consumes_goal_marker_only_after_it_claims_the_session(mo
         model="test-model",
     )
     config.PENDING_GOAL_CONTINUATION.add(session.session_id)
-    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_a, **_k: {})
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda session_id, event: {**event, "session_id": session_id},
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
     waiting_for_lock = __import__("threading").Event()
     result = {}
@@ -125,6 +129,8 @@ def test_turn_admission_consumes_goal_marker_only_after_it_claims_the_session(mo
         config.finish_runtime_run("existing")
         if "accepted" in locals():
             config.finish_runtime_run(accepted["stream_id"])
+        with config.LOCK:
+            config.SESSIONS.pop(session.session_id, None)
 
 
 def test_pending_goal_continuation_is_a_set():

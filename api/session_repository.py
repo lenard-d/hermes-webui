@@ -34,6 +34,10 @@ class SessionActiveError(RuntimeError):
         super().__init__(f"Session {sid} has active stream {stream_id}")
 
 
+class SessionWriteRejected(KeyError):
+    """Raised when a durable delete forbids materializing a queued stale seed."""
+
+
 @dataclass(frozen=True)
 class SessionDeletionResult:
     """Observable result of deleting all WebUI-owned session state."""
@@ -65,11 +69,19 @@ class SessionRepository:
         load_full: Callable[[str], object],
         lock_for: Callable[[str], object],
         cache_full: Callable[[str, object], None],
+        write_index: Callable[[list[object]], None] | None = None,
+        sidecar_exists: Callable[[str], bool] | None = None,
+        discard_sidecar: Callable[[str], None] | None = None,
+        prune_index: Callable[[str], None] | None = None,
     ) -> None:
         self._load = load
         self._load_full = load_full
         self._lock_for = lock_for
         self._cache_full = cache_full
+        self._write_index = write_index
+        self._sidecar_exists = sidecar_exists
+        self._discard_sidecar = discard_sidecar
+        self._prune_index = prune_index
 
     @staticmethod
     def _validate(sid: str, session: object, *, require_full: bool = False) -> object:
@@ -114,6 +126,100 @@ class SessionRepository:
             raise KeyError(sid)
         with self._hold_lock(sid, None):
             return self._load_for_edit(sid, session)
+
+    @contextmanager
+    def write_owner(
+        self,
+        sid: str,
+        *,
+        session: object | None = None,
+        reject_when: Callable[[], bool] | None = None,
+    ) -> Iterator[object]:
+        """Yield the authoritative full session while holding its owner lock."""
+        sid = str(sid or "")
+        if not sid:
+            raise KeyError(sid)
+        with self._hold_lock(sid, None):
+            if reject_when is not None and reject_when():
+                raise SessionWriteRejected(sid)
+            yield self._load_for_edit(sid, session)
+
+    def compensate_failed_admission(
+        self,
+        sid: str,
+        *,
+        expected_stream_id: str,
+        restore: Callable[[object], None],
+        on_committed: Callable[[], None] | None = None,
+        baseline_persisted: bool = True,
+    ) -> bool:
+        """Durably compensate one still-owned, unaccepted admission generation."""
+        sid = str(sid or "")
+        if not sid or not expected_stream_id:
+            return False
+        with self._hold_lock(sid, None):
+            try:
+                current = self._load_for_edit(sid, None)
+            except KeyError:
+                return False
+            if getattr(current, "active_stream_id", None) != expected_stream_id:
+                return False
+            sidecar_exists = (
+                self._sidecar_exists(sid)
+                if self._sidecar_exists is not None
+                else True
+            )
+            if baseline_persisted and not sidecar_exists:
+                return False
+            if not baseline_persisted and sidecar_exists:
+                try:
+                    persisted = self._validate(
+                        sid,
+                        self._load_full(sid),
+                        require_full=True,
+                    )
+                except (KeyError, OSError):
+                    return False
+                if getattr(persisted, "active_stream_id", None) != expected_stream_id:
+                    return False
+            # The admission restore callback replaces owned fields rather than
+            # mutating nested values in place. Preserve collaborator identity
+            # (including test locks) if restore or persistence fails.
+            before = dict(getattr(current, "__dict__", {}))
+            try:
+                restore(current)
+                if baseline_persisted:
+                    # The sidecar is the durable truth. Do not manufacture a
+                    # recovery backup containing the rejected eager checkpoint.
+                    current.save(
+                        touch_updated_at=False,
+                        skip_index=True,
+                        _admission_compensation=True,
+                    )
+                elif sidecar_exists:
+                    if self._discard_sidecar is None:
+                        raise RuntimeError("admission sidecar discard is unavailable")
+                    self._discard_sidecar(sid)
+            except Exception:
+                current.__dict__.clear()
+                current.__dict__.update(before)
+                raise
+            if baseline_persisted and self._write_index is not None:
+                try:
+                    self._write_index([current])
+                except Exception:
+                    # The canonical sidecar is already restored.  The index is
+                    # a repairable projection and must not make compensation
+                    # appear to have failed after durable ownership was cleared.
+                    logger.exception("Failed to refresh index after admission compensation")
+            elif not baseline_persisted and self._prune_index is not None:
+                try:
+                    self._prune_index(sid)
+                except Exception:
+                    logger.exception("Failed to prune index after admission compensation")
+            if on_committed is not None:
+                on_committed()
+            return True
 
     @contextmanager
     def _hold_lock(self, sid: str, timeout: float | None) -> Iterator[None]:
@@ -167,11 +273,21 @@ def _default_repository() -> SessionRepository:
     # would keep edits attached to the stale module and stale cache.
     from api import config, models
 
+    def sidecar_path(sid: str):
+        root = models.SESSION_DIR.resolve()
+        path = (root / f"{sid}.json").resolve()
+        path.relative_to(root)
+        return path
+
     return SessionRepository(
         load=models.get_session,
         load_full=models.Session.load,
         lock_for=config._get_session_agent_lock,
         cache_full=models.cache_full_session,
+        write_index=lambda sessions: models._write_session_index(updates=sessions),
+        sidecar_exists=lambda sid: sidecar_path(sid).is_file(),
+        discard_sidecar=lambda sid: sidecar_path(sid).unlink(missing_ok=True),
+        prune_index=models.prune_session_from_index,
     )
 
 
@@ -200,6 +316,35 @@ def edit_session(
 def get_full_session(sid: str, *, session: object | None = None) -> object:
     """Load a complete session through the process-wide repository."""
     return _default_repository().get_full(sid, session=session)
+
+
+@contextmanager
+def admission_write_owner(sid: str, *, session: object | None = None) -> Iterator[object]:
+    """Yield admission's authoritative session unless a durable delete won."""
+    with _default_repository().write_owner(
+        sid,
+        session=session,
+        reject_when=lambda: session_deleted_for_write(sid),
+    ) as current:
+        yield current
+
+
+def compensate_failed_admission(
+    sid: str,
+    *,
+    expected_stream_id: str,
+    restore: Callable[[object], None],
+    on_committed: Callable[[], None] | None = None,
+    baseline_persisted: bool = True,
+) -> bool:
+    """Restore a failed admission without retaining its provisional transcript."""
+    return _default_repository().compensate_failed_admission(
+        sid,
+        expected_stream_id=expected_stream_id,
+        restore=restore,
+        on_committed=on_committed,
+        baseline_persisted=baseline_persisted,
+    )
 
 
 def session_deleted_for_write(sid: str) -> bool:
@@ -242,7 +387,6 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
         if path.name.startswith("_"):
             continue
         owner_lock = config._get_session_agent_lock(path.stem)
-        removed = False
         try:
             with owner_lock:
                 # Reload only after acquiring the same lock as writers. An
@@ -269,17 +413,15 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
                     models.SESSIONS.pop(path.stem, None)
                 path.unlink(missing_ok=True)
                 removed_sidecar_ids.add(path.stem)
-                removed = True
                 # Startup recovery treats an orphan .bak as recoverable state;
                 # leaving it behind would undo the cleanup on the next boot.
                 path.with_suffix(".json.bak").unlink(missing_ok=True)
         except Exception:
             logger.debug("Failed to clean up session file %s", path, exc_info=True)
         finally:
-            if removed:
-                with config.SESSION_AGENT_LOCKS_LOCK:
-                    if config.SESSION_AGENT_LOCKS.get(path.stem) is owner_lock:
-                        config.SESSION_AGENT_LOCKS.pop(path.stem, None)
+            # The weak registry retains this lock while any holder or waiter
+            # still references it, then removes it automatically.
+            del owner_lock
 
     phase2_rewrote_index = False
     if index_file.exists():
@@ -360,7 +502,6 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
     owner_lock = config._get_session_agent_lock(sid)
     sidecar_deleted = False
     state_db_cleanup_failed = False
-    deletion_started = False
     try:
         with owner_lock:
             try:
@@ -376,7 +517,6 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
             if blocking_stream:
                 raise SessionActiveError(sid, blocking_stream)
 
-            deletion_started = True
             with config.LOCK:
                 models.SESSIONS.pop(sid, None)
 
@@ -492,12 +632,9 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
                         exc_info=True,
                     )
     finally:
-        # Only remove the lock we actually held. An identity check prevents a
-        # concurrent replacement from losing its own owner entry.
-        if deletion_started:
-            with config.SESSION_AGENT_LOCKS_LOCK:
-                if config.SESSION_AGENT_LOCKS.get(sid) is owner_lock:
-                    config.SESSION_AGENT_LOCKS.pop(sid, None)
+        # Do not pop the weak registry entry: another waiter may already hold
+        # this same lock reference. It self-prunes after all references end.
+        del owner_lock
 
     return SessionDeletionResult(
         sidecar_deleted=sidecar_deleted,

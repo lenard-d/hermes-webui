@@ -117,7 +117,11 @@ def test_issue1855_target_routes_are_wired_to_diagnostics(monkeypatch):
         def save(self, *args, **kwargs):
             return None
 
-    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_a, **_k: {})
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda session_id, event: {**event, "session_id": session_id},
+    )
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
     diag = _StageRecorder()
     result = turn_admission.start_local_turn(
@@ -143,3 +147,5 @@ def test_issue1855_target_routes_are_wired_to_diagnostics(monkeypatch):
             assert stage in diag.stages
     finally:
         config.finish_runtime_run(result["stream_id"])
+        with config.LOCK:
+            models.SESSIONS.pop("diagnostic-admission", None)

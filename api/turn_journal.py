@@ -25,6 +25,10 @@ _TERMINAL_EVENTS = {"completed", "interrupted"}
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
+class TurnJournalCommitUnknown(RuntimeError):
+    """Raised when a journal event cannot be proven durable or absent."""
+
+
 def _default_session_dir() -> Path:
     from api.models import SESSION_DIR
 
@@ -41,6 +45,26 @@ def _journal_path(session_id: str, session_dir: Path | None = None) -> Path:
 
 def _make_turn_id() -> str:
     return f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:12]}"
+
+
+def make_turn_id() -> str:
+    """Allocate one stable identity before a caller begins a journal write."""
+    return _make_turn_id()
+
+
+def _fsync_parent_directory(path: Path, *, strict: bool) -> None:
+    o_directory = getattr(os, "O_DIRECTORY", None)
+    if o_directory is None:
+        return
+    try:
+        dir_fd = os.open(path, o_directory)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        if strict:
+            raise
 
 
 @contextmanager
@@ -96,17 +120,82 @@ def append_turn_journal_event(
             fh.write(line)
             fh.flush()
             os.fsync(fh.fileno())
-    o_directory = getattr(os, "O_DIRECTORY", None)
-    if o_directory is not None:
-        try:
-            dir_fd = os.open(path.parent, o_directory)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-        except OSError:
-            pass
+    _fsync_parent_directory(path.parent, strict=False)
     return payload
+
+
+def confirm_turn_journal_event(
+    session_id: str,
+    expected: dict,
+    *,
+    session_dir: Path | None = None,
+) -> dict | None:
+    """Re-fsync and return one exact event written by this process.
+
+    ``None`` proves the current process shard contains no event with the
+    expected turn-event identity. Malformed content, a conflicting event using
+    the same ``turn_id`` and event name, or any read/fsync error is an unknown
+    commit state and raises :class:`TurnJournalCommitUnknown` instead of
+    allowing a caller to roll back another durable truth.
+    """
+    if not isinstance(expected, dict):
+        raise TypeError("expected must be a dict")
+    sid = str(session_id or "").strip()
+    turn_id = str(expected.get("turn_id") or "").strip()
+    stream_id = str(expected.get("stream_id") or "").strip()
+    event_name = str(expected.get("event") or "").strip()
+    if not sid or not turn_id or not stream_id or not event_name:
+        raise ValueError("session_id, turn_id, stream_id, and event are required")
+
+    path = _journal_path(sid, session_dir=session_dir)
+    try:
+        fh = path.open("r+", encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise TurnJournalCommitUnknown("unable to open turn journal shard") from exc
+
+    try:
+        with fh:
+            with _journal_file_lock(fh):
+                exact_matches = []
+                conflicting_identity = False
+                malformed = False
+                fh.seek(0)
+                for raw in fh:
+                    if not raw.strip():
+                        continue
+                    try:
+                        candidate = json.loads(raw)
+                    except json.JSONDecodeError:
+                        malformed = True
+                        continue
+                    if not isinstance(candidate, dict):
+                        malformed = True
+                        continue
+                    if str(candidate.get("turn_id") or "") != turn_id:
+                        continue
+                    if str(candidate.get("event") or "") != event_name:
+                        continue
+                    if all(candidate.get(key) == value for key, value in expected.items()):
+                        exact_matches.append(candidate)
+                    else:
+                        conflicting_identity = True
+
+                if malformed or conflicting_identity or len(exact_matches) > 1:
+                    raise TurnJournalCommitUnknown(
+                        "turn journal shard contains ambiguous admission state"
+                    )
+                if not exact_matches:
+                    return None
+                fh.flush()
+                os.fsync(fh.fileno())
+        _fsync_parent_directory(path.parent, strict=True)
+    except TurnJournalCommitUnknown:
+        raise
+    except (OSError, ValueError) as exc:
+        raise TurnJournalCommitUnknown("unable to confirm turn journal event") from exc
+    return exact_matches[0]
 
 
 def read_turn_journal(session_id: str, *, session_dir: Path | None = None) -> dict:

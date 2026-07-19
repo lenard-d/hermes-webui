@@ -25,6 +25,7 @@ import traceback
 import urllib.error
 import urllib.request
 import uuid
+import weakref
 from pathlib import Path
 from typing import Any
 
@@ -8570,7 +8571,9 @@ def _clear_thread_env():
 
 
 # ── Per-session agent locks ───────────────────────────────────────────────────
-SESSION_AGENT_LOCKS: dict = {}
+SESSION_AGENT_LOCKS: weakref.WeakValueDictionary[str, threading.Lock] = (
+    weakref.WeakValueDictionary()
+)
 SESSION_AGENT_LOCKS_LOCK = threading.Lock()
 
 
@@ -8578,26 +8581,40 @@ def _get_session_agent_lock(session_id: str) -> threading.Lock:
     """Return the per-session Lock used to serialize all Session mutations.
 
     Lock lifecycle invariant:
-      - A Lock is created lazily on first access and lives in SESSION_AGENT_LOCKS
-        for the lifetime of the session.
-      - The entry is pruned in /api/session/delete (under SESSION_AGENT_LOCKS_LOCK)
-        so deleted sessions don't leak a Lock forever.
+      - A Lock is created lazily and remains discoverable while any holder or
+        waiter keeps a strong reference. Weak registry entries disappear only
+        after the last overlapping operation releases its reference.
       - During context compression the agent may rotate session_id.  The
         streaming thread migrates the lock entry atomically under
         SESSION_AGENT_LOCKS_LOCK: it aliases the new session_id to the *same*
-        Lock object and pops the old-id entry (see streaming.py compression
-        block).  This ensures that subsequent callers using the new ID still
-        acquire the same Lock, while the old-id entry is removed to prevent a
-        leak.  The streaming thread already holds the Lock during this
-        migration, so the reference stays alive even after the dict entry is
-        removed.
+        Lock object (see streaming.py compression block). Both aliases remain
+        weakly discoverable while old- or new-id waiters still exist.
       - Lock contract: hold for the in-memory mutation + s.save() only; never
         across network I/O (LLM calls, HTTP requests).
     """
     with SESSION_AGENT_LOCKS_LOCK:
-        if session_id not in SESSION_AGENT_LOCKS:
-            SESSION_AGENT_LOCKS[session_id] = threading.Lock()
-        return SESSION_AGENT_LOCKS[session_id]
+        lock = SESSION_AGENT_LOCKS.get(session_id)
+        if lock is None:
+            lock = threading.Lock()
+            SESSION_AGENT_LOCKS[session_id] = lock
+        return lock
+
+
+def alias_session_agent_lock(
+    old_session_id: str,
+    new_session_id: str,
+    held_lock: threading.Lock,
+) -> None:
+    """Bind a compression continuation to the already-held session owner."""
+    with SESSION_AGENT_LOCKS_LOCK:
+        old_owner = SESSION_AGENT_LOCKS.get(old_session_id)
+        new_owner = SESSION_AGENT_LOCKS.get(new_session_id)
+        if old_owner is not None and old_owner is not held_lock:
+            raise RuntimeError("old session id has another lock owner")
+        if new_owner is not None and new_owner is not held_lock:
+            raise RuntimeError("new session id has another lock owner")
+        SESSION_AGENT_LOCKS[old_session_id] = held_lock
+        SESSION_AGENT_LOCKS[new_session_id] = held_lock
 
 
 # ── Settings persistence ─────────────────────────────────────────────────────

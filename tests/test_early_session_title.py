@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def test_prepare_chat_start_sets_provisional_title_for_default_session(tmp_path, monkeypatch):
@@ -106,7 +107,11 @@ def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeyp
         def start(self):
             return None
 
-    monkeypatch.setattr(turn_admission.threading, "Thread", ImmediateThread)
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=ImmediateThread),
+    )
 
     s = Session(session_id="test-start-response-title", title="Untitled")
     response = routes._start_chat_stream_for_session(
@@ -119,12 +124,12 @@ def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeyp
     )
 
     try:
+        assert response["title"] == s.title
+        assert response["title"] != "Untitled"
+    finally:
         config.finish_runtime_run(response["stream_id"])
-    except Exception:
-        pass
-
-    assert response["title"] == s.title
-    assert response["title"] != "Untitled"
+        with config.LOCK:
+            config.SESSIONS.pop(s.session_id, None)
 
 
 def test_prompt_provisional_title_still_counts_as_provisional_after_response():

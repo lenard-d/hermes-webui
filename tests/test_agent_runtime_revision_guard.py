@@ -445,6 +445,7 @@ def test_runner_owned_start_run_does_not_enter_local_stream_barrier(monkeypatch)
 def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gateway_owned):
     """The barrier and worker must share one immutable backend decision."""
     from api import config
+    from api import models
     from api import routes
     from api import turn_admission
 
@@ -486,8 +487,16 @@ def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gatew
     monkeypatch.setattr(turn_admission, "_was_hidden_empty_session", lambda _session: False)
     monkeypatch.setattr(turn_admission, "prepare_session_for_turn", prepare)
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _workspace: None)
-    monkeypatch.setattr(turn_admission.threading, "Thread", FakeThread)
-    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        types.SimpleNamespace(Thread=FakeThread),
+    )
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda session_id, event: {**event, "session_id": session_id},
+    )
 
     response = routes._start_chat_stream_for_session(
         session,
@@ -511,6 +520,8 @@ def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gatew
     finally:
         stream_id = str(response.get("stream_id") or "")
         config.finish_runtime_run(stream_id)
+        with config.LOCK:
+            models.SESSIONS.pop(session.session_id, None)
 
 
 @pytest.mark.parametrize(

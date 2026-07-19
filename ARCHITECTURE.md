@@ -8,7 +8,7 @@
 > Keep this document updated as architecture changes are made.
 
 > Current changelog release: `v0.52.76` (July 18, 2026), plus Unreleased changes.
-> Automated test snapshot (July 19, 2026): 13,476 tests across 1,281 test files via
+> Automated test snapshot (July 19, 2026): 13,535 tests across 1,285 test files via
 > `./scripts/test.sh tests/ --collect-only -q`. CI runs on Python 3.11, 3.12, and
 > 3.13 (5 parallel shards each) against every PR, plus a ruff
 > lint gate, a headless browser smoke test, and a Docker smoke test.
@@ -98,7 +98,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       sw.js                Service worker: offline shell cache, version-pinned assets
     tests/
       conftest.py          Isolated test server/state fixtures
-      1,281 test files     13,476 tests in the July 19, 2026 snapshot
+      1,285 test files     13,535 tests in the July 19, 2026 snapshot
                            (run `./scripts/test.sh tests/ --collect-only -q` for exact)
       test_regressions.py  Permanent regression gate
     CONTRIBUTING.md        Contributor workflow and PR expectations.
@@ -200,12 +200,16 @@ larger migration remains incremental:
   producers publish their durable cursor through the same owner. This is not yet the complete
   browser-turn runtime described by the run-adapter RFC.
 - `api/turn_admission.py` owns the synchronous local-turn transition after HTTP
-  validation: claim the session, consume single-use continuation markers,
-  persist pending ownership, append the submitted journal event, publish the
-  SSE stream, and launch exactly one worker. `api/routes.py` chooses the local
-  or gateway worker and delegates this transition instead of coordinating the
-  registries itself. Provider execution and terminal persistence remain in the
-  runtime adapter and streaming Modules.
+  validation: claim the authoritative session, persist pending ownership,
+  consume single-use continuation markers, durably confirm the pre-identified
+  submitted journal event, register the SSE stream, recheck ownership, and
+  launch exactly one worker after releasing the session lock. Admission
+  failures compensate only after a matching terminal event is durably
+  confirmed; an ambiguous journal commit or failed runtime cleanup retains the
+  pending owner and fails closed. `api/routes.py` chooses the local or gateway
+  worker and delegates this transition instead of coordinating the registries
+  itself. Provider execution and terminal persistence remain in the runtime
+  adapter and streaming Modules.
 - `api/session_repository.py` owns the mutation protocol for WebUI session
   sidecars: acquire the per-session owner lock, reject identity mismatches,
   reload the current record after acquiring that lock, upgrade metadata-only
@@ -217,11 +221,17 @@ larger migration remains incremental:
   and the non-messaging `state.db` row are handled by one operation. Deletion
   fails closed while a turn is active, and turn admission checks the durable
   deletion marker while holding the same lock so a queued stale request cannot
-  recreate the session. Empty-sidecar and index-ghost cleanup is also a
-  repository reconciliation operation; it reloads candidates under the owner
-  lock, preserves active turns, and removes recovery backups with their
-  sidecars. CLI imports persist allowlisted origin metadata with their initial
-  write. JSON sidecars remain authoritative; the
+  recreate the session. The repository also owns generation-checked admission
+  compensation: an existing sidecar is restored without preserving a rejected
+  shrink backup, while a provisional first-turn sidecar and index row are
+  discarded instead of turning into an empty ghost. Per-session locks live in
+  a weak registry, so holders and waiters preserve one lock generation without
+  explicit deletion-time pruning; compression aliases old and new session IDs
+  to that same owner before publishing the continuation. Empty-sidecar and
+  index-ghost cleanup is also a repository reconciliation operation; it reloads
+  candidates under the owner lock, preserves active turns, and removes recovery
+  backups with their sidecars. CLI imports persist allowlisted origin metadata
+  with their initial write. JSON sidecars remain authoritative; the
   repository is the migration seam, not a claim that unified SQLite storage is
   shipped.
 - `api/session_sources.py` owns which foreign source-identity fields may enter
@@ -840,7 +850,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         *.js                  Classic-script frontend modules (no bundler)
       tests/
         conftest.py           Isolated test server/state fixtures
-        1,281 test files      13,476 tests in the July 19, 2026 snapshot
+        1,285 test files      13,535 tests in the July 19, 2026 snapshot
         test_regressions.py   Permanent regression gate
 
 Route extraction to api/routes.py completed in Sprint 11. server.py remains a
@@ -954,7 +964,7 @@ The optional password gate for non-SSH-tunnel deployments lives in `api/auth.py`
 
 ### Phase I: Test Infrastructure -- BROAD SUITE; COVERAGE REPORTING ADDED
 
-13,476 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
+13,535 tests across 1,285 test files in the July 19, 2026 snapshot, plus regression
 gates. Test count is not a coverage metric; `scripts/coverage.sh` and the
 combined Python 3.12 CI artifact now provide repeatable line/branch reporting.
 The first local full snapshot reported 74.07% combined line/branch coverage; an

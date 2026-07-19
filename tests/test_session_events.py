@@ -41,7 +41,8 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
 
     assert 'if worktree_info:\n            publish_session_list_changed(\n                "session_new",' in ROUTES
     assert "was_hidden = _was_hidden_empty_session(session)" in TURN_ADMISSION
-    assert 'if was_hidden:\n        publish_session_list_changed(\n            "session_new",' in TURN_ADMISSION
+    assert "if was_hidden:" in TURN_ADMISSION
+    assert 'publish_session_list_changed(\n                "session_new",' in TURN_ADMISSION
     assert 'publish_session_list_changed(\n                "session_duplicate",' in ROUTES
     assert 'publish_session_list_changed(\n            "session_rename",' in ROUTES
     assert '_persist_generated_session_title(s, next_title, event_reason="session_title_regenerate")' in ROUTES

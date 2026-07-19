@@ -183,3 +183,268 @@ def test_edit_uses_explicit_seed_only_when_repository_has_no_session():
         session.title = "Created"
 
     assert seed.saved == [{}]
+
+
+def test_write_owner_rejects_deleted_seed_before_cache_publication():
+    from api.session_repository import SessionRepository, SessionWriteRejected
+
+    lock = _RecordingLock()
+    seed = _FakeSession("deleted", metadata_only=False, messages=[])
+    seed.lock = lock
+    cached = []
+    repository = SessionRepository(
+        load=lambda sid: (_ for _ in ()).throw(KeyError(sid)),
+        load_full=lambda sid: (_ for _ in ()).throw(KeyError(sid)),
+        lock_for=lambda _sid: lock,
+        cache_full=lambda sid, session: cached.append((sid, session)),
+    )
+
+    with pytest.raises(SessionWriteRejected):
+        with repository.write_owner(
+            "deleted",
+            session=seed,
+            reject_when=lambda: True,
+        ):
+            pass
+
+    assert cached == []
+    assert seed.saved == []
+    assert lock.held is False
+
+
+def test_admission_compensation_generation_mismatch_is_noop():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "newer"
+    current.lock = lock
+    restored = []
+    indexed = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+        write_index=lambda sessions: indexed.extend(sessions),
+    )
+
+    committed = repository.compensate_failed_admission(
+        "s1",
+        expected_stream_id="older",
+        restore=lambda _session: restored.append(True),
+    )
+
+    assert committed is False
+    assert restored == []
+    assert current.saved == []
+    assert indexed == []
+
+
+def test_admission_compensation_does_not_resurrect_missing_baseline_sidecar():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    restored = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+        sidecar_exists=lambda _sid: False,
+    )
+
+    committed = repository.compensate_failed_admission(
+        "s1",
+        expected_stream_id="stream-1",
+        restore=lambda _session: restored.append(True),
+        baseline_persisted=True,
+    )
+
+    assert committed is False
+    assert restored == []
+    assert current.saved == []
+
+
+def test_first_turn_compensation_restores_memory_without_creating_sidecar():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("new", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    pruned = []
+    callbacks = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: pytest.fail("missing sidecar must not be loaded"),
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+        sidecar_exists=lambda _sid: False,
+        prune_index=pruned.append,
+    )
+
+    committed = repository.compensate_failed_admission(
+        "new",
+        expected_stream_id="stream-1",
+        restore=lambda session: setattr(session, "active_stream_id", None),
+        on_committed=lambda: callbacks.append(True),
+        baseline_persisted=False,
+    )
+
+    assert committed is True
+    assert current.active_stream_id is None
+    assert current.saved == []
+    assert pruned == ["new"]
+    assert callbacks == [True]
+
+
+def test_first_turn_compensation_discards_matching_provisional_sidecar():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("new", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    discarded = []
+    pruned = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+        sidecar_exists=lambda _sid: True,
+        discard_sidecar=discarded.append,
+        prune_index=pruned.append,
+    )
+
+    committed = repository.compensate_failed_admission(
+        "new",
+        expected_stream_id="stream-1",
+        restore=lambda session: setattr(session, "active_stream_id", None),
+        baseline_persisted=False,
+    )
+
+    assert committed is True
+    assert current.active_stream_id is None
+    assert current.saved == []
+    assert discarded == ["new"]
+    assert pruned == ["new"]
+
+
+def test_first_turn_discard_failure_restores_provisional_memory_state():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("new", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+        sidecar_exists=lambda _sid: True,
+        discard_sidecar=lambda _sid: (_ for _ in ()).throw(
+            OSError("discard unavailable")
+        ),
+    )
+
+    def restore(session):
+        session.title = "Restored baseline"
+        session.active_stream_id = None
+
+    with pytest.raises(OSError, match="discard unavailable"):
+        repository.compensate_failed_admission(
+            "new",
+            expected_stream_id="stream-1",
+            restore=restore,
+            baseline_persisted=False,
+        )
+
+    assert current.title == "Before"
+    assert current.active_stream_id == "stream-1"
+    assert current.saved == []
+
+
+def test_admission_compensation_restores_memory_when_restore_raises():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    def fail_after_mutation(session):
+        session.title = "Partially restored"
+        raise RuntimeError("restore failed")
+
+    with pytest.raises(RuntimeError, match="restore failed"):
+        repository.compensate_failed_admission(
+            "s1",
+            expected_stream_id="stream-1",
+            restore=fail_after_mutation,
+        )
+
+    assert current.title == "Before"
+    assert current.active_stream_id == "stream-1"
+    assert current.saved == []
+    assert lock.held is False
+
+
+def test_admission_compensation_commits_before_marker_callback_and_tolerates_index_failure():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    order = []
+
+    def fail_index(_sessions):
+        order.append("index")
+        raise OSError("index unavailable")
+
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+        write_index=fail_index,
+    )
+
+    def restore(session):
+        order.append("restore")
+        session.active_stream_id = None
+
+    def markers():
+        assert lock.held is True
+        assert current.saved == [
+            {
+                "touch_updated_at": False,
+                "skip_index": True,
+                "_admission_compensation": True,
+            }
+        ]
+        order.append("markers")
+
+    committed = repository.compensate_failed_admission(
+        "s1",
+        expected_stream_id="stream-1",
+        restore=restore,
+        on_committed=markers,
+    )
+
+    assert committed is True
+    assert order == ["restore", "index", "markers"]
+    assert current.active_stream_id is None
+    assert lock.held is False

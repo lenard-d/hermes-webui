@@ -7,7 +7,7 @@ import sys
 import types
 from pathlib import Path
 
-from api import models, streaming
+from api import config, models, streaming
 from api.models import Session
 from api.streaming import (
     _agent_result_terminal_failure,
@@ -33,7 +33,7 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
     streaming.SESSIONS.clear()
     streaming.STREAMS.clear()
     streaming.AGENT_INSTANCES.clear()
-    streaming.SESSION_AGENT_LOCKS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
     old_sid = "old_sid"
     new_sid = "new_sid"
     stream_id = "stream-compression-exhausted"
@@ -330,7 +330,7 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
     streaming.SESSIONS.clear()
     streaming.STREAMS.clear()
     streaming.AGENT_INSTANCES.clear()
-    streaming.SESSION_AGENT_LOCKS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
 
     old_sid = "old_sid_capture"
     new_sid = "new_sid_capture"

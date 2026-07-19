@@ -2,8 +2,10 @@ import json
 import os
 
 import api.turn_journal as turn_journal
+import pytest
 from api.session_recovery import audit_session_recovery
 from api.turn_journal import (
+    TurnJournalCommitUnknown,
     append_turn_journal_event,
     derive_turn_journal_states,
     iter_turn_journal_session_ids,
@@ -43,6 +45,141 @@ def test_append_turn_journal_event_fsyncs_jsonl_and_preserves_payload(tmp_path):
     lines = shards[0].read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert json.loads(lines[0])["content"] == "hello"
+
+
+def test_confirm_turn_journal_event_refsyncs_exact_written_event(tmp_path, monkeypatch):
+    expected = append_turn_journal_event(
+        "sid-confirm",
+        {
+            "event": "submitted",
+            "turn_id": "turn-confirm",
+            "stream_id": "stream-confirm",
+            "role": "user",
+            "content": "durable prompt",
+        },
+        session_dir=tmp_path,
+    )
+    fsync_calls = []
+    real_fsync = os.fsync
+
+    def recording_fsync(fd):
+        fsync_calls.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(turn_journal.os, "fsync", recording_fsync)
+
+    confirmed = turn_journal.confirm_turn_journal_event(
+        "sid-confirm",
+        expected,
+        session_dir=tmp_path,
+    )
+
+    assert confirmed == expected
+    assert fsync_calls
+
+
+def test_confirm_turn_journal_event_proves_missing_process_shard(tmp_path):
+    expected = {
+        "version": 1,
+        "session_id": "sid-missing",
+        "event": "submitted",
+        "turn_id": "turn-missing",
+        "stream_id": "stream-missing",
+    }
+
+    confirmed = turn_journal.confirm_turn_journal_event(
+        "sid-missing",
+        expected,
+        session_dir=tmp_path,
+    )
+
+    assert confirmed is None
+
+
+def test_confirm_turn_journal_event_rejects_conflicting_turn_identity(tmp_path):
+    expected = append_turn_journal_event(
+        "sid-conflict",
+        {
+            "event": "submitted",
+            "turn_id": "turn-conflict",
+            "stream_id": "stream-conflict",
+            "content": "first",
+        },
+        session_dir=tmp_path,
+    )
+    append_turn_journal_event(
+        "sid-conflict",
+        {
+            **expected,
+            "content": "different durable payload",
+        },
+        session_dir=tmp_path,
+    )
+
+    with pytest.raises(TurnJournalCommitUnknown, match="ambiguous admission state"):
+        turn_journal.confirm_turn_journal_event(
+            "sid-conflict",
+            expected,
+            session_dir=tmp_path,
+        )
+
+
+def test_confirm_turn_journal_event_allows_prior_lifecycle_event_for_same_turn(
+    tmp_path,
+):
+    submitted = append_turn_journal_event(
+        "sid-lifecycle",
+        {
+            "event": "submitted",
+            "turn_id": "turn-lifecycle",
+            "stream_id": "stream-lifecycle",
+        },
+        session_dir=tmp_path,
+    )
+    interrupted = append_turn_journal_event(
+        "sid-lifecycle",
+        {
+            "event": "interrupted",
+            "turn_id": submitted["turn_id"],
+            "stream_id": submitted["stream_id"],
+            "reason": "admission_failed",
+        },
+        session_dir=tmp_path,
+    )
+
+    confirmed = turn_journal.confirm_turn_journal_event(
+        "sid-lifecycle",
+        interrupted,
+        session_dir=tmp_path,
+    )
+
+    assert confirmed == interrupted
+
+
+def test_confirm_turn_journal_event_fails_closed_when_refsync_fails(
+    tmp_path, monkeypatch
+):
+    expected = append_turn_journal_event(
+        "sid-refsync-failure",
+        {
+            "event": "submitted",
+            "turn_id": "turn-refsync-failure",
+            "stream_id": "stream-refsync-failure",
+        },
+        session_dir=tmp_path,
+    )
+    monkeypatch.setattr(
+        turn_journal.os,
+        "fsync",
+        lambda _fd: (_ for _ in ()).throw(OSError("fsync unavailable")),
+    )
+
+    with pytest.raises(TurnJournalCommitUnknown, match="unable to confirm"):
+        turn_journal.confirm_turn_journal_event(
+            "sid-refsync-failure",
+            expected,
+            session_dir=tmp_path,
+        )
 
 
 def test_read_turn_journal_tolerates_malformed_lines(tmp_path):

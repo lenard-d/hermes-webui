@@ -1,6 +1,6 @@
 """Regression tests for first-class WebUI /goal command parity."""
 
-import threading
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -239,6 +239,76 @@ def test_goal_endpoint_sets_goal_and_starts_kickoff_stream(
     assert started[0]["external_runtime_owned"] is gateway_owned
 
 
+def test_goal_endpoint_restores_previous_goal_when_kickoff_admission_raises(
+    monkeypatch, tmp_path
+):
+    """A failed kickoff must not leave the newly requested goal installed."""
+    from api import goals as webui_goals
+    from api import routes
+
+    previous_goal_state = object()
+    restored = []
+
+    class FakeSession:
+        session_id = "sid-goal-route"
+        profile = "default"
+        workspace = str(tmp_path)
+        model = "gpt-5.5"
+        model_provider = "openai-codex"
+        messages = []
+        context_messages = []
+        pending_user_message = None
+        active_stream_id = None
+
+    monkeypatch.setattr(
+        webui_goals,
+        "goal_state_snapshot",
+        lambda session_id, **kwargs: previous_goal_state,
+    )
+    monkeypatch.setattr(
+        webui_goals,
+        "goal_command_payload",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "action": "set",
+            "kickoff_prompt": "ship the feature",
+        },
+    )
+    monkeypatch.setattr(
+        webui_goals,
+        "restore_goal_state",
+        lambda session_id, snapshot, **kwargs: restored.append(
+            (session_id, snapshot)
+        ),
+    )
+    monkeypatch.setattr(routes, "get_session", lambda sid: FakeSession())
+    monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda workspace: tmp_path)
+    monkeypatch.setattr(routes, "get_config", lambda: {})
+    monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda _cfg: False)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_compatible_session_model_state",
+        lambda model, provider, **_: (model, provider, False),
+    )
+    monkeypatch.setattr(
+        routes,
+        "_start_chat_stream_for_session",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("journal unavailable")),
+    )
+
+    with pytest.raises(OSError, match="journal unavailable"):
+        routes._handle_goal_command(
+            object(),
+            {
+                "session_id": "sid-goal-route",
+                "args": "ship the feature",
+                "workspace": str(tmp_path),
+            },
+        )
+
+    assert restored == [("sid-goal-route", previous_goal_state)]
+
+
 def test_goal_endpoint_preserves_response_shape_under_runtime_adapter_flag(monkeypatch, tmp_path):
     """The Slice 3c adapter path delegates /goal without adding adapter-only fields."""
     from api import goals as webui_goals
@@ -389,6 +459,7 @@ def test_routes_register_goal_endpoint_and_kickoff_stream():
 
 
 def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_path):
+    from api import config
     from api import routes
     import api.turn_admission as turn_admission
 
@@ -412,21 +483,39 @@ def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_pat
             captured["started"] = True
 
     def fake_prepare(session, **kwargs):
+        session.active_stream_id = kwargs["stream_id"]
         session.pending_started_at = 123.0
         session.title = "Goal Chat"
 
-    monkeypatch.setattr(turn_admission, "_get_session_agent_lock", lambda *args, **kwargs: threading.Lock())
+    session = FakeSession()
+    monkeypatch.setattr(
+        turn_admission,
+        "admission_write_owner",
+        lambda *args, **kwargs: nullcontext(session),
+    )
     monkeypatch.setattr(turn_admission, "prepare_session_for_turn", fake_prepare)
     monkeypatch.setattr(turn_admission, "_was_hidden_empty_session", lambda *args, **kwargs: False)
     monkeypatch.setattr(turn_admission, "publish_session_list_changed", lambda *args, **kwargs: None)
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda *args, **kwargs: None)
-    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        turn_admission,
+        "append_turn_journal_event",
+        lambda session_id, event: {**event, "session_id": session_id},
+    )
     monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda *args, **kwargs: True)
-    monkeypatch.setattr(turn_admission.threading, "Thread", FakeThread)
-    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: SimpleNamespace(hex="goal-stream-id"))
+    monkeypatch.setattr(
+        turn_admission,
+        "threading",
+        SimpleNamespace(Thread=FakeThread),
+    )
+    monkeypatch.setattr(
+        turn_admission,
+        "uuid",
+        SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="goal-stream-id")),
+    )
 
     response = routes._start_chat_stream_for_session(
-        FakeSession(),
+        session,
         msg="continue the goal",
         attachments=[],
         workspace=str(tmp_path),
@@ -435,11 +524,14 @@ def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_pat
         goal_related=True,
     )
 
-    assert response["stream_id"] == "goal-stream-id"
-    assert captured["target"] is routes._run_gateway_chat_streaming
-    assert captured["kwargs"]["goal_related"] is True
-    assert captured["kwargs"]["model_provider"] == "openai-codex"
-    assert captured["started"] is True
+    try:
+        assert response["stream_id"] == "goal-stream-id"
+        assert captured["target"] is routes._run_gateway_chat_streaming
+        assert captured["kwargs"]["goal_related"] is True
+        assert captured["kwargs"]["model_provider"] == "openai-codex"
+        assert captured["started"] is True
+    finally:
+        config.finish_runtime_run(response["stream_id"])
 
 
 def test_streaming_post_turn_goal_hook_surfaces_and_continues():

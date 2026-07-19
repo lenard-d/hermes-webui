@@ -4,7 +4,7 @@ import sys
 import types
 from pathlib import Path
 
-from api import models
+from api import config, models
 from api import streaming
 from api.models import Session
 
@@ -29,7 +29,7 @@ def _run_streaming_with_fake_agent(
     streaming.SESSIONS.clear()
     streaming.STREAMS.clear()
     streaming.AGENT_INSTANCES.clear()
-    streaming.SESSION_AGENT_LOCKS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
     streaming.PENDING_GOAL_CONTINUATION.clear()
     try:
         from api.config import SESSION_AGENT_CACHE

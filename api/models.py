@@ -1342,7 +1342,13 @@ class Session:
     def path(self):
         return SESSION_DIR / f'{self.session_id}.json'
 
-    def save(self, touch_updated_at: bool = True, skip_index: bool = False) -> None:
+    def save(
+        self,
+        touch_updated_at: bool = True,
+        skip_index: bool = False,
+        *,
+        _admission_compensation: bool = False,
+    ) -> None:
         if not is_safe_session_id(self.session_id):
             raise ValueError(f"Unsafe session_id {self.session_id!r}; refusing to write outside session store")
         # ── #1558 P0 guard ──────────────────────────────────────────────
@@ -1446,6 +1452,7 @@ class Session:
                     existing_msg_count > 0
                     and incoming_msg_count == 0
                     and (self.active_stream_id or self.pending_user_message)
+                    and not _admission_compensation
                 ):
                     logger.warning(
                         "refusing to overwrite session %s messages with empty active/pending snapshot "
@@ -1456,7 +1463,7 @@ class Session:
                         self.active_stream_id,
                     )
                     return
-                if existing_msg_count > incoming_msg_count:
+                if existing_msg_count > incoming_msg_count and not _admission_compensation:
                     bak_path = self.path.with_suffix('.json.bak')
                     # SHOULD-FIX #2 (Opus): atomic write via tmp+replace,
                     # mirroring the main save() pattern below. Prevents a

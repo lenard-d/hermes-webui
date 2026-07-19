@@ -86,10 +86,14 @@ liveness, admission blocking, immutable progress/cancellation snapshots, stale-w
 reconciliation, terminal cleanup, and copied views for route/model consumers.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
-the cursor through the runtime owner. `api/turn_admission.py` now owns the synchronous transition from an
-accepted local turn through pending persistence, submitted journal entry,
-stream publication, and worker launch. Agent interruption and cancelled-session
-persistence consume the runtime snapshot in `api/streaming.py`; provider
+the cursor through the runtime owner. `api/turn_admission.py` now owns the
+synchronous transition from a validated local-turn candidate through pending
+persistence, durable submitted-event confirmation, stream registration,
+ownership recheck, and worker launch outside the session lock. It compensates
+only after a matching terminal event is confirmed; ambiguous journal commits
+and failed runtime cleanup retain the pending owner and fail closed. Agent
+interruption and cancelled-session persistence consume the runtime snapshot in
+`api/streaming.py`; provider
 execution, recovery, and final persistence still need to converge on the same
 runtime Interface before this finding is closed.
 
@@ -161,6 +165,12 @@ index, tombstone, attachment, journal, terminal, completion-deduplication, and
 non-messaging `state.db` cleanup behind one operation. It refuses deletion
 while a turn is active, and admission rechecks the durable delete marker while
 holding the same lock, closing both active-writeback and queued-start races.
+Admission compensation is now generation-checked against the authoritative
+sidecar. Existing sessions restore their pre-admission state without creating a
+rejected shrink backup; failed first turns discard their provisional sidecar and
+index row. Delete never explicitly prunes the per-session lock: a weak registry
+keeps one lock identity alive for current holders and waiters, and compression
+aliases old and new session IDs to that identity before publishing the new ID.
 Empty-sidecar and index-only-ghost cleanup is now a repository reconciliation
 operation rather than route logic; it reloads candidates under their owner
 lock, skips live turns, and removes recovery backups with deleted sidecars.
@@ -369,11 +379,11 @@ Priority: high
 Remediation status: in progress. The initial figures below are the audit
 baseline, not the current branch result. Source-shape assumptions touched by
 the runtime/cache/session extraction have been replaced with behavioral tests.
-After the deletion/admission and cleanup ownership work, a complete run of the current
-13,484-test collection finished in 335.27 seconds with 13,326 passed, 158
-skipped, 2 xfailed, 1 xpassed, and 34 subtests passed; there were no real
-failures. The broader source-coupled portfolio and missing coverage threshold
-remain open.
+After the deletion/admission, journal-confirmation, lock-lifecycle, and cleanup
+ownership work, a complete run of the current 13,535-test collection finished
+in 387.49 seconds with 13,377 passed, 158 skipped, 2 xfailed, 1 xpassed, and 34
+subtests passed; there were no real failures. The broader source-coupled
+portfolio and missing coverage threshold remain open.
 
 Collection through `./scripts/test.sh` found exactly 13,461 tests. The collector
 reported that `hermes-agent` was unavailable locally, causing 30 agent-dependent
@@ -487,7 +497,7 @@ Priority: medium to high
 
 Remediation status: in progress. The root architecture, testing, and README
 snapshots now use the repo test runner, the current 5-shard matrix, the refreshed
-13,484-test/1,282-file count, and the current runtime/session/admission Module map.
+13,535-test/1,285-file count, and the current runtime/session/admission Module map.
 The architecture roadmap now distinguishes initial file extraction from deeper
 ownership. Archiving the embedded sprint logs and consolidating competing
 architecture indexes remain open.
@@ -525,7 +535,7 @@ but contains several stale snapshots:
 The document is approximately 1,981 lines and has accumulated chronological
 sprint guidance:
 
-- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,484
+- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,535
 - it claimed three CI shards; `.github/workflows/tests.yml` uses five shards for
   each of three Python versions
 - its coverage reference reflects early sprints rather than the current suite
