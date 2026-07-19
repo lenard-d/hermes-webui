@@ -593,7 +593,8 @@ def test_custom_slug_cold_stale_not_picked_still_strips_5979():
 def test_warm_models_catalog_provenance_if_cold_publishes_from_disk_5979():
     """The send-path warm helper publishes provenance from a valid disk cache
     when memory is cold — restoring the endpoint-advertised signal so #433
-    strips and #5979 preserves — WITHOUT a live rebuild.
+    strips and #5979 preserves — WITHOUT making the full memory catalog fresh
+    or suppressing a later live rebuild.
     """
     old_cfg = dict(config.cfg)
     config.cfg.clear()
@@ -611,6 +612,7 @@ def test_warm_models_catalog_provenance_if_cold_publishes_from_disk_5979():
         assert config._models_cache_provenance is not None
         # Simulate cold memory but valid disk cache (do NOT delete disk).
         config._available_models_cache = None
+        cold_cache_ts = config._available_models_cache_ts
         config._advertised_model_ids_memo = None
         config._sync_models_cache_provenance()
         assert config._models_cache_provenance is None, "precondition: memory cold"
@@ -618,6 +620,12 @@ def test_warm_models_catalog_provenance_if_cold_publishes_from_disk_5979():
         config.warm_models_catalog_provenance_if_cold()
         assert config._models_cache_provenance is not None, (
             "warm helper must publish provenance from the disk cache"
+        )
+        assert config._available_models_cache is None, (
+            "provenance-only warmup must leave the full models catalog cold"
+        )
+        assert config._available_models_cache_ts == cold_cache_ts, (
+            "provenance-only warmup must not stamp a disk snapshot as a fresh memory cache"
         )
         adv = config._endpoint_advertised_model_ids('custom:llm-proxy')
         assert adv and 'x-ai/grok-composer-2.5-fast' in adv, (

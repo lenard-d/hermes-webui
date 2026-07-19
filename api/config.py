@@ -7963,8 +7963,9 @@ def warm_models_catalog_provenance_if_cold() -> None:
       * tries the cache lock NON-BLOCKING and returns immediately if it's busy
         (a concurrent rebuild will publish provenance itself);
       * reads ONLY the on-disk cache (no network, no live probe, no rebuild);
-      * publishes the snapshot + source fingerprint via the same globals the
-        real publish sites use, then ``_sync_models_cache_provenance()``.
+      * publishes only the snapshot + source fingerprint provenance pair used
+        by the resolver, leaving the full in-memory catalog cold so a later
+        request can still perform its normal live rebuild.
     Publishing the fingerprint from the CURRENT runtime is correct: the disk
     cache is validated by schema/version/source-fingerprint on load
     (``_is_loadable_disk_cache``), so a load success means it belongs to this
@@ -7980,8 +7981,7 @@ def warm_models_catalog_provenance_if_cold() -> None:
     published fingerprint to the current one before short-circuiting closes that
     hole — a mismatch falls through to load THIS profile's disk snapshot.
     """
-    global _available_models_cache, _available_models_cache_ts
-    global _available_models_cache_source_fingerprint
+    global _models_cache_provenance, _advertised_model_ids_memo
 
     def _provenance_is_current() -> bool:
         prov = _models_cache_provenance
@@ -8006,13 +8006,9 @@ def warm_models_catalog_provenance_if_cold() -> None:
             disk_groups = None
         if disk_groups is None:
             return  # no durable cache for this profile → stay cold, preserve verbatim
-        _available_models_cache = disk_groups
-        _available_models_cache_ts = time.monotonic()
-        try:
-            _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
-        except Exception:
-            _available_models_cache_source_fingerprint = None
-        _sync_models_cache_provenance()
+        current_fingerprint = _models_cache_source_fingerprint()
+        _models_cache_provenance = (disk_groups, current_fingerprint)
+        _advertised_model_ids_memo = None
     except Exception:
         logger.debug("models catalog provenance warm failed", exc_info=True)
     finally:
