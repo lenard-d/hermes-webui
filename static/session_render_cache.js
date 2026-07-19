@@ -8,6 +8,80 @@ function positiveLimit(value, fallback){
   return Number.isFinite(parsed)&&parsed>0?Math.floor(parsed):fallback;
 }
 
+export function createRenderSignature({
+  messages=[],
+  toolCalls=[],
+  session=null,
+  messageContent=(message)=>message&&message.content,
+  messageHasReasoningPayload=(message)=>!!(
+    message&&(message.reasoning||message.thinking||message._reasoning)
+  ),
+}={}){
+  const renderedMessages=Array.isArray(messages)?messages:[];
+  const settledToolCalls=Array.isArray(toolCalls)?toolCalls:[];
+  let hash=2166136261;
+
+  function add(value){
+    const text=String(value==null?'':value);
+    for(let index=0;index<text.length;index++){
+      hash^=text.charCodeAt(index);
+      hash=Math.imul(hash,16777619)>>>0;
+    }
+    hash^=31;
+    hash=Math.imul(hash,16777619)>>>0;
+  }
+
+  add(renderedMessages.length);
+  for(const message of renderedMessages){
+    if(!message||typeof message!=='object'){ add('missing'); continue; }
+    add(message.role);add(message.timestamp);add(message._ts);
+    add(message._error);add(message._statusCard);add(messageContent(message));
+    if(Array.isArray(message.content)){
+      add('content-array');
+      message.content.forEach((part)=>{
+        if(!part||typeof part!=='object'){ add(part); return; }
+        add(part.type);add(part.id);add(part.name);add(part.text);add(part.content);
+      });
+    }
+    if(Array.isArray(message.tool_calls)){
+      add('message-tool-calls');add(message.tool_calls.length);
+      message.tool_calls.forEach((toolCall)=>{
+        add(toolCall&&toolCall.id);add(toolCall&&toolCall.name);
+        add(toolCall&&toolCall.type);add(JSON.stringify(toolCall&&toolCall.function||{}));
+      });
+    }
+    if(Array.isArray(message._partial_tool_calls)){
+      add('partial-tool-calls');add(message._partial_tool_calls.length);
+      message._partial_tool_calls.forEach((toolCall)=>{
+        add(toolCall&&toolCall.id);add(toolCall&&toolCall.name);add(toolCall&&toolCall.snippet);
+      });
+    }
+    if(messageHasReasoningPayload(message)){
+      add(message.reasoning||message.thinking||message._reasoning||'reasoning');
+    }
+    if(Array.isArray(message.attachments)){
+      message.attachments.forEach((attachment)=>{
+        add(attachment&&typeof attachment==='object'?JSON.stringify(attachment):attachment);
+      });
+    }
+  }
+
+  add('settled-tool-calls');add(settledToolCalls.length);
+  settledToolCalls.forEach((toolCall)=>{
+    if(!toolCall||typeof toolCall!=='object'){ add(toolCall); return; }
+    add(toolCall.tid);add(toolCall.id);add(toolCall.name);add(toolCall.done);
+    add(toolCall.is_diff);add(toolCall.assistant_msg_idx);add(toolCall.snippet);
+    add(JSON.stringify(toolCall.args||{}));
+  });
+  if(session){
+    add(session.message_count);add(session.updated_at);
+    add(session.compression_anchor_visible_idx);
+    add(JSON.stringify(session.compression_anchor_message_key||null));
+    add(session.compression_anchor_summary||'');
+  }
+  return `${renderedMessages.length}:${settledToolCalls.length}:${hash.toString(16)}`;
+}
+
 export function createSessionRenderCache(options={}){
   const maxEntries=positiveLimit(options.maxEntries,8);
   const maxEntryBytes=positiveLimit(options.maxEntryBytes,2*1024*1024);

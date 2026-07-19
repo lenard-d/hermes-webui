@@ -245,7 +245,9 @@ larger migration remains incremental:
   budgets. It exports one factory and does not publish browser globals.
   `static/session_render_cache_adapter.js` is the temporary compatibility
   Adapter that exposes this Interface to classic `static/ui.js`; cache behavior
-  is not duplicated in the Adapter.
+  is not duplicated in the Adapter. The owner also computes transcript render
+  signatures from message, tool-call, and session inputs, so cache validity is
+  behavior-tested without parsing `ui.js` source layout.
 
 These Interfaces are intentionally deep: route and rendering code state the
 operation they need while lock ordering, cache accounting, and multi-registry

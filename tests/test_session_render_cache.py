@@ -12,9 +12,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE = shutil.which("node")
-ADAPTER_SOURCE = (ROOT / "static" / "session_render_cache_adapter.js").read_text(
-    encoding="utf-8"
-)
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node is required")
 
@@ -26,7 +23,7 @@ import fs from 'node:fs';
 const source = fs.readFileSync({json.dumps(str(module_path))}, 'utf8');
 const moduleUrl = `data:text/javascript;base64,${{Buffer.from(source).toString('base64')}}`;
 globalThis.window = {{}};
-const {{createSessionRenderCache}} = await import(moduleUrl);
+const {{createSessionRenderCache, createRenderSignature}} = await import(moduleUrl);
 const createCache = createSessionRenderCache;
 {script}
 """
@@ -57,12 +54,25 @@ console.log(JSON.stringify({
     }
 
 
-def test_legacy_adapter_statically_imports_the_owner_before_publishing():
-    assert (
-        "import {createSessionRenderCache} from './session_render_cache.js';"
-        in ADAPTER_SOURCE
+def test_render_signature_changes_for_each_rendered_state_dimension():
+    result = _run_cache_scenario(
+        """
+const base={messages:[{role:'assistant',content:'same'}],toolCalls:[],session:{}};
+const signatures={
+  base:createRenderSignature(base),
+  repeat:createRenderSignature(structuredClone(base)),
+  content:createRenderSignature({...base,messages:[{role:'assistant',content:'changed'}]}),
+  messageTool:createRenderSignature({...base,messages:[{...base.messages[0],tool_calls:[{id:'1',name:'read'}]}]}),
+  partialTool:createRenderSignature({...base,messages:[{...base.messages[0],_partial_tool_calls:[{id:'1',snippet:'partial'}]}]}),
+  settledTool:createRenderSignature({...base,toolCalls:[{tid:'1',name:'read',snippet:'done'}]}),
+  compression:createRenderSignature({...base,session:{compression_anchor_summary:'summary'}}),
+};
+console.log(JSON.stringify(signatures));
+"""
     )
-    assert "await import(" not in ADAPTER_SOURCE
+
+    assert result["base"] == result.pop("repeat")
+    assert len(set(result.values())) == len(result)
 
 
 def test_cache_enforces_lru_and_memory_limits_through_its_interface():

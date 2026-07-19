@@ -14512,52 +14512,13 @@ function clearMessageRenderCache(){
 }
 
 function _messageRenderCacheSignature(){
-  let hash=2166136261;
-  function add(value){
-    const s=String(value==null?'':value);
-    for(let i=0;i<s.length;i++){
-      hash^=s.charCodeAt(i);
-      hash=Math.imul(hash,16777619)>>>0;
-    }
-    hash^=31;
-    hash=Math.imul(hash,16777619)>>>0;
-  }
-  const messages=Array.isArray(S.messages)?S.messages:[];
-  add(messages.length);
-  for(const m of messages){
-    if(!m||typeof m!=='object'){ add('missing'); continue; }
-    add(m.role);add(m.timestamp);add(m._ts);add(m._error);add(m._statusCard);
-    add(msgContent(m));
-    if(Array.isArray(m.content)){
-      add('content-array');
-      m.content.forEach(part=>{
-        if(!part||typeof part!=='object'){ add(part); return; }
-        add(part.type);add(part.id);add(part.name);add(part.text);add(part.content);
-      });
-    }
-    if(Array.isArray(m.tool_calls)){
-      add('message-tool-calls');add(m.tool_calls.length);
-      m.tool_calls.forEach(tc=>{add(tc&&tc.id);add(tc&&tc.name);add(tc&&tc.type);add(JSON.stringify(tc&&tc.function||{}));});
-    }
-    if(Array.isArray(m._partial_tool_calls)){
-      add('partial-tool-calls');add(m._partial_tool_calls.length);
-      m._partial_tool_calls.forEach(tc=>{add(tc&&tc.id);add(tc&&tc.name);add(tc&&tc.snippet);});
-    }
-    if(_messageHasReasoningPayload(m)) add(m.reasoning||m.thinking||m._reasoning||'reasoning');
-    if(Array.isArray(m.attachments)) m.attachments.forEach(a=>add(a&&typeof a==='object'?JSON.stringify(a):a));
-  }
-  const toolCalls=Array.isArray(S.toolCalls)?S.toolCalls:[];
-  add('settled-tool-calls');add(toolCalls.length);
-  toolCalls.forEach(tc=>{
-    if(!tc||typeof tc!=='object'){ add(tc); return; }
-    add(tc.tid);add(tc.id);add(tc.name);add(tc.done);add(tc.is_diff);add(tc.assistant_msg_idx);add(tc.snippet);add(JSON.stringify(tc.args||{}));
+  return window.HermesSessionRenderCache.signature({
+    messages:S.messages,
+    toolCalls:S.toolCalls,
+    session:S.session,
+    messageContent:msgContent,
+    messageHasReasoningPayload:_messageHasReasoningPayload,
   });
-  if(S.session){
-    add(S.session.message_count);add(S.session.updated_at);add(S.session.compression_anchor_visible_idx);
-    add(JSON.stringify(S.session.compression_anchor_message_key||null));
-    add(S.session.compression_anchor_summary||'');
-  }
-  return `${messages.length}:${toolCalls.length}:${hash.toString(16)}`;
 }
 
 function _clipCliToolSnippet(text, maxLen=20000){

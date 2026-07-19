@@ -301,6 +301,10 @@ behavior tests cover the module directly, and the isolated local server served
 both module files with JavaScript MIME types in the documented order. A real
 browser smoke check could not be completed because the configured Playwright
 driver expects a Chrome installation that is not present on this machine.
+The render-signature regression now drives the exported behavior across
+message content, partial and settled tool calls, and compression metadata;
+three assertions over exact `ui.js` helper names and source windows were
+removed.
 
 Relevant areas:
 
