@@ -12,6 +12,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE = shutil.which("node")
+ADAPTER_SOURCE = (ROOT / "static" / "session_render_cache_adapter.js").read_text(
+    encoding="utf-8"
+)
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node is required")
 
@@ -19,17 +22,16 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node is required")
 def _run_cache_scenario(script: str) -> dict:
     module_path = ROOT / "static" / "session_render_cache.js"
     harness = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sandbox = {{window: {{}}}};
-sandbox.globalThis = sandbox.window;
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync({json.dumps(str(module_path))}, 'utf8'), sandbox);
-const createCache = sandbox.window.HermesSessionRenderCache.create;
+import fs from 'node:fs';
+const source = fs.readFileSync({json.dumps(str(module_path))}, 'utf8');
+const moduleUrl = `data:text/javascript;base64,${{Buffer.from(source).toString('base64')}}`;
+globalThis.window = {{}};
+const {{createSessionRenderCache}} = await import(moduleUrl);
+const createCache = createSessionRenderCache;
 {script}
 """
     result = subprocess.run(
-        [NODE, "-e", harness],
+        [NODE, "--input-type=module", "-e", harness],
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -37,6 +39,30 @@ const createCache = sandbox.window.HermesSessionRenderCache.create;
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
+
+
+def test_module_import_does_not_publish_a_browser_global():
+    result = _run_cache_scenario(
+        """
+console.log(JSON.stringify({
+  exportedFactory: typeof createCache,
+  leakedLegacyInterface: Object.hasOwn(window, 'HermesSessionRenderCache'),
+}));
+"""
+    )
+
+    assert result == {
+        "exportedFactory": "function",
+        "leakedLegacyInterface": False,
+    }
+
+
+def test_legacy_adapter_statically_imports_the_owner_before_publishing():
+    assert (
+        "import {createSessionRenderCache} from './session_render_cache.js';"
+        in ADAPTER_SOURCE
+    )
+    assert "await import(" not in ADAPTER_SOURCE
 
 
 def test_cache_enforces_lru_and_memory_limits_through_its_interface():

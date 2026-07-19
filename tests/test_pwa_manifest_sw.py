@@ -252,6 +252,7 @@ class TestIndexHtmlIntegration:
         for asset in (
             "style.css",
             "boot.js",
+            "session_render_cache_adapter.js",
             "ui.js",
             "messages.js",
             "sessions.js",
@@ -271,6 +272,11 @@ class TestIndexHtmlIntegration:
                 f"sw.js SHELL_ASSETS entry for {asset} must carry "
                 "?v=__WEBUI_VERSION__ to match the URL the page requests"
             )
+
+        assert "'./static/session_render_cache.js'," in src, (
+            "the service worker must pre-cache the unversioned URL requested "
+            "by the adapter's static relative module import"
+        )
 
     def test_sw_shell_assets_are_network_first(self):
         """Shell JS/CSS must prefer the network, then fall back to CacheStorage.

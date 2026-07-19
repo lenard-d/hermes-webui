@@ -26,6 +26,9 @@ const SHELL_ASSETS = [
   './static/pwa-startup.js' + VQ,
   './static/boot.js' + VQ,
   './static/assistant_turn_anchors.js' + VQ,
+  './static/session_render_cache_adapter.js' + VQ,
+  // The adapter's static relative import requests this dependency without VQ.
+  './static/session_render_cache.js',
   './static/ui.js' + VQ,
   './static/messages.js' + VQ,
   './static/sessions.js' + VQ,

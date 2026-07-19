@@ -33,8 +33,10 @@ and `static/boot.js` keeps the dataset synchronized with the runtime panel state
 
 The design philosophy is deliberately minimal. There is no build step, no bundler, no
 frontend framework. The Python server is split into a routing shell (server.py) and
-business logic modules (api/). The frontend is seven vanilla JS modules loaded from static/.
-This makes the code easy to modify from a terminal or by an agent.
+business logic modules (api/). The frontend is vanilla JavaScript loaded from
+`static/`; most feature files are still classic scripts, while bounded new
+ownership seams can use native ES modules without adding a build step. This
+makes the code easy to modify from a terminal or by an agent.
 
 Hermes-level chrome is intentionally consolidated: the sidebar has no dedicated brand header.
 Instead, the footer exposes a single "Hermes WebUI" launch button that opens one tabbed
@@ -81,7 +83,8 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       index.html           HTML template
       style.css            All CSS incl. mobile responsive, themes + skins, KaTeX
       ui.js                DOM helpers, renderMd, tool cards, context indicator, file tree
-      session_render_cache.js Bounded LRU for serialized transcript render snapshots
+      session_render_cache.js Native ES module owning the bounded transcript-render LRU
+      session_render_cache_adapter.js Temporary classic-frontend compatibility adapter
       workspace.js         File preview, file ops, git badge, central api() fetch wrapper
       sessions.js          Session CRUD, list rendering, collapsible groups, search, SSE sync
       messages.js          send(), SSE event handlers, approval/clarify, transcript, recovery
@@ -237,9 +240,12 @@ larger migration remains incremental:
   Hermes `state.db`. Its Interface accepts query text and storage collaborators
   and returns a payload; the route wrapper only supplies those values and
   serializes the response.
-- `static/session_render_cache.js` owns the bounded browser transcript-render
-  cache, including LRU order and UTF-16 memory budgets. `static/ui.js` consumes
-  its small interface instead of mutating cache counters directly.
+- `static/session_render_cache.js` is a native ES module that owns the bounded
+  browser transcript-render cache, including LRU order and UTF-16 memory
+  budgets. It exports one factory and does not publish browser globals.
+  `static/session_render_cache_adapter.js` is the temporary compatibility
+  Adapter that exposes this Interface to classic `static/ui.js`; cache behavior
+  is not duplicated in the Adapter.
 
 These Interfaces are intentionally deep: route and rendering code state the
 operation they need while lock ordering, cache accounting, and multi-registry
@@ -477,7 +483,8 @@ read_file_content(workspace, rel):
 ### 5.1 Structure
 
 The frontend is served from static/ as separate files: one HTML template, one CSS file,
-and multiple JavaScript modules. External dependencies include Prism.js (syntax
+and multiple JavaScript files. Most application files remain classic scripts rather
+than enforceable modules. External dependencies include Prism.js (syntax
 highlighting), Mermaid.js (diagrams), xterm.js, and KaTeX assets loaded with the
 current static template's integrity/CSP assumptions.
 
@@ -902,9 +909,11 @@ Completed across Sprints 5, 6, and 9:
 2. CSS extracted to `static/style.css` (Sprint 4).
 3. `app.js` was deleted in Sprint 9 and replaced by focused files. The current
    page loads 15 application scripts at the end of `static/index.html` in addition
-   to the early PWA startup script. They are classic `<script>` files rather than
-   native ES Modules, so their shared global namespace and load order remain a
-   shallow Interface that needs further deepening.
+   to the early PWA startup script. Most are classic `<script>` files, so their
+   shared global namespace and load order remain a shallow Interface that needs
+   further deepening. The transcript render cache is the first incremental
+   native-module seam: a pure owner module plus one temporary compatibility
+   Adapter for `ui.js`.
 4. Prism.js added for syntax highlighting (Sprint 8) via CDN, deferred load.
 
 Remaining: renderMd() is still a hand-rolled regex chain. Tables partially supported.

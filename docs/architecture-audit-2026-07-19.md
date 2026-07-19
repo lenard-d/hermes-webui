@@ -292,6 +292,16 @@ value.
 
 Priority: high
 
+Remediation status: in progress. `static/session_render_cache.js` is now a
+native ES module with one explicit factory export and no browser-global writes.
+The cache's LRU and memory accounting remain private. A separate, small
+compatibility Adapter publishes the existing frozen Interface for classic
+`ui.js`; this isolates rather than duplicates the transition mechanism. Node
+behavior tests cover the module directly, and the isolated local server served
+both module files with JavaScript MIME types in the documented order. A real
+browser smoke check could not be completed because the configured Playwright
+driver expects a Chrome installation that is not present on this machine.
+
 Relevant areas:
 
 - `static/index.html`
@@ -603,7 +613,8 @@ The audit recommends addressing the findings in this order:
 
 1. Complete runtime ownership for the browser-turn lifecycle.
 2. Establish one session repository and reconciliation owner.
-3. Replace the frontend global namespace with native module interfaces.
+3. Continue replacing the frontend global namespace with native module
+   interfaces, using the transcript-render cache seam as the migration pattern.
 4. Deepen provider catalog and configuration modules, then slim route dispatch.
 5. Rebalance tests toward observable behavior and add coverage visibility.
 6. Reset architecture and testing documentation around durable sources.
