@@ -83,7 +83,10 @@ Priority: critical
 
 Remediation status: in progress. `api/runtime_state.py` now owns process-local
 liveness, admission blocking, immutable progress/cancellation snapshots, stale-worker
-reconciliation, and terminal cleanup. `api/turn_admission.py` now owns the synchronous transition from an
+reconciliation, terminal cleanup, and copied views for route/model consumers.
+`api/routes.py` and `api/models.py` no longer import the mutable transport,
+worker, or event-cursor registries, and both local and Gateway producers record
+the cursor through the runtime owner. `api/turn_admission.py` now owns the synchronous transition from an
 accepted local turn through pending persistence, submitted journal entry,
 stream publication, and worker launch. Agent interruption and cancelled-session
 persistence consume the runtime snapshot in `api/streaming.py`; provider
@@ -416,7 +419,7 @@ Priority: medium to high
 
 Remediation status: in progress. The root architecture, testing, and README
 snapshots now use the repo test runner, the current 5-shard matrix, the refreshed
-13,470-test/1,281-file count, and the current runtime/session/admission Module map.
+13,473-test/1,281-file count, and the current runtime/session/admission Module map.
 The architecture roadmap now distinguishes initial file extraction from deeper
 ownership. Archiving the embedded sprint logs and consolidating competing
 architecture indexes remain open.
@@ -454,7 +457,7 @@ but contains several stale snapshots:
 The document is approximately 1,981 lines and has accumulated chronological
 sprint guidance:
 
-- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,470
+- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,473
 - it claimed three CI shards; `.github/workflows/tests.yml` uses five shards for
   each of three Python versions
 - its coverage reference reflects early sprints rather than the current suite

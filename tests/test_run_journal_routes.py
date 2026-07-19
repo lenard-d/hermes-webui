@@ -5,6 +5,7 @@ import io
 import json
 import queue
 
+import api.config as config
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
@@ -85,14 +86,11 @@ def test_active_stream_replay_uses_snapshot_cutoff_and_skips_duplicate_queue_ite
         },
     )
     monkeypatch.setattr(routes, "stale_interrupted_event", lambda *_args, **_kwargs: None)
-    previous_streams = dict(routes.STREAMS)
-    routes.STREAMS.clear()
-    routes.STREAMS["run_1"] = stream
+    config.register_runtime_stream("run_1", "session_1", stream)
     try:
         routes._handle_sse_stream(handler, urlparse("/api/chat/stream?stream_id=run_1&replay=1&after_seq=0"))
     finally:
-        routes.STREAMS.clear()
-        routes.STREAMS.update(previous_streams)
+        config.finish_runtime_run("run_1")
 
     body = handler.wfile.getvalue().decode("utf-8")
     assert body.count("event: token\n") == 1
@@ -150,17 +148,14 @@ def test_active_stream_snapshot_keeps_items_for_new_run_with_same_seq_range(monk
         lambda session_id, run_id, after_seq=None, max_seq=None: {"events": []},
     )
     monkeypatch.setattr(routes, "stale_interrupted_event", lambda *_args, **_kwargs: None)
-    previous_streams = dict(routes.STREAMS)
-    routes.STREAMS.clear()
-    routes.STREAMS["run_new"] = stream
+    config.register_runtime_stream("run_new", "session_2", stream)
     try:
         routes._handle_sse_stream(
             handler,
             urlparse("/api/chat/stream?stream_id=run_new&replay=1&after_seq=0"),
         )
     finally:
-        routes.STREAMS.clear()
-        routes.STREAMS.update(previous_streams)
+        config.finish_runtime_run("run_new")
 
     body = handler.wfile.getvalue().decode("utf-8")
     assert "id: run_new:1\n" in body
@@ -199,17 +194,18 @@ def test_active_stream_replay_without_journal_keeps_buffered_queue_items(monkeyp
 
     monkeypatch.setattr(routes, "find_run_summary", lambda _stream_id: None)
     handler = Handler()
-    previous_streams = dict(routes.STREAMS)
-    routes.STREAMS.clear()
-    routes.STREAMS["missing_journal_run"] = FakeStream()
+    config.register_runtime_stream(
+        "missing_journal_run",
+        "missing-journal-session",
+        FakeStream(),
+    )
     try:
         routes._handle_sse_stream(
             handler,
             urlparse("/api/chat/stream?stream_id=missing_journal_run&replay=1&after_seq=0"),
         )
     finally:
-        routes.STREAMS.clear()
-        routes.STREAMS.update(previous_streams)
+        config.finish_runtime_run("missing_journal_run")
 
     body = handler.wfile.getvalue().decode("utf-8")
     assert "id: missing_journal_run:1\n" in body
@@ -238,14 +234,11 @@ def test_live_sse_uses_each_queue_items_own_event_id():
     stream.put_nowait(("token", {"text": "A"}, "run_own_id:1"))
     stream.put_nowait(("stream_end", {"ok": True}, "run_own_id:2"))
     handler = Handler()
-    previous_streams = dict(routes.STREAMS)
-    routes.STREAMS.clear()
-    routes.STREAMS["run_own_id"] = stream
+    config.register_runtime_stream("run_own_id", "run-own-session", stream)
     try:
         routes._handle_sse_stream(handler, urlparse("/api/chat/stream?stream_id=run_own_id"))
     finally:
-        routes.STREAMS.clear()
-        routes.STREAMS.update(previous_streams)
+        config.finish_runtime_run("run_own_id")
 
     body = handler.wfile.getvalue().decode("utf-8")
     assert "id: run_own_id:1\nevent: token\n" in body
@@ -581,17 +574,14 @@ def test_active_stream_replay_keeps_items_for_new_run_with_same_seq_range(monkey
         lambda session_id, run_id, after_seq=None, max_seq=None: {"events": []},
     )
     monkeypatch.setattr(routes, "stale_interrupted_event", lambda *_args, **_kwargs: None)
-    previous_streams = dict(routes.STREAMS)
-    routes.STREAMS.clear()
-    routes.STREAMS["run_new"] = stream
+    config.register_runtime_stream("run_new", "session_2", stream)
     try:
         routes._handle_sse_stream(
             handler,
             urlparse("/api/chat/stream?stream_id=run_new&replay=1&after_seq=0"),
         )
     finally:
-        routes.STREAMS.clear()
-        routes.STREAMS.update(previous_streams)
+        config.finish_runtime_run("run_new")
 
     body = handler.wfile.getvalue().decode("utf-8")
     assert "id: run_new:1\n" in body

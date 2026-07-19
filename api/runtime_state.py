@@ -129,6 +129,72 @@ class ProcessRuntimeState:
         with self._active_runs_lock:
             return stream_id in self._active_runs
 
+    def transport(self, stream_id: str) -> Any | None:
+        """Return the current transport handle without exposing its registry."""
+        stream_id = str(stream_id or "").strip()
+        if not stream_id:
+            return None
+        with self._streams_lock:
+            return self._streams.get(stream_id)
+
+    def transport_items(self) -> tuple[tuple[str, Any], ...]:
+        """Return a stable snapshot of published transport handles."""
+        with self._streams_lock:
+            return tuple(self._streams.items())
+
+    def transport_count(self, *, timeout: float | None = None) -> int | None:
+        """Count transports, returning ``None`` when a bounded lock wait expires."""
+        if timeout is None:
+            with self._streams_lock:
+                return len(self._streams)
+        if timeout < 0:
+            raise ValueError("timeout must be non-negative")
+        if not self._streams_lock.acquire(timeout=timeout):
+            return None
+        try:
+            return len(self._streams)
+        finally:
+            self._streams_lock.release()
+
+    def worker_items(self) -> tuple[tuple[str, dict[str, Any]], ...]:
+        """Return copied worker metadata that callers cannot mutate in place."""
+        with self._active_runs_lock:
+            return tuple(
+                (str(stream_id), dict(metadata or {}))
+                for stream_id, metadata in self._active_runs.items()
+            )
+
+    def active_run_ids(self) -> frozenset[str]:
+        """Return every run with a live transport or worker."""
+        with self._streams_lock:
+            active_ids = set(self._streams)
+        with self._active_runs_lock:
+            active_ids.update(str(stream_id) for stream_id in self._active_runs)
+        return frozenset(active_ids)
+
+    def run_session_id(self, stream_id: str) -> str | None:
+        """Resolve a run's session from worker metadata, then stream ownership."""
+        stream_id = str(stream_id or "").strip()
+        if not stream_id:
+            return None
+        with self._active_runs_lock:
+            worker = dict(self._active_runs.get(stream_id) or {})
+        session_id = str(worker.get("session_id") or "").strip()
+        if session_id:
+            return session_id
+        return self.owner_session_id(stream_id)
+
+    def last_event_id(self, stream_id: str) -> str | None:
+        """Return the most recent durable event cursor for a live run."""
+        return self.progress_snapshot(stream_id).last_event_id
+
+    def note_last_event_id(self, stream_id: str, event_id: str) -> None:
+        """Record the latest durable event cursor without exposing its registry."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        event_id = self._required_id(event_id, "event_id")
+        with self._streams_lock:
+            self._last_event_ids[stream_id] = event_id
+
     def blocking_stream_for_session(
         self,
         session_id: str,

@@ -29,6 +29,7 @@ import json
 import queue
 from urllib.parse import urlparse
 
+import api.config as config
 import api.routes as routes
 
 
@@ -63,14 +64,14 @@ class _FakeStream:
 
 def _run_handler(monkeypatch, stream, query):
     handler = _Handler()
-    previous_streams = dict(routes.STREAMS)
-    routes.STREAMS.clear()
-    routes.STREAMS["run_1"] = stream
+    previous_streams = dict(config.STREAMS)
+    config.STREAMS.clear()
+    config.STREAMS["run_1"] = stream
     try:
         routes._handle_sse_stream(handler, urlparse(f"/api/chat/stream?{query}"))
     finally:
-        routes.STREAMS.clear()
-        routes.STREAMS.update(previous_streams)
+        config.STREAMS.clear()
+        config.STREAMS.update(previous_streams)
     return handler.wfile.getvalue().decode("utf-8")
 
 
@@ -113,7 +114,7 @@ def test_dropped_frames_without_journal_emit_recovery_not_tail(monkeypatch):
         ],
     )
     monkeypatch.setattr(routes, "find_run_summary", lambda _sid: None)
-    monkeypatch.setattr(routes, "stream_owner_session_id", lambda _sid: "session_1")
+    monkeypatch.setattr(routes, "runtime_run_session_id", lambda _sid: "session_1")
 
     body = _run_handler(monkeypatch, stream, "stream_id=run_1&replay=1&after_seq=100")
 
@@ -194,7 +195,7 @@ def test_incomplete_journal_coverage_emits_recovery(monkeypatch):
             "events": _journal_events(101, 103, run_id=run_id)
         },
     )
-    monkeypatch.setattr(routes, "stream_owner_session_id", lambda _sid: "session_1")
+    monkeypatch.setattr(routes, "runtime_run_session_id", lambda _sid: "session_1")
 
     body = _run_handler(monkeypatch, stream, "stream_id=run_1&replay=1&after_seq=100")
 

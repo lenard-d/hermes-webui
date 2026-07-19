@@ -396,6 +396,7 @@ def test_chat_cancel_blocks_foreign_owned_stream_before_cancel_call(monkeypatch)
 
 
 def test_chat_cancel_same_profile_stream_still_passes_through(monkeypatch):
+    from api import config
     from api import runtime_adapter
     handler = _FakeHandler()
     visible = _SimpleSession("visible_session", profile="default")
@@ -408,21 +409,17 @@ def test_chat_cancel_same_profile_stream_still_passes_through(monkeypatch):
 
     cap = _capture(monkeypatch)
 
-    with routes.ACTIVE_RUNS_LOCK:
-        previous = dict(routes.ACTIVE_RUNS)
-        routes.ACTIVE_RUNS.clear()
-        routes.ACTIVE_RUNS["stream-visible"] = {
-            "session_id": "visible_session",
-            "started_at": time.time(),
-            "phase": "running",
-        }
+    config.register_active_run(
+        "stream-visible",
+        session_id="visible_session",
+        started_at=time.time(),
+        phase="running",
+    )
 
     try:
         routes.handle_get(handler, urlparse("/api/chat/cancel?stream_id=stream-visible"))
     finally:
-        with routes.ACTIVE_RUNS_LOCK:
-            routes.ACTIVE_RUNS.clear()
-            routes.ACTIVE_RUNS.update(previous)
+        config.unregister_active_run("stream-visible")
 
     assert calls["cancel"] == 1
     assert cap["ok"]["cancelled"] is True

@@ -567,20 +567,11 @@ def _stream_id_owner_session_id(stream_id: str | None) -> str | None:
     if not stream_id:
         return None
     try:
-        with ACTIVE_RUNS_LOCK:
-            raw = (ACTIVE_RUNS or {}).get(stream_id)
-        if isinstance(raw, dict):
-            owner = str(raw.get("session_id") or "").strip()
-            if owner:
-                return owner
-    except Exception:
-        logger.debug("Failed reading ACTIVE_RUNS owner for stream %s", stream_id, exc_info=True)
-    try:
-        owner = stream_owner_session_id(stream_id)
+        owner = runtime_run_session_id(stream_id)
         if owner:
             return owner
     except Exception:
-        logger.debug("Failed reading registered owner for stream %s", stream_id, exc_info=True)
+        logger.debug("Failed reading runtime owner for stream %s", stream_id, exc_info=True)
     if not is_safe_session_id(stream_id):
         return None
     try:
@@ -2778,10 +2769,6 @@ from api.config import (
     SESSIONS,
     SESSIONS_MAX,
     LOCK,
-    STREAMS,
-    STREAMS_LOCK,
-    CANCEL_FLAGS,
-    STREAM_LAST_EVENT_ID,
     SERVER_START_TIME,
     _resolve_cli_toolsets,
     get_available_models,
@@ -2792,13 +2779,17 @@ from api.config import (
     MIME_MAP,
     MAX_FILE_BYTES,
     MAX_UPLOAD_BYTES,
-    ACTIVE_RUNS,
-    ACTIVE_RUNS_LOCK,
     register_runtime_stream,
-    stream_owner_session_id,
     blocking_runtime_stream,
     runtime_stream_alive,
     runtime_worker_alive,
+    runtime_transport,
+    runtime_transport_items,
+    runtime_transport_count,
+    runtime_worker_items,
+    runtime_last_run_finished_at,
+    runtime_run_session_id,
+    runtime_last_event_id,
     CHAT_LOCK,
     _get_session_agent_lock,
     SESSION_AGENT_LOCKS,
@@ -11420,22 +11411,19 @@ def _accept_loop_health(handler) -> dict:
 
 def _streams_lock_health(timeout_seconds: float = 0.5) -> dict:
     t0 = time.time()
-    acquired = STREAMS_LOCK.acquire(timeout=timeout_seconds)
+    active_streams = runtime_transport_count(timeout=timeout_seconds)
     elapsed_ms = round((time.time() - t0) * 1000, 1)
-    if not acquired:
+    if active_streams is None:
         return {
             "status": "blocked",
             "timeout_seconds": timeout_seconds,
             "ms": elapsed_ms,
         }
-    try:
-        return {
-            "status": "ok",
-            "active_streams": len(STREAMS),
-            "ms": elapsed_ms,
-        }
-    finally:
-        STREAMS_LOCK.release()
+    return {
+        "status": "ok",
+        "active_streams": active_streams,
+        "ms": elapsed_ms,
+    }
 
 
 def _stream_runtime_diagnostics() -> dict:
@@ -11449,8 +11437,7 @@ def _stream_runtime_diagnostics() -> dict:
     streams = []
     total_subscribers = 0
     total_offline_buffered_events = 0
-    with STREAMS_LOCK:
-        items = list(STREAMS.items())
+    items = runtime_transport_items()
     for stream_id, stream in items:
         snapshot = {}
         diagnostic_snapshot = getattr(stream, "diagnostic_snapshot", None)
@@ -11481,26 +11468,21 @@ def _stream_runtime_diagnostics() -> dict:
 
 def _run_lifecycle_health() -> dict:
     """Return active worker-run state independent of SSE stream presence."""
-    # Import the module rather than relying only on imported scalar aliases so
-    # LAST_RUN_FINISHED_AT stays fresh after unregister_active_run() updates it.
-    from api import config as _live_config
-
     now = time.time()
-    with _live_config.ACTIVE_RUNS_LOCK:
-        runs = []
-        for _stream_id, raw in (_live_config.ACTIVE_RUNS or {}).items():
-            item = dict(raw or {})
-            item.pop("session_id", None)
-            item.pop("stream_id", None)
-            item.pop("workspace", None)
-            started_at = item.get("started_at")
-            try:
-                age = max(0.0, now - float(started_at))
-            except Exception:
-                age = 0.0
-            item["age_seconds"] = round(age, 1)
-            runs.append(item)
-        last_finished = _live_config.LAST_RUN_FINISHED_AT
+    runs = []
+    for _stream_id, raw in runtime_worker_items():
+        item = dict(raw or {})
+        item.pop("session_id", None)
+        item.pop("stream_id", None)
+        item.pop("workspace", None)
+        started_at = item.get("started_at")
+        try:
+            age = max(0.0, now - float(started_at))
+        except Exception:
+            age = 0.0
+        item["age_seconds"] = round(age, 1)
+        runs.append(item)
+    last_finished = runtime_last_run_finished_at()
     runs.sort(key=lambda item: float(item.get("started_at") or 0.0))
     payload = {
         "active_runs": len(runs),
@@ -13431,7 +13413,7 @@ def handle_get(handler, parsed) -> bool:
         stream_id = parse_qs(parsed.query).get("stream_id", [""])[0]
         if not _stream_id_visible_to_request_profile(handler, stream_id):
             return True
-        active = stream_id in STREAMS
+        active = runtime_stream_alive(stream_id)
         payload = {"active": active, "stream_id": stream_id, "replay_available": False}
         try:
             journal = find_run_summary(stream_id) if stream_id else None
@@ -17355,7 +17337,7 @@ def _sse_offline_gap_recovery(handler, stream_id: str, offline_dropped: int) -> 
     # session (eventMatchesCurrent), so fall back to the journal summary when
     # the pre-worker owner registration is already gone.
     try:
-        session_id = stream_owner_session_id(stream_id) or ""
+        session_id = runtime_run_session_id(stream_id) or ""
         if not session_id:
             session_id = str((find_run_summary(stream_id) or {}).get("session_id") or "")
     except Exception:
@@ -17476,7 +17458,7 @@ def _handle_sse_stream(handler, parsed):
     stream_id = qs.get("stream_id", [""])[0]
     if not _stream_id_visible_to_request_profile(handler, stream_id):
         return True
-    stream = STREAMS.get(stream_id)
+    stream = runtime_transport(stream_id)
     if stream is None:
         if _stream_runner_run_events(handler, stream_id, _runner_stream_cursor_from_query(qs)):
             return True
@@ -17527,12 +17509,12 @@ def _handle_sse_stream(handler, parsed):
                 event, data, queued_event_id = item[0], item[1], item[2]
             else:
                 event, data = item
-                queued_event_id = STREAM_LAST_EVENT_ID.get(stream_id)
-            # Stage-364: emit `id:` from STREAM_LAST_EVENT_ID side-channel so
+                queued_event_id = runtime_last_event_id(stream_id)
+            # Stage-364: emit `id:` from the runtime cursor snapshot so
             # the frontend's `_lastRunJournalSeq` cursor advances during live
             # streaming. Without this, mid-stream error→replay would arrive
             # with after_seq=0 and double-render every journaled event.
-            event_id = queued_event_id or STREAM_LAST_EVENT_ID.get(stream_id)
+            event_id = queued_event_id or runtime_last_event_id(stream_id)
             event_seq = _run_journal_same_run_seq(event_id, stream_id)
             if replay_cutoff_seq is not None and event_seq is not None and event_seq <= replay_cutoff_seq:
                 continue
@@ -17595,7 +17577,7 @@ def _handle_session_run_journal_stream_for_session(handler, parsed, session_id):
 
     def attach_active_stream():
         stream_id = _active_run_stream_for_session(session_id)
-        stream = STREAMS.get(stream_id) if stream_id else None
+        stream = runtime_transport(stream_id) if stream_id else None
         if stream is None:
             return None, None, None, stream_id
         if hasattr(stream, "subscribe_with_snapshot"):
@@ -17675,8 +17657,8 @@ def _handle_session_run_journal_stream_for_session(handler, parsed, session_id):
                     event, data, queued_event_id = item[0], item[1], item[2]
                 else:
                     event, data = item
-                    queued_event_id = STREAM_LAST_EVENT_ID.get(active_stream_id)
-                event_id = queued_event_id or STREAM_LAST_EVENT_ID.get(active_stream_id)
+                    queued_event_id = runtime_last_event_id(active_stream_id)
+                event_id = queued_event_id or runtime_last_event_id(active_stream_id)
                 event_seq = _run_journal_same_run_seq(event_id, active_stream_id)
                 _is_terminal = event in ("stream_end", "error", "cancel")
                 _already_sent = (
@@ -20717,9 +20699,8 @@ def _handle_btw(handler, body):
     # Duplicate-stream guard (same pattern as chat/start)
     current_stream_id = getattr(s, "active_stream_id", None)
     if current_stream_id:
-        with STREAMS_LOCK:
-            if current_stream_id in STREAMS:
-                return j(handler, {"error": "session already has an active stream"}, status=409)
+        if runtime_stream_alive(current_stream_id):
+            return j(handler, {"error": "session already has an active stream"}, status=409)
         s.active_stream_id = None
     # Create ephemeral hidden session inheriting context
     from api.models import new_session as _new_session
@@ -21552,8 +21533,7 @@ def _handle_goal_command(handler, body):
     current_stream_id = getattr(s, "active_stream_id", None)
     stream_running = False
     if current_stream_id:
-        with STREAMS_LOCK:
-            stream_running = current_stream_id in STREAMS
+        stream_running = runtime_stream_alive(current_stream_id)
         if not stream_running:
             _clear_stale_stream_state(s)
 
@@ -22420,10 +22400,7 @@ def _git_locked_by_active_stream(session) -> bool:
     if not stream_id:
         return False
     try:
-        from api.config import STREAMS, STREAMS_LOCK
-
-        with STREAMS_LOCK:
-            return stream_id in STREAMS
+        return runtime_stream_alive(stream_id)
     except Exception:
         return False
 

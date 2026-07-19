@@ -5,9 +5,10 @@ import time
 
 import pytest
 
+import api.config as config
 import api.models as models
 import api.routes as routes
-from api.models import SESSIONS, STREAMS, Session, all_sessions
+from api.models import SESSIONS, Session, all_sessions
 
 
 @pytest.fixture(autouse=True)
@@ -31,10 +32,12 @@ def _isolate(tmp_path, monkeypatch):
 
     monkeypatch.setattr(models, "_persisted_session_ids_snapshot", uncached_persisted_session_ids)
     SESSIONS.clear()
-    STREAMS.clear()
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
     yield state_db
     SESSIONS.clear()
-    STREAMS.clear()
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
 
 
 def _ensure_state_db(path):

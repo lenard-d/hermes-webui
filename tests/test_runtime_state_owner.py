@@ -230,3 +230,34 @@ def test_progress_snapshot_is_immutable_and_does_not_consume_live_buffers():
     assert progress.live_tool_calls == ({"name": "tool"},)
     assert progress.last_event_id == "stream-1:8"
     assert stores["partial_text"]["stream-1"] == "partial"
+
+
+def test_runtime_views_hide_mutable_registry_ownership_from_callers():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    channel = object()
+    state.register_stream("transport", "session-transport", channel)
+    state.register_worker("worker", session_id="session-worker", phase="running")
+
+    assert state.transport("transport") is channel
+    assert state.transport("missing") is None
+    assert state.transport_items() == (("transport", channel),)
+    assert state.active_run_ids() == frozenset({"transport", "worker"})
+    assert state.run_session_id("transport") == "session-transport"
+    assert state.run_session_id("worker") == "session-worker"
+
+    worker_rows = state.worker_items()
+    stores["active_runs"]["worker"]["phase"] = "changed"
+    assert worker_rows[0][0] == "worker"
+    assert worker_rows[0][1]["phase"] == "running"
+
+
+def test_runtime_owner_records_and_releases_the_live_event_cursor():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+
+    state.note_last_event_id("stream-1", "stream-1:7")
+
+    assert state.last_event_id("stream-1") == "stream-1:7"
+    assert stores["last_event_ids"] == {"stream-1": "stream-1:7"}
+
+    state.finish_run("stream-1")
+    assert state.last_event_id("stream-1") is None

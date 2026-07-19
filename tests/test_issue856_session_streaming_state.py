@@ -5,10 +5,9 @@ This ensures backend payloads report per-session streaming status from active st
 tracking, not only for the foreground conversation.
 """
 
-import threading
-
 import pytest
 
+import api.config as config
 import api.models as models
 from api.models import Session, all_sessions
 
@@ -24,13 +23,13 @@ def _isolate_session_stream_state(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
     models.SESSIONS.clear()
 
-    stream_map = {}
-    stream_lock = threading.Lock()
-    monkeypatch.setattr(models, "STREAMS", stream_map)
-    monkeypatch.setattr(models, "STREAMS_LOCK", stream_lock)
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
 
     yield
 
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
     models.SESSIONS.clear()
 
 
@@ -55,8 +54,8 @@ def test_all_sessions_marks_indexed_and_in_memory_streaming_sessions():
     with models.LOCK:
         models.SESSIONS[s_memory.session_id] = s_memory
 
-    models.STREAMS["stream-1"] = object()
-    models.STREAMS["stream-2"] = object()
+    config.register_runtime_stream("stream-1", "disk_session", object())
+    config.register_runtime_stream("stream-2", "memory_session", object())
 
     listed = all_sessions()
     by_sid = {s["session_id"]: s for s in listed}
@@ -75,10 +74,10 @@ def test_all_sessions_marks_streaming_false_when_stream_is_not_active():
 
     assert all_sessions()[0]["is_streaming"] is False
 
-    models.STREAMS["stale-stream"] = object()
+    config.register_runtime_stream("stale-stream", "stalesession", object())
     assert all_sessions()[0]["is_streaming"] is True
 
-    models.STREAMS.pop("stale-stream", None)
+    config.finish_runtime_run("stale-stream")
     assert all_sessions()[0]["is_streaming"] is False
 
 

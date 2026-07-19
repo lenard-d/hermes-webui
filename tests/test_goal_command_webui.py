@@ -344,6 +344,7 @@ def test_goal_endpoint_adapter_keeps_full_set_text_and_legacy_payload_status(mon
 
 def test_goal_endpoint_adapter_error_payload_still_controls_http_status(monkeypatch, tmp_path):
     """The /goal route preserves legacy error/status handling under the adapter flag."""
+    from api import config
     from api import goals as webui_goals
     from api import routes
 
@@ -367,10 +368,12 @@ def test_goal_endpoint_adapter_error_payload_still_controls_http_status(monkeypa
     monkeypatch.setenv("HERMES_WEBUI_RUNTIME_ADAPTER", "legacy-journal")
     monkeypatch.setattr(webui_goals, "GoalManager", FakeGoalManager)
     monkeypatch.setattr(routes, "get_session", lambda sid: FakeSession())
-    monkeypatch.setitem(routes.STREAMS, "running-stream", {"queue": object()})
     monkeypatch.setattr(routes, "j", lambda handler, payload, status=200, **kwargs: {"status": status, "payload": payload})
-
-    result = routes._handle_goal_command(object(), {"session_id": "sid-goal-route", "args": "ship it"})
+    config.register_runtime_stream("running-stream", "sid-goal-route", object())
+    try:
+        result = routes._handle_goal_command(object(), {"session_id": "sid-goal-route", "args": "ship it"})
+    finally:
+        config.finish_runtime_run("running-stream")
 
     assert result["status"] == 409
     assert result["payload"]["ok"] is False

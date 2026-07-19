@@ -29,7 +29,7 @@ import api.config as _cfg
 from api.compression_anchor import is_context_compression_marker
 from api.config import (
     SESSION_DIR, SESSION_INDEX_FILE, SESSIONS, SESSIONS_MAX,
-    LOCK, STREAMS, STREAMS_LOCK, DEFAULT_WORKSPACE, DEFAULT_MODEL, PROJECTS_FILE, HOME,
+    LOCK, DEFAULT_WORKSPACE, DEFAULT_MODEL, PROJECTS_FILE, HOME,
     get_effective_default_model, _get_session_agent_lock,
 )
 from api.workspace import get_last_workspace
@@ -828,17 +828,9 @@ def _content_has_reasoning_only_parts(content) -> bool:
 
 
 def _active_stream_ids():
-    with STREAMS_LOCK:
-        active_ids = set(STREAMS.keys())
-    # STREAMS tracks the browser/SSE observation path. A worker can still be
-    # running after the SSE stream entry disappears (for example while a request
-    # is blocked in the provider, unwinding after cancel, or otherwise detached
-    # from the client). Treat ACTIVE_RUNS as authoritative for worker liveness so
-    # stale-pending repair does not append a misleading restart/interrupted
-    # marker while the agent turn is still in flight.
-    with _cfg.ACTIVE_RUNS_LOCK:
-        active_ids.update(_cfg.ACTIVE_RUNS.keys())
-    return active_ids
+    # Runtime ownership combines live transports with detached workers so stale
+    # repair cannot misclassify a provider-blocked or cancelling run as dead.
+    return set(_cfg.runtime_active_run_ids())
 
 
 def _recovered_model_context_projection(message: dict) -> dict | None:
@@ -2185,9 +2177,8 @@ def _classify_interruption_cause(
 
     if stream_id:
         try:
-            with _cfg.ACTIVE_RUNS_LOCK:
-                if str(stream_id) in _cfg.ACTIVE_RUNS:
-                    return 'stream_run_split_brain'
+            if _cfg.runtime_worker_alive(str(stream_id)):
+                return 'stream_run_split_brain'
         except Exception:
             pass
         return 'lost_worker_bookkeeping'

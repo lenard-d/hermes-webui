@@ -9021,6 +9021,42 @@ def runtime_worker_alive(stream_id: str) -> bool:
     return RUNTIME_STATE.has_worker(stream_id)
 
 
+def runtime_transport(stream_id: str):
+    return RUNTIME_STATE.transport(stream_id)
+
+
+def runtime_transport_items():
+    return RUNTIME_STATE.transport_items()
+
+
+def runtime_transport_count(*, timeout: float | None = None) -> int | None:
+    return RUNTIME_STATE.transport_count(timeout=timeout)
+
+
+def runtime_worker_items():
+    return RUNTIME_STATE.worker_items()
+
+
+def runtime_last_run_finished_at() -> float | None:
+    return RUNTIME_STATE.last_run_finished_at
+
+
+def runtime_active_run_ids():
+    return RUNTIME_STATE.active_run_ids()
+
+
+def runtime_run_session_id(stream_id: str) -> str | None:
+    return RUNTIME_STATE.run_session_id(stream_id)
+
+
+def runtime_last_event_id(stream_id: str) -> str | None:
+    return RUNTIME_STATE.last_event_id(stream_id)
+
+
+def note_runtime_last_event_id(stream_id: str, event_id: str) -> None:
+    RUNTIME_STATE.note_last_event_id(stream_id, event_id)
+
+
 def runtime_progress_snapshot(stream_id: str):
     """Return an immutable copy of terminally relevant live progress."""
     return RUNTIME_STATE.progress_snapshot(stream_id)

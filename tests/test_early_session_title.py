@@ -88,6 +88,7 @@ def test_prepare_chat_start_does_not_overwrite_manual_title(tmp_path, monkeypatc
 
 
 def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeypatch):
+    import api.config as config
     from api.models import Session
     import api.routes as routes
     import api.turn_admission as turn_admission
@@ -118,7 +119,7 @@ def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeyp
     )
 
     try:
-        routes.STREAMS.pop(response["stream_id"], None)
+        config.finish_runtime_run(response["stream_id"])
     except Exception:
         pass
 

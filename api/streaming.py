@@ -30,10 +30,10 @@ from api.config import (
     STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, STREAM_PARTIAL_TEXT,
     STREAM_REASONING_TEXT, STREAM_LIVE_TOOL_CALLS,
     STREAM_GOAL_RELATED, PENDING_GOAL_CONTINUATION,
-    STREAM_LAST_EVENT_ID,
     LOCK, SESSIONS, SESSIONS_MAX, SESSION_DIR,
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
     register_active_run, update_active_run, finish_runtime_run,
+    note_runtime_last_event_id,
     unregister_stream_owner,
     SESSION_AGENT_LOCKS, SESSION_AGENT_LOCKS_LOCK,
     resolve_model_provider,
@@ -7298,7 +7298,7 @@ def _run_agent_streaming(
                 # undelivered event.
                 event_id = (journaled or {}).get('event_id') if isinstance(journaled, dict) else None
                 if event_id:
-                    STREAM_LAST_EVENT_ID[stream_id] = event_id
+                    note_runtime_last_event_id(stream_id, event_id)
             except Exception:
                 logger.debug("Failed to append run journal event %s for stream %s", event, stream_id, exc_info=True)
         if event_id and hasattr(q, "note_last_event_id"):

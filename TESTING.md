@@ -8,7 +8,7 @@
 > Prerequisites: SSH tunnel is active on port 8787. Open http://localhost:8787 in browser.
 > Server health check: curl http://127.0.0.1:8787/health should return {"status":"ok"}.
 >
-> Automated test snapshot (July 19, 2026): 13,470 tests collected across 1,281 test files via `./scripts/test.sh tests/ --collect-only -q`. Tests run on every PR via GitHub Actions on Python 3.11, 3.12, and 3.13 (5 parallel shards each), alongside a ruff lint gate, a headless browser smoke test, and a Docker smoke test. The suite covers the bootstrap/static wizard, real provider config persistence (`config.yaml` + `.env`), the `/api/onboarding/*` backend, the onboarding skip/existing-config guard, CSS regression coverage for thinking/tool card animation, streaming session persistence, mobile layout breakpoints, locale parity across 14 languages, and hundreds of issue/PR-pinned regression tests.
+> Automated test snapshot (July 19, 2026): 13,473 tests collected across 1,281 test files via `./scripts/test.sh tests/ --collect-only -q`. Tests run on every PR via GitHub Actions on Python 3.11, 3.12, and 3.13 (5 parallel shards each), alongside a ruff lint gate, a headless browser smoke test, and a Docker smoke test. The suite covers the bootstrap/static wizard, real provider config persistence (`config.yaml` + `.env`), the `/api/onboarding/*` backend, the onboarding skip/existing-config guard, CSS regression coverage for thinking/tool card animation, streaming session persistence, mobile layout breakpoints, locale parity across 14 languages, and hundreds of issue/PR-pinned regression tests.
 > Run: `./scripts/test.sh`
 >
 > Local regression focus: verify that a previously closed workspace panel stays visually closed from first paint through boot completion on desktop refresh; there should be no brief open-then-close flash.
@@ -1975,7 +1975,7 @@ Bridged CLI sessions:
 ---
 
 *Current suite snapshot refreshed July 19, 2026; older sprint markers above are historical section timestamps*
-*Automated test snapshot: 13,470 collected on July 19, 2026 (run `./scripts/test.sh tests/ --collect-only -q` for the exact current count)*
+*Automated test snapshot: 13,473 collected on July 19, 2026 (run `./scripts/test.sh tests/ --collect-only -q` for the exact current count)*
 *Regression gate: tests/test_regressions.py*
 *Run: ./scripts/test.sh*
 *Source: <repo>/*

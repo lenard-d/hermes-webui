@@ -801,20 +801,15 @@ def _real_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(profiles, "_DEFAULT_HERMES_HOME", hermes_home)
 
     models.SESSIONS.clear()
-    try:
-        from api.models import STREAMS
-        STREAMS.clear()
-    except Exception:
-        pass
+    import api.config as config
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
 
     yield tmp_path
 
     models.SESSIONS.clear()
-    try:
-        from api.models import STREAMS
-        STREAMS.clear()
-    except Exception:
-        pass
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
 
 
 def _write_webui_sidecar(

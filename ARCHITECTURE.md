@@ -8,7 +8,7 @@
 > Keep this document updated as architecture changes are made.
 
 > Current changelog release: `v0.52.76` (July 18, 2026), plus Unreleased changes.
-> Automated test snapshot (July 19, 2026): 13,470 tests across 1,281 test files via
+> Automated test snapshot (July 19, 2026): 13,473 tests across 1,281 test files via
 > `./scripts/test.sh tests/ --collect-only -q`. CI runs on Python 3.11, 3.12, and
 > 3.13 (5 parallel shards each) against every PR, plus a ruff
 > lint gate, a headless browser smoke test, and a Docker smoke test.
@@ -91,7 +91,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       sw.js                Service worker: offline shell cache, version-pinned assets
     tests/
       conftest.py          Isolated test server/state fixtures
-      1,281 test files     13,470 tests in the July 19, 2026 snapshot
+      1,281 test files     13,473 tests in the July 19, 2026 snapshot
                            (run `./scripts/test.sh tests/ --collect-only -q` for exact)
       test_regressions.py  Permanent regression gate
     CONTRIBUTING.md        Contributor workflow and PR expectations.
@@ -187,8 +187,11 @@ larger migration remains incremental:
   stream through `register_runtime_stream()`, read terminal progress through
   `runtime_progress_snapshot()`, claim cancel through `begin_runtime_cancel()`,
   and finish through `finish_runtime_run()`; they must
-  not independently clear individual per-run dictionaries. This is not yet the
-  complete browser-turn runtime described by the run-adapter RFC.
+  not independently clear individual per-run dictionaries. Route diagnostics,
+  SSE attachment, cursor lookup, and model recovery consume immutable registry
+  views rather than importing the dictionaries; local and Gateway event
+  producers publish their durable cursor through the same owner. This is not yet the complete
+  browser-turn runtime described by the run-adapter RFC.
 - `api/turn_admission.py` owns the synchronous local-turn transition after HTTP
   validation: claim the session, consume single-use continuation markers,
   persist pending ownership, append the submitted journal event, publish the
@@ -792,7 +795,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         *.js                  Classic-script frontend modules (no bundler)
       tests/
         conftest.py           Isolated test server/state fixtures
-        1,281 test files      13,470 tests in the July 19, 2026 snapshot
+        1,281 test files      13,473 tests in the July 19, 2026 snapshot
         test_regressions.py   Permanent regression gate
 
 Route extraction to api/routes.py completed in Sprint 11. server.py remains a
@@ -901,7 +904,7 @@ The optional password gate for non-SSH-tunnel deployments lives in `api/auth.py`
 
 ### Phase I: Test Infrastructure -- BROAD SUITE; COVERAGE BASELINE OPEN
 
-13,470 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
+13,473 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
 gates. Test count is not a coverage metric; a repeatable line/branch coverage baseline
 and an agreed gate remain open. The pytest fixture derives
 an isolated port and state directory from the repo path unless

@@ -11,10 +11,10 @@ import json
 
 import pytest
 
+import api.config as config
 import api.models as models
 from api.models import (
     SESSIONS,
-    STREAMS,
     Session,
     all_sessions,
     new_session,
@@ -30,10 +30,12 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
     SESSIONS.clear()
-    STREAMS.clear()
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
     yield session_dir
     SESSIONS.clear()
-    STREAMS.clear()
+    for stream_id in config.runtime_active_run_ids():
+        config.finish_runtime_run(stream_id)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -52,7 +54,11 @@ def _simulate_first_turn_streaming(session):
     session.active_stream_id = f"stream-{session.session_id}"
     session.save()
     # Register stream so _active_stream_ids() finds it
-    STREAMS[session.active_stream_id] = session.session_id
+    config.register_runtime_stream(
+        session.active_stream_id,
+        session.session_id,
+        object(),
+    )
 
 
 # ── Index path (sidebar via index file) ────────────────────────────────────
@@ -132,7 +138,7 @@ def test_session_visible_after_stream_completes(_isolate):
     s.messages.append({"role": "assistant", "content": "Hi there"})
     s.title = "Greeting"
     s.save()
-    STREAMS.pop(f"stream-{s.session_id}", None)
+    config.finish_runtime_run(f"stream-{s.session_id}")
 
     ids = {row["session_id"] for row in all_sessions()}
     assert s.session_id in ids, (

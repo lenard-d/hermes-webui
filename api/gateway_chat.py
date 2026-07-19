@@ -16,7 +16,6 @@ from api.config import (
     STREAM_GOAL_RELATED,
     STREAMS,
     STREAMS_LOCK,
-    STREAM_LAST_EVENT_ID,
     STREAM_LIVE_TOOL_CALLS,
     STREAM_PARTIAL_TEXT,
     STREAM_REASONING_TEXT,
@@ -25,6 +24,7 @@ from api.config import (
     gateway_approval_unavailable_reason,
     gateway_supports_approval,
     finish_runtime_run,
+    note_runtime_last_event_id,
     register_active_run,
     unregister_stream_owner,
     update_active_run,
@@ -696,7 +696,7 @@ def _run_gateway_chat_streaming(
                 journaled = run_journal.append_sse_event(event, data)
                 event_id = (journaled or {}).get("event_id") if isinstance(journaled, dict) else None
                 if event_id:
-                    STREAM_LAST_EVENT_ID[stream_id] = event_id
+                    note_runtime_last_event_id(stream_id, event_id)
             except Exception:
                 logger.debug("Failed to append gateway event %s for stream %s", event, stream_id, exc_info=True)
         if event_id and hasattr(q, "note_last_event_id"):

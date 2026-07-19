@@ -30,16 +30,6 @@ class _FakeSession:
         self.saved_touch_updated_at.append(touch_updated_at)
 
 
-def test_stale_stream_cleanup_helper_exists():
-    assert "def _clear_stale_stream_state(session)" in ROUTES_SRC
-    assert "stream_id in STREAMS" in ROUTES_SRC
-    assert "session.active_stream_id = None" in ROUTES_SRC
-    assert "session.pending_user_message = None" in ROUTES_SRC
-    assert "session.pending_attachments = []" in ROUTES_SRC
-    assert "session.pending_started_at = None" in ROUTES_SRC
-    assert "session.save(touch_updated_at=False)" in ROUTES_SRC
-
-
 def test_stale_stream_cleanup_does_not_refresh_sidebar_timestamp():
     config.STREAMS.clear()
     config.SESSION_AGENT_LOCKS.clear()
@@ -108,7 +98,7 @@ def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_p
             session.active_stream_id = existing_stream_id
             session.pending_user_message = "prompt already claimed by another start"
             session.pending_started_at = 123.0
-            routes.STREAMS[existing_stream_id] = queue.Queue()
+            config.STREAMS[existing_stream_id] = queue.Queue()
             return self
 
         def __exit__(self, exc_type, exc, tb):
@@ -141,9 +131,9 @@ def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_p
         assert response["_status"] == 409
         assert response["active_stream_id"] == existing_stream_id
         assert session.active_stream_id == existing_stream_id
-        assert "new-stream" not in routes.STREAMS
+        assert "new-stream" not in config.STREAMS
     finally:
-        routes.STREAMS.pop(existing_stream_id, None)
+        config.STREAMS.pop(existing_stream_id, None)
 
 
 def test_chat_start_blocks_same_session_active_run_after_cancel_clears_stream_id(monkeypatch, tmp_path):
@@ -207,7 +197,7 @@ def test_chat_start_blocks_same_session_active_run_after_cancel_clears_stream_id
         assert response["active_stream_id"] == old_stream_id
         assert session.active_stream_id is None
         assert session.pending_user_message is None
-        assert "new-stream" not in routes.STREAMS
+        assert "new-stream" not in config.STREAMS
     finally:
         config.unregister_active_run(old_stream_id)
 
@@ -266,7 +256,7 @@ def test_chat_start_allows_same_session_after_active_run_unregisters(monkeypatch
         assert session.active_stream_id == "new-stream"
         assert session.pending_user_message == "successor prompt"
     finally:
-        routes.STREAMS.pop("new-stream", None)
+        config.STREAMS.pop("new-stream", None)
 
 
 def test_chat_start_not_permanently_blocked_by_stale_active_run(monkeypatch, tmp_path):
@@ -340,7 +330,7 @@ def test_chat_start_not_permanently_blocked_by_stale_active_run(monkeypatch, tmp
         assert session.active_stream_id == "new-stream"
     finally:
         config.unregister_active_run(stale_stream_id)
-        routes.STREAMS.pop("new-stream", None)
+        config.STREAMS.pop("new-stream", None)
 
 
 def test_live_worker_past_ceiling_is_not_reaped_from_active_runs():
@@ -398,8 +388,8 @@ def test_stale_stream_cleanup_does_not_clobber_concurrent_chat_start(monkeypatch
 
     def start_new_stream():
         assert lookup_finished.wait(2), "cleanup did not reach race point"
-        with routes.STREAMS_LOCK:
-            routes.STREAMS[new_stream_id] = queue.Queue()
+        with config.STREAMS_LOCK:
+            config.STREAMS[new_stream_id] = queue.Queue()
         with routes._get_session_agent_lock(session.session_id):
             session.active_stream_id = new_stream_id
             session.pending_user_message = "new prompt"
