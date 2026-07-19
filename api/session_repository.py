@@ -8,6 +8,7 @@ and save only after a successful mutation.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -57,6 +58,16 @@ class SessionCleanupResult:
     @property
     def cleaned(self) -> int:
         return self.removed_sidecars + self.pruned_index_rows
+
+
+@dataclass(frozen=True)
+class StreamWritebackResult:
+    """One generation-checked stream settlement committed by the repository."""
+
+    session: object
+    value: object
+    reconciled_after_save: bool
+    reconciliation_error: Exception | None
 
 
 class SessionRepository:
@@ -118,6 +129,23 @@ class SessionRepository:
         )
         self._cache_full(sid, full_session)
         return full_session
+
+    @staticmethod
+    def _snapshot_session_state(session: object) -> dict[str, object]:
+        """Copy mutable session fields while preserving collaborator identity."""
+        snapshot = dict(getattr(session, "__dict__", {}))
+        for key, value in tuple(snapshot.items()):
+            if isinstance(value, (dict, list, set)):
+                snapshot[key] = copy.deepcopy(value)
+        return snapshot
+
+    @staticmethod
+    def _restore_session_state(session: object, snapshot: dict[str, object]) -> None:
+        state = getattr(session, "__dict__", None)
+        if state is None:
+            raise TypeError("session writeback requires mutable object state")
+        state.clear()
+        state.update(snapshot)
 
     def get_full(self, sid: str, *, session: object | None = None) -> object:
         """Return an identity-checked full session under its owner lock."""
@@ -221,6 +249,90 @@ class SessionRepository:
                 on_committed()
             return True
 
+    def commit_stream_writeback(
+        self,
+        sid: str,
+        *,
+        expected_stream_id: str,
+        mutate: Callable[[object], object],
+        reconcile_after_save: Callable[[object], bool] | None = None,
+        session: object | None = None,
+        touch_updated_at: bool = True,
+        skip_index: bool = False,
+    ) -> StreamWritebackResult | None:
+        """Commit one stream generation and optionally reconcile a late signal.
+
+        The generation check, mutation, first durable save, and one optional
+        reconciliation save all run under the same per-session owner lock.
+        This lets streaming backends observe cancellation immediately after the
+        first save without reopening a check-then-use race.
+        """
+        sid = str(sid or "")
+        expected_stream_id = str(expected_stream_id or "")
+        if not sid:
+            raise KeyError(sid)
+        if not expected_stream_id:
+            return None
+
+        with self._hold_lock(sid, None):
+            # An admitted stream must already have an authoritative session.
+            # Never use the caller's pre-lock object as a seed here: deletion
+            # may have won while the worker was queued for this owner lock.
+            try:
+                current = self._load_for_edit(sid, None)
+            except KeyError:
+                return None
+            if getattr(current, "active_stream_id", None) != expected_stream_id:
+                return None
+            before = self._snapshot_session_state(current)
+            save_kwargs = {"skip_index": True}
+            if not touch_updated_at:
+                save_kwargs["touch_updated_at"] = False
+            try:
+                value = mutate(current)
+                current.save(**save_kwargs)
+            except Exception:
+                self._restore_session_state(current, before)
+                raise
+
+            first_commit = self._snapshot_session_state(current)
+            reconciled = False
+            reconciliation_error = None
+            if reconcile_after_save is not None:
+                try:
+                    should_resave = bool(reconcile_after_save(current))
+                    if should_resave:
+                        current.save(**save_kwargs)
+                        reconciled = True
+                    else:
+                        # ``False`` means the callback observed no durable
+                        # reconciliation. Discard any incidental mutation so
+                        # cache and index still describe the first checkpoint.
+                        self._restore_session_state(current, first_commit)
+                except Exception as exc:
+                    # The first sidecar checkpoint is already durable. Keep the
+                    # cache aligned with that known checkpoint rather than
+                    # rolling all the way back to the pre-writeback generation.
+                    self._restore_session_state(current, first_commit)
+                    reconciliation_error = exc
+                    logger.exception(
+                        "Failed to reconcile stream writeback after its first save"
+                    )
+
+            if not skip_index and self._write_index is not None:
+                try:
+                    self._write_index([current])
+                except Exception:
+                    # The sidecar is canonical and already durable. The compact
+                    # index is a repairable projection.
+                    logger.exception("Failed to refresh index after stream writeback")
+            return StreamWritebackResult(
+                session=current,
+                value=value,
+                reconciled_after_save=reconciled,
+                reconciliation_error=reconciliation_error,
+            )
+
     @contextmanager
     def _hold_lock(self, sid: str, timeout: float | None) -> Iterator[None]:
         lock = self._lock_for(sid)
@@ -316,6 +428,28 @@ def edit_session(
 def get_full_session(sid: str, *, session: object | None = None) -> object:
     """Load a complete session through the process-wide repository."""
     return _default_repository().get_full(sid, session=session)
+
+
+def commit_stream_writeback(
+    sid: str,
+    *,
+    expected_stream_id: str,
+    mutate: Callable[[object], object],
+    reconcile_after_save: Callable[[object], bool] | None = None,
+    session: object | None = None,
+    touch_updated_at: bool = True,
+    skip_index: bool = False,
+) -> StreamWritebackResult | None:
+    """Commit one stream generation through the process-wide repository."""
+    return _default_repository().commit_stream_writeback(
+        sid,
+        expected_stream_id=expected_stream_id,
+        mutate=mutate,
+        reconcile_after_save=reconcile_after_save,
+        session=session,
+        touch_updated_at=touch_updated_at,
+        skip_index=skip_index,
+    )
 
 
 @contextmanager

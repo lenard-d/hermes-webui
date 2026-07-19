@@ -496,6 +496,14 @@ def test_gateway_chat_worker_classifies_terminal_provider_error_without_text(tmp
     empty_errors = [item[1] for item in empty_events if item[0] == "apperror"]
     assert empty_errors[-1]["type"] == "gateway_empty_response"
     assert empty_errors[-1]["session_id"] == s.session_id
+    empty_saved = models.get_session(s.session_id)
+    assert [message.get("role") for message in empty_saved.messages[-2:]] == [
+        "user",
+        "assistant",
+    ]
+    assert empty_saved.messages[-1].get("_error") is True
+    assert empty_saved.active_stream_id is None
+    assert empty_saved.pending_user_message is None
 
     response_error[0] = "Gateway provider failed without a known classification"
     unknown_stream_id = "stream-gateway-unknown-terminal-error-test"
@@ -553,6 +561,62 @@ def test_gateway_chat_worker_classifies_terminal_provider_error_without_text(tmp
     assert payload_messages[-2]["_partial"] is True
     assert payload_messages[-2]["content"] == "partial"
     assert payload_messages[-1]["_error"] is True
+
+
+def test_gateway_chat_worker_suppresses_empty_error_from_stale_generation(
+    tmp_path,
+    monkeypatch,
+):
+    from unittest.mock import MagicMock
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def __iter__(self):
+            yield b"data: [DONE]\n\n"
+
+    monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
+    monkeypatch.setattr(
+        gateway_chat.urllib.request,
+        "urlopen",
+        lambda req, timeout=0: FakeResponse(),
+    )
+
+    old_stream_id = "stream-gateway-stale-empty"
+    newer_stream_id = "stream-gateway-newer"
+    events = []
+    channel = MagicMock()
+    channel.put_nowait = lambda item: events.append(item)
+    STREAMS[old_stream_id] = channel
+    s = new_session()
+    s.active_stream_id = newer_stream_id
+    s.pending_user_message = "newer prompt"
+    s.pending_attachments = []
+    s.save()
+
+    gateway_chat._run_gateway_chat_streaming(
+        s.session_id,
+        "older prompt",
+        "test-model",
+        str(tmp_path),
+        old_stream_id,
+        [],
+    )
+
+    saved = models.get_session(s.session_id)
+    assert saved.active_stream_id == newer_stream_id
+    assert saved.pending_user_message == "newer prompt"
+    assert not any(item[0] == "apperror" for item in events)
 
 
 def test_gateway_chat_worker_persists_reasoning_and_tool_state_on_terminal_error(tmp_path, monkeypatch):
@@ -1423,9 +1487,10 @@ def test_gateway_runs_api_body_includes_session_id():
     try:
         with patch.dict("os.environ", env, clear=True):
             with patch("api.gateway_chat.gateway_supports_approval", return_value=True), \
-                 patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=MagicMock(
-                     active_stream_id=stream_id, workspace="/tmp",
+                     patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+                     patch("api.gateway_chat.get_session", return_value=MagicMock(
+                         session_id="sess-optin",
+                         active_stream_id=stream_id, workspace="/tmp",
                      profile=None, context_messages=[], messages=[],
                  )):
                 _run_gateway_chat_streaming(
@@ -1545,6 +1610,7 @@ def test_gateway_worker_skips_runs_api_when_opt_in_absent():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=True), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.gateway_chat.get_session", return_value=MagicMock(
+                     session_id="sess-optin", _loaded_metadata_only=False,
                      active_stream_id=stream_id, workspace="/tmp",
                      profile=None, context_messages=[], messages=[],
                  )):

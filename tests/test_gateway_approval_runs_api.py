@@ -255,7 +255,6 @@ def test_gateway_runs_api_submission():
                  patch("api.gateway_chat._run_gateway_runs_api_streaming", fake_runs_streaming), \
                  patch("api.gateway_chat._gateway_reasoning_effort_for_request", return_value="high"), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess1",
@@ -645,16 +644,37 @@ def test_gateway_approval_response_invalid_gateway_base_returns_502():
 #    misleading approval-unsupported banner)
 # ---------------------------------------------------------------------------
 
-def test_gateway_empty_response_no_approval_banner():
+def test_gateway_empty_response_no_approval_banner(tmp_path, monkeypatch):
     """Empty response from chat/completions path emits gateway_empty_response, not gateway_approval_unsupported."""
+    from collections import OrderedDict
+
+    from api import models
     from api.config import STREAMS, STREAMS_LOCK
     from api.gateway_chat import _run_gateway_chat_streaming
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
 
     events = []
     q = MagicMock()
     q.put_nowait = lambda item: events.append(item)
 
     stream_id = "sid-fb"
+    session = models.Session(
+        session_id="sess-fb",
+        active_stream_id=stream_id,
+        pending_user_message="do something risky",
+        pending_attachments=[],
+        workspace="/tmp",
+        model="test",
+        profile=None,
+        context_messages=[],
+        messages=[],
+    )
+    session.save()
     with STREAMS_LOCK:
         STREAMS[stream_id] = q
 
@@ -671,11 +691,7 @@ def test_gateway_empty_response_no_approval_banner():
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
-                 patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=MagicMock(
-                     active_stream_id=stream_id, workspace="/tmp",
-                     profile=None, context_messages=[], messages=[],
-                 )):
+                 patch("urllib.request.urlopen", side_effect=fake_urlopen):
                 _run_gateway_chat_streaming(
                     session_id="sess-fb",
                     msg_text="do something risky",
@@ -725,6 +741,8 @@ def test_gateway_chat_completions_path_unchanged():
     )
 
     mock_session = MagicMock()
+    mock_session.session_id = "sess-ok"
+    mock_session._loaded_metadata_only = False
     mock_session.active_stream_id = stream_id
     mock_session.workspace = "/tmp"
     mock_session.model = "test"
@@ -748,7 +766,6 @@ def test_gateway_chat_completions_path_unchanged():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-ok",

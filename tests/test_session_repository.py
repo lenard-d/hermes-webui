@@ -45,6 +45,22 @@ class _FakeSession:
         self.saved.append(kwargs)
 
 
+class _FailingSaveSession(_FakeSession):
+    def __init__(self, *args, fail_on_call: int, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fail_on_call = fail_on_call
+        self.save_calls = 0
+        self.durable_titles = []
+
+    def save(self, **kwargs):
+        assert self.lock is not None and self.lock.held is True
+        self.save_calls += 1
+        if self.save_calls == self.fail_on_call:
+            raise OSError(f"save {self.save_calls} failed")
+        self.saved.append(kwargs)
+        self.durable_titles.append(self.title)
+
+
 def test_edit_upgrades_metadata_stub_and_saves_under_the_session_lock():
     from api.session_repository import SessionRepository
 
@@ -183,6 +199,235 @@ def test_edit_uses_explicit_seed_only_when_repository_has_no_session():
         session.title = "Created"
 
     assert seed.saved == [{}]
+
+
+def test_stream_writeback_reconciles_a_late_signal_after_the_first_save():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    reconciled = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    def mutate(session):
+        assert lock.held is True
+        session.title = "Completed"
+        session.active_stream_id = None
+        return "success"
+
+    def reconcile_after_save(session):
+        assert lock.held is True
+        assert session.saved == [{"skip_index": True}]
+        session.title = "Cancelled after save"
+        reconciled.append(session.title)
+        return True
+
+    result = repository.commit_stream_writeback(
+        "s1",
+        expected_stream_id="stream-1",
+        mutate=mutate,
+        reconcile_after_save=reconcile_after_save,
+    )
+
+    assert result is not None
+    assert result.session is current
+    assert result.value == "success"
+    assert result.reconciled_after_save is True
+    assert result.reconciliation_error is None
+    assert current.title == "Cancelled after save"
+    assert current.saved == [{"skip_index": True}, {"skip_index": True}]
+    assert reconciled == ["Cancelled after save"]
+    assert lock.held is False
+
+
+def test_stream_writeback_rejects_a_stale_generation_without_mutating_or_saving():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "newer-stream"
+    current.lock = lock
+    mutated = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    result = repository.commit_stream_writeback(
+        "s1",
+        expected_stream_id="older-stream",
+        mutate=lambda _session: mutated.append(True),
+    )
+
+    assert result is None
+    assert mutated == []
+    assert current.saved == []
+    assert lock.held is False
+
+
+def test_stream_writeback_does_not_resurrect_a_missing_session_from_caller_seed():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    seed = _FakeSession("deleted", metadata_only=False, messages=[])
+    seed.active_stream_id = "stream-1"
+    seed.lock = lock
+    cached = []
+    mutated = []
+    indexed = []
+    repository = SessionRepository(
+        load=lambda sid: (_ for _ in ()).throw(KeyError(sid)),
+        load_full=lambda sid: (_ for _ in ()).throw(KeyError(sid)),
+        lock_for=lambda _sid: lock,
+        cache_full=lambda sid, session: cached.append((sid, session)),
+        write_index=lambda sessions: indexed.extend(sessions),
+    )
+
+    result = repository.commit_stream_writeback(
+        "deleted",
+        expected_stream_id="stream-1",
+        session=seed,
+        mutate=lambda _session: mutated.append(True),
+    )
+
+    assert result is None
+    assert cached == []
+    assert mutated == []
+    assert seed.saved == []
+    assert indexed == []
+    assert lock.held is False
+
+
+def test_stream_writeback_discards_reconcile_mutation_when_no_resave_is_requested():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FakeSession("s1", metadata_only=False, messages=[])
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    cached = []
+    indexed_titles = []
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, session: cached.append(session),
+        write_index=lambda sessions: indexed_titles.extend(
+            session.title for session in sessions
+        ),
+    )
+
+    def mutate(session):
+        session.title = "Completed"
+        session.active_stream_id = None
+        return "success"
+
+    def reconcile_without_resave(session):
+        session.title = "Unpersisted reconciliation"
+        return False
+
+    result = repository.commit_stream_writeback(
+        "s1",
+        expected_stream_id="stream-1",
+        mutate=mutate,
+        reconcile_after_save=reconcile_without_resave,
+    )
+
+    assert result is not None
+    assert result.session is current
+    assert result.session.title == "Completed"
+    assert result.value == "success"
+    assert result.reconciled_after_save is False
+    assert result.reconciliation_error is None
+    assert cached == [current]
+    assert cached[0].title == "Completed"
+    assert indexed_titles == ["Completed"]
+    assert current.saved == [{"skip_index": True}]
+    assert lock.held is False
+
+
+def test_stream_writeback_restores_memory_when_the_first_durable_save_fails():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FailingSaveSession(
+        "s1",
+        metadata_only=False,
+        messages=[],
+        fail_on_call=1,
+    )
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    with pytest.raises(OSError, match="save 1 failed"):
+        repository.commit_stream_writeback(
+            "s1",
+            expected_stream_id="stream-1",
+            mutate=lambda session: (
+                setattr(session, "title", "Completed"),
+                setattr(session, "active_stream_id", None),
+            ),
+        )
+
+    assert current.title == "Before"
+    assert current.active_stream_id == "stream-1"
+    assert current.durable_titles == []
+    assert lock.held is False
+
+
+def test_stream_writeback_keeps_the_first_commit_when_reconciliation_save_fails():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    current = _FailingSaveSession(
+        "s1",
+        metadata_only=False,
+        messages=[],
+        fail_on_call=2,
+    )
+    current.active_stream_id = "stream-1"
+    current.lock = lock
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    result = repository.commit_stream_writeback(
+        "s1",
+        expected_stream_id="stream-1",
+        mutate=lambda session: (
+            setattr(session, "title", "Completed"),
+            setattr(session, "active_stream_id", None),
+        ),
+        reconcile_after_save=lambda session: (
+            setattr(session, "title", "Cancelled after save") or True
+        ),
+    )
+
+    assert result is not None
+    assert result.reconciled_after_save is False
+    assert isinstance(result.reconciliation_error, OSError)
+    assert current.title == "Completed"
+    assert current.active_stream_id is None
+    assert current.durable_titles == ["Completed"]
+    assert lock.held is False
 
 
 def test_write_owner_rejects_deleted_seed_before_cache_publication():

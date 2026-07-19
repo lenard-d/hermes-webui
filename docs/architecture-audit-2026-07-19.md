@@ -106,6 +106,14 @@ tool progress, append the cancellation marker, then clear pending ownership in
 one locked save. The repository upgrades cached metadata projections first, so
 Stop cannot silently leave the sidecar active after refusing an unsafe compact
 save.
+Gateway success, terminal error, provider cancellation, and final pending-state
+cleanup now pass through `SessionRepository` with a generation check. The
+repository commits the canonical sidecar first with `skip_index=True`, then
+refreshes the repairable index separately on a best-effort basis. Late-cancel
+reconciliation remains under the same owner lock; if its second save fails, the
+first durable checkpoint remains authoritative. Stale workers publish nothing,
+while a failed first terminal save publishes no fabricated session snapshot and
+leaves pending state available for recovery.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
 the cursor through the runtime owner. `api/turn_admission.py` now owns the

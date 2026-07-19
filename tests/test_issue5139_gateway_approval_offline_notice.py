@@ -5,9 +5,11 @@ from __future__ import annotations
 import io
 import json
 import urllib.error
+from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from api import models
 from api.config import STREAMS, STREAMS_LOCK, invalidate_gateway_caps
 from api.gateway_chat import _run_gateway_chat_streaming
 
@@ -16,7 +18,28 @@ GATEWAY_CHAT = (REPO / "api" / "gateway_chat.py").read_text(encoding="utf-8")
 MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
 
 
-def _run_gateway_warning_case(unavailable_reason: str) -> list:
+def _gateway_session(tmp_path, monkeypatch, *, session_id: str, stream_id: str):
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
+    session = models.Session(
+        session_id=session_id,
+        active_stream_id=stream_id,
+        workspace="/tmp",
+        model="test",
+        profile=None,
+        context_messages=[],
+        messages=[],
+    )
+    session._approval_notice_emitted = False
+    session.save()
+    models.cache_full_session(session_id, session)
+    return session
+
+
+def _run_gateway_warning_case(unavailable_reason: str, tmp_path, monkeypatch) -> list:
     events = []
     q = MagicMock()
     q.put_nowait = lambda item: events.append(item)
@@ -25,18 +48,12 @@ def _run_gateway_warning_case(unavailable_reason: str) -> list:
     with STREAMS_LOCK:
         STREAMS[stream_id] = q
 
-    mock_session = MagicMock()
-    mock_session.active_stream_id = stream_id
-    mock_session.workspace = "/tmp"
-    mock_session.model = "test"
-    mock_session.model_provider = None
-    mock_session.profile = None
-    mock_session.context_messages = []
-    mock_session.messages = []
-    mock_session.pending_user_message = None
-    mock_session.pending_attachments = None
-    mock_session.pending_started_at = None
-    mock_session._approval_notice_emitted = False
+    session = _gateway_session(
+        tmp_path,
+        monkeypatch,
+        session_id="sess-warning",
+        stream_id=stream_id,
+    )
 
     def fake_urlopen(req, *, timeout=None):
         assert req.full_url == "http://127.0.0.1:8642/v1/chat/completions"
@@ -60,8 +77,7 @@ def _run_gateway_warning_case(unavailable_reason: str) -> list:
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("api.gateway_chat.gateway_approval_unavailable_reason", return_value=unavailable_reason), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
+                 patch("api.gateway_chat.get_session", return_value=session), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-warning",
@@ -77,8 +93,8 @@ def _run_gateway_warning_case(unavailable_reason: str) -> list:
     return events
 
 
-def test_gateway_chat_emits_offline_warning_for_unreachable_probe():
-    events = _run_gateway_warning_case("unreachable")
+def test_gateway_chat_emits_offline_warning_for_unreachable_probe(tmp_path, monkeypatch):
+    events = _run_gateway_warning_case("unreachable", tmp_path, monkeypatch)
     warnings = [item for item in events if isinstance(item, tuple) and item[0] == "warning"]
     assert warnings
     assert warnings[0][1]["type"] == "approval_gateway_offline"
@@ -90,8 +106,8 @@ def test_gateway_chat_emits_offline_warning_for_unreachable_probe():
     )
 
 
-def test_gateway_chat_keeps_unsupported_warning_for_reachable_older_gateway():
-    events = _run_gateway_warning_case("unsupported")
+def test_gateway_chat_keeps_unsupported_warning_for_reachable_older_gateway(tmp_path, monkeypatch):
+    events = _run_gateway_warning_case("unsupported", tmp_path, monkeypatch)
     warnings = [item for item in events if isinstance(item, tuple) and item[0] == "warning"]
     assert warnings
     assert warnings[0][1]["type"] == "approval_gateway_unsupported"
@@ -103,7 +119,7 @@ def test_gateway_chat_keeps_unsupported_warning_for_reachable_older_gateway():
     )
 
 
-def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe():
+def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe(tmp_path, monkeypatch):
     events = []
     q = MagicMock()
     q.put_nowait = lambda item: events.append(item)
@@ -112,18 +128,12 @@ def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe():
     with STREAMS_LOCK:
         STREAMS[stream_id] = q
 
-    mock_session = MagicMock()
-    mock_session.active_stream_id = stream_id
-    mock_session.workspace = "/tmp"
-    mock_session.model = "test"
-    mock_session.model_provider = None
-    mock_session.profile = None
-    mock_session.context_messages = []
-    mock_session.messages = []
-    mock_session.pending_user_message = None
-    mock_session.pending_attachments = None
-    mock_session.pending_started_at = None
-    mock_session._approval_notice_emitted = False
+    session = _gateway_session(
+        tmp_path,
+        monkeypatch,
+        session_id="sess-404",
+        stream_id=stream_id,
+    )
 
     def fake_urlopen(req, *, timeout=None):
         if req.full_url == "http://127.0.0.1:8642/v1/capabilities":
@@ -146,8 +156,7 @@ def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe():
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
+                 patch("api.gateway_chat.get_session", return_value=session), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-404",
@@ -172,7 +181,7 @@ def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe():
     )
 
 
-def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe():
+def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe(tmp_path, monkeypatch):
     events = []
     q = MagicMock()
     q.put_nowait = lambda item: events.append(item)
@@ -181,18 +190,12 @@ def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe()
     with STREAMS_LOCK:
         STREAMS[stream_id] = q
 
-    mock_session = MagicMock()
-    mock_session.active_stream_id = stream_id
-    mock_session.workspace = "/tmp"
-    mock_session.model = "test"
-    mock_session.model_provider = None
-    mock_session.profile = None
-    mock_session.context_messages = []
-    mock_session.messages = []
-    mock_session.pending_user_message = None
-    mock_session.pending_attachments = None
-    mock_session.pending_started_at = None
-    mock_session._approval_notice_emitted = False
+    session = _gateway_session(
+        tmp_path,
+        monkeypatch,
+        session_id="sess-timeout",
+        stream_id=stream_id,
+    )
 
     def fake_urlopen(req, *, timeout=None):
         if req.full_url == "http://127.0.0.1:8642/v1/capabilities":
@@ -215,8 +218,7 @@ def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe()
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
+                 patch("api.gateway_chat.get_session", return_value=session), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-timeout",

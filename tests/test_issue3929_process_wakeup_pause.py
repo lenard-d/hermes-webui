@@ -2585,22 +2585,6 @@ def test_success_path_clears_process_wakeup_pause_after_late_cancel_checks():
     assert pause_save_idx < post_save_cancel_idx < post_save_restore_idx < done_payload_idx
 
 
-def test_gateway_success_path_checks_cancel_before_clearing_process_wakeup_pause():
-    src = Path(__file__).parent.parent.joinpath("api", "gateway_chat.py").read_text(encoding="utf-8")
-    current_idx = src.index("if not _stream_writeback_is_current(s, stream_id):")
-    early_cancel_idx = src.index("if cancel_event.is_set():", current_idx)
-    pending_clear_idx = src.index("s.pending_user_source = None")
-    pre_clear_comment_idx = src.index("# Recheck immediately before clearing", pending_clear_idx)
-    final_cancel_idx = src.index("if cancel_event.is_set():", pre_clear_comment_idx)
-    pause_clear_idx = src.index(
-        'clear_process_wakeup_pause(s, reason="run_completed")',
-        final_cancel_idx,
-    )
-    save_idx = src.index("s.save()", pause_clear_idx)
-
-    assert current_idx < early_cancel_idx < pending_clear_idx < final_cancel_idx < pause_clear_idx < save_idx
-
-
 def test_process_wakeup_pause_does_not_suppress_explicit_non_wakeup_turn(tmp_path, monkeypatch):
     session = Session(
         session_id="wakeup_pause_manual_recover",

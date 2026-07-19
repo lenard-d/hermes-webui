@@ -210,7 +210,6 @@ def test_legacy_sse_loop_relays_approval_event():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-legacy-approval",
@@ -311,7 +310,6 @@ def test_legacy_approval_records_run_id_for_response_relay():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-legacy-runid",
@@ -393,6 +391,8 @@ def test_legacy_teardown_clears_stale_gateway_mirror_and_notifies_empty_state():
     q.put_nowait = lambda item: None
 
     mock_session = MagicMock()
+    mock_session.session_id = session_id
+    mock_session._loaded_metadata_only = False
     mock_session.active_stream_id = stream_id
     mock_session.workspace = "/tmp"
     mock_session.model = "test"
@@ -420,7 +420,6 @@ def test_legacy_teardown_clears_stale_gateway_mirror_and_notifies_empty_state():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=_make_legacy_gateway_urlopen(approval_payload, clear_gateway_queue)), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
@@ -495,7 +494,6 @@ def test_legacy_teardown_preserves_live_gateway_head_mirror():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=_make_legacy_gateway_urlopen(approval_payload)), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
@@ -578,7 +576,6 @@ def test_legacy_teardown_preserves_local_pending_entry():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=_make_legacy_gateway_urlopen(approval_payload)), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
@@ -815,7 +812,6 @@ def test_legacy_approval_without_run_id_stays_actionable():
             with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat._stream_writeback_is_current", return_value=True), \
                  patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
