@@ -182,6 +182,40 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
     assert sess.session_source == "messaging"
 
 
+def test_delete_active_session_fails_closed_with_conflict(tmp_path, monkeypatch):
+    from api.session_repository import SessionActiveError
+
+    _isolate_session_store(tmp_path, monkeypatch)
+    sid = "activedeleteconflict1"
+    Session(session_id=sid, title="Still running").save()
+    captured = _capture_post(monkeypatch, {"session_id": sid})
+    monkeypatch.setattr(
+        routes,
+        "bad",
+        lambda handler, message, status=400: captured.update(
+            payload={"error": message},
+            status=status,
+        )
+        or True,
+    )
+    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda value: {})
+    monkeypatch.setattr(routes, "_is_messaging_session_id", lambda value: False)
+    monkeypatch.setattr(
+        routes,
+        "delete_session_state",
+        lambda value, *, messaging: (_ for _ in ()).throw(
+            SessionActiveError(value, "stream-1")
+        ),
+    )
+
+    assert routes.handle_post(object(), SimpleNamespace(path="/api/session/delete")) is True
+
+    assert captured["status"] == 409
+    assert captured["payload"]["error"] == (
+        "Stop the active response before deleting this session"
+    )
+
+
 def test_archive_worktree_session_reports_retained_worktree_without_cleanup(tmp_path, monkeypatch):
     _isolate_session_store(tmp_path, monkeypatch)
     session, worktree = _worktree_session(tmp_path, "wtarchive1")

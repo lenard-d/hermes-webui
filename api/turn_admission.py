@@ -25,6 +25,7 @@ from api.config import (
     register_runtime_stream,
 )
 from api.models import _REPAIR_STALE_PENDING_GRACE_SECONDS, title_from
+from api.session_repository import session_deleted_for_write
 from api.session_events import publish_session_list_changed
 from api.turn_journal import append_turn_journal_event
 from api.workspace import set_last_workspace
@@ -178,6 +179,11 @@ def start_local_turn(
     diag.stage("session_lock_wait") if diag else None
     while True:
         with session_lock:
+            # The request may have loaded its Session before waiting behind a
+            # concurrent delete. Never admit that stale object after deletion:
+            # it would recreate the sidecar and clear the durable tombstone.
+            if session_deleted_for_write(session_id):
+                return {"error": "Session not found", "_status": 404}
             locked_stream_id = getattr(session, "active_stream_id", None)
             blocking = blocking_runtime_stream(
                 session_id,

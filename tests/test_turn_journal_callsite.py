@@ -101,3 +101,29 @@ def test_journal_failure_does_not_publish_before_persistence_or_prevent_worker(m
     assert worker_finished.wait(2)
     assert order == ["persisted", "journal_failed", "published", "worker"]
     assert result["turn_id"] is None
+
+
+def test_local_turn_refuses_a_session_deleted_while_waiting_for_its_lock(monkeypatch):
+    order = []
+    session = _Session(order)
+    monkeypatch.setattr(
+        turn_admission,
+        "session_deleted_for_write",
+        lambda sid: sid == session.session_id,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        turn_admission,
+        "register_runtime_stream",
+        lambda *_args, **_kwargs: order.append("published"),
+    )
+
+    result = turn_admission.start_local_turn(
+        session,
+        _request(),
+        worker_target=lambda *_args, **_kwargs: order.append("worker"),
+        clear_stale_stream=lambda _session: False,
+    )
+
+    assert result == {"error": "Session not found", "_status": 404}
+    assert order == []

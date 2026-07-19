@@ -155,8 +155,14 @@ full-load/lock/save mutation protocol and now reloads the current record after
 acquiring the per-session owner lock, preventing a stale pre-lock object from
 overwriting a newer transcript. Caller-provided objects seed only missing
 records. CLI imports persist allowlisted source identity fields in the initial
-write, and full plus metadata-only loads now preserve those fields. Delete,
-recovery, migration, reconciliation, and sidebar projections remain distributed.
+write, and full plus metadata-only loads now preserve those fields. Session
+deletion now runs under that same owner lock and hides cache, sidecar, backup,
+index, tombstone, attachment, journal, terminal, completion-deduplication, and
+non-messaging `state.db` cleanup behind one operation. It refuses deletion
+while a turn is active, and admission rechecks the durable delete marker while
+holding the same lock, closing both active-writeback and queued-start races.
+Recovery, migration,
+reconciliation, and sidebar projections remain distributed.
 
 Relevant areas:
 
@@ -321,6 +327,15 @@ into each locale or feature.
 
 Priority: high
 
+Remediation status: in progress. The initial figures below are the audit
+baseline, not the current branch result. Source-shape assumptions touched by
+the runtime/cache/session extraction have been replaced with behavioral tests.
+After the deletion/admission ownership work, a complete run of the current
+13,481-test collection finished in 343.91 seconds with 13,323 passed, 158
+skipped, 2 xfailed, 1 xpassed, and 34 subtests passed; there were no real
+failures. The broader source-coupled portfolio and missing coverage threshold
+remain open.
+
 Collection through `./scripts/test.sh` found exactly 13,461 tests. The collector
 reported that `hermes-agent` was unavailable locally, causing 30 agent-dependent
 tests to be skipped at collection time.
@@ -427,7 +442,7 @@ Priority: medium to high
 
 Remediation status: in progress. The root architecture, testing, and README
 snapshots now use the repo test runner, the current 5-shard matrix, the refreshed
-13,476-test/1,281-file count, and the current runtime/session/admission Module map.
+13,481-test/1,282-file count, and the current runtime/session/admission Module map.
 The architecture roadmap now distinguishes initial file extraction from deeper
 ownership. Archiving the embedded sprint logs and consolidating competing
 architecture indexes remain open.
@@ -465,7 +480,7 @@ but contains several stale snapshots:
 The document is approximately 1,981 lines and has accumulated chronological
 sprint guidance:
 
-- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,476
+- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,481
 - it claimed three CI shards; `.github/workflows/tests.yml` uses five shards for
   each of three Python versions
 - its coverage reference reflects early sprints rather than the current suite

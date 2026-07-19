@@ -204,7 +204,13 @@ larger migration remains incremental:
   reload the current record after acquiring that lock, upgrade metadata-only
   projections, publish the full object to the LRU, and save only after a
   successful edit. A caller-provided object seeds only a genuinely missing
-  record, so a pre-lock snapshot cannot overwrite a newer transcript. CLI
+  record, so a pre-lock snapshot cannot overwrite a newer transcript. It also
+  owns destructive cleanup under that same lock: cache, sidecar and backup,
+  index, tombstone, attachments, journals, terminal, completion deduplication,
+  and the non-messaging `state.db` row are handled by one operation. Deletion
+  fails closed while a turn is active, and turn admission checks the durable
+  deletion marker while holding the same lock so a queued stale request cannot
+  recreate the session. CLI
   imports persist allowlisted origin metadata with their initial write. JSON sidecars remain authoritative; the
   repository is the migration seam, not a claim that unified SQLite storage is
   shipped.

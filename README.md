@@ -589,7 +589,7 @@ system/Homebrew interpreter.
 
 Tests run against an isolated server with a separate state directory.
 Production data and real cron jobs are never touched. The July 19, 2026 checkout
-snapshot contains **13,476 collected tests** across **1,281 test files**. CI runs
+snapshot contains **13,481 collected tests** across **1,282 test files**. CI runs
 the suite on Python 3.11, 3.12, and 3.13 in 5 parallel shards per interpreter.
 Run `./scripts/test.sh tests/ --collect-only -q` for the current count.
 
@@ -612,7 +612,7 @@ api/
   onboarding.py   First-run onboarding wizard, OAuth provider support
   profiles.py     Profile state management, hermes_cli wrapper
   runtime_state.py  Process-local stream and worker lifecycle ownership
-  session_repository.py  Full-load, lock, and persistence protocol for edits
+  session_repository.py  Full-load, mutation, persistence, and deletion ownership
   turn_admission.py  Atomic local-turn admission and worker launch
   routes.py       All GET + POST route handlers (if/elif dispatch, no decorators)
   state_sync.py   /insights sync — message_count to state.db

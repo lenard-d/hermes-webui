@@ -227,7 +227,7 @@ def test_all_api_modules_importable(cleanup_test_sessions):
     """All api/ modules must be importable without NameError or ImportError.
     Catches missing imports introduced during future module splits.
     """
-    import ast, pathlib
+    import ast
     api_dir = REPO_ROOT / "api"
     for module_file in api_dir.glob("*.py"):
         src = module_file.read_text()
@@ -239,7 +239,7 @@ def test_all_api_modules_importable(cleanup_test_sessions):
 
 def test_server_py_importable(cleanup_test_sessions):
     """server.py must parse without syntax errors after any split."""
-    import ast, pathlib
+    import ast
     src = (REPO_ROOT / "server.py").read_text()
     try:
         ast.parse(src)
@@ -334,34 +334,37 @@ def test_deleted_session_does_not_appear_in_list(cleanup_test_sessions):
 
 def test_server_delete_prunes_session_index(cleanup_test_sessions):
     """session/delete should prune the deleted row without discarding the index."""
-    src = (REPO_ROOT / "server.py").read_text()
-    routes_src = (REPO_ROOT / "api" / "routes.py").read_text() if (REPO_ROOT / "api" / "routes.py").exists() else ""
-    # Find the delete handler in either file
-    for label, text in [("server.py", src), ("api/routes.py", routes_src)]:
-        # Accept both single-quote and double-quote style (formatting varies by contributor)
-        delete_idx = max(
-            text.find("if parsed.path == '/api/session/delete':"),
-            text.find('if parsed.path == "/api/session/delete":'),
-        )
-        if delete_idx >= 0:
-            delete_block = text[delete_idx:delete_idx+2400]
-            assert "prune_session_from_index(sid)" in delete_block, \
-                f"{label} session/delete must prune SESSION_INDEX_FILE"
-            return
-    assert False, "session/delete handler not found in server.py or api/routes.py"
+    from api.models import SESSION_INDEX_FILE
+
+    deleted_sid = make_session(cleanup_test_sessions)
+    retained_sid = make_session(cleanup_test_sessions)
+    _make_session_visible(deleted_sid)
+    _make_session_visible(retained_sid)
+
+    result, status = post("/api/session/delete", {"session_id": deleted_sid})
+
+    assert status == 200 and result.get("ok") is True
+    index = json.loads(SESSION_INDEX_FILE.read_text(encoding="utf-8"))
+    indexed_ids = {entry["session_id"] for entry in index}
+    assert deleted_sid not in indexed_ids
+    assert retained_sid in indexed_ids
+    cleanup_test_sessions.remove(deleted_sid)
 
 
 def test_server_delete_removes_session_bak_snapshot(cleanup_test_sessions):
     """session/delete must remove sidecar backups so deleted sessions stay deleted."""
-    routes_src = (REPO_ROOT / "api" / "routes.py").read_text()
-    delete_idx = max(
-        routes_src.find("if parsed.path == '/api/session/delete':"),
-        routes_src.find('if parsed.path == "/api/session/delete":'),
-    )
-    assert delete_idx >= 0, "session/delete handler not found in api/routes.py"
-    delete_block = routes_src[delete_idx:delete_idx+2400]
-    assert "with_suffix('.json.bak').unlink" in delete_block or 'with_suffix(".json.bak").unlink' in delete_block, \
-        "session/delete must unlink <sid>.json.bak to avoid later orphan-backup recovery"
+    from api.models import SESSION_DIR
+
+    sid = make_session(cleanup_test_sessions)
+    _make_session_visible(sid)
+    backup = SESSION_DIR / f"{sid}.json.bak"
+    backup.write_text("recoverable transcript", encoding="utf-8")
+
+    result, status = post("/api/session/delete", {"session_id": sid})
+
+    assert status == 200 and result.get("ok") is True
+    assert not backup.exists()
+    cleanup_test_sessions.remove(sid)
 
 # ── R9: Token/tool SSE events write to wrong session after switch ─────────────
 
