@@ -499,24 +499,53 @@ class TestIssue765FollowupHardening:
             "other session-mutating endpoints"
         )
 
-    def test_session_ops_retry_undo_hold_agent_lock(self):
-        """retry_last and undo_last must hold _get_session_agent_lock for the
-        entire read-modify-save cycle."""
-        src = (Path(__file__).parent.parent / "api" / "session_ops.py").read_text(
-            encoding="utf-8"
+    @pytest.mark.parametrize("operation_name", ["retry_last", "undo_last"])
+    def test_session_ops_retry_undo_hold_agent_lock(self, operation_name):
+        """Both mutations wait for the session owner lock before changing disk."""
+        import api.config as config
+        import api.session_ops as session_ops
+
+        sid = f"owner-lock-{operation_name}"
+        session = Session(
+            session_id=sid,
+            messages=[
+                {"role": "user", "content": "first"},
+                {"role": "assistant", "content": "reply"},
+                {"role": "user", "content": "last"},
+            ],
+            context_messages=[
+                {"role": "user", "content": "first"},
+                {"role": "assistant", "content": "reply"},
+                {"role": "user", "content": "last"},
+            ],
         )
-        assert "_get_session_agent_lock" in src, (
-            "session_ops must import _get_session_agent_lock"
-        )
-        # Both functions must use with _get_session_agent_lock(session_id):
-        for func_name in ("retry_last", "undo_last"):
-            func_idx = src.find(f"def {func_name}(")
-            assert func_idx != -1, f"{func_name} not found in session_ops.py"
-            func_block = src[func_idx:func_idx + 1200]
-            assert "with _get_session_agent_lock" in func_block, (
-                f"{func_name} must wrap its read-modify-save cycle in "
-                f"with _get_session_agent_lock(session_id)"
-            )
+        session.save()
+        lock = config._get_session_agent_lock(sid)
+        lock.acquire()
+        started = threading.Event()
+        finished = threading.Event()
+        errors = []
+
+        def mutate():
+            started.set()
+            try:
+                getattr(session_ops, operation_name)(sid)
+            except Exception as exc:  # pragma: no cover - asserted below
+                errors.append(exc)
+            finally:
+                finished.set()
+
+        worker = threading.Thread(target=mutate)
+        worker.start()
+        assert started.wait(timeout=1)
+        assert finished.wait(timeout=0.05) is False
+        lock.release()
+        worker.join(timeout=2)
+
+        assert errors == []
+        assert finished.is_set()
+        persisted = Session.load(sid)
+        assert [row["content"] for row in persisted.messages] == ["first", "reply"]
 
     def test_periodic_checkpoint_mutation_race_with_undo_last(self, tmp_path, monkeypatch):
         """Run _periodic_checkpoint against a session whose messages list is

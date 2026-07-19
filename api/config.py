@@ -28,6 +28,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
+
+from api.runtime_state import ProcessRuntimeState
 from urllib.parse import parse_qs, urlparse
 
 # ── Basic layout ──────────────────────────────────────────────────────────────
@@ -8776,32 +8778,17 @@ PENDING_GOAL_CONTINUATION: set = set()  # session_ids awaiting a goal continuati
 
 def register_stream_owner(stream_id: str, session_id: str) -> None:
     """Record the session that owns a stream before worker startup."""
-    stream_id = str(stream_id or "").strip()
-    session_id = str(session_id or "").strip()
-    if not stream_id or not session_id:
-        return
-    with STREAM_SESSION_OWNERS_LOCK:
-        STREAM_SESSION_OWNERS[stream_id] = session_id
+    RUNTIME_STATE.register_owner(stream_id, session_id)
 
 
 def stream_owner_session_id(stream_id: str) -> str | None:
     """Return the synchronously-recorded owner session for a stream, if any."""
-    stream_id = str(stream_id or "").strip()
-    if not stream_id:
-        return None
-    with STREAM_SESSION_OWNERS_LOCK:
-        owner = STREAM_SESSION_OWNERS.get(stream_id)
-    owner = str(owner or "").strip()
-    return owner or None
+    return RUNTIME_STATE.owner_session_id(stream_id)
 
 
 def unregister_stream_owner(stream_id: str) -> None:
     """Forget the pre-worker stream owner once the stream has torn down."""
-    stream_id = str(stream_id or "").strip()
-    if not stream_id:
-        return
-    with STREAM_SESSION_OWNERS_LOCK:
-        STREAM_SESSION_OWNERS.pop(stream_id, None)
+    RUNTIME_STATE.unregister_owner(stream_id)
 
 
 # ── Gateway capability cache ─────────────────────────────────────────────────
@@ -8958,36 +8945,60 @@ SERVER_START_TIME = time.time()
 
 def register_active_run(stream_id: str, **metadata) -> None:
     """Mark a WebUI agent worker as alive until its outer finally exits."""
-    if not stream_id:
-        return
-    now = time.time()
-    entry = dict(metadata or {})
-    entry.setdefault("stream_id", stream_id)
-    entry.setdefault("started_at", now)
-    entry.setdefault("phase", "running")
-    with ACTIVE_RUNS_LOCK:
-        ACTIVE_RUNS[stream_id] = entry
+    RUNTIME_STATE.register_worker(stream_id, **metadata)
 
 
 def update_active_run(stream_id: str, **metadata) -> None:
     """Update active-run metadata without creating a new run implicitly."""
-    if not stream_id:
-        return
-    with ACTIVE_RUNS_LOCK:
-        entry = ACTIVE_RUNS.get(stream_id)
-        if entry is not None:
-            entry.update(metadata)
+    RUNTIME_STATE.update_worker(stream_id, **metadata)
 
 
 def unregister_active_run(stream_id: str) -> None:
     """Remove a worker from the active-run registry and record idle start."""
-    if not stream_id:
-        return
     global LAST_RUN_FINISHED_AT
-    with ACTIVE_RUNS_LOCK:
-        ACTIVE_RUNS.pop(stream_id, None)
-        LAST_RUN_FINISHED_AT = time.time()
-    unregister_stream_owner(stream_id)
+    RUNTIME_STATE.unregister_worker(stream_id)
+    LAST_RUN_FINISHED_AT = RUNTIME_STATE.last_run_finished_at
+
+
+RUNTIME_STATE = ProcessRuntimeState(
+    streams=STREAMS,
+    stream_owners=STREAM_SESSION_OWNERS,
+    cancel_flags=CANCEL_FLAGS,
+    agent_instances=AGENT_INSTANCES,
+    partial_text=STREAM_PARTIAL_TEXT,
+    reasoning_text=STREAM_REASONING_TEXT,
+    live_tool_calls=STREAM_LIVE_TOOL_CALLS,
+    goal_related=STREAM_GOAL_RELATED,
+    last_event_ids=STREAM_LAST_EVENT_ID,
+    active_runs=ACTIVE_RUNS,
+    streams_lock=STREAMS_LOCK,
+    owners_lock=STREAM_SESSION_OWNERS_LOCK,
+    active_runs_lock=ACTIVE_RUNS_LOCK,
+)
+
+
+def register_runtime_stream(
+    stream_id: str,
+    session_id: str,
+    channel,
+    *,
+    goal_related: bool = False,
+) -> None:
+    """Publish a stream, authorization owner, and optional goal state together."""
+    RUNTIME_STATE.register_stream(
+        stream_id,
+        session_id,
+        channel,
+        goal_related=goal_related,
+    )
+
+
+def finish_runtime_run(stream_id: str) -> bool:
+    """Release every process-local value owned by a completed run."""
+    global LAST_RUN_FINISHED_AT
+    removed = RUNTIME_STATE.finish_run(stream_id)
+    LAST_RUN_FINISHED_AT = RUNTIME_STATE.last_run_finished_at
+    return removed
 
 # Agent cache: reuse AIAgent across messages in the same WebUI session so that
 # _user_turn_count survives between turns.  This mirrors the gateway's

@@ -149,19 +149,21 @@ def test_run_agent_streaming_uses_goal_related():
 
 def test_stream_goal_related_cleaned_up():
     """STREAM_GOAL_RELATED entries must be cleaned up when streams end."""
-    from pathlib import Path
-    streaming_py = (Path(__file__).resolve().parents[1] / "api" / "streaming.py").read_text()
+    import api.config as config
 
-    # Must have cleanup of STREAM_GOAL_RELATED
-    assert "STREAM_GOAL_RELATED" in streaming_py
-    # Look for pop or del of STREAM_GOAL_RELATED
-    assert any(
-        pattern in streaming_py
-        for pattern in [
-            "STREAM_GOAL_RELATED.pop",
-            "del STREAM_GOAL_RELATED",
-        ]
-    ), "streaming.py must clean up STREAM_GOAL_RELATED entries when streams end"
+    stream_id = "goal-related-cleanup-contract"
+    config.register_runtime_stream(
+        stream_id,
+        "goal-related-cleanup-session",
+        object(),
+        goal_related=True,
+    )
+    try:
+        assert config.STREAM_GOAL_RELATED[stream_id] is True
+        config.finish_runtime_run(stream_id)
+        assert stream_id not in config.STREAM_GOAL_RELATED
+    finally:
+        config.finish_runtime_run(stream_id)
 
 
 # ---------------------------------------------------------------------------

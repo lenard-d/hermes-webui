@@ -4404,6 +4404,26 @@ def _evict_sessions_over_cap(cap: int | None = None) -> int:
     return evicted
 
 
+def cache_full_session(sid: str, session):
+    """Publish one fully loaded session into the process LRU.
+
+    This is the single cache-publication Interface used by persistence owners.
+    It rejects cross-session objects and metadata-only projections so a caller
+    cannot poison later full-session reads.
+    """
+    sid = str(sid or "")
+    actual_sid = str(getattr(session, "session_id", "") or "")
+    if not sid or actual_sid != sid:
+        raise ValueError("session cache key does not match the session object")
+    if getattr(session, "_loaded_metadata_only", False):
+        raise ValueError("metadata-only sessions cannot enter the full-session cache")
+    with LOCK:
+        SESSIONS[sid] = session
+        SESSIONS.move_to_end(sid)
+        _evict_sessions_over_cap()
+    return session
+
+
 def get_session(sid, metadata_only=False):
     """Load a session, optionally with metadata only (skipping the messages array).
 

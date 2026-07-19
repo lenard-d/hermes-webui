@@ -61,6 +61,8 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       models.py            Session model + CRUD, per-session profile tracking, CLI/state.db bridge
       profiles.py          Profile state management, hermes_cli wrapper
+      runtime_state.py     Process-local stream/run ownership and terminal cleanup
+      session_repository.py Full-load, lock, and persistence protocol for session edits
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            All GET + POST route handlers (if/elif dispatch, no decorators)
       startup.py           Startup helpers: auto_install_agent_deps()
@@ -73,6 +75,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       index.html           HTML template
       style.css            All CSS incl. mobile responsive, themes + skins, KaTeX
       ui.js                DOM helpers, renderMd, tool cards, context indicator, file tree
+      session_render_cache.js Bounded LRU for serialized transcript render snapshots
       workspace.js         File preview, file ops, git badge, central api() fetch wrapper
       sessions.js          Session CRUD, list rendering, collapsible groups, search, SSE sync
       messages.js          send(), SSE event handlers, approval/clarify, transcript, recovery
@@ -169,6 +172,30 @@ See Architecture Phase B for the fix.
 ---
 
 ## 4. Server Architecture: Current State
+
+### 4.0 Implemented ownership seams
+
+Three narrow ownership seams now replace repeated state manipulation while the
+larger migration remains incremental:
+
+- `api/runtime_state.py` owns publication and terminal cleanup of process-local
+  stream/run registries. Callers register a stream through
+  `register_runtime_stream()` and finish it through `finish_runtime_run()`;
+  they must not independently clear individual per-run dictionaries. This is
+  not yet the complete browser-turn runtime described by the run-adapter RFC.
+- `api/session_repository.py` owns the mutation protocol for WebUI session
+  sidecars: acquire the per-session owner lock, reject identity mismatches,
+  upgrade metadata-only projections, publish the full object to the LRU, and
+  save only after a successful edit. JSON sidecars remain authoritative; the
+  repository is the migration seam, not a claim that unified SQLite storage is
+  shipped.
+- `static/session_render_cache.js` owns the bounded browser transcript-render
+  cache, including LRU order and UTF-16 memory budgets. `static/ui.js` consumes
+  its small interface instead of mutating cache counters directly.
+
+These Interfaces are intentionally deep: route and rendering code state the
+operation they need while lock ordering, cache accounting, and multi-registry
+cleanup remain local to their owner Modules.
 
 ### 4.1 HTTP Server Layer
 

@@ -802,9 +802,15 @@ def test_chat_start_rejects_invalid_request_profile(monkeypatch):
     import api.routes as routes
 
     class FakeSession:
+        session_id = "sid-invalid-profile"
         profile = "default"
 
     monkeypatch.setattr(routes, "get_session", lambda sid: FakeSession())
+    monkeypatch.setattr(
+        routes,
+        "get_full_session",
+        lambda _sid, session=None: session,
+    )
     errors = []
 
     def fake_bad(handler, message, status=400):

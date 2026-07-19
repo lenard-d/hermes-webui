@@ -9,8 +9,11 @@ erase work completed while it was in flight.
 from __future__ import annotations
 
 import importlib
+import json
 import threading
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -343,25 +346,47 @@ def test_lru_eviction_commits_outside_cache_lock():
     assert "outside the cache lock" in outside_section
 
 
-def test_clear_session_evicts_outside_session_lock():
+def test_clear_session_evicts_outside_session_lock(monkeypatch, tmp_path):
     """Clearing a session must not hold the per-session mutation lock while
     evicting its cached agent, because eviction can run provider commit I/O."""
-    import api.routes as routes_mod
-    src = Path(routes_mod.__file__).read_text(encoding="utf-8")
+    import api.config as config
+    import api.models as models
+    import api.routes as routes
 
-    route_start = src.index('if parsed.path == "/api/session/clear"')
-    route_end = src.index('if parsed.path == "/api/session/truncate"', route_start)
-    route_block = src[route_start:route_end]
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    models.SESSIONS.clear()
 
-    lock_start = route_block.index("with _get_session_agent_lock(sid):")
-    lock_end = route_block.index("# Evict cached agent outside the per-session lock", lock_start)
-    locked_section = route_block[lock_start:lock_end]
-    outside_section = route_block[lock_end:]
+    sid = "clear-releases-session-lock"
+    session = models.Session(
+        session_id=sid,
+        messages=[{"role": "user", "content": "clear me"}],
+    )
+    session.save()
 
-    assert "_evict_session_agent" not in locked_section
-    assert "s.save()" in locked_section
-    assert "_evict_session_agent(sid)" in outside_section
-    assert "provider" in outside_section and "I/O" in outside_section
+    lock = config._get_session_agent_lock(sid)
+    eviction_observations = []
+
+    def observe_evict(evicted_sid):
+        acquired = lock.acquire(blocking=False)
+        eviction_observations.append((evicted_sid, acquired))
+        if acquired:
+            lock.release()
+
+    monkeypatch.setattr(config, "_evict_session_agent", observe_evict)
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "j", lambda _handler, _payload, **_kwargs: True)
+    body = json.dumps({"session_id": sid}).encode()
+    handler = SimpleNamespace(
+        headers={"Content-Length": str(len(body))},
+        rfile=BytesIO(body),
+    )
+
+    routes.handle_post(handler, SimpleNamespace(path="/api/session/clear"))
+
+    assert eviction_observations == [(sid, True)]
 
 
 def test_post_turn_lifecycle_marks_completion_without_commit():

@@ -58,15 +58,53 @@ def test_regenerate_endpoint_persists_generated_title_without_reordering_sidebar
     assert "Read-only imported sessions cannot regenerate titles" in block
 
 
-def test_regenerate_helper_persists_generated_title_and_publishes_sidebar_refresh():
-    helper_idx = ROUTES_PY.index("def _persist_generated_session_title")
-    queue_idx = ROUTES_PY.index("def _queue_generated_title_for_imported_session", helper_idx)
-    helper_block = ROUTES_PY[helper_idx:queue_idx]
-    assert "mark_session_title_generated(session)" in helper_block
-    assert "session.save(touch_updated_at=False)" in helper_block
-    assert "_sync_session_title_to_insights(session)" in helper_block
-    assert "_publish_session_list_changed(" in helper_block
-    assert "session_id=sid" in helper_block
+def test_regenerate_helper_persists_generated_title_and_publishes_sidebar_refresh(
+    monkeypatch, tmp_path
+):
+    import api.models as models
+    import api.routes as routes
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    models.SESSIONS.clear()
+
+    session = models.Session(
+        session_id="regenerate-title-contract",
+        title="Untitled",
+        messages=[{"role": "user", "content": "name this session"}],
+        updated_at=123.0,
+    )
+    session.save(touch_updated_at=False)
+    synced = []
+    published = []
+    monkeypatch.setattr(routes, "_sync_session_title_to_insights", synced.append)
+    monkeypatch.setattr(
+        routes,
+        "_publish_session_list_changed",
+        lambda reason, **scope: published.append((reason, scope)),
+    )
+
+    result = routes._persist_generated_session_title(
+        session,
+        "A durable generated title",
+        event_reason="session_title_regenerate",
+    )
+
+    persisted = models.Session.load(session.session_id)
+    assert result == "A durable generated title"
+    assert persisted.title == "A durable generated title"
+    assert persisted.llm_title_generated is True
+    assert persisted.manual_title is False
+    assert persisted.updated_at == 123.0
+    assert len(synced) == 1
+    assert synced[0].session_id == session.session_id
+    assert synced[0].title == "A durable generated title"
+    assert published == [(
+        "session_title_regenerate",
+        {"profile": session.profile, "session_id": session.session_id},
+    )]
 
 
 def test_regenerate_endpoint_syncs_title_to_state_db_when_enabled():

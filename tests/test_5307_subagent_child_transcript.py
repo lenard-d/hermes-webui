@@ -333,8 +333,8 @@ def test_materialize_helper_refuses_persisted_writable_subagent_sidecar(
 
     monkeypatch.setattr(routes_module, "get_session", lambda _sid: _FakeSession())
     monkeypatch.setattr(
-        routes_module, "_ensure_full_session_before_mutation",
-        lambda _sid, s: s, raising=False,
+        routes_module, "get_full_session",
+        lambda _sid, session=None: session,
     )
     with pytest.raises(PermissionError):
         routes_module._get_or_materialize_session("persisted-sa")

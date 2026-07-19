@@ -969,9 +969,13 @@ def test_retry_truncates_model_context_when_it_is_separate(monkeypatch, tmp_path
     )
     saved = []
     session.save = lambda *args, **kwargs: saved.append(True)
-    monkeypatch.setattr(session_ops, "get_session", lambda sid: session)
-    monkeypatch.setattr(session_ops, "SESSIONS", {session.session_id: session})
-    monkeypatch.setattr(session_ops, "_get_session_agent_lock", lambda sid: contextlib.nullcontext())
+
+    @contextlib.contextmanager
+    def edit_session(_sid):
+        yield session
+        session.save()
+
+    monkeypatch.setattr(session_ops, "edit_session", edit_session)
 
     result = session_ops.retry_last(session.session_id)
 
@@ -1003,9 +1007,13 @@ def test_undo_truncates_model_context_when_it_is_separate(monkeypatch, tmp_path)
     )
     saved = []
     session.save = lambda *args, **kwargs: saved.append(True)
-    monkeypatch.setattr(session_ops, "get_session", lambda sid: session)
-    monkeypatch.setattr(session_ops, "SESSIONS", {session.session_id: session})
-    monkeypatch.setattr(session_ops, "_get_session_agent_lock", lambda sid: contextlib.nullcontext())
+
+    @contextlib.contextmanager
+    def edit_session(_sid):
+        yield session
+        session.save()
+
+    monkeypatch.setattr(session_ops, "edit_session", edit_session)
 
     result = session_ops.undo_last(session.session_id)
 

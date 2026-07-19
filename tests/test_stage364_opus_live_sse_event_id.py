@@ -94,14 +94,20 @@ def test_sse_handler_reads_event_id_from_side_channel():
 def test_cleanup_pops_stream_last_event_id():
     """The streaming worker's finally block must pop STREAM_LAST_EVENT_ID
     alongside the other STREAM_* dicts to prevent memory leak."""
-    # Find the cleanup block — multiple .pop(stream_id, None) lines
-    cleanup_idx = STREAMING_PY.find("STREAM_LIVE_TOOL_CALLS.pop(stream_id, None)")
-    assert cleanup_idx != -1, "cleanup block not found"
-    cleanup_block = STREAMING_PY[cleanup_idx:cleanup_idx + 500]
-    assert "STREAM_LAST_EVENT_ID.pop(stream_id, None)" in cleanup_block, (
-        "STREAM_LAST_EVENT_ID must be popped on worker finally to prevent "
-        "unbounded memory growth across streams"
+    import api.config as config
+
+    stream_id = "last-event-id-cleanup-contract"
+    config.register_runtime_stream(
+        stream_id,
+        "last-event-id-cleanup-session",
+        object(),
     )
+    config.STREAM_LAST_EVENT_ID[stream_id] = f"{stream_id}:3"
+    try:
+        config.finish_runtime_run(stream_id)
+        assert stream_id not in config.STREAM_LAST_EVENT_ID
+    finally:
+        config.finish_runtime_run(stream_id)
 
 
 def test_imports_present():

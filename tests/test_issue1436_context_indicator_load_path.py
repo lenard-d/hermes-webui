@@ -55,7 +55,7 @@ class TestIssue1436BackendFallback:
         # Real persisted sessions default read_only to False; set it explicitly so
         # the rename/update/move read-only guard (#3994) doesn't see a truthy
         # auto-attribute on the bare MagicMock. Same for _loaded_metadata_only,
-        # which _ensure_full_session_before_mutation() checks — a truthy mock
+        # which the session repository checks — a truthy mock
         # would trigger a spurious Session.load() reload onto a different object.
         s.read_only = False
         s._loaded_metadata_only = False

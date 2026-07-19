@@ -24,8 +24,8 @@ from api.config import (
     coerce_reasoning_effort_for_model,
     gateway_approval_unavailable_reason,
     gateway_supports_approval,
+    finish_runtime_run,
     register_active_run,
-    unregister_active_run,
     unregister_stream_owner,
     update_active_run,
 )
@@ -1179,13 +1179,5 @@ def _run_gateway_chat_streaming(
             except Exception:
                 logger.debug("Failed to clear gateway stream state", exc_info=True)
             _cleanup_gateway_pending_mirror(session_id)
-        with STREAMS_LOCK:
-            CANCEL_FLAGS.pop(stream_id, None)
-            STREAM_GOAL_RELATED.pop(stream_id, None)
-            STREAM_PARTIAL_TEXT.pop(stream_id, None)
-            STREAM_REASONING_TEXT.pop(stream_id, None)
-            STREAM_LIVE_TOOL_CALLS.pop(stream_id, None)
-            STREAM_LAST_EVENT_ID.pop(stream_id, None)
-            STREAMS.pop(stream_id, None)
+        finish_runtime_run(stream_id)
         _STREAM_RUN_IDS.pop(stream_id, None)
-        unregister_active_run(stream_id)

@@ -85,7 +85,7 @@ def test_import_cli_queue_helper_generates_title_once_for_placeholder_session(mo
 
     monkeypatch.setattr(routes.threading, "Thread", InlineThread)
     monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, sid: current if sid == current.session_id else None))
-    monkeypatch.setattr(routes, "_ensure_full_session_before_mutation", lambda sid, session: session)
+    monkeypatch.setattr(routes, "get_full_session", lambda sid, session=None: session)
     monkeypatch.setattr(routes, "generate_session_title_for_session", lambda session: (generated.append(session.session_id) or "Better imported title", "llm", "raw"))
     monkeypatch.setattr(
         routes,
@@ -126,7 +126,7 @@ def test_import_cli_queue_helper_skips_sessions_that_already_have_real_titles(mo
 
     monkeypatch.setattr(routes.threading, "Thread", InlineThread)
     monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, sid: current if sid == current.session_id else None))
-    monkeypatch.setattr(routes, "_ensure_full_session_before_mutation", lambda sid, session: session)
+    monkeypatch.setattr(routes, "get_full_session", lambda sid, session=None: session)
     monkeypatch.setattr(
         routes,
         "generate_session_title_for_session",

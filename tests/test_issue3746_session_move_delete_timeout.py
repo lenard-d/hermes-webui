@@ -15,8 +15,14 @@ B) /api/projects/delete unlinked every assigned session with a full
    actively-streaming sessions (largest arrays + race the writer) and guard each
    per-session save so one slow/failing session can't abort the whole request.
 """
+import json
 import threading
+from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 ROUTES_SRC = (Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
 
@@ -48,40 +54,86 @@ class TestBoundedLockAcquire:
         lock.release()
 
 
-# ── A) Structural: the move handler uses a bounded acquire + 503, not a bare `with` ──
-
-def _move_block():
-    idx = ROUTES_SRC.find('"/api/session/move"')
-    assert idx > 0, "session/move handler not found"
-    end = ROUTES_SRC.find('"/api/projects/create"', idx)
-    return ROUTES_SRC[idx:end]
+# ── A) Observable move/repository behavior ──
 
 
 def test_move_uses_bounded_lock_acquire():
-    block = _move_block()
-    assert ".acquire(timeout=" in block, (
-        "session/move must acquire the agent lock with a bounded timeout, not block forever (#3746)"
+    from api.session_repository import SessionBusyError, SessionRepository
+
+    lock = threading.Lock()
+    lock.acquire()
+    repository = SessionRepository(
+        load=lambda _sid: SimpleNamespace(session_id="move-busy"),
+        load_full=lambda _sid: None,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
     )
-    # Must NOT still use the bare blocking `with _get_session_agent_lock(...)` form
-    # around the save (that's the regression we're removing).
-    assert "with _get_session_agent_lock(body[\"session_id\"]):" not in block, (
-        "session/move must not use a bare unbounded `with` lock acquire anymore (#3746)"
-    )
+    try:
+        with pytest.raises(SessionBusyError):
+            with repository.edit("move-busy", lock_timeout=0.01):
+                pass
+    finally:
+        lock.release()
 
 
-def test_move_returns_503_on_lock_contention():
-    block = _move_block()
-    assert "status=503" in block, (
-        "session/move must return HTTP 503 when the lock can't be acquired in time (#3746)"
+def test_move_returns_503_on_lock_contention(monkeypatch):
+    import api.routes as routes
+    from api.session_repository import SessionBusyError
+
+    session = SimpleNamespace(
+        session_id="move-busy-route",
+        project_id=None,
+        profile=None,
+        workspace="/tmp",
+        compact=lambda: {"session_id": "move-busy-route"},
     )
+
+    @contextmanager
+    def busy_edit(*_args, **_kwargs):
+        raise SessionBusyError("busy")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "_get_or_materialize_session", lambda _sid: session)
+    monkeypatch.setattr(routes, "edit_session", busy_edit)
+    captured = {}
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: captured.update(
+            payload=payload, status=status
+        ),
+    )
+    body = json.dumps({"session_id": session.session_id}).encode()
+    handler = SimpleNamespace(
+        headers={"Content-Length": str(len(body))},
+        rfile=BytesIO(body),
+    )
+
+    routes.handle_post(handler, SimpleNamespace(path="/api/session/move"))
+
+    assert captured["status"] == 503
+    assert "busy" in captured["payload"]["error"].lower()
 
 
 def test_move_releases_lock_in_finally():
-    block = _move_block()
-    # The lock must be released on every path once acquired.
-    assert "finally:" in block and ".release()" in block, (
-        "session/move must release the agent lock in a finally block (#3746)"
+    from api.session_repository import SessionRepository
+
+    lock = threading.Lock()
+    session = SimpleNamespace(session_id="move-release", save=lambda **_kwargs: None)
+    repository = SessionRepository(
+        load=lambda _sid: session,
+        load_full=lambda _sid: None,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
     )
+
+    with pytest.raises(RuntimeError, match="mutation failed"):
+        with repository.edit("move-release", lock_timeout=0.1):
+            raise RuntimeError("mutation failed")
+
+    assert lock.acquire(blocking=False) is True
+    lock.release()
 
 
 # ── B) Structural: project delete skips streaming sessions + guards each save ──

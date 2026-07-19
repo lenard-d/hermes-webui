@@ -30,29 +30,19 @@ def _read_routes():
 
 
 def test_streaming_finally_does_not_discard_pending_goal_continuation():
-    """REGRESSION GUARD (stage-326): the streaming worker's `finally` block
-    must NOT contain `PENDING_GOAL_CONTINUATION.discard(session_id)`.
+    """Run teardown must preserve the single-use session continuation marker."""
+    import api.config as config
 
-    Doing so races against the frontend's SSE-receive → POST /chat/start
-    round-trip and erases the marker before it can be consumed.
-    """
-    src = _read_streaming()
-
-    # Find the cleanup block — STREAM_GOAL_RELATED.pop is a stable anchor.
-    pop_idx = src.find("STREAM_GOAL_RELATED.pop(stream_id")
-    assert pop_idx != -1, "STREAM_GOAL_RELATED cleanup not found — test needs update"
-
-    # Look at the next ~600 chars (the immediate cleanup block).
-    block = src[pop_idx:pop_idx + 600]
-
-    # The discard must NOT appear in this cleanup block.
-    assert "PENDING_GOAL_CONTINUATION.discard" not in block, (
-        "REGRESSION: streaming.py's stream-cleanup block discards "
-        "PENDING_GOAL_CONTINUATION. This races against the consumer in "
-        "routes.py and breaks the goal-continuation chain. The discard "
-        "must live ONLY in routes.py's `_start_chat_stream_for_session` "
-        "consumer path."
-    )
+    stream_id = "goal-stream-teardown"
+    session_id = "goal-session-teardown"
+    config.PENDING_GOAL_CONTINUATION.add(session_id)
+    config.register_runtime_stream(stream_id, session_id, object(), goal_related=True)
+    try:
+        config.finish_runtime_run(stream_id)
+        assert session_id in config.PENDING_GOAL_CONTINUATION
+    finally:
+        config.PENDING_GOAL_CONTINUATION.discard(session_id)
+        config.finish_runtime_run(stream_id)
 
 
 def test_routes_consumer_discards_atomically_on_read():
@@ -91,19 +81,18 @@ def test_pending_goal_continuation_is_a_set():
 
 
 def test_stream_goal_related_pop_keyed_by_stream_id():
-    """STREAM_GOAL_RELATED.pop in the cleanup must be keyed by stream_id
-    (the ending stream's id), not session_id — a different stream's flag
-    must not be erased."""
-    src = _read_streaming()
-    # Search for the cleanup line.
-    m = re.search(r"STREAM_GOAL_RELATED\.pop\(([^,)]+)", src)
-    assert m is not None, "STREAM_GOAL_RELATED.pop not found in streaming.py"
-    key = m.group(1).strip()
-    assert key == "stream_id", (
-        f"STREAM_GOAL_RELATED.pop must be keyed by stream_id, got {key!r}. "
-        "Using session_id would erase a different stream's flag if two "
-        "streams overlap on the same session."
-    )
+    """Run teardown removes only the ending stream's goal-related state."""
+    import api.config as config
+
+    config.register_runtime_stream("ending-stream", "shared-session", object(), goal_related=True)
+    config.register_runtime_stream("other-stream", "shared-session", object(), goal_related=True)
+    try:
+        config.finish_runtime_run("ending-stream")
+        assert "ending-stream" not in config.STREAM_GOAL_RELATED
+        assert config.STREAM_GOAL_RELATED["other-stream"] is True
+    finally:
+        config.finish_runtime_run("ending-stream")
+        config.finish_runtime_run("other-stream")
 
 
 def test_goal_continue_set_marker_before_emitting_event():

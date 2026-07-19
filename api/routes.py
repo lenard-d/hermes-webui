@@ -61,6 +61,7 @@ from api.session_events import (
 )
 from api.gateway_restart import restart_active_profile_gateway
 from api.shares import create_or_refresh_share, load_share, revoke_share
+from api.session_repository import SessionBusyError, edit_session, get_full_session
 
 logger = logging.getLogger(__name__)
 
@@ -124,19 +125,12 @@ def _persist_generated_session_title(
     normalized_title = str(next_title or "").strip()[:80] or "Untitled"
     sid = str(getattr(session, "session_id", "") or "")
     original_session = session
-    with _get_session_agent_lock(sid):
-        with LOCK:
-            latest = SESSIONS.get(sid)
-            if latest is not None and str(getattr(latest, "session_id", "") or "") != sid:
-                SESSIONS.pop(sid, None)
-                latest = None
-            elif latest is not None:
-                SESSIONS.move_to_end(sid)
-        if latest is None:
-            latest = Session.load(sid)
-            if latest is None:
-                raise KeyError(sid)
-        session = _ensure_full_session_before_mutation(sid, latest)
+    should_save = False
+    with edit_session(
+        sid,
+        touch_updated_at=False,
+        save_when=lambda _session: should_save,
+    ) as session:
         if getattr(session, "read_only", False):
             raise PermissionError(f"Session {sid} is read-only")
         if require_default_title:
@@ -154,11 +148,7 @@ def _persist_generated_session_title(
 
         # mark_session_title_generated sets s.llm_title_generated = True and clears manual_title.
         mark_session_title_generated(session)
-        session.save(touch_updated_at=False)
-        with LOCK:
-            SESSIONS[sid] = session
-            SESSIONS.move_to_end(sid)
-            _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
+        should_save = True
     _sync_session_title_to_insights(session)
     _publish_session_list_changed(
         event_reason,
@@ -186,7 +176,7 @@ def _queue_generated_title_for_imported_session(session, cli_meta: dict | None) 
                 current = Session.load(sid)
                 if not current:
                     return
-                current = _ensure_full_session_before_mutation(sid, current)
+                current = get_full_session(sid, session=current)
                 if getattr(current, "read_only", False):
                     return
                 current_meta = {
@@ -2805,6 +2795,7 @@ from api.config import (
     ACTIVE_RUNS,
     ACTIVE_RUNS_LOCK,
     register_stream_owner,
+    register_runtime_stream,
     stream_owner_session_id,
     unregister_stream_owner,
     CHAT_LOCK,
@@ -3669,26 +3660,6 @@ def _run_journal_live_snapshot(stream_id: str | None, *, handler=None) -> dict |
             "activity_rows": anchor_activity_rows,
         },
     }
-
-
-def _ensure_full_session_before_mutation(sid: str, session):
-    """Reload cached metadata-only sessions before mutating persisted fields.
-
-    Session.save() intentionally refuses metadata-only stubs (#1558) because
-    their messages list is empty by design. Mutation routes that save session
-    metadata must upgrade the cached stub first so they do not trip that guard
-    or risk writing an incomplete object.
-    """
-    if not getattr(session, "_loaded_metadata_only", False):
-        return session
-    full_session = Session.load(sid)
-    if full_session is None:
-        raise KeyError(sid)
-    with LOCK:
-        SESSIONS[sid] = full_session
-        SESSIONS.move_to_end(sid)
-        _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
-    return full_session
 
 
 _ANCHOR_ACTIVITY_SCENE_MAX_BYTES = 256_000
@@ -4891,7 +4862,14 @@ def _handle_session_anchor_scene(handler, body):
     # same shape the read path uses — and leave anchor_activity_scenes untouched.
     if not _session_visible_to_active_profile(getattr(s, "profile", None) or None, handler):
         return bad(handler, "Session not found", 404)
-    with _get_session_agent_lock(sid):
+    should_save = False
+    with edit_session(
+        sid,
+        session=s,
+        touch_updated_at=False,
+        skip_index=True,
+        save_when=lambda _session: should_save,
+    ) as s:
         idx, message = _find_anchor_scene_message(
             getattr(s, "messages", None) or [],
             message_index=message_index,
@@ -4921,7 +4899,7 @@ def _handle_session_anchor_scene(handler, body):
             )
             records = dict(ordered[-256:])
         s.anchor_activity_scenes = records
-        s.save(touch_updated_at=False, skip_index=True)
+        should_save = True
     return j(handler, {"ok": True, "message_index": idx, "message_ref": ref})
 
 
@@ -4935,7 +4913,7 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
     """
     try:
         s = get_session(sid)
-        s = _ensure_full_session_before_mutation(sid, s)
+        s = get_full_session(sid, session=s)
         # Read-only guard on the happy path too: an already-stored read-only /
         # imported session must not be mutated via rename/update/move
         # (Session.save() does not enforce this). Scope this to the explicit
@@ -5167,7 +5145,7 @@ def _resolve_share_session_pair(sid: str, handler):
         )
         if not _session_visible_to_active_profile(effective_profile, handler):
             raise KeyError(sid)
-        stored_session = _ensure_full_session_before_mutation(sid, stored_session)
+        stored_session = get_full_session(sid, session=stored_session)
         snapshot_session = copy.copy(stored_session)
         snapshot_session.messages = _share_snapshot_messages_for_session(
             stored_session,
@@ -14653,10 +14631,9 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Session not found", 404)
         except PermissionError:
             return bad(handler, "Read-only imported sessions cannot be renamed from WebUI", 403)
-        with _get_session_agent_lock(body["session_id"]):
+        with edit_session(body["session_id"], session=s) as s:
             from api.session_ops import apply_session_title_rename
             apply_session_title_rename(s, body["title"])
-            s.save()
         _sync_session_title_to_insights(s)
         publish_session_list_changed(
             "session_rename",
@@ -14703,7 +14680,6 @@ def handle_post(handler, parsed) -> bool:
         name = body["name"].strip()
         try:
             s = get_session(sid)
-            s = _ensure_full_session_before_mutation(sid, s)
         except KeyError:
             return bad(handler, "Session not found", 404)
         # Resolve personality from config.yaml agent.personalities section
@@ -14733,9 +14709,8 @@ def handle_post(handler, parsed) -> bool:
                 prompt = "\n".join(p for p in parts if p)
             else:
                 prompt = str(value)
-        with _get_session_agent_lock(sid):
+        with edit_session(sid, session=s) as s:
             s.personality = name if name else None
-            s.save()
         return j(handler, {"ok": True, "personality": s.personality, "prompt": prompt})
 
     if parsed.path == "/api/session/toolsets":
@@ -14760,15 +14735,13 @@ def handle_post(handler, parsed) -> bool:
             s = get_session(sid)
         except KeyError:
             return bad(handler, "Session not found", 404)
-        with _get_session_agent_lock(sid):
+        with edit_session(sid, session=s) as s:
             s.enabled_toolsets = toolsets
-            s.save()
         return j(handler, {"ok": True, "enabled_toolsets": s.enabled_toolsets})
 
     if parsed.path == "/api/session/draft":
-        # GET ?session_id=X  → return current draft
-        # POST body          → save draft { session_id, text?, files? }
-        # HTTP method is in handler.command (e.g. "POST", "GET"), parsed has no .method
+        # POST body → save draft { session_id, text?, files? }. Current draft
+        # state is returned as part of GET /api/session.
         import time as _draft_time
         _draft_t0 = _draft_time.monotonic()
         _draft_stages = []
@@ -14776,18 +14749,6 @@ def handle_post(handler, parsed) -> bool:
         def _draft_mark(name):
             _draft_stages.append((name, _draft_time.monotonic()))
         _draft_mark("enter")
-        if handler.command == "GET":
-            query = parse_qs(parsed.query)
-            sid = query.get("session_id", [""])[0] if parsed.query else ""
-            if not sid:
-                return bad(handler, "session_id is required", 400)
-            try:
-                s = get_session(sid)
-            except KeyError:
-                return bad(handler, "Session not found", 404)
-            draft = getattr(s, "composer_draft", {}) or {}
-            return j(handler, {"draft": draft})
-        # POST
         try:
             require(body, "session_id")
         except ValueError as e:
@@ -14817,7 +14778,13 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Session not found", 404)
         _draft_mark("after_get_session")
         unchanged = False
-        with _get_session_agent_lock(sid):
+        with edit_session(
+            sid,
+            session=s,
+            touch_updated_at=False,
+            skip_index=True,
+            save_when=lambda _session: not unchanged,
+        ) as s:
             _draft_mark("acquired_lock")
             current_draft = dict(getattr(s, "composer_draft", {}) or {})
             next_draft = dict(current_draft)
@@ -14835,8 +14802,6 @@ def handle_post(handler, parsed) -> bool:
                 # current chat every few seconds while the user is typing, and that
                 # delayed reload can restore an older draft over newer local input.
                 _draft_mark("before_save")
-                s.save(touch_updated_at=False, skip_index=True)
-                _draft_mark("after_save")
                 saved_draft = s.composer_draft
         _draft_mark("released_lock")
         payload = {"ok": True, "draft": saved_draft}
@@ -14877,7 +14842,7 @@ def handle_post(handler, parsed) -> bool:
             new_ws = str(resolve_trusted_workspace(body.get("workspace", s.workspace)))
         except ValueError as e:
             return bad(handler, str(e))
-        with _get_session_agent_lock(body["session_id"]):
+        with edit_session(body["session_id"], session=s) as s:
             s.workspace = new_ws
             if "model" in body or "model_provider" in body:
                 model, provider = _session_model_state_from_request(
@@ -14901,7 +14866,6 @@ def handle_post(handler, parsed) -> bool:
                     from api.config import _evict_session_agent
 
                     _evict_session_agent(body["session_id"])
-            s.save()
         if str(old_ws or "") != str(new_ws or ""):
             try:
                 from api.terminal import close_terminal
@@ -15060,7 +15024,7 @@ def handle_post(handler, parsed) -> bool:
         except KeyError:
             return bad(handler, "Session not found", 404)
         sid = body["session_id"]
-        with _get_session_agent_lock(sid):
+        with edit_session(sid, session=s) as s:
             had_sidecar_messages = bool(s.messages or [])
             # Clear is a full truncate-to-empty: route through the SAME helper the
             # /api/session/truncate handler uses (single source of truth) so the
@@ -15110,29 +15074,28 @@ def handle_post(handler, parsed) -> bool:
             # again (#3542 lifecycle gap).
             from api.session_ops import apply_session_title_rename
             apply_session_title_rename(s, "Untitled")
-            s.save()
-            persisted_clear = False
+        persisted_clear = False
+        try:
+            persisted = json.loads(s.path.read_text(encoding="utf-8"))
+            persisted_clear = (
+                persisted.get("messages") == []
+                and persisted.get("context_messages") == []
+                and persisted.get("truncation_watermark") == 0.0
+                and persisted.get("truncation_boundary") == 0.0
+                and persisted.get("active_stream_id") is None
+                and persisted.get("pending_user_message") is None
+                and persisted.get("pending_attachments") == []
+                and persisted.get("pending_started_at") is None
+                and persisted.get("pending_user_source") is None
+                and persisted.get("clear_generation") == s.clear_generation
+            )
+        except (OSError, json.JSONDecodeError, ValueError):
+            logger.warning("session clear could not verify persisted empty state for %s", sid, exc_info=True)
+        if had_sidecar_messages and persisted_clear:
             try:
-                persisted = json.loads(s.path.read_text(encoding="utf-8"))
-                persisted_clear = (
-                    persisted.get("messages") == []
-                    and persisted.get("context_messages") == []
-                    and persisted.get("truncation_watermark") == 0.0
-                    and persisted.get("truncation_boundary") == 0.0
-                    and persisted.get("active_stream_id") is None
-                    and persisted.get("pending_user_message") is None
-                    and persisted.get("pending_attachments") == []
-                    and persisted.get("pending_started_at") is None
-                    and persisted.get("pending_user_source") is None
-                    and persisted.get("clear_generation") == s.clear_generation
-                )
-            except (OSError, json.JSONDecodeError, ValueError):
-                logger.warning("session clear could not verify persisted empty state for %s", sid, exc_info=True)
-            if had_sidecar_messages and persisted_clear:
-                try:
-                    s.path.with_suffix('.json.bak').unlink(missing_ok=True)
-                except OSError:
-                    logger.warning("session clear could not remove stale backup for %s", sid, exc_info=True)
+                s.path.with_suffix('.json.bak').unlink(missing_ok=True)
+            except OSError:
+                logger.warning("session clear could not remove stale backup for %s", sid, exc_info=True)
         # Evict cached agent outside the per-session lock.  Eviction may run a
         # boundary memory commit for batch-extraction providers, and provider
         # I/O must not hold the session mutation lock.
@@ -15166,11 +15129,10 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "keep_count must be an integer")
         if keep < 0:
             return bad(handler, "keep_count must be non-negative")
-        with _get_session_agent_lock(body["session_id"]):
+        with edit_session(body["session_id"], session=s) as s:
             from api.session_ops import truncate_session_at_keep
 
             old_msg_count, old_ctx_count = truncate_session_at_keep(s, keep)
-            s.save()
             logger.info(
                 "truncate %s: messages %d→%d, context_messages %d→%d, watermark=%.2f",
                 body["session_id"], old_msg_count, len(s.messages or []),
@@ -15947,7 +15909,6 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Subagent sessions are view-only and cannot be modified from WebUI", 400)
         try:
             s = get_session(body["session_id"])
-            s = _ensure_full_session_before_mutation(body["session_id"], s)
         except KeyError:
             return bad(handler, "Session not found", 404)
         pin_requested = bool(body.get("pinned", True))
@@ -15996,12 +15957,11 @@ def handle_post(handler, parsed) -> bool:
                 # requests see the increment immediately, even before
                 # save() finishes flushing to disk.
                 s.pinned = True
-            with _get_session_agent_lock(body["session_id"]):
-                s.save()
+            with edit_session(body["session_id"], session=s) as s:
+                s.pinned = True
         else:
-            with _get_session_agent_lock(body["session_id"]):
+            with edit_session(body["session_id"], session=s) as s:
                 s.pinned = pin_requested
-                s.save()
         publish_session_list_changed(
             "session_pin",
             profile=getattr(s, "profile", None),
@@ -16020,16 +15980,6 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Subagent sessions are view-only and cannot be archived from WebUI", 400)
         try:
             s = get_session(sid)
-            # #1558: save() refuses metadata-only session stubs because their
-            # messages list is intentionally empty. If a sidebar/status preload
-            # left one in the LRU cache, upgrade to a full disk load before
-            # mutating archived state so the guard stays intact.
-            if getattr(s, "_loaded_metadata_only", False):
-                s = Session.load(sid)
-                if s is None:
-                    raise KeyError(sid)
-                with LOCK:
-                    SESSIONS[sid] = s
         except KeyError:
             cli_meta = _lookup_cli_session_metadata(sid)
             if not cli_meta:
@@ -16089,9 +16039,8 @@ def handle_post(handler, parsed) -> bool:
                 s.thread_id = cli_meta.get("thread_id")
                 s.session_key = cli_meta.get("session_key")
                 s.platform = cli_meta.get("platform")
-        with _get_session_agent_lock(sid):
+        with edit_session(sid, session=s, touch_updated_at=False) as s:
             s.archived = bool(body.get("archived", True))
-            s.save(touch_updated_at=False)
         publish_session_list_changed(
             "session_archive",
             profile=getattr(s, "profile", None),
@@ -16129,26 +16078,22 @@ def handle_post(handler, parsed) -> bool:
                 return bad(handler, "Project not found", 404)
             if not _profiles_match(target.get("profile"), _session_profile):
                 return bad(handler, "Project not found", 404)
-        # #3746: acquire the per-session agent lock with a bounded timeout
-        # instead of blocking indefinitely. The streaming thread holds this same
-        # lock during checkpoint saves; on slow file I/O (e.g. WSL/DrvFs) a bare
-        # blocking acquire could outlast the client's 30s abort and surface as a
-        # silent "Request timed out" toast with no server-side signal. Bounding
-        # the wait converts that into an actionable HTTP 503 the client can retry.
-        # We keep the lock (rather than dropping it for this metadata-only write)
-        # because s.save() still races the streaming thread's atomic writer.
-        _move_lock = _get_session_agent_lock(body["session_id"])
-        if not _move_lock.acquire(timeout=5):
+        # #3746: use the repository's bounded edit. The streaming thread holds
+        # the same owner lock during checkpoint writes; contention becomes an
+        # actionable HTTP 503 instead of outlasting the client's request timeout.
+        try:
+            with edit_session(
+                body["session_id"],
+                session=s,
+                lock_timeout=5,
+            ) as s:
+                s.project_id = target_pid
+        except SessionBusyError:
             return j(
                 handler,
                 {"error": "Session is busy (streaming). Please try again in a moment."},
                 status=503,
             )
-        try:
-            s.project_id = target_pid
-            s.save()
-        finally:
-            _move_lock.release()
         publish_session_list_changed(
             "session_move",
             profile=getattr(s, "profile", None),
@@ -20799,9 +20744,7 @@ def _handle_btw(handler, body):
     ephemeral.active_stream_id = stream_id
     ephemeral.save()
     stream = create_stream_channel()
-    register_stream_owner(stream_id, ephemeral.session_id)
-    with STREAMS_LOCK:
-        STREAMS[stream_id] = stream
+    register_runtime_stream(stream_id, ephemeral.session_id, stream)
     from api.background import track_btw
     track_btw(body["session_id"], ephemeral.session_id, stream_id, question)
     thr = threading.Thread(
@@ -20849,9 +20792,7 @@ def _handle_background(handler, body):
     bg.active_stream_id = stream_id
     bg.save()
     stream = create_stream_channel()
-    register_stream_owner(stream_id, bg.session_id)
-    with STREAMS_LOCK:
-        STREAMS[stream_id] = stream
+    register_runtime_stream(stream_id, bg.session_id, stream)
     task_id = uuid.uuid4().hex[:8]
     from api.background import track_background, complete_background
     parent_sid = body["session_id"]
@@ -21275,12 +21216,12 @@ def _start_chat_stream_for_session(
     set_last_workspace(workspace)
     diag.stage("stream_registration") if diag else None
     stream = create_stream_channel()
-    register_stream_owner(stream_id, s.session_id)
-    with STREAMS_LOCK:
-        STREAMS[stream_id] = stream
-    # #1932: mark stream as goal-related so the streaming hook evaluates the goal.
-    if goal_related:
-        STREAM_GOAL_RELATED[stream_id] = True
+    register_runtime_stream(
+        stream_id,
+        s.session_id,
+        stream,
+        goal_related=goal_related,
+    )
     diag.stage("worker_thread_start") if diag else None
     worker_target = _run_gateway_chat_streaming if backend_is_gateway else _run_agent_streaming
     worker_kwargs = {"model_provider": model_provider, "goal_related": goal_related}

@@ -19,7 +19,7 @@ def test_materialize_returns_in_store_session_directly():
 
     existing = SimpleNamespace(session_id="s1", profile="default", messages=[])
     with patch("api.routes.get_session", return_value=existing), \
-         patch("api.routes._ensure_full_session_before_mutation", return_value=existing):
+        patch("api.routes.get_full_session", return_value=existing):
         out = routes._get_or_materialize_session("s1")
     assert out is existing
 
@@ -78,7 +78,7 @@ def test_materialize_rejects_stored_readonly_session():
 
     ro = SimpleNamespace(session_id="ro_stored", profile="default", messages=[], read_only=True)
     with patch("api.routes.get_session", return_value=ro), \
-         patch("api.routes._ensure_full_session_before_mutation", return_value=ro):
+        patch("api.routes.get_full_session", return_value=ro):
         with pytest.raises(PermissionError):
             routes._get_or_materialize_session("ro_stored")
 
@@ -93,7 +93,7 @@ def test_materialize_allows_stored_messaging_session_without_readonly():
     msg = SimpleNamespace(session_id="msg_stored", profile="default", messages=[],
                           session_source="messaging", source_tag="telegram", read_only=False)
     with patch("api.routes.get_session", return_value=msg), \
-         patch("api.routes._ensure_full_session_before_mutation", return_value=msg):
+        patch("api.routes.get_full_session", return_value=msg):
         out = routes._get_or_materialize_session("msg_stored")
     assert out is msg
 
@@ -113,4 +113,3 @@ def test_materialize_rejects_messaging_cli_meta_without_readonly_flag():
             routes._get_or_materialize_session("msg1")
     assert not mock_import.called, "must not import a messaging session"
     assert not MockSession.called, "must not build a writable messaging stub"
-

@@ -82,6 +82,13 @@ read the relevant RFC before editing. In the PR description, name the state laye
 or event/control surface affected and include a regression test or manual
 verification for the relevant invariant.
 
+Current implementation seams for incremental migration are recorded in
+[`ARCHITECTURE.md`](../ARCHITECTURE.md#40-implemented-ownership-seams). In
+particular, process-local run cleanup belongs to `api/runtime_state.py`, and
+ordinary mutable session persistence belongs to `api/session_repository.py`.
+The RFCs remain the broader target contracts; these shipped seams must not be
+described as complete runtime-adapter or unified-database implementations.
+
 Proposed RFCs are review guardrails, not implementation authorization. Do not
 implement RFC fragments unless the task or tracking issue explicitly asks for
 that slice.
