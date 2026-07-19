@@ -219,7 +219,10 @@ Implementation has moved from `api/config.py` to `api/stream_channel.py`, which
 now owns bounded multi-subscriber fan-out, reconnect replay, backpressure, event
 cursors, and diagnostics. `api.config` retains a compatibility re-export, so
 callers can migrate without a flag day while configuration no longer owns this
-queueing mechanism.
+queueing mechanism. The 369-line static provider-name, alias, and fallback-model
+catalog has also moved to `api/model_catalog.py`. `api.config` re-exports the
+same objects for compatibility, while `api.providers` now reads the catalog
+from its owner rather than through the configuration dependency hub.
 
 ### `api/routes.py`
 
@@ -243,7 +246,7 @@ by HTTP method or line count would leave the coupling intact.
 Measured characteristics:
 
 - approximately 201 top-level definitions
-- approximately 143 globals
+- approximately 139 globals
 - `get_available_models()` is approximately 1,839 lines
 - `resolve_model_provider()` is approximately 372 lines
 

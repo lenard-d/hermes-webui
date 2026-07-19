@@ -33,8 +33,6 @@ except ImportError:  # pragma: no cover - exercised only where fcntl is unavaila
     fcntl = None  # type: ignore[assignment]
 
 from api.config import (
-    _PROVIDER_DISPLAY,
-    _PROVIDER_MODELS,
     _coerce_provider_cost_budget,
     _custom_provider_slug_from_name,
     _get_label_for_model,
@@ -47,6 +45,10 @@ from api.config import (
     get_config,
     invalidate_models_cache,
     reload_config,
+)
+from api.model_catalog import (
+    PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
+    PROVIDER_MODELS as _PROVIDER_MODELS,
 )
 from api.plugin_providers import (
     effective_provider_display_name,
