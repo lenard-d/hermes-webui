@@ -122,6 +122,7 @@ def test_existing_cli_import_refreshes_same_length_tool_metadata(monkeypatch):
 
     class FakeSession:
         def __init__(self):
+            self.session_id = session_id
             self.messages = list(stripped)
             self.source_tag = "cli"
             self.raw_source = "cli"

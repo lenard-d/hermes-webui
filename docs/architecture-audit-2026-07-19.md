@@ -166,8 +166,10 @@ operation rather than route logic; it reloads candidates under their owner
 lock, skips live turns, and removes recovery backups with deleted sidecars.
 Local handoff-summary transcript markers now use the same mutation owner, so a
 delayed handoff write cannot overwrite messages that arrived after its initial
-read. Recovery, migration, broader reconciliation, and sidebar projections
-remain distributed.
+read. Refreshing an already imported CLI session now fetches foreign data
+outside the lock, then re-authorizes and merges it into the repository-current
+record under the owner lock, preserving newer local turns. Recovery, migration,
+broader reconciliation, and sidebar projections remain distributed.
 
 Relevant areas:
 

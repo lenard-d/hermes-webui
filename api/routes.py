@@ -25074,50 +25074,71 @@ def _handle_session_import_cli(handler, body):
             profile=(cli_meta or {}).get("profile") or refresh_profile,
         )
         changed = False
-        if fresh_msgs and len(fresh_msgs) > len(existing.messages):
-            # Prefix-equality guard: only extend if existing messages are a prefix of
-            # the fresh CLI messages. Prevents silently dropping WebUI-added messages
-            # on hybrid sessions (user sent messages via WebUI while CLI continued).
-            if _is_messages_refresh_prefix_match(existing.messages, fresh_msgs):
-                existing.messages = fresh_msgs
-                changed = True
-        elif fresh_msgs and _is_cli_tool_metadata_enrichment(existing.messages, fresh_msgs):
-            # Same row count, richer payload: rebuild sidecars imported before
-            # CLI tool metadata was preserved (#1772).
-            existing.messages = fresh_msgs
-            changed = True
-        if cli_meta:
-            # A subagent child must never be flipped to CLI-classified /
-            # writable on an existing-session refresh either (#5307).
-            _existing_is_sa = (
-                (existing.source_tag or existing.raw_source or "").strip().lower() == "subagent"
-                or (cli_meta.get("source_tag") or cli_meta.get("raw_source") or "").strip().lower() == "subagent"
-                or _is_subagent_child_session_id(sid)
-            )
-            updates = {
-                "is_cli_session": (False if _existing_is_sa else True),
-                "source_tag": existing.source_tag or cli_meta.get("source_tag"),
-                "raw_source": existing.raw_source or cli_meta.get("raw_source") or cli_meta.get("source_tag"),
-                "session_source": existing.session_source or cli_meta.get("session_source"),
-                "source_label": existing.source_label or cli_meta.get("source_label"),
-                "parent_session_id": existing.parent_session_id or cli_meta.get("parent_session_id"),
-            }
-            # A subagent child is view-only: also coerce read_only=True on the
-            # persisted sidecar so a stale writable (pre-fix) sidecar can't be
-            # used to start a WebUI turn (#5307).
-            if _existing_is_sa:
-                updates["read_only"] = True
-            for attr, value in updates.items():
-                if getattr(existing, attr, None) != value:
-                    setattr(existing, attr, value)
+        try:
+            with edit_session(
+                sid,
+                session=existing,
+                touch_updated_at=False,
+                save_when=lambda _session: changed,
+            ) as current:
+                # Authorization was checked before reading the foreign store so an
+                # unauthorized request cannot use refresh as a metadata oracle. Check
+                # the repository-current record again before applying that data.
+                current_profile = getattr(current, "profile", None)
+                if allow_all_profiles:
+                    if requested_profile and not _profiles_match(
+                        current_profile, requested_profile
+                    ):
+                        return bad(handler, "Session not found in CLI store", 404)
+                elif not _session_visible_to_active_profile(current_profile, handler):
+                    return bad(handler, "Session not found in CLI store", 404)
+
+                existing = current
+                if fresh_msgs and len(fresh_msgs) > len(existing.messages):
+                    # Prefix-equality guard: only extend if existing messages are a prefix of
+                    # the fresh CLI messages. Prevents silently dropping WebUI-added messages
+                    # on hybrid sessions (user sent messages via WebUI while CLI continued).
+                    if _is_messages_refresh_prefix_match(existing.messages, fresh_msgs):
+                        existing.messages = fresh_msgs
+                        changed = True
+                elif fresh_msgs and _is_cli_tool_metadata_enrichment(existing.messages, fresh_msgs):
+                    # Same row count, richer payload: rebuild sidecars imported before
+                    # CLI tool metadata was preserved (#1772).
+                    existing.messages = fresh_msgs
                     changed = True
-        else:
-            _existing_is_sa = (
-                (existing.source_tag or existing.raw_source or "").strip().lower() == "subagent"
-                or _is_subagent_child_session_id(sid)
-            )
+                if cli_meta:
+                    # A subagent child must never be flipped to CLI-classified /
+                    # writable on an existing-session refresh either (#5307).
+                    _existing_is_sa = (
+                        (existing.source_tag or existing.raw_source or "").strip().lower() == "subagent"
+                        or (cli_meta.get("source_tag") or cli_meta.get("raw_source") or "").strip().lower() == "subagent"
+                        or _is_subagent_child_session_id(sid)
+                    )
+                    updates = {
+                        "is_cli_session": (False if _existing_is_sa else True),
+                        "source_tag": existing.source_tag or cli_meta.get("source_tag"),
+                        "raw_source": existing.raw_source or cli_meta.get("raw_source") or cli_meta.get("source_tag"),
+                        "session_source": existing.session_source or cli_meta.get("session_source"),
+                        "source_label": existing.source_label or cli_meta.get("source_label"),
+                        "parent_session_id": existing.parent_session_id or cli_meta.get("parent_session_id"),
+                    }
+                    # A subagent child is view-only: also coerce read_only=True on the
+                    # persisted sidecar so a stale writable (pre-fix) sidecar can't be
+                    # used to start a WebUI turn (#5307).
+                    if _existing_is_sa:
+                        updates["read_only"] = True
+                    for attr, value in updates.items():
+                        if getattr(existing, attr, None) != value:
+                            setattr(existing, attr, value)
+                            changed = True
+                else:
+                    _existing_is_sa = (
+                        (existing.source_tag or existing.raw_source or "").strip().lower() == "subagent"
+                        or _is_subagent_child_session_id(sid)
+                    )
+        except KeyError:
+            return bad(handler, "Session not found in CLI store", 404)
         if changed:
-            existing.save(touch_updated_at=False)
             publish_session_list_changed(
                 "session_import_cli",
                 profile=getattr(existing, "profile", None),

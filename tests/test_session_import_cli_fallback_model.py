@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import io
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -99,6 +100,7 @@ def test_session_import_cli_refresh_matches_messages_despite_timestamp_type_diff
 
     class FakeSession:
         def __init__(self):
+            self.session_id = session_id
             self.messages = [
                 {"role": "user", "content": "hello", "timestamp": 1710000000},
                 {"role": "assistant", "content": "working", "timestamp": 1710000001},
@@ -150,6 +152,7 @@ def test_session_import_cli_refresh_rejects_prefix_if_non_timing_content_diverge
 
     class FakeSession:
         def __init__(self):
+            self.session_id = session_id
             self.messages = [
                 {"role": "user", "content": "old-prefix", "timestamp": 1710000000},
                 {"role": "assistant", "content": "from local", "timestamp": 1710000001},
@@ -190,6 +193,89 @@ def test_session_import_cli_refresh_rejects_prefix_if_non_timing_content_diverge
     assert save_calls == []
 
 
+def test_session_import_cli_refresh_mutates_the_repository_current_session(monkeypatch):
+    """A CLI refresh must not overwrite a local turn added after its first load."""
+    import api.routes as routes
+
+    session_id = "cli_refresh_current_001"
+
+    class FakeSession:
+        def __init__(self, messages):
+            self.messages = list(messages)
+            self.session_id = session_id
+            self.source_tag = "cli"
+            self.raw_source = "cli"
+            self.session_source = "cli"
+            self.source_label = "CLI"
+            self.parent_session_id = None
+            self.is_cli_session = True
+            self.profile = None
+            self.read_only = False
+            self.saved = []
+
+        def compact(self):
+            return {"session_id": session_id, "title": "Imported CLI"}
+
+        def save(self, touch_updated_at=False):
+            self.saved.append(touch_updated_at)
+
+    first_load = FakeSession([{"role": "user", "content": "old", "timestamp": 1.0}])
+    current = FakeSession(
+        [
+            {"role": "user", "content": "old", "timestamp": 1.0},
+            {"role": "assistant", "content": "new local turn", "timestamp": 2.0},
+        ]
+    )
+    cli_messages = [
+        {"role": "user", "content": "old", "timestamp": 1.0},
+        {"role": "assistant", "content": "different CLI tail", "timestamp": 2.0},
+    ]
+
+    monkeypatch.setattr(
+        routes.Session,
+        "load",
+        classmethod(lambda _cls, sid: first_load if sid == session_id else None),
+    )
+    monkeypatch.setattr(routes, "require", lambda body, *keys: None)
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+    monkeypatch.setattr(
+        routes,
+        "get_cli_session_messages",
+        lambda sid, profile=None: cli_messages if sid == session_id else [],
+    )
+    monkeypatch.setattr(
+        routes,
+        "get_cli_sessions",
+        lambda source_filter=None, all_profiles=False: [
+            {
+                "session_id": session_id,
+                "source_tag": "cli",
+                "raw_source": "cli",
+                "session_source": "cli",
+                "source_label": "CLI",
+            }
+        ],
+    )
+
+    @contextmanager
+    def _edit_current(sid, **kwargs):
+        assert sid == session_id
+        yield current
+        save_when = kwargs.get("save_when")
+        if save_when is None or save_when(current):
+            current.save(touch_updated_at=kwargs.get("touch_updated_at", True))
+
+    monkeypatch.setattr(routes, "edit_session", _edit_current)
+
+    response = routes._handle_session_import_cli(object(), {"session_id": session_id})
+
+    assert response["imported"] is False
+    assert response["session"]["messages"][-1]["content"] == "new local turn"
+    assert current.messages[-1]["content"] == "new local turn"
+    assert first_load.messages == [{"role": "user", "content": "old", "timestamp": 1.0}]
+    assert first_load.saved == []
+
+
 def test_session_import_cli_preserves_parent_metadata_on_existing_import(monkeypatch):
     """Refreshing an already-imported CLI session must persist lineage metadata."""
     import api.routes as routes
@@ -199,6 +285,7 @@ def test_session_import_cli_preserves_parent_metadata_on_existing_import(monkeyp
 
     class FakeSession:
         def __init__(self):
+            self.session_id = session_id
             self.messages = [{"role": "user", "content": "hello", "timestamp": 1.0}]
             self.source_tag = "telegram"
             self.raw_source = "telegram"
