@@ -4,12 +4,12 @@ static _PROVIDER_MODELS list. Keep that curated list in sync with the public Go 
 and documented Go models endpoint while excluding preview/free-only Zen models.
 """
 
-import ast
 from pathlib import Path
 
+from api.model_catalog import PROVIDER_MODELS
+
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = ROOT / "api" / "config.py"
-CONFIG = CONFIG_PATH.read_text(encoding="utf-8")
+CONFIG = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
 
 EXPECTED_OPENCODE_GO_MODEL_IDS = [
     "minimax-m3",
@@ -35,15 +35,7 @@ EXPECTED_OPENCODE_GO_MODEL_IDS = [
 
 
 def _opencode_go_static_models():
-    tree = ast.parse(CONFIG, filename=str(CONFIG_PATH))
-    for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(isinstance(target, ast.Name) and target.id == "_PROVIDER_MODELS" for target in node.targets):
-            continue
-        provider_models = ast.literal_eval(node.value)
-        return provider_models["opencode-go"]
-    raise AssertionError("_PROVIDER_MODELS assignment not found")
+    return PROVIDER_MODELS["opencode-go"]
 
 
 def test_opencode_go_skips_live_models_probe():

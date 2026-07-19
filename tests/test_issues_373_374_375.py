@@ -8,6 +8,8 @@ Tests for issues #373, #374, and #375.
 import pathlib
 import re
 
+from api.model_catalog import FALLBACK_MODELS, PROVIDER_MODELS
+
 REPO = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 CONFIG_PY    = (REPO / "api" / "config.py").read_text(encoding="utf-8")
@@ -252,11 +254,9 @@ class TestGeminiModelIds:
 
     def test_gemini_provider_models_has_3x(self):
         """_PROVIDER_MODELS['gemini'] must contain valid Gemini 3.x model IDs (#669)."""
-        gemini_block_start = CONFIG_PY.find('"gemini": [')
-        assert gemini_block_start != -1, "_PROVIDER_MODELS['gemini'] block not found"
-        gemini_block = CONFIG_PY[gemini_block_start:gemini_block_start + 600]
+        gemini_ids = {model["id"] for model in PROVIDER_MODELS["gemini"]}
         for mid in self.VALID_GEMINI_3:
-            assert mid in gemini_block, (
+            assert mid in gemini_ids, (
                 f"_PROVIDER_MODELS['gemini'] must contain {mid!r} — "
                 f"this is a valid Google AI Studio model ID (#669)"
             )
@@ -267,52 +267,35 @@ class TestGeminiModelIds:
         This was the model the reporter selected from the wizard — it must appear
         in the native gemini provider model list so users can select it.
         """
-        gemini_block_start = CONFIG_PY.find('"gemini": [')
-        assert gemini_block_start != -1
-        gemini_block = CONFIG_PY[gemini_block_start:gemini_block_start + 600]
-        assert "gemini-3.1-flash-lite-preview" in gemini_block, (
+        gemini_ids = {model["id"] for model in PROVIDER_MODELS["gemini"]}
+        assert "gemini-3.1-flash-lite-preview" in gemini_ids, (
             "_PROVIDER_MODELS['gemini'] missing gemini-3.1-flash-lite-preview — "
             "this was the exact model the #669 reporter tried and got API_KEY_INVALID"
         )
 
     def test_fallback_models_has_gemini_3x(self):
         """_FALLBACK_MODELS must contain valid Gemini 3.x OpenRouter model IDs (#669)."""
-        fallback_start = CONFIG_PY.find("_FALLBACK_MODELS = [")
-        fallback_end = CONFIG_PY.find("]", fallback_start + len("_FALLBACK_MODELS = ["))
-        # Find the closing bracket for the list (multi-line)
-        depth = 0
-        pos = fallback_start + len("_FALLBACK_MODELS = [")
-        for i, ch in enumerate(CONFIG_PY[pos:], start=pos):
-            if ch == '[':
-                depth += 1
-            elif ch == ']':
-                if depth == 0:
-                    fallback_end = i
-                    break
-                depth -= 1
-        fallback_block = CONFIG_PY[fallback_start:fallback_end]
+        fallback_ids = {model["id"] for model in FALLBACK_MODELS}
         for mid in ("google/gemini-3.1-pro-preview", "google/gemini-3-flash-preview"):
-            assert mid in fallback_block, (
+            assert mid in fallback_ids, (
                 f"_FALLBACK_MODELS must contain {mid!r} for OpenRouter Google models (#669)"
             )
 
     def test_gemini_provider_also_has_stable_25(self):
         """_PROVIDER_MODELS['gemini'] must retain stable Gemini 2.5 models (#669)."""
-        gemini_block_start = CONFIG_PY.find('"gemini": [')
-        assert gemini_block_start != -1
-        gemini_block = CONFIG_PY[gemini_block_start:gemini_block_start + 600]
-        assert "gemini-2.5-pro" in gemini_block, (
+        gemini_ids = {model["id"] for model in PROVIDER_MODELS["gemini"]}
+        assert "gemini-2.5-pro" in gemini_ids, (
             "_PROVIDER_MODELS['gemini'] must keep gemini-2.5-pro as a stable fallback"
         )
 
     def test_no_invalid_gemini_3_pro_model(self):
         """gemini-3-pro-preview must not appear — it was shut down March 9 2026 (#669)."""
-        assert "gemini-3-pro-preview" not in CONFIG_PY or "gemini-3.1-pro-preview" in CONFIG_PY, (
-            "gemini-3-pro-preview was shut down — use gemini-3.1-pro-preview instead (#669)"
-        )
-        # More precise: ensure the bare (non-.1) version isn't the only one present
-        count_bare = CONFIG_PY.count('"gemini-3-pro-preview"')
-        assert count_bare == 0, (
-            f"gemini-3-pro-preview appears {count_bare} time(s) in config.py — "
+        all_model_ids = {
+            model["id"]
+            for models in PROVIDER_MODELS.values()
+            for model in models
+        } | {model["id"] for model in FALLBACK_MODELS}
+        assert "gemini-3-pro-preview" not in all_model_ids, (
+            "gemini-3-pro-preview remains in the catalog — "
             "it was shut down March 9 2026, use gemini-3.1-pro-preview (#669)"
         )

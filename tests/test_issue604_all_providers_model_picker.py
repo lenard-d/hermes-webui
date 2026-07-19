@@ -1,32 +1,15 @@
 """Tests for #604 — model picker shows all configured providers."""
 import re
 
+from api.model_catalog import PROVIDER_MODELS
+
 
 def _src() -> str:
     with open("api/config.py") as f:
         return f.read()
 
 
-def _get_provider_models_keys() -> set:
-    """Extract top-level provider keys from _PROVIDER_MODELS dict."""
-    with open("api/config.py") as f:
-        lines = f.readlines()
-    keys = []
-    in_dict = False
-    for line in lines:
-        if "_PROVIDER_MODELS = {" in line:
-            in_dict = True
-            continue
-        if in_dict:
-            m = re.match(r'^    "([^"]+)":\s*\[', line)
-            if m:
-                keys.append(m.group(1))
-            if re.match(r'^\}', line):
-                break
-    return set(keys)
-
-
-_PROVIDER_MODELS_KEYS = _get_provider_models_keys()
+_PROVIDER_MODELS_KEYS = set(PROVIDER_MODELS)
 
 
 class TestProviderDetectionEnvVars:
