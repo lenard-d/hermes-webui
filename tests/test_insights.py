@@ -78,6 +78,93 @@ def test_insights_aggregation_has_a_transport_independent_owner(tmp_path):
     assert len(payload["daily_tokens"]) == 30
 
 
+def _seed_insights_state_db(db_path, *, session_id, model, now):
+    import sqlite3
+
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            """CREATE TABLE sessions (
+                id TEXT PRIMARY KEY, source TEXT, model TEXT,
+                message_count INTEGER, input_tokens INTEGER,
+                output_tokens INTEGER, estimated_cost_usd REAL,
+                cache_read_tokens INTEGER DEFAULT 0,
+                started_at REAL, ended_at REAL
+            )"""
+        )
+        conn.execute(
+            """INSERT INTO sessions (
+                id, source, model, message_count, input_tokens, output_tokens,
+                estimated_cost_usd, cache_read_tokens, started_at, ended_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, "cli", model, 1, 100, 25, 0.01, 0, now, now),
+        )
+
+
+def test_insights_ignores_global_state_db_when_none_is_injected(
+    monkeypatch, tmp_path
+):
+    import api.models as models
+    from api.insights import build_insights
+
+    now = time.mktime((2026, 5, 30, 12, 0, 0, 0, 0, -1))
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    (session_dir / "_index.json").write_text("[]", encoding="utf-8")
+
+    foreign_db = tmp_path / "foreign-state.db"
+    _seed_insights_state_db(
+        foreign_db,
+        session_id="foreign-cli-session",
+        model="foreign-model",
+        now=now,
+    )
+    monkeypatch.setattr(models, "_active_state_db_path", lambda: foreign_db)
+
+    payload = build_insights(
+        "days=7",
+        session_dir=session_dir,
+        state_db_path=lambda: None,
+    )
+
+    assert payload["total_sessions"] == 0
+    assert payload["models"] == []
+
+
+def test_insights_reads_injected_state_db_when_global_resolver_is_none(
+    monkeypatch, tmp_path
+):
+    import api.models as models
+    from api.insights import build_insights
+
+    now = time.mktime((2026, 5, 30, 12, 0, 0, 0, 0, -1))
+    monkeypatch.setattr(time, "time", lambda: now)
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    (session_dir / "_index.json").write_text("[]", encoding="utf-8")
+
+    injected_db = tmp_path / "injected-state.db"
+    _seed_insights_state_db(
+        injected_db,
+        session_id="injected-cli-session",
+        model="injected-model",
+        now=now,
+    )
+    monkeypatch.setattr(models, "_active_state_db_path", lambda: None)
+
+    payload = build_insights(
+        "days=7",
+        session_dir=session_dir,
+        state_db_path=lambda: injected_db,
+    )
+
+    assert payload["total_sessions"] == 1
+    assert payload["total_input_tokens"] == 100
+    assert [model["model"] for model in payload["models"]] == ["injected-model"]
+
+
 def test_insights_daily_tokens_zero_fills_selected_range_and_parses_cost(monkeypatch, tmp_path):
     now = time.mktime((2026, 5, 4, 12, 0, 0, 0, 0, -1))
     two_days_ago = now - (2 * 86400)

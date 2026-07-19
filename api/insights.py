@@ -142,8 +142,7 @@ def build_insights(
 
     # ── Also include CLI sessions from Hermes state.db ─────────────────────
     try:
-        from api.models import _active_state_db_path
-        db_path = _active_state_db_path()
+        db_path = state_db_path()
         if db_path and db_path.exists():
             with closing(sqlite3.connect(str(db_path))) as conn:
                 conn.row_factory = sqlite3.Row
