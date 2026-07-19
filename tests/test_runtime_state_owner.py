@@ -165,3 +165,51 @@ def test_finish_runtime_run_releases_every_owned_per_run_value():
 def test_finish_runtime_run_is_idempotent():
     assert config.finish_runtime_run("missing-stream") is False
     assert config.finish_runtime_run("missing-stream") is False
+
+
+def test_begin_cancel_snapshots_progress_and_releases_transport_admission():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    channel = object()
+    cancel_event = threading.Event()
+    agent = object()
+    state.register_stream("stream-1", "session-1", channel)
+    state.register_worker("stream-1", session_id="session-1")
+    stores["cancel_flags"]["stream-1"] = cancel_event
+    stores["agent_instances"]["stream-1"] = agent
+    stores["partial_text"]["stream-1"] = "partial"
+    stores["reasoning_text"]["stream-1"] = "reasoning"
+    stores["live_tool_calls"]["stream-1"] = [{"name": "tool"}]
+    stores["last_event_ids"]["stream-1"] = "stream-1:7"
+
+    cancellation = state.begin_cancel("stream-1")
+
+    assert cancellation is not None
+    assert cancellation.session_id == "session-1"
+    assert cancellation.channel is channel
+    assert cancellation.agent is agent
+    assert cancellation.partial_text == "partial"
+    assert cancellation.reasoning_text == "reasoning"
+    assert cancellation.live_tool_calls == ({"name": "tool"},)
+    assert cancellation.last_event_id == "stream-1:7"
+    assert cancellation.had_transport is True
+    assert cancel_event.is_set()
+    assert "stream-1" not in stores["streams"]
+    assert "stream-1" not in stores["cancel_flags"]
+    assert "stream-1" not in stores["agent_instances"]
+    assert stores["active_runs"]["stream-1"]["phase"] == "cancelling"
+    assert stores["partial_text"]["stream-1"] == "partial"
+
+
+def test_begin_cancel_accepts_detached_worker_and_rejects_unknown_run():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    state.register_worker("detached", session_id="session-1")
+    stores["partial_text"]["detached"] = "detached partial"
+
+    cancellation = state.begin_cancel("detached")
+
+    assert cancellation is not None
+    assert cancellation.session_id == "session-1"
+    assert cancellation.had_transport is False
+    assert cancellation.partial_text == "detached partial"
+    assert stores["active_runs"]["detached"]["phase"] == "cancelling"
+    assert state.begin_cancel("missing") is None

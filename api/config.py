@@ -9021,6 +9021,11 @@ def runtime_worker_alive(stream_id: str) -> bool:
     return RUNTIME_STATE.has_worker(stream_id)
 
 
+def begin_runtime_cancel(stream_id: str):
+    """Claim cancellation and snapshot the process-local run state."""
+    return RUNTIME_STATE.begin_cancel(stream_id)
+
+
 def finish_runtime_run(stream_id: str) -> bool:
     """Release every process-local value owned by a completed run."""
     global LAST_RUN_FINISHED_AT

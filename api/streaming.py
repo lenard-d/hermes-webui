@@ -10942,110 +10942,35 @@ def _handle_chat_steer(handler, body: dict) -> bool:
 def cancel_stream(stream_id: str) -> bool:
     """Signal an in-flight stream to cancel. Returns True if work was found.
 
-    Eagerly releases the session lock (pops STREAMS/CANCEL_FLAGS/AGENT_INSTANCES
-    and clears session.active_stream_id) so new /api/chat/start requests succeed
-    immediately after cancel, even if the agent thread is still blocked.
+    The runtime owner eagerly releases transport admission state; this function
+    interrupts the agent and persists the cancelled session so a successor
+    /api/chat/start can be admitted while the old worker unwinds.
 
-    The worker thread's finally block uses .pop(key, None), so the double-pop is
-    a safe no-op. Session cleanup runs outside STREAMS_LOCK to preserve lock
-    ordering (streaming thread does LOCK → STREAMS_LOCK; inverting would deadlock).
+    Session cleanup runs outside process-local locks to preserve lock ordering
+    (streaming thread does LOCK → STREAMS_LOCK; inverting would deadlock).
     """
     from api import config as _live_config
 
-    # Use module-level aliases (imported from api.config at startup).
-    # In production these are always the same objects as api.config.STREAMS etc.
-    # The fallback below handles a hypothetical future case where api.config's
-    # state dicts are replaced at runtime (e.g. a future profile-reload path).
-    # No production code currently does this; the fallback is defensive only.
-    streams = STREAMS
-    cancel_flags = CANCEL_FLAGS
-    agent_instances = AGENT_INSTANCES
-    partial_texts = STREAM_PARTIAL_TEXT
-    streams_lock = STREAMS_LOCK
-    if stream_id not in streams and getattr(_live_config, 'STREAMS', streams) is not streams:
-        streams = _live_config.STREAMS
-        cancel_flags = _live_config.CANCEL_FLAGS
-        agent_instances = _live_config.AGENT_INSTANCES
-        partial_texts = _live_config.STREAM_PARTIAL_TEXT
-        streams_lock = _live_config.STREAMS_LOCK
+    # The runtime owner atomically snapshots progress, marks the worker as
+    # cancelling, signals its cancel event, and releases the transport values
+    # that block successor admission. Session persistence remains below and
+    # deliberately runs after the process-local locks have been released.
+    cancellation = _live_config.begin_runtime_cancel(stream_id)
+    if cancellation is None:
+        return False
 
-    active_run_entry = None
-    active_run_session_id = None
-    stream_present = False
-    agent = None
-    q = None
-    # Snapshots captured UNDER streams_lock so the worker's finally block (which
-    # pops STREAM_PARTIAL_TEXT/REASONING/TOOL_CALLS under STREAMS_LOCK) cannot
-    # race agent.interrupt() and clear these buffers before we read them — a
-    # cancelled turn would otherwise silently lose its already-streamed
-    # partial text / reasoning / tool-calls (Codex pre-release finding).
-    _snap_partial_text = None
-    _snap_reasoning = None
-    _snap_tool_calls = None
-    _snap_flag = None
-    _snap_agent = None
+    stream_present = cancellation.had_transport
+    active_run_session_id = cancellation.session_id
+    agent = cancellation.agent
+    q = cancellation.channel
+    _cancel_partial_text = cancellation.partial_text
+    _cancel_reasoning = cancellation.reasoning_text
+    _cancel_tool_calls = list(cancellation.live_tool_calls)
     _cancel_session_payload = None
-
-    with streams_lock:
-        stream_present = stream_id in streams
-        # Snapshot everything the worker's finally could pop, WHILE the lock is
-        # held and before any interrupt lets that finally run — for BOTH the
-        # STREAMS-present and the ACTIVE_RUNS-only (detached) paths. The buffers
-        # are keyed by stream_id independent of STREAMS membership, so a detached
-        # cancel must snapshot them too or it loses the already-streamed text.
-        _snap_flag = cancel_flags.get(stream_id)
-        _snap_agent = agent_instances.get(stream_id)
-        _snap_partial_text = partial_texts.get(stream_id, '')
-        if not _snap_partial_text:
-            _live_partials = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
-            if _live_partials is not partial_texts:
-                _snap_partial_text = _live_partials.get(stream_id, '')
-        _snap_reasoning = STREAM_REASONING_TEXT.get(stream_id, '')
-        if not _snap_reasoning:
-            _live_reasoning = getattr(_live_config, 'STREAM_REASONING_TEXT', STREAM_REASONING_TEXT)
-            if _live_reasoning is not STREAM_REASONING_TEXT:
-                _snap_reasoning = _live_reasoning.get(stream_id, '')
-        _snap_tool_calls = list(STREAM_LIVE_TOOL_CALLS.get(stream_id, []) or [])
-        if not _snap_tool_calls:
-            _live_tools = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', STREAM_LIVE_TOOL_CALLS)
-            if _live_tools is not STREAM_LIVE_TOOL_CALLS:
-                _snap_tool_calls = list(_live_tools.get(stream_id, []) or [])
-        if stream_present:
-            q = streams.get(stream_id)
-        else:
-            try:
-                with _live_config.ACTIVE_RUNS_LOCK:
-                    active_run_entry = dict((_live_config.ACTIVE_RUNS or {}).get(stream_id) or {})
-            except Exception:
-                active_run_entry = None
-            if not active_run_entry:
-                return False
-            active_run_session_id = str(active_run_entry.get("session_id") or "").strip() or None
-
-    if active_run_entry is None:
-        try:
-            with _live_config.ACTIVE_RUNS_LOCK:
-                active_run_entry = dict((_live_config.ACTIVE_RUNS or {}).get(stream_id) or {})
-        except Exception:
-            active_run_entry = None
-        if active_run_entry and not active_run_session_id:
-            active_run_session_id = str(active_run_entry.get("session_id") or "").strip() or None
-
-    # Mark the worker lifecycle registry immediately. The SSE maps may be popped
-    # below while the worker is still unwinding; ACTIVE_RUNS is what recovery /
-    # health polling sees during that detached window.
-    update_active_run(stream_id, phase="cancelling")
-
-    # Set WebUI layer cancel flag. Prefer the snapshot captured under the lock;
-    # fall back to a fresh lookup for the ACTIVE_RUNS-only path (stream absent).
-    flag = _snap_flag if _snap_flag is not None else cancel_flags.get(stream_id)
-    if flag:
-        flag.set()
 
     # Interrupt the AIAgent instance to stop tool execution. Use the
     # lock-snapshot agent when the stream was present; otherwise fall back to
     # the session agent cache via the active-run session id.
-    agent = _snap_agent if _snap_agent is not None else agent_instances.get(stream_id)
     if agent is None and active_run_session_id:
         try:
             with _live_config.SESSION_AGENT_CACHE_LOCK:
@@ -11087,49 +11012,13 @@ def cancel_stream(stream_id: str) -> bool:
     # worker save and show cancel in the client while persistence says done.
     _emit_cancel_event = True
 
-    # ── Eager session lock release (fixes #653) ──────────────────────────
-    # Pop stream state now so the 409 guard in routes.py sees the session
-    # as idle and allows new /api/chat/start immediately after cancel,
-    # even if the agent thread is still blocked in a C-level syscall.
-    # The worker thread's finally block uses .pop(key, None) too, so a
-    # double-pop here is safe (no-op).
-    if stream_present:
-        streams.pop(stream_id, None)
-        cancel_flags.pop(stream_id, None)
-        agent_instances.pop(stream_id, None)
-    # STREAM_PARTIAL_TEXT is intentionally NOT popped here — the agent thread may
-    # still be appending tokens, and the streaming finally block handles cleanup
-    # when the thread exits. We already snapshotted the buffers under streams_lock
-    # at the top of this function (see _snap_*), so they're safe to read below
-    # even if the worker's finally has since popped the live maps.
-
-    # Resolve the cancel session id and reuse the under-lock snapshots.
+    # Resolve the cancel session id from the runtime snapshot or agent handle.
     # Session cleanup (get_session + save) must happen OUTSIDE the lock —
     # get_session() acquires LOCK, and the streaming thread does LOCK first
     # then STREAMS_LOCK, so inverting the order here would cause deadlock.
     _cancel_session_id = getattr(agent, 'session_id', None) if agent else None
     if not _cancel_session_id and active_run_session_id:
         _cancel_session_id = active_run_session_id
-    # Use the snapshots captured under streams_lock above (the worker's finally
-    # may have popped the live buffers by now via agent.interrupt()). For the
-    # ACTIVE_RUNS-only path (stream absent) the snapshots are None → fall back to
-    # a best-effort live read.
-    _cancel_partial_text = _snap_partial_text if _snap_partial_text is not None else partial_texts.get(stream_id, '')
-    if not _cancel_partial_text:
-        live_partials = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
-        if live_partials is not partial_texts:
-            _cancel_partial_text = live_partials.get(stream_id, '')
-    # Capture reasoning trace and live tool calls (#1361 §A + §B)
-    _cancel_reasoning = _snap_reasoning if _snap_reasoning is not None else STREAM_REASONING_TEXT.get(stream_id, '')
-    if not _cancel_reasoning:
-        live_reasoning = getattr(_live_config, 'STREAM_REASONING_TEXT', STREAM_REASONING_TEXT)
-        if live_reasoning is not STREAM_REASONING_TEXT:
-            _cancel_reasoning = live_reasoning.get(stream_id, '')
-    _cancel_tool_calls = _snap_tool_calls if _snap_tool_calls is not None else STREAM_LIVE_TOOL_CALLS.get(stream_id, [])
-    if not _cancel_tool_calls:
-        live_tools = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', STREAM_LIVE_TOOL_CALLS)
-        if live_tools is not STREAM_LIVE_TOOL_CALLS:
-            _cancel_tool_calls = live_tools.get(stream_id, [])
 
     # Session cleanup outside STREAMS_LOCK to preserve lock ordering.
     # Acquire the per-session _agent_lock too, mirroring every other session
@@ -11290,7 +11179,7 @@ def cancel_stream(stream_id: str) -> bool:
                 logger.debug("Failed to clear session state on cancel for %s", _cancel_session_id)
 
     if _emit_cancel_event and q:
-        _cancel_event_id = STREAM_LAST_EVENT_ID.get(stream_id)
+        _cancel_event_id = cancellation.last_event_id
         if _cancel_event_id and hasattr(q, "note_last_event_id"):
             try:
                 q.note_last_event_id(_cancel_event_id)

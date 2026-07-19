@@ -62,7 +62,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       models.py            Session model + CRUD, per-session profile tracking, CLI/state.db bridge
       profiles.py          Profile state management, hermes_cli wrapper
-      runtime_state.py     Process-local stream/run ownership and terminal cleanup
+      runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
       turn_admission.py    Atomic local-turn admission, pending persistence, journal, stream, worker
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
@@ -181,12 +181,13 @@ See Architecture Phase B for the fix.
 Four ownership seams now replace repeated state manipulation while the
 larger migration remains incremental:
 
-- `api/runtime_state.py` owns publication and terminal cleanup of process-local
-  stream/run registries. It also owns the cross-registry admission decision and
-  bounded stale-worker reconciliation. Callers register a stream through
-  `register_runtime_stream()` and finish it through `finish_runtime_run()`;
-  they must not independently clear individual per-run dictionaries. This is
-  not yet the complete browser-turn runtime described by the run-adapter RFC.
+- `api/runtime_state.py` owns publication, cancellation snapshots, and terminal
+  cleanup of process-local stream/run registries. It also owns the cross-registry
+  admission decision and bounded stale-worker reconciliation. Callers register a
+  stream through `register_runtime_stream()`, claim cancel through
+  `begin_runtime_cancel()`, and finish through `finish_runtime_run()`; they must
+  not independently clear individual per-run dictionaries. This is not yet the
+  complete browser-turn runtime described by the run-adapter RFC.
 - `api/turn_admission.py` owns the synchronous local-turn transition after HTTP
   validation: claim the session, consume single-use continuation markers,
   persist pending ownership, append the submitted journal event, publish the

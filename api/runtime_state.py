@@ -11,8 +11,26 @@ from __future__ import annotations
 
 import time
 from collections.abc import MutableMapping
+from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Callable
+
+
+@dataclass(frozen=True)
+class RunCancellationSnapshot:
+    """Immutable process-local state captured before a run is interrupted."""
+
+    stream_id: str
+    session_id: str | None
+    channel: Any
+    cancel_event: Any
+    agent: Any
+    partial_text: str
+    reasoning_text: str
+    live_tool_calls: tuple
+    last_event_id: str | None
+    had_transport: bool
+    had_worker: bool
 
 
 class ProcessRuntimeState:
@@ -230,6 +248,68 @@ class ProcessRuntimeState:
             self._last_run_finished_at = self._clock()
         self.unregister_owner(stream_id)
         return removed
+
+    def begin_cancel(self, stream_id: str) -> RunCancellationSnapshot | None:
+        """Claim cancellation and eagerly release transport admission state.
+
+        Progress buffers deliberately remain owned by the worker until terminal
+        cleanup. Their immutable snapshots let persistence finish after an agent
+        interrupt races with worker teardown.
+        """
+        stream_id = str(stream_id or "").strip()
+        if not stream_id:
+            return None
+
+        with self._streams_lock:
+            had_transport = stream_id in self._streams
+            channel = self._streams.get(stream_id)
+            cancel_event = self._cancel_flags.get(stream_id)
+            agent = self._agent_instances.get(stream_id)
+            partial_text = str(self._partial_text.get(stream_id, "") or "")
+            reasoning_text = str(self._reasoning_text.get(stream_id, "") or "")
+            raw_tool_calls = self._live_tool_calls.get(stream_id, []) or []
+            live_tool_calls = tuple(
+                dict(item) if isinstance(item, dict) else item
+                for item in raw_tool_calls
+            )
+            last_event_id = self._last_event_ids.get(stream_id)
+            if had_transport:
+                self._streams.pop(stream_id, None)
+                self._cancel_flags.pop(stream_id, None)
+                self._agent_instances.pop(stream_id, None)
+
+        worker_entry: dict[str, Any] = {}
+        with self._active_runs_lock:
+            raw_worker_entry = self._active_runs.get(stream_id)
+            if raw_worker_entry is not None:
+                worker_entry = dict(raw_worker_entry or {})
+                raw_worker_entry["phase"] = "cancelling"
+        had_worker = bool(raw_worker_entry is not None)
+
+        if not had_transport and not had_worker:
+            return None
+        if cancel_event is not None:
+            cancel_event.set()
+
+        session_id = str(worker_entry.get("session_id") or "").strip() or None
+        if session_id is None:
+            session_id = self.owner_session_id(stream_id)
+        if session_id is None and agent is not None:
+            session_id = str(getattr(agent, "session_id", "") or "").strip() or None
+
+        return RunCancellationSnapshot(
+            stream_id=stream_id,
+            session_id=session_id,
+            channel=channel,
+            cancel_event=cancel_event,
+            agent=agent,
+            partial_text=partial_text,
+            reasoning_text=reasoning_text,
+            live_tool_calls=live_tool_calls,
+            last_event_id=str(last_event_id or "").strip() or None,
+            had_transport=had_transport,
+            had_worker=had_worker,
+        )
 
     def finish_run(self, stream_id: str) -> bool:
         """Release all process-local values owned by one completed run."""

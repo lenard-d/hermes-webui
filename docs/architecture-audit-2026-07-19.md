@@ -82,12 +82,13 @@ internal. It is substantially deeper than similarly sized global script files.
 Priority: critical
 
 Remediation status: in progress. `api/runtime_state.py` now owns process-local
-liveness, admission blocking, stale-worker reconciliation, and terminal
-cleanup. `api/turn_admission.py` now owns the synchronous transition from an
+liveness, admission blocking, cancellation snapshots, stale-worker
+reconciliation, and terminal cleanup. `api/turn_admission.py` now owns the synchronous transition from an
 accepted local turn through pending persistence, submitted journal entry,
-stream publication, and worker launch. Provider execution, cancellation,
-recovery, and final persistence still need to converge on the same runtime
-Interface before this finding is closed.
+stream publication, and worker launch. Agent interruption and cancelled-session
+persistence consume the runtime snapshot in `api/streaming.py`; provider
+execution, recovery, and final persistence still need to converge on the same
+runtime Interface before this finding is closed.
 
 Relevant areas:
 

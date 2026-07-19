@@ -84,7 +84,7 @@ verification for the relevant invariant.
 
 Current implementation seams for incremental migration are recorded in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md#40-implemented-ownership-seams). In
-particular, process-local run liveness and cleanup belong to
+particular, process-local run liveness, cancellation snapshots, and cleanup belong to
 `api/runtime_state.py`, synchronous local-turn admission belongs to
 `api/turn_admission.py`, and ordinary mutable session persistence belongs to
 `api/session_repository.py`.
