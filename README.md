@@ -589,7 +589,7 @@ system/Homebrew interpreter.
 
 Tests run against an isolated server with a separate state directory.
 Production data and real cron jobs are never touched. The July 19, 2026 checkout
-snapshot contains **13,473 collected tests** across **1,281 test files**. CI runs
+snapshot contains **13,476 collected tests** across **1,281 test files**. CI runs
 the suite on Python 3.11, 3.12, and 3.13 in 5 parallel shards per interpreter.
 Run `./scripts/test.sh tests/ --collect-only -q` for the current count.
 

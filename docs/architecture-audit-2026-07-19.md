@@ -150,6 +150,14 @@ disconnect, restart, and teardown.
 
 Priority: critical
 
+Remediation status: in progress. `api/session_repository.py` owns the ordinary
+full-load/lock/save mutation protocol and now reloads the current record after
+acquiring the per-session owner lock, preventing a stale pre-lock object from
+overwriting a newer transcript. Caller-provided objects seed only missing
+records. CLI imports persist allowlisted source identity fields in the initial
+write, and full plus metadata-only loads now preserve those fields. Delete,
+recovery, migration, reconciliation, and sidebar projections remain distributed.
+
 Relevant areas:
 
 - `api/models.py`
@@ -419,7 +427,7 @@ Priority: medium to high
 
 Remediation status: in progress. The root architecture, testing, and README
 snapshots now use the repo test runner, the current 5-shard matrix, the refreshed
-13,473-test/1,281-file count, and the current runtime/session/admission Module map.
+13,476-test/1,281-file count, and the current runtime/session/admission Module map.
 The architecture roadmap now distinguishes initial file extraction from deeper
 ownership. Archiving the embedded sprint logs and consolidating competing
 architecture indexes remain open.
@@ -457,7 +465,7 @@ but contains several stale snapshots:
 The document is approximately 1,981 lines and has accumulated chronological
 sprint guidance:
 
-- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,473
+- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,476
 - it claimed three CI shards; `.github/workflows/tests.yml` uses five shards for
   each of three Python versions
 - its coverage reference reflects early sprints rather than the current suite

@@ -238,6 +238,7 @@ def test_session_import_cli_queues_generated_title_for_writable_default_cli_titl
         "read_only": False,
     }
     persisted = {}
+    import_calls = []
     queued = []
     published = []
 
@@ -273,14 +274,20 @@ def test_session_import_cli_queues_generated_title_for_writable_default_cli_titl
         "get_cli_sessions",
         lambda source_filter=None, all_profiles=False: [cli_meta],
     )
-    monkeypatch.setattr(routes, "import_cli_session", lambda *args, **kwargs: imported)
+    monkeypatch.setattr(
+        routes,
+        "import_cli_session",
+        lambda *args, **kwargs: import_calls.append((args, kwargs)) or imported,
+    )
     monkeypatch.setattr(routes, "publish_session_list_changed", lambda reason, profile=None: published.append((reason, profile)))
     monkeypatch.setattr(routes, "_queue_generated_title_for_imported_session", lambda session, meta: queued.append((session, meta.copy())))
 
     response = routes._handle_session_import_cli(object(), {"session_id": sid})
 
     assert response["imported"] is True
-    assert persisted["saved"] is False
+    assert persisted == {}, "the import helper owns the single durable write"
+    assert import_calls[0][1]["source_metadata"]["source_tag"] == "cli"
+    assert import_calls[0][1]["source_metadata"]["session_source"] == "external_agent"
     assert published == [("session_import_cli", "default")]
     assert queued == [(imported, {
         "title": "CLI Session",

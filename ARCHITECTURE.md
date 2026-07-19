@@ -8,7 +8,7 @@
 > Keep this document updated as architecture changes are made.
 
 > Current changelog release: `v0.52.76` (July 18, 2026), plus Unreleased changes.
-> Automated test snapshot (July 19, 2026): 13,473 tests across 1,281 test files via
+> Automated test snapshot (July 19, 2026): 13,476 tests across 1,281 test files via
 > `./scripts/test.sh tests/ --collect-only -q`. CI runs on Python 3.11, 3.12, and
 > 3.13 (5 parallel shards each) against every PR, plus a ruff
 > lint gate, a headless browser smoke test, and a Docker smoke test.
@@ -91,7 +91,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       sw.js                Service worker: offline shell cache, version-pinned assets
     tests/
       conftest.py          Isolated test server/state fixtures
-      1,281 test files     13,473 tests in the July 19, 2026 snapshot
+      1,281 test files     13,476 tests in the July 19, 2026 snapshot
                            (run `./scripts/test.sh tests/ --collect-only -q` for exact)
       test_regressions.py  Permanent regression gate
     CONTRIBUTING.md        Contributor workflow and PR expectations.
@@ -201,8 +201,11 @@ larger migration remains incremental:
   runtime adapter and streaming Modules.
 - `api/session_repository.py` owns the mutation protocol for WebUI session
   sidecars: acquire the per-session owner lock, reject identity mismatches,
-  upgrade metadata-only projections, publish the full object to the LRU, and
-  save only after a successful edit. JSON sidecars remain authoritative; the
+  reload the current record after acquiring that lock, upgrade metadata-only
+  projections, publish the full object to the LRU, and save only after a
+  successful edit. A caller-provided object seeds only a genuinely missing
+  record, so a pre-lock snapshot cannot overwrite a newer transcript. CLI
+  imports persist allowlisted origin metadata with their initial write. JSON sidecars remain authoritative; the
   repository is the migration seam, not a claim that unified SQLite storage is
   shipped.
 - `static/session_render_cache.js` owns the bounded browser transcript-render
@@ -795,7 +798,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         *.js                  Classic-script frontend modules (no bundler)
       tests/
         conftest.py           Isolated test server/state fixtures
-        1,281 test files      13,473 tests in the July 19, 2026 snapshot
+        1,281 test files      13,476 tests in the July 19, 2026 snapshot
         test_regressions.py   Permanent regression gate
 
 Route extraction to api/routes.py completed in Sprint 11. server.py remains a
@@ -843,9 +846,11 @@ All three problems fixed in Sprint 5:
    `all_sessions()` reads the index file (O(1)) instead of scanning all JSONs.
 
 These performance fixes do not make every session mutation use one Interface.
-`session_repository.py` now owns ordinary full-load/lock/save edits, while delete,
-recovery, migration, projections, and several route-specific mutations still need
-to move behind that owner.
+`session_repository.py` now owns ordinary full-load/lock/save edits and reloads
+the current record under the owner lock before mutation. CLI imports also write
+their allowlisted origin metadata atomically instead of creating a partial
+sidecar and patching it afterward. Delete, recovery, migration, projections, and
+several route-specific mutations still need to move behind that owner.
 
 ### Phase D: Input Validation and Error Handling -- COMPLETE
 
@@ -904,7 +909,7 @@ The optional password gate for non-SSH-tunnel deployments lives in `api/auth.py`
 
 ### Phase I: Test Infrastructure -- BROAD SUITE; COVERAGE BASELINE OPEN
 
-13,473 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
+13,476 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
 gates. Test count is not a coverage metric; a repeatable line/branch coverage baseline
 and an agreed gate remain open. The pytest fixture derives
 an isolated port and state directory from the repo path unless

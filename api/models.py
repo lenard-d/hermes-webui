@@ -1307,6 +1307,12 @@ class Session:
         self.raw_source = kwargs.get('raw_source')
         self.session_source = kwargs.get('session_source')
         self.source_label = kwargs.get('source_label')
+        self.user_id = kwargs.get('user_id')
+        self.chat_id = kwargs.get('chat_id')
+        self.chat_type = kwargs.get('chat_type')
+        self.thread_id = kwargs.get('thread_id')
+        self.session_key = kwargs.get('session_key')
+        self.platform = kwargs.get('platform')
         self.read_only = bool(kwargs.get('read_only', False))
         self.enabled_toolsets = enabled_toolsets  # List[str] or None — per-session toolset override
         self.composer_draft = composer_draft if isinstance(composer_draft, dict) else {}
@@ -1381,7 +1387,9 @@ class Session:
             'gateway_routing', 'gateway_routing_history', 'llm_title_generated', 'manual_title',
             'parent_session_id',
             'worktree_path', 'worktree_branch', 'worktree_repo_root', 'worktree_created_at',
-            'is_cli_session', 'source_tag', 'raw_source', 'session_source', 'source_label', 'read_only',
+            'is_cli_session', 'source_tag', 'raw_source', 'session_source', 'source_label',
+            'user_id', 'chat_id', 'chat_type', 'thread_id', 'session_key', 'platform',
+            'read_only',
             'enabled_toolsets', 'composer_draft',
             'process_wakeup_pause',
             'share_token', 'share_created_at',
@@ -6208,6 +6216,7 @@ def import_cli_session(
     created_at=None,
     updated_at=None,
     parent_session_id=None,
+    source_metadata: dict | None = None,
 ):
     """Create a new WebUI session populated with CLI/agent messages.
 
@@ -6215,6 +6224,25 @@ def import_cli_session(
     keep their lineage in the WebUI store and sidebar instead of reappearing as
     detached orphan chats.
     """
+    allowed_source_fields = {
+        key: source_metadata[key]
+        for key in (
+            'is_cli_session',
+            'source_tag',
+            'raw_source',
+            'session_source',
+            'source_label',
+            'user_id',
+            'chat_id',
+            'chat_type',
+            'thread_id',
+            'session_key',
+            'platform',
+            'project_id',
+            'model_provider',
+        )
+        if isinstance(source_metadata, dict) and key in source_metadata
+    }
     s = Session(
         session_id=session_id,
         title=title,
@@ -6225,6 +6253,7 @@ def import_cli_session(
         created_at=created_at,
         updated_at=updated_at,
         parent_session_id=parent_session_id,
+        **allowed_source_fields,
     )
     # #4985: import_cli_session uses an explicit sid (the CLI sidecar's id).
     # If that sid was previously tombstoned as a webui zero-message orphan,

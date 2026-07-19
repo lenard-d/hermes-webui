@@ -5002,6 +5002,7 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
             profile=cli_meta.get("profile"),
             created_at=cli_meta.get("created_at"),
             updated_at=cli_meta.get("updated_at"),
+            source_metadata=cli_meta,
         )
         _apply_source_meta(s)
 
@@ -16003,6 +16004,7 @@ def handle_post(handler, parsed) -> bool:
                     profile=cli_meta.get("profile"),
                     created_at=cli_meta.get("created_at"),
                     updated_at=cli_meta.get("updated_at"),
+                    source_metadata=cli_meta,
                 )
                 s.is_cli_session = is_cli_session_row(cli_meta)
                 s.source_tag = cli_meta.get("source_tag")
@@ -25387,22 +25389,22 @@ def _handle_session_import_cli(handler, body):
         created_at=created_at,
         updated_at=updated_at,
         parent_session_id=cli_parent_session_id,
+        source_metadata={
+            "project_id": cron_project_id,
+            "is_cli_session": True,
+            "source_tag": cli_source_tag,
+            "raw_source": cli_raw_source or cli_source_tag,
+            "session_source": cli_session_source,
+            "source_label": cli_source_label,
+            "user_id": cli_user_id,
+            "chat_id": cli_chat_id,
+            "chat_type": cli_chat_type,
+            "thread_id": cli_thread_id,
+            "session_key": cli_session_key,
+            "platform": cli_platform,
+            "model_provider": (cli_meta or {}).get("model_provider"),
+        },
     )
-    if cron_project_id:
-        s.project_id = cron_project_id
-    s.is_cli_session = True
-    s.source_tag = cli_source_tag
-    s.raw_source = cli_raw_source or cli_source_tag
-    s.session_source = cli_session_source
-    s.source_label = cli_source_label
-    s.user_id = cli_user_id
-    s.chat_id = cli_chat_id
-    s.chat_type = cli_chat_type
-    s.thread_id = cli_thread_id
-    s.session_key = cli_session_key
-    s.platform = cli_platform
-    s._cli_origin = sid
-    s.save(touch_updated_at=False)
     publish_session_list_changed(
         "session_import_cli",
         profile=getattr(s, "profile", None),

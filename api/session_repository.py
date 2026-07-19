@@ -44,7 +44,17 @@ class SessionRepository:
         return session
 
     def _load_for_edit(self, sid: str, session: object | None) -> object:
-        current = session if session is not None else self._load(sid)
+        # Resolve again only after acquiring the per-session lock. A caller may
+        # have loaded ``session`` before waiting for a streaming/checkpoint
+        # writer; saving that stale object would overwrite the newer transcript.
+        # The explicit object is therefore only a seed for a genuinely missing
+        # record, such as a newly materialized foreign session.
+        try:
+            current = self._load(sid)
+        except KeyError:
+            current = None
+        if current is None:
+            current = session
         current = self._validate(sid, current)
         if not getattr(current, "_loaded_metadata_only", False):
             self._cache_full(sid, current)

@@ -32,3 +32,44 @@ def test_import_cli_session_preserves_parent_session_id():
     loaded = Session.load(child_id)
     assert loaded.parent_session_id == parent_id
     assert loaded.compact()['parent_session_id'] == parent_id
+
+
+def test_import_cli_session_persists_source_metadata_in_the_initial_write():
+    from api.models import import_cli_session, SESSION_DIR, Session
+
+    sid = "cli_source_metadata_001"
+    (SESSION_DIR / f"{sid}.json").unlink(missing_ok=True)
+    messages = [{"role": "user", "content": "keep", "timestamp": 1.0}]
+
+    session = import_cli_session(
+        sid,
+        "Imported",
+        messages,
+        model="test-model",
+        source_metadata={
+            "is_cli_session": False,
+            "source_tag": "cron",
+            "raw_source": "cron",
+            "session_source": "cron",
+            "source_label": "Cron",
+            "platform": "local",
+            "session_id": "attacker-controlled",
+            "messages": [{"role": "user", "content": "replace"}],
+        },
+    )
+
+    loaded = Session.load(sid)
+    metadata = Session.load_metadata_only(sid)
+    assert session.source_tag == "cron"
+    assert loaded is not None
+    assert loaded.session_id == sid
+    assert loaded.messages == messages
+    assert loaded.is_cli_session is False
+    assert loaded.source_tag == "cron"
+    assert loaded.raw_source == "cron"
+    assert loaded.session_source == "cron"
+    assert loaded.source_label == "Cron"
+    assert loaded.platform == "local"
+    assert metadata is not None
+    assert metadata.source_tag == "cron"
+    assert metadata.platform == "local"

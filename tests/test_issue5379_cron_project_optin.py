@@ -138,20 +138,25 @@ def test_recovery_endpoint_zero_user_projects_skips_cron_project_creation(monkey
             return {"session_id": sid, "title": "Cron run"}
 
     fake = FakeSession()
+    imported = {}
+
+    def fake_import(*args, **kwargs):
+        imported.update(kwargs)
+        return fake
 
     monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, _sid: None))
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
     monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: payload)
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda _sid, profile=None: messages)
     monkeypatch.setattr(routes, "get_cli_sessions", lambda source_filter=None, all_profiles=False: [cron_meta])
-    monkeypatch.setattr(routes, "import_cli_session", lambda *a, **k: fake)
+    monkeypatch.setattr(routes, "import_cli_session", fake_import)
     monkeypatch.setattr(routes, "publish_session_list_changed", lambda *a, **k: None)
     monkeypatch.setattr(routes, "_queue_generated_title_for_imported_session", lambda *a, **k: None)
 
     response = routes._handle_session_import_cli(object(), {"session_id": sid})
 
     assert response["imported"] is True
-    assert fake.project_id is None
+    assert imported["source_metadata"]["project_id"] is None
     assert not (tmp_path / "projects.json").exists()
 
 
@@ -213,20 +218,25 @@ def test_recovery_endpoint_with_user_project_still_autoassigns_cron(monkeypatch,
             return {"session_id": sid, "title": "Cron run"}
 
     fake = FakeSession()
+    imported = {}
+
+    def fake_import(*args, **kwargs):
+        imported.update(kwargs)
+        return fake
 
     monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, _sid: None))
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
     monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: payload)
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda _sid, profile=None: messages)
     monkeypatch.setattr(routes, "get_cli_sessions", lambda source_filter=None, all_profiles=False: [cron_meta])
-    monkeypatch.setattr(routes, "import_cli_session", lambda *a, **k: fake)
+    monkeypatch.setattr(routes, "import_cli_session", fake_import)
     monkeypatch.setattr(routes, "publish_session_list_changed", lambda *a, **k: None)
     monkeypatch.setattr(routes, "_queue_generated_title_for_imported_session", lambda *a, **k: None)
 
     response = routes._handle_session_import_cli(object(), {"session_id": sid})
 
     assert response["imported"] is True
-    assert fake.project_id is not None
+    assert imported["source_metadata"]["project_id"] is not None
     saved = json.loads(projects_file.read_text())
     assert any(p["name"] == "Cron Jobs" for p in saved)
 

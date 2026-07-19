@@ -129,3 +129,57 @@ def test_edit_can_skip_persistence_for_an_unchanged_mutation():
         pass
 
     assert full.saved == []
+
+
+def test_edit_reloads_current_session_under_lock_instead_of_saving_stale_argument():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    stale = _FakeSession(
+        "s1",
+        metadata_only=False,
+        messages=[{"role": "user", "content": "old"}],
+    )
+    current = _FakeSession(
+        "s1",
+        metadata_only=False,
+        messages=[
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "newer"},
+        ],
+    )
+    stale.lock = lock
+    current.lock = lock
+    repository = SessionRepository(
+        load=lambda _sid: current,
+        load_full=lambda _sid: current,
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    with repository.edit("s1", session=stale) as session:
+        session.title = "Renamed"
+
+    assert current.title == "Renamed"
+    assert current.messages[-1]["content"] == "newer"
+    assert current.saved == [{}]
+    assert stale.saved == []
+
+
+def test_edit_uses_explicit_seed_only_when_repository_has_no_session():
+    from api.session_repository import SessionRepository
+
+    lock = _RecordingLock()
+    seed = _FakeSession("new", metadata_only=False, messages=[])
+    seed.lock = lock
+    repository = SessionRepository(
+        load=lambda sid: (_ for _ in ()).throw(KeyError(sid)),
+        load_full=lambda sid: (_ for _ in ()).throw(KeyError(sid)),
+        lock_for=lambda _sid: lock,
+        cache_full=lambda _sid, _session: None,
+    )
+
+    with repository.edit("new", session=seed) as session:
+        session.title = "Created"
+
+    assert seed.saved == [{}]
