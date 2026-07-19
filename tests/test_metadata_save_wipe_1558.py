@@ -131,6 +131,82 @@ def test_clear_stale_stream_state_preserves_messages(temp_session_dir):
     )
 
 
+def test_cancel_stream_upgrades_cached_metadata_projection(temp_session_dir, monkeypatch):
+    """Cancel must persist through the repository without shrinking history."""
+    import queue
+    import threading
+    from unittest.mock import Mock
+
+    import api.config as config
+    import api.models as models
+    import api.streaming as streaming
+
+    sid = _make_session_on_disk(temp_session_dir, n_msgs=1000, with_active_stream=True)
+    stream_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    stub = models.get_session(sid, metadata_only=True)
+    assert getattr(stub, "_loaded_metadata_only", False) is True
+    with models.LOCK:
+        models.SESSIONS[sid] = stub
+    # Pin the historical direct-load hazard even if get_session's cache
+    # freshness heuristics happen to reload the file on this platform.
+    monkeypatch.setattr(streaming, "get_session", lambda _sid: stub)
+
+    agent = Mock()
+    agent.session_id = sid
+    agent.interrupt = Mock()
+    config.STREAMS[stream_id] = queue.Queue()
+    config.CANCEL_FLAGS[stream_id] = threading.Event()
+    config.AGENT_INSTANCES[stream_id] = agent
+
+    assert streaming.cancel_stream(stream_id) is True
+
+    raw = json.loads((temp_session_dir / f"{sid}.json").read_text(encoding="utf-8"))
+    assert len(raw["messages"]) >= 1000
+    assert raw["active_stream_id"] is None
+    assert raw["pending_user_message"] is None
+    assert any(message.get("_error") is True for message in raw["messages"])
+
+
+def test_cancel_stream_does_not_resurrect_session_deleted_before_edit(
+    temp_session_dir,
+    monkeypatch,
+):
+    """A delete that wins before repository ownership must remain durable."""
+    import queue
+    import threading
+    from contextlib import contextmanager
+    from unittest.mock import Mock
+
+    import api.config as config
+    import api.models as models
+    import api.streaming as streaming
+
+    sid = _make_session_on_disk(temp_session_dir, n_msgs=4, with_active_stream=True)
+    stream_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    stale_seed = models.Session.load(sid)
+    real_edit_session = streaming.edit_session
+
+    @contextmanager
+    def delete_then_edit(*args, **kwargs):
+        with models.LOCK:
+            models.SESSIONS.pop(sid, None)
+        (temp_session_dir / f"{sid}.json").unlink()
+        with real_edit_session(*args, **kwargs) as session:
+            yield session
+
+    monkeypatch.setattr(streaming, "edit_session", delete_then_edit)
+    agent = Mock()
+    agent.session_id = sid
+    agent.interrupt = Mock()
+    config.STREAMS[stream_id] = queue.Queue()
+    config.CANCEL_FLAGS[stream_id] = threading.Event()
+    config.AGENT_INSTANCES[stream_id] = agent
+    monkeypatch.setattr(streaming, "get_session", lambda _sid: stale_seed)
+
+    assert streaming.cancel_stream(stream_id) is True
+    assert not (temp_session_dir / f"{sid}.json").exists()
+
+
 def test_archive_route_reloads_metadata_only_cached_session(temp_session_dir, monkeypatch):
     """Archiving must upgrade cached metadata-only stubs before save()."""
     from types import SimpleNamespace

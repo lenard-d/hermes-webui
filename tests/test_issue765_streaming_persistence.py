@@ -481,9 +481,8 @@ class TestIssue765FollowupHardening:
             "session instance whose id matches the requested session"
         )
 
-    def test_cancel_stream_uses_agent_lock(self):
-        """cancel_stream must hold _agent_lock during session cleanup to
-        prevent races with checkpoint saves and other writers."""
+    def test_cancel_stream_uses_repository_edit_owner(self):
+        """Cancel cleanup must serialize and persist through the repository."""
         src = (Path(__file__).parent.parent / "api" / "streaming.py").read_text(
             encoding="utf-8"
         )
@@ -491,14 +490,14 @@ class TestIssue765FollowupHardening:
         assert cancel_idx != -1, "cancel_stream function not found"
         cancel_block = src[cancel_idx:]
         # Find the session cleanup section
-        cleanup_idx = cancel_block.find("Session cleanup outside STREAMS_LOCK")
+        cleanup_idx = cancel_block.find("Session cleanup stays outside STREAMS_LOCK")
         assert cleanup_idx != -1, "Session cleanup comment not found in cancel_stream"
-        cleanup_section = cancel_block[cleanup_idx:cleanup_idx + 800]
-        assert "_get_session_agent_lock" in cleanup_section, (
-            "cancel_stream must acquire _get_session_agent_lock during "
-            "session cleanup to serialise with the checkpoint thread and "
-            "other session-mutating endpoints"
+        cleanup_section = cancel_block[cleanup_idx:cleanup_idx + 1000]
+        assert "with edit_session(" in cleanup_section, (
+            "cancel_stream must use the repository edit owner during session "
+            "cleanup to serialize with checkpoint and endpoint writers"
         )
+        assert "save_when=lambda _current: _cancel_persisted" in cleanup_section
 
     @pytest.mark.parametrize("operation_name", ["retry_last", "undo_last"])
     def test_session_ops_retry_undo_hold_agent_lock(self, operation_name):

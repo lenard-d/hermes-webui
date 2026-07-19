@@ -4,10 +4,22 @@ Tests the integration between cancel_stream() and agent.interrupt().
 """
 import queue
 import threading
+from contextlib import contextmanager
 from unittest.mock import Mock
 
 from api.streaming import cancel_stream
 from api.config import AGENT_INSTANCES, STREAMS, CANCEL_FLAGS, ACTIVE_RUNS, SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
+
+
+def _edit_mock_session(session):
+    @contextmanager
+    def edit_session(_sid, **kwargs):
+        yield session
+        save_when = kwargs.get("save_when")
+        if save_when is None or save_when(session):
+            session.save()
+
+    return edit_session
 
 
 class TestCancelInterrupt:
@@ -108,6 +120,7 @@ class TestCancelInterrupt:
 
         mock_session = Mock()
         mock_session.session_id = session_id
+        mock_session._loaded_metadata_only = False
         mock_session.active_stream_id = stream_id
         mock_session.pending_user_message = "hello"
         mock_session.pending_attachments = ["file.txt"]
@@ -123,7 +136,10 @@ class TestCancelInterrupt:
         with SESSION_AGENT_CACHE_LOCK:
             SESSION_AGENT_CACHE[session_id] = (mock_agent, "sig")
 
-        with patch("api.streaming.get_session", return_value=mock_session):
+        with patch(
+            "api.streaming.edit_session",
+            _edit_mock_session(mock_session),
+        ):
             result = cancel_stream(stream_id)
 
         assert result is True
@@ -208,6 +224,7 @@ class TestCancelInterrupt:
 
         mock_session = Mock()
         mock_session.session_id = session_id
+        mock_session._loaded_metadata_only = False
         mock_session.active_stream_id = stream_id
         mock_session.pending_user_message = "q"
         mock_session.pending_attachments = []
@@ -215,7 +232,10 @@ class TestCancelInterrupt:
         mock_session.messages = []
         mock_session.save = Mock()
 
-        with patch("api.streaming.get_session", return_value=mock_session):
+        with patch(
+            "api.streaming.edit_session",
+            _edit_mock_session(mock_session),
+        ):
             result = cancel_stream(stream_id)
 
         assert result is True
@@ -270,6 +290,7 @@ class TestCancelInterrupt:
 
         mock_session = Mock()
         mock_session.session_id = session_id
+        mock_session._loaded_metadata_only = False
         mock_session.active_stream_id = stream_id
         mock_session.pending_user_message = "q"
         mock_session.pending_attachments = []
@@ -277,7 +298,7 @@ class TestCancelInterrupt:
         mock_session.messages = []
         mock_session.save = Mock()
 
-        with patch("api.streaming.get_session", return_value=mock_session), \
+        with patch("api.streaming.edit_session", _edit_mock_session(mock_session)), \
                 patch("api.streaming._cached_agent_matches_session", return_value=True):
             result = cancel_stream(stream_id)
 

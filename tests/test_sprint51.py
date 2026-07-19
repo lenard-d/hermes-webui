@@ -14,10 +14,22 @@ All tests are isolated and clean up after themselves.
 import pytest
 import queue
 import threading
+from contextlib import contextmanager
 from unittest.mock import Mock, patch, MagicMock
 
 from api.streaming import cancel_stream
 from api.config import AGENT_INSTANCES, STREAMS, STREAMS_LOCK, CANCEL_FLAGS
+
+
+def _edit_mock_session(session):
+    @contextmanager
+    def edit_session(_sid, **kwargs):
+        yield session
+        save_when = kwargs.get("save_when")
+        if save_when is None or save_when(session):
+            session.save()
+
+    return edit_session
 
 
 class TestCancelStreamEagerRelease:
@@ -82,6 +94,8 @@ class TestCancelStreamEagerRelease:
         mock_agent.session_id = session_id
 
         mock_session = Mock()
+        mock_session.session_id = session_id
+        mock_session._loaded_metadata_only = False
         mock_session.active_stream_id = stream_id
         mock_session.pending_user_message = "hello"
         mock_session.pending_attachments = ["file.txt"]
@@ -93,7 +107,10 @@ class TestCancelStreamEagerRelease:
         CANCEL_FLAGS[stream_id] = threading.Event()
         AGENT_INSTANCES[stream_id] = mock_agent
 
-        with patch('api.streaming.get_session', return_value=mock_session):
+        with patch(
+            'api.streaming.edit_session',
+            _edit_mock_session(mock_session),
+        ):
             cancel_stream(stream_id)
 
         assert mock_session.active_stream_id is None, \
@@ -162,8 +179,8 @@ class TestCancelStreamEagerRelease:
         result2 = cancel_stream(stream_id)
         assert result2 is False
 
-    def test_cancel_handle_get_session_failure(self):
-        """Cancel should not raise even if get_session fails."""
+    def test_cancel_handles_repository_load_failure(self):
+        """Cancel should not raise when the repository cannot load a session."""
         stream_id = "test_session_fail"
         mock_agent = Mock()
         mock_agent.interrupt = Mock()
@@ -173,7 +190,7 @@ class TestCancelStreamEagerRelease:
         CANCEL_FLAGS[stream_id] = threading.Event()
         AGENT_INSTANCES[stream_id] = mock_agent
 
-        with patch('api.streaming.get_session', side_effect=KeyError("Session not found")):
+        with patch('api.streaming.edit_session', side_effect=KeyError("Session not found")):
             # Should not raise
             result = cancel_stream(stream_id)
 

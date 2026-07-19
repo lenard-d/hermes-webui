@@ -100,6 +100,12 @@ without duplicating steps. Local and Gateway now advance the same previously
 submitted turn identity; strict stream lookup prevents a missing journal
 mapping from silently inventing a second turn, while ephemeral `/btw` workers
 skip the durable transition.
+`cancel_stream()` now delegates its complete durable mutation to the session
+repository: recover the pending user row, merge partial text, reasoning, and
+tool progress, append the cancellation marker, then clear pending ownership in
+one locked save. The repository upgrades cached metadata projections first, so
+Stop cannot silently leave the sidecar active after refusing an unsafe compact
+save.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
 the cursor through the runtime owner. `api/turn_admission.py` now owns the
@@ -197,6 +203,9 @@ upgrades metadata-only projections and reloads the current generation under the
 owner lock before clearing anything, then rechecks runtime liveness at the point
 of use. Detached full objects cannot overwrite a newer stream, and persistence
 failure is no longer reported as successful cleanup.
+Cancellation now uses that owner for its entire durable settlement as well. It
+cannot save a metadata-only cache projection, overwrite a newer stream
+generation, or use a pre-lock seed to recreate a session after deletion wins.
 Local handoff-summary transcript markers now use the same mutation owner, so a
 delayed handoff write cannot overwrite messages that arrived after its initial
 read. Refreshing an already imported CLI session now fetches foreign data

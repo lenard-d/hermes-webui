@@ -255,10 +255,13 @@ larger migration remains incremental:
   same edit owner: it upgrades metadata projections, reloads the current stream
   generation under the lock, rechecks process-local liveness, and reports a
   failed durable save as an unsuccessful cleanup. A detached object therefore
-  cannot clear a newer admitted turn. CLI imports persist allowlisted origin
-  metadata with their initial write. JSON sidecars remain authoritative; the
-  repository is the migration seam, not a claim that unified SQLite storage is
-  shipped.
+  cannot clear a newer admitted turn. User cancellation also performs its
+  pending-turn recovery, partial/reasoning/tool snapshot merge, terminal marker,
+  and pending-state clear as one repository edit; metadata-only cache entries
+  are upgraded before the cancel is persisted. CLI imports persist allowlisted
+  origin metadata with their initial write. JSON sidecars remain authoritative;
+  the repository is the migration seam, not a claim that unified SQLite storage
+  is shipped.
 - `api/session_sources.py` owns which foreign source-identity fields may enter
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining

@@ -67,6 +67,7 @@ from api.models import (
     reconciled_state_db_messages_for_session,
 )
 from api.session_ops import mark_session_title_generated, session_has_manual_title
+from api.session_repository import edit_session
 from api.process_event_utils import (
     claim_async_delegation_delivery,
     complete_async_delegation_delivery,
@@ -10909,15 +10910,17 @@ def cancel_stream(stream_id: str) -> bool:
     if not _cancel_session_id and active_run_session_id:
         _cancel_session_id = active_run_session_id
 
-    # Session cleanup outside STREAMS_LOCK to preserve lock ordering.
-    # Acquire the per-session _agent_lock too, mirroring every other session
-    # writer (streaming success/error paths, periodic checkpoint, POST endpoints)
-    # so the cancel-path mutation races neither the checkpoint thread nor
-    # concurrent undo/retry calls.
+    # Session cleanup stays outside STREAMS_LOCK to preserve lock ordering. The
+    # repository reloads the authoritative full session under its per-session
+    # owner, so cancellation races neither checkpoint/undo/retry writers nor a
+    # cached metadata projection.
     if _cancel_session_id:
-        with _get_session_agent_lock(_cancel_session_id):
-            try:
-                _cs = get_session(_cancel_session_id)
+        _cancel_persisted = False
+        try:
+            with edit_session(
+                _cancel_session_id,
+                save_when=lambda _current: _cancel_persisted,
+            ) as _cs:
                 if not isinstance(getattr(_cs, 'messages', None), list):
                     _cs.messages = []
                 if not _stream_writeback_is_current(_cs, stream_id):
@@ -11062,10 +11065,11 @@ def cancel_stream(stream_id: str) -> bool:
                         'provider_details_label': 'Cancellation details',
                         'timestamp': int(time.time()),
                     })
-                _cs.save()
+                _cancel_persisted = True
+            if _cancel_persisted:
                 _cancel_session_payload = _redacted_session_payload_with_full_messages(_cs)
-            except Exception:
-                logger.debug("Failed to clear session state on cancel for %s", _cancel_session_id)
+        except Exception:
+            logger.debug("Failed to clear session state on cancel for %s", _cancel_session_id)
 
     if _emit_cancel_event and q:
         _cancel_event_id = cancellation.last_event_id
