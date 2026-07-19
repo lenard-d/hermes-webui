@@ -907,11 +907,26 @@ Option 2: Use threading.local():
     # In tools that read env vars: check _ctx first, fall back to os.environ
 
 Option 3 (interim, safe for single-user): Wrap the env var block in a per-session lock:
-    SESSION_AGENT_LOCKS = {}  # session_id -> Lock
+    SESSION_AGENT_LOCKS = weakref.WeakValueDictionary()  # session_id -> Lock
+    SESSION_AGENT_LOCKS_LOCK = threading.Lock()
+    def _get_session_agent_lock(session_id):
+        with SESSION_AGENT_LOCKS_LOCK:
+            # Keep a local strong reference across lookup, creation, and return.
+            lock = SESSION_AGENT_LOCKS.get(session_id)
+            if lock is None:
+                lock = threading.Lock()
+                SESSION_AGENT_LOCKS[session_id] = lock
+            return lock
     # Only one agent run per session at a time
-    with SESSION_AGENT_LOCKS.setdefault(session_id, threading.Lock()):
+    with _get_session_agent_lock(session_id):
         os.environ[...] = ...
         result = agent.run_conversation(...)
+
+The weak registry preserves one lock identity while a holder or waiter keeps a
+strong reference to it, then prunes the entry automatically after the final
+overlapping operation releases that reference. Session-id rotation aliases the
+old and new ids to the same already-held lock under the registry mutex; callers
+must not manually remove either registry entry.
 
 Phase B also includes: review all other os.environ reads/writes in the codebase for
 similar thread-safety issues.
@@ -1707,8 +1722,15 @@ server.py shrunk by ~200 lines.
 
 #### Phase B: Per-Session Agent Lock
 
-SESSION_AGENT_LOCKS = {} keyed by session_id, each value is a threading.Lock().
-_get_session_agent_lock(sid) returns the lock, creating it if needed.
+SESSION_AGENT_LOCKS is a weakref.WeakValueDictionary keyed by session_id, with
+threading.Lock values. _get_session_agent_lock(sid) performs lookup and lazy
+creation under the registry mutex and keeps the result in a local strong
+reference through return. A lock therefore retains one identity while any
+holder or waiter references it, and its registry entry is pruned automatically
+after the final overlapping operation releases that reference. During
+session-id rotation, alias_session_agent_lock() binds the old and new ids to the
+same already-held lock under the registry mutex; no caller manually pops those
+aliases.
 _run_agent_streaming() wraps the env var block with: with _agent_lock: ...
 This prevents two concurrent requests for the same session from overwriting env vars
 mid-execution. Two concurrent requests for DIFFERENT sessions are still unsafe (env vars
