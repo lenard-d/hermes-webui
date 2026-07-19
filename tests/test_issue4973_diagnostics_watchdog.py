@@ -79,12 +79,36 @@ def test_watchdog_fires_on_timeout_for_a_slow_request(caplog):
 def test_finish_before_deadline_prevents_watchdog_log(caplog):
     """A request that finishes fast must NOT be logged by the watchdog."""
     logger = logging.getLogger("test.issue4973.fast")
-    diag = RequestDiagnostics(
-        "GET", "/api/sessions", logger=logger, timeout_seconds=0.05
-    )
-    diag.finish()  # completes immediately, well under the deadline
+    probe_fired = threading.Event()
     with caplog.at_level(logging.WARNING, logger=logger.name):
-        time.sleep(1.5)  # give the watchdog a couple of ticks
+        diag = RequestDiagnostics(
+            "GET", "/api/sessions", logger=logger, timeout_seconds=0.05
+        )
+        diag.finish()  # completes immediately, well under the deadline
+
+        # Synchronize on a real watchdog callback instead of sleeping for an
+        # assumed number of ticks.  This probe expires after ``diag`` did, so
+        # observing it proves the watchdog scanned after the finished
+        # request's deadline without turning the test into a fixed 1.5s wait.
+        probe = RequestDiagnostics(
+            "GET",
+            "/api/sessions",
+            timeout_seconds=0.05,
+            print_fn=lambda _message: probe_fired.set(),
+        )
+        try:
+            with rd._watchdog_cv:
+                probe_deadline = rd._watchdog_pending[probe.request_id][0]
+            probe_fired.wait(max(0.0, probe_deadline - time.monotonic()))
+
+            wait_deadline = time.monotonic() + 1.0
+            while not probe_fired.is_set() and time.monotonic() < wait_deadline:
+                with rd._watchdog_cv:
+                    rd._watchdog_cv.notify_all()
+                probe_fired.wait(0.01)
+            assert probe_fired.is_set(), "watchdog probe did not fire"
+        finally:
+            probe.finish()
     assert not any(
         "still running" in (r.getMessage() or "") for r in caplog.records
     ), "watchdog logged a request that already finished"
