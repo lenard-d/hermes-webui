@@ -66,6 +66,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       model_catalog.py     Static provider names, aliases, and fallback models
       models.py            Session model + CRUD, per-session profile tracking, CLI/state.db bridge
       profiles.py          Profile state management, hermes_cli wrapper
+      run_event_sink.py    Journal, cursor, and live-frame publication ordering
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
       session_sources.py   Allowlisted source identity for imported session sidecars
@@ -199,11 +200,15 @@ larger migration remains incremental:
   and finish through `finish_runtime_run()`; they must not independently mutate
   or clear individual per-run dictionaries. Empty legacy buffer aliases remain
   temporarily compatible, but cannot revive a released run or reset real
-  progress. Route diagnostics,
+  progress. `api/run_event_sink.py` gives local and Gateway workers the same
+  journal -> runtime cursor -> transport cursor -> live frame ordering while
+  preserving two-tuple legacy queues and best-effort live delivery if the
+  journal is unavailable. Backend-specific cancel filtering and payload policy
+  remain outside the sink. Route diagnostics,
   SSE attachment, cursor lookup, and model recovery consume immutable registry
   views rather than importing the dictionaries; local and Gateway event
-  producers publish their durable cursor through the same owner. This is not yet the complete
-  browser-turn runtime described by the run-adapter RFC.
+  producers publish their durable cursor through the same owner. This is not
+  yet the complete browser-turn runtime described by the run-adapter RFC.
 - `api/turn_admission.py` owns the synchronous local-turn transition after HTTP
   validation: claim the authoritative session, persist pending ownership,
   consume single-use continuation markers, durably confirm the pre-identified

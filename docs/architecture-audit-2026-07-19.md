@@ -88,6 +88,10 @@ progress/cancellation snapshots, stale-worker reconciliation, terminal cleanup,
 and copied views for route/model consumers. Local and Gateway execution now use
 the same producer Interface; a late callback cannot recreate buffers or an agent
 after teardown, and a stable tool-call ID cannot complete a same-name sibling.
+`api/run_event_sink.py` now centralizes the shared event-publication sequence:
+append to the run journal, record the runtime and transport cursors, then queue
+the exact live frame. Local and Gateway wrappers retain only backend policy such
+as cancel suppression and Gateway error-payload enrichment.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
 the cursor through the runtime owner. `api/turn_admission.py` now owns the
@@ -108,6 +112,7 @@ Relevant areas:
 - `api/config.py`
 - `api/models.py`
 - `api/run_journal.py`
+- `api/run_event_sink.py`
 - `api/runtime_adapter.py`
 - `docs/rfcs/hermes-run-adapter-contract.md`
 - `docs/rfcs/webui-run-state-consistency-contract.md`

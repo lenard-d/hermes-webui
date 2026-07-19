@@ -32,6 +32,7 @@ from api.config import (
 from api.helpers import _redact_text, redact_session_data
 from api.models import clear_process_wakeup_pause, get_session, merge_session_messages_append_only
 from api.run_journal import RunJournalWriter, bound_run_journal_snapshot_args
+from api.run_event_sink import RunEventSink
 
 logger = logging.getLogger(__name__)
 
@@ -674,6 +675,14 @@ def _run_gateway_chat_streaming(
         return
 
     success_writeback_committed = False
+    event_sink = RunEventSink(
+        stream_id=stream_id,
+        transport=q,
+        journal=run_journal,
+        record_runtime_cursor=note_runtime_last_event_id,
+        logger=logger,
+        log_label="gateway run",
+    )
 
     def put_gateway_event(event, data):
         if cancel_event.is_set() and not success_writeback_committed and event not in ("cancel", "error", "apperror"):
@@ -681,25 +690,7 @@ def _run_gateway_chat_streaming(
         if event == "apperror" and isinstance(data, dict):
             data = data.copy()
             data.setdefault("session_id", session_id)
-        event_id = None
-        if run_journal is not None:
-            try:
-                journaled = run_journal.append_sse_event(event, data)
-                event_id = (journaled or {}).get("event_id") if isinstance(journaled, dict) else None
-                if event_id:
-                    note_runtime_last_event_id(stream_id, event_id)
-            except Exception:
-                logger.debug("Failed to append gateway event %s for stream %s", event, stream_id, exc_info=True)
-        if event_id and hasattr(q, "note_last_event_id"):
-            try:
-                q.note_last_event_id(event_id)
-            except Exception:
-                logger.debug("Failed to note gateway event_id %s for stream %s", event_id, stream_id, exc_info=True)
-        try:
-            queue_item = (event, data, event_id) if event_id and hasattr(q, "subscribe_with_snapshot") else (event, data)
-            q.put_nowait(queue_item)
-        except Exception:
-            logger.debug("Failed to put gateway event to queue")
+        event_sink.publish(event, data)
 
     s = None
     final_text = ""

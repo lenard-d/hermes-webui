@@ -9,9 +9,8 @@ accumulator.
 
 Implementation:
 
-  - api/streaming.py `put()` captures `journaled["event_id"]` from
-    `RunJournalWriter.append_sse_event()` and records it through the runtime
-    owner.
+  - `RunEventSink` captures `journaled["event_id"]` from the run journal and
+    records it through the runtime owner.
   - StreamChannel queue items carry `(event, data, event_id)` so active
     subscribers emit each frame with its own id instead of the latest global id.
   - Legacy plain queues keep `(event, data)` and use the runtime cursor view as
@@ -29,38 +28,26 @@ ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 GATEWAY_CHAT_PY = (REPO_ROOT / "api" / "gateway_chat.py").read_text(encoding="utf-8")
 
 
-def test_put_records_event_id_through_runtime_owner():
-    """The local producer must publish its journal cursor through the owner."""
+def test_local_producer_delegates_journal_and_cursor_publication_to_sink():
+    """The local policy wrapper must delegate publication to RunEventSink."""
     put_def_idx = STREAMING_PY.find("def put(event, data):")
     assert put_def_idx != -1, "put(event, data) not found in api/streaming.py"
-    put_body = STREAMING_PY[put_def_idx:put_def_idx + 2500]
-    assert "journaled = run_journal.append_sse_event(event, data)" in put_body, (
-        "put() must capture append_sse_event return value"
-    )
-    assert "note_runtime_last_event_id(stream_id, event_id)" in put_body
+    setup = STREAMING_PY[max(0, put_def_idx - 700):put_def_idx]
+    put_body = STREAMING_PY[put_def_idx:put_def_idx + 700]
+    assert "event_sink = RunEventSink(" in setup
+    assert "record_runtime_cursor=note_runtime_last_event_id" in setup
+    assert "event_sink.publish(event, data)" in put_body
 
 
-def test_stream_channel_queue_item_carries_per_event_id_with_legacy_fallback():
-    """StreamChannel queue items need per-frame ids; legacy queues stay 2-tuples."""
-    put_def_idx = STREAMING_PY.find("def put(event, data):")
-    put_body = STREAMING_PY[put_def_idx:put_def_idx + 2500]
-    assert 'queue_item = (event, data, event_id) if event_id and hasattr(q, "subscribe_with_snapshot") else (event, data)' in put_body, (
-        "StreamChannel events must carry their own event_id while legacy queue "
-        "consumers retain the 2-tuple shape"
-    )
-    assert "q.put_nowait(queue_item)" in put_body
-
-
-def test_gateway_queue_item_carries_per_event_id_with_legacy_fallback():
-    """Gateway-backed WebUI chat must preserve the same live cursor invariant."""
+def test_gateway_producer_delegates_journal_and_cursor_publication_to_sink():
+    """Gateway policy must use the same publication owner as local runs."""
     put_def_idx = GATEWAY_CHAT_PY.find("def put_gateway_event(event, data):")
     assert put_def_idx != -1, "put_gateway_event(event, data) not found"
-    put_body = GATEWAY_CHAT_PY[put_def_idx:put_def_idx + 1800]
-    assert 'queue_item = (event, data, event_id) if event_id and hasattr(q, "subscribe_with_snapshot") else (event, data)' in put_body, (
-        "Gateway live events must carry their own event_id for StreamChannel "
-        "subscribers while preserving legacy queue compatibility"
-    )
-    assert "q.put_nowait(queue_item)" in put_body
+    setup = GATEWAY_CHAT_PY[max(0, put_def_idx - 700):put_def_idx]
+    put_body = GATEWAY_CHAT_PY[put_def_idx:put_def_idx + 700]
+    assert "event_sink = RunEventSink(" in setup
+    assert "record_runtime_cursor=note_runtime_last_event_id" in setup
+    assert "event_sink.publish(event, data)" in put_body
 
 
 def test_sse_handler_emits_runtime_cursor_for_legacy_queue(monkeypatch):
