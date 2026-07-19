@@ -68,6 +68,34 @@ without ruff aren't blocked, while CI (which installs ruff) enforces it. The
 diff-scoped gate runs as the `lint` job in `.github/workflows/tests.yml` and is
 also part of the maintainer pre-release pre-gate.
 
+## Python line and branch coverage
+
+Coverage is measured separately from the ordinary local test command. The
+entry point uses the same supported repo `.venv` and dependency bootstrap as
+`./scripts/test.sh`, then writes a terminal report plus a machine-readable
+`coverage.json`:
+
+```bash
+./scripts/coverage.sh
+```
+
+Normal pytest selectors work for focused measurements, for example
+`./scripts/coverage.sh tests/test_session_repository.py -q`. The product source
+scope and branch settings live in `pyproject.toml`; generated reports are
+git-ignored.
+
+CI collects coverage from the five existing Python 3.12 shards, combines those
+data files after the matrix passes, prints the report, and uploads the JSON as
+the `coverage-report` artifact. Coverage is initially informational. A
+`fail-under` threshold should be introduced only after the first stable combined
+baseline is reviewed, so the number reflects observed coverage rather than an
+arbitrary target.
+
+The first local full measurement on July 19, 2026 reported 74.07% combined
+line/branch coverage across the configured Python product scope. Treat that as
+a diagnostic snapshot, not yet as the enforcement floor; the CI-combined
+Python 3.12 value is the baseline to review.
+
 ## Automated browser smoke (runtime brick-class gate)
 
 The ESLint guard above catches `const`-reassign / import-assign statically. The

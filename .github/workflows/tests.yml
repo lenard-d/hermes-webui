@@ -215,7 +215,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # Office parsers stay optional at runtime; CI installs them explicitly for the workspace preview tests.
-          pip install "pyyaml>=6.0" pytest pytest-timeout pytest-asyncio pytest-shard python-docx openpyxl python-pptx playwright
+          pip install "pyyaml>=6.0" pytest pytest-timeout pytest-asyncio pytest-shard pytest-cov python-docx openpyxl python-pptx playwright
           # ruff is installed so tests/test_ruff_forward_lint.py runs its E9/F821
           # tree-clean assertions in-suite (mirrors how eslint is available for
           # tests/test_static_js_runtime_lint.py). If install fails the test
@@ -249,4 +249,53 @@ jobs:
 
       - name: Run tests (shard ${{ matrix.shard }} of 5)
         if: needs.changes.outputs.docs_only != 'true'
-        run: pytest tests/ -v --timeout=60 --shard-id=${{ matrix.shard }} --num-shards=5
+        env:
+          COVERAGE_FILE: .coverage.${{ matrix.shard }}
+        run: |
+          coverage_args=()
+          if [[ "${{ matrix.python-version }}" == "3.12" ]]; then
+            coverage_args=(--cov --cov-config=pyproject.toml --cov-report=)
+          fi
+          pytest tests/ -v --timeout=60 --shard-id=${{ matrix.shard }} --num-shards=5 "${coverage_args[@]}"
+
+      - name: Upload Python 3.12 coverage shard
+        if: needs.changes.outputs.docs_only != 'true' && matrix.python-version == '3.12' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: .coverage*
+          include-hidden-files: true
+          if-no-files-found: error
+
+  coverage:
+    needs: [changes, test]
+    if: needs.changes.outputs.docs_only != 'true' && needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install coverage reporter
+        run: python -m pip install coverage
+
+      - name: Download Python 3.12 coverage shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          merge-multiple: true
+
+      - name: Combine and report coverage
+        run: |
+          coverage combine
+          coverage report
+          coverage json -o coverage.json
+
+      - name: Upload combined coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.json
+          if-no-files-found: error

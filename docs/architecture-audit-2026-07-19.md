@@ -428,8 +428,14 @@ Portfolio measurements:
 - 21 exact duplicate test-body groups were found, covering 43 functions; this
   is visible but not a dominant source of size
 
-There is no pytest coverage configuration, coverage dependency, fail-under
-threshold, or current coverage report in the repository. Test count is not a
+Remediation status: measurement added. `scripts/coverage.sh` uses the supported
+repo test environment and produces branch-aware terminal and JSON reports from
+the product Python source scope. The existing five Python 3.12 CI shards now
+upload and combine their data into a `coverage-report` artifact, avoiding a
+second full test run. There is deliberately no fail-under threshold until the
+first stable combined baseline has been reviewed. The first local full
+measurement reported 74.07% combined line/branch coverage; `server.py` was the
+largest clear blind spot at 40.43%. Test count is not a
 substitute for knowing which state-space paths are untested.
 
 The suite also contains substantial strengths: HTTP behavior, concurrency,

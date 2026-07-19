@@ -22,6 +22,19 @@ def test_github_actions_quotes_pyyaml_version_specifier():
     assert "pip install pyyaml>=6.0" not in text
 
 
+def test_ci_combines_python312_coverage_shards_into_an_artifact():
+    workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pytest-cov" in workflow
+    assert "COVERAGE_FILE" in workflow
+    assert "--cov-config=pyproject.toml" in workflow
+    assert "coverage combine" in workflow
+    assert "coverage.json" in workflow
+    assert "name: coverage-report" in workflow
+
+
 def test_pytest_integration_marker_is_registered():
     config = ROOT / "pytest.ini"
     text = config.read_text(encoding="utf-8")

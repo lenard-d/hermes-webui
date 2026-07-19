@@ -54,3 +54,14 @@ select = ["E9", "F", "B"]
 # occasionally shadow loop vars in table-driven cases (B007); that's idiomatic in a
 # test suite and not a production-code risk.
 "tests/**" = ["B011", "B007"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+relative_files = true
+source = ["api", "server", "bootstrap", "mcp_server"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = true

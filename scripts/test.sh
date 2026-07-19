@@ -80,6 +80,7 @@ modules = [
     "mcp",
     "pytest",
     "pytest_asyncio",
+    "pytest_cov",
     "pytest_shard",
     "pytest_timeout",
     "ruff",

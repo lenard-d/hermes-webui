@@ -952,11 +952,13 @@ The optional password gate for non-SSH-tunnel deployments lives in `api/auth.py`
 4. All API endpoints check cookie if HERMES_WEBUI_PASSWORD is set
 5. Cookie validity: 30 days from last activity
 
-### Phase I: Test Infrastructure -- BROAD SUITE; COVERAGE BASELINE OPEN
+### Phase I: Test Infrastructure -- BROAD SUITE; COVERAGE REPORTING ADDED
 
 13,476 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
-gates. Test count is not a coverage metric; a repeatable line/branch coverage baseline
-and an agreed gate remain open. The pytest fixture derives
+gates. Test count is not a coverage metric; `scripts/coverage.sh` and the
+combined Python 3.12 CI artifact now provide repeatable line/branch reporting.
+The first local full snapshot reported 74.07% combined line/branch coverage; an
+agreed enforcement floor remains open until CI confirms the baseline. The pytest fixture derives
 an isolated port and state directory from the repo path unless
 `HERMES_WEBUI_TEST_PORT` / `HERMES_WEBUI_TEST_STATE_DIR` pin them explicitly.
 Production data never touched.
@@ -1329,7 +1331,7 @@ Quick-reference table for prioritizing architecture work. Phases are from Sectio
 | F     | API Design Cleanup          | Low      | Medium | requires A     | Pending    |
 | G     | Observability               | Low      | Low    | nothing        | Partial (Sprint 7: active_streams+uptime added to /health; log rotation still pending) |
 | H     | Authentication              | Low      | Medium | nothing        | Implemented in `api/auth.py` |
-| I     | Test Infrastructure         | High     | High   | requires A,D   | Broad suite; repeatable coverage baseline open |
+| I     | Test Infrastructure         | High     | High   | requires A,D   | Broad suite; line/branch reporting added, enforcement open |
 | J     | Performance                 | Low      | High   | requires C     | Pending    |
 
 (*) Phase G is partial: structured request logging done in Sprint 1. Full observability
@@ -1339,7 +1341,7 @@ Recommended current execution order:
     2. Move remaining session mutations behind `session_repository.py`.
     3. Extract provider discovery and configuration from `config.py` behind deep Interfaces.
     4. Replace frontend global coupling with native Module Interfaces, one behavior slice at a time.
-    5. Establish repeatable line/branch coverage and harden behavior-level tests.
+    5. Review the line/branch baseline, set a justified floor, and continue hardening behavior-level tests.
     6. Keep current architecture/contracts concise; archive sprint snapshots and validate assets.
 
 ---
