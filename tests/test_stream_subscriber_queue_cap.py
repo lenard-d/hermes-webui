@@ -26,6 +26,16 @@ import queue as _queue
 from api.config import StreamChannel, create_stream_channel
 
 
+def test_config_reexports_the_stream_channel_owner():
+    from api.stream_channel import (
+        StreamChannel as OwnedStreamChannel,
+        create_stream_channel as owned_factory,
+    )
+
+    assert StreamChannel is OwnedStreamChannel
+    assert create_stream_channel is owned_factory
+
+
 def _drain(q: _queue.Queue) -> list:
     out = []
     while True:
@@ -243,4 +253,3 @@ def test_terminal_frame_survives_concurrent_drain_during_drop_oldest():
     assert delivered_continue == [terminal_item], (
         "post-fix `continue` must deliver the terminal frame after the race"
     )
-

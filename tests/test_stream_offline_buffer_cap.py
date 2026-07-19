@@ -127,7 +127,7 @@ def test_eviction_logs_once_per_disconnect_cycle(caplog):
         for i in range(n + extra):
             ch.put_nowait(("token", i))
 
-    with caplog.at_level(logging.DEBUG, logger="api.config"):
+    with caplog.at_level(logging.DEBUG, logger="api.stream_channel"):
         # cycle 1 (no subscriber) → one log
         overflow(3)
         assert caplog.text.count("offline buffer full") == 1

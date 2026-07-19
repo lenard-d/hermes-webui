@@ -65,6 +65,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
       session_sources.py   Allowlisted source identity for imported session sidecars
+      stream_channel.py    Bounded multi-tab live-event broadcast and reconnect replay
       turn_admission.py    Atomic local-turn admission, pending persistence, journal, stream, worker
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            All GET + POST route handlers (if/elif dispatch, no decorators)
@@ -222,6 +223,10 @@ larger migration remains incremental:
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining
   parallel field-copy blocks.
+- `api/stream_channel.py` owns bounded live-turn event fan-out, offline replay,
+  slow-subscriber backpressure, event cursors, and non-sensitive diagnostics.
+  `api.config` re-exports its Interface for compatibility but no longer contains
+  the queueing Implementation.
 - `static/session_render_cache.js` owns the bounded browser transcript-render
   cache, including LRU order and UTF-16 memory budgets. `static/ui.js` consumes
   its small interface instead of mutating cache counters directly.
@@ -803,6 +808,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         runtime_state.py      Process-local stream and worker lifecycle owner
         session_repository.py Full-load, lock, and persistence protocol for edits
         session_sources.py    Imported-session source identity policy
+        stream_channel.py     Bounded live-event broadcast and replay
         turn_admission.py     Atomic local-turn admission and worker launch
         workspace.py          File ops and workspace management
         upload.py             Multipart parser and file upload handler

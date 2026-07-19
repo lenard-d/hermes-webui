@@ -214,18 +214,25 @@ semantics, and a smaller change surface when storage evolves.
 
 Priority: high
 
+Remediation status: in progress. The 225-line `StreamChannel` runtime
+Implementation has moved from `api/config.py` to `api/stream_channel.py`, which
+now owns bounded multi-subscriber fan-out, reconnect replay, backpressure, event
+cursors, and diagnostics. `api.config` retains a compatibility re-export, so
+callers can migrate without a flag day while configuration no longer owns this
+queueing mechanism.
+
 ### `api/routes.py`
 
 Measured characteristics:
 
-- approximately 590 top-level definitions
+- approximately 583 top-level definitions
 - approximately 135 module globals
 - approximately 60 import statements
 - 244 imported names from local `api` modules
 - 62 imported names that are private by naming convention
 - approximately 234 literal `/api/...` paths
 - `handle_get()` is approximately 1,899 lines
-- `handle_post()` is approximately 2,646 lines
+- `handle_post()` is approximately 2,533 lines
 
 The file is simultaneously a transport dispatcher, normalizer, policy engine,
 orchestrator, persistence caller, and direct state mutator. Splitting it solely
@@ -235,8 +242,8 @@ by HTTP method or line count would leave the coupling intact.
 
 Measured characteristics:
 
-- approximately 187 top-level definitions
-- approximately 142 globals
+- approximately 201 top-level definitions
+- approximately 143 globals
 - `get_available_models()` is approximately 1,839 lines
 - `resolve_model_provider()` is approximately 372 lines
 
