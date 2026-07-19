@@ -7,12 +7,13 @@
 >
 > Keep this document updated as architecture changes are made.
 
-> Current shipped build: `v0.51.792` (July 1, 2026).
-> Automated coverage: ~11,500 tests via `pytest tests/ --collect-only -q`. CI runs on
-> Python 3.11, 3.12, and 3.13 (3 parallel shards each) against every PR, plus a ruff
+> Current changelog release: `v0.52.76` (July 18, 2026), plus Unreleased changes.
+> Automated test snapshot (July 19, 2026): 13,470 tests across 1,281 test files via
+> `./scripts/test.sh tests/ --collect-only -q`. CI runs on Python 3.11, 3.12, and
+> 3.13 (5 parallel shards each) against every PR, plus a ruff
 > lint gate, a headless browser smoke test, and a Docker smoke test.
 >
-> Notable architecture state: the bootstrap and first-run onboarding flow own setup discovery; the default WebUI state directory is `~/.hermes/webui`; `ctl.sh` provides a daemon wrapper for homelab installs; chat streaming is still WebUI-owned SSE with stream-ownership guards, cancellation, async manual compression, and turn-journal audit plumbing; provider/model discovery is profile-aware with live-model cache invalidation and custom-provider scoping. (Version/test-count numbers above are a periodic snapshot — the authoritative source is the latest git tag and `pytest --collect-only`.)
+> Notable architecture state: the bootstrap and first-run onboarding flow own setup discovery; the default WebUI state directory is `~/.hermes/webui`; `ctl.sh` provides a daemon wrapper for homelab installs; chat streaming is still WebUI-owned SSE with stream-ownership guards, cancellation, async manual compression, and turn-journal audit plumbing; provider/model discovery is profile-aware with live-model cache invalidation and custom-provider scoping. (Version/test-count numbers above are a periodic snapshot — the authoritative source is the latest git tag and the repo test runner's `--collect-only` result.)
 
 ---
 
@@ -90,7 +91,8 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       sw.js                Service worker: offline shell cache, version-pinned assets
     tests/
       conftest.py          Isolated test server/state fixtures
-      ~1,150 test files    ~11,500 tests collected via pytest (run `pytest --collect-only -q` for exact)
+      1,281 test files     13,470 tests in the July 19, 2026 snapshot
+                           (run `./scripts/test.sh tests/ --collect-only -q` for exact)
       test_regressions.py  Permanent regression gate
     CONTRIBUTING.md        Contributor workflow and PR expectations.
     ROADMAP.md             Feature and product roadmap document.
@@ -257,7 +259,8 @@ Session is a plain Python class (not a dataclass, not SQLAlchemy):
 
     In-memory cache:
       SESSIONS = {}    dict: session_id -> Session object
-      LOCK = threading.Lock()   defined but NOT currently used around SESSIONS access
+      LOCK = threading.Lock()   guards SESSIONS snapshots and cache mutations;
+                                disk I/O is deliberately performed outside it
 
     get_session(sid): checks SESSIONS cache, loads from disk on miss, raises KeyError
     new_session(workspace, model): creates Session, caches in SESSIONS, saves, returns
@@ -761,35 +764,40 @@ restriction from the UI yet (see ROADMAP.md Wave 4 for the plan).
 These phases run in parallel with the feature roadmap. Each phase targets software
 quality: testability, resilience, maintainability, and modularity.
 
-### Phase A: File Separation -- COMPLETE
+### Phase A: Initial File Separation -- COMPLETE; Deepening Ongoing
 
 Split server.py into a proper package. Completed across Sprints 4-10.
 
-Current structure:
+Current backend structure (roles only; use `wc -l` for current sizes):
 
     <repo>/
-      server.py               Entry point + HTTP Handler dispatch (~446 lines)
+      server.py               Entry point + HTTP Handler dispatch
       api/
         __init__.py
-        routes.py             All GET + POST route handlers (~9772 lines)
-        config.py             Configuration, constants, global state, model discovery (~4139 lines)
-        helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve() (~302 lines)
-        models.py             Session model + CRUD (~1927 lines)
-        workspace.py          File ops, workspace management (~810 lines)
-        upload.py             Multipart parser, file upload handler (~284 lines)
-        streaming.py          SSE engine, run_agent, cancel support (~4420 lines)
+        routes.py             GET + POST route dispatch and legacy orchestration
+        config.py             Configuration, constants, runtime wiring, model discovery
+        helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
+        models.py             Session representation, projections, indexes, CLI bridge
+        runtime_state.py      Process-local stream and worker lifecycle owner
+        session_repository.py Full-load, lock, and persistence protocol for edits
+        turn_admission.py     Atomic local-turn admission and worker launch
+        workspace.py          File ops and workspace management
+        upload.py             Multipart parser and file upload handler
+        streaming.py          SSE execution, cancellation, recovery, and compression
       static/
         index.html            HTML document (served from disk)
-        style.css             All CSS (~3767 lines)
-        ui.js, workspace.js, sessions.js, messages.js, panels.js, commands.js, boot.js
+        style.css             Shared layout, theme, and responsive CSS
+        *.js                  Classic-script frontend modules (no bundler)
       tests/
         conftest.py           Isolated test server/state fixtures
-        ~1,150 test files     ~11,500 tests collected
+        1,281 test files      13,470 tests in the July 19, 2026 snapshot
         test_regressions.py   Permanent regression gate
 
 Route extraction to api/routes.py completed in Sprint 11. server.py remains a
 thin shell relative to the rest of the app: Handler class with headers,
-structured logging, dispatch to routes, TLS wrapping, and main().
+structured logging, dispatch to routes, TLS wrapping, and main(). The extraction
+did not by itself create deep Modules: routes.py, config.py, models.py, streaming.py,
+style.css, and the shared classic-script namespace remain active deepening work.
 
 ### Phase B: Thread-Safe Request Context (Priority: Critical, Effort: Medium)
 
@@ -820,7 +828,7 @@ Option 3 (interim, safe for single-user): Wrap the env var block in a per-sessio
 Phase B also includes: review all other os.environ reads/writes in the codebase for
 similar thread-safety issues.
 
-### Phase C: Session Store Improvements -- COMPLETE
+### Phase C: Session Store Performance -- COMPLETE; Ownership Deepening Ongoing
 
 All three problems fixed in Sprint 5:
 
@@ -828,6 +836,11 @@ All three problems fixed in Sprint 5:
 2. LOCK: all SESSIONS dict reads/writes wrapped with LOCK (from Sprint 1).
 3. Session index: `sessions/_index.json` maintained on every save/delete.
    `all_sessions()` reads the index file (O(1)) instead of scanning all JSONs.
+
+These performance fixes do not make every session mutation use one Interface.
+`session_repository.py` now owns ordinary full-load/lock/save edits, while delete,
+recovery, migration, projections, and several route-specific mutations still need
+to move behind that owner.
 
 ### Phase D: Input Validation and Error Handling -- COMPLETE
 
@@ -837,15 +850,17 @@ Completed in Sprint 4-6:
 2. All endpoints return clean 400/404 responses instead of tracebacks.
 3. Structured JSON request logging via `log_request()` override (Sprint 1).
 
-### Phase E: Frontend Modularization -- COMPLETE
+### Phase E: Frontend File Extraction -- COMPLETE; Module Interfaces Ongoing
 
 Completed across Sprints 5, 6, and 9:
 
 1. HTML extracted to `static/index.html` (Sprint 6).
 2. CSS extracted to `static/style.css` (Sprint 4).
-3. `app.js` deleted Sprint 9, replaced by 6 focused modules:
-   `ui.js`, `workspace.js`, `sessions.js`, `messages.js`, `panels.js`, `boot.js`.
-   Loaded as standard `<script>` tags (not ES modules) in dependency order.
+3. `app.js` was deleted in Sprint 9 and replaced by focused files. The current
+   page loads 15 application scripts at the end of `static/index.html` in addition
+   to the early PWA startup script. They are classic `<script>` files rather than
+   native ES Modules, so their shared global namespace and load order remain a
+   shallow Interface that needs further deepening.
 4. Prism.js added for syntax highlighting (Sprint 8) via CDN, deferred load.
 
 Remaining: renderMd() is still a hand-rolled regex chain. Tables partially supported.
@@ -872,9 +887,9 @@ Replacing with marked.js + DOMPurify is a future improvement (not blocking).
 2. Enhanced /health: COMPLETE (Sprint 7). Returns `active_streams`, `uptime_seconds`.
 3. GET /api/debug/stats: NOT YET IMPLEMENTED. Low priority.
 
-### Phase H: Authentication (Priority: Low, Effort: Medium)
+### Phase H: Authentication -- IMPLEMENTED
 
-Optional password gate for non-SSH-tunnel deployments.
+The optional password gate for non-SSH-tunnel deployments lives in `api/auth.py`.
 
 1. HERMES_WEBUI_PASSWORD env var enables auth
 2. Login page: minimal dark form, POST /api/auth/login
@@ -882,9 +897,11 @@ Optional password gate for non-SSH-tunnel deployments.
 4. All API endpoints check cookie if HERMES_WEBUI_PASSWORD is set
 5. Cookie validity: 30 days from last activity
 
-### Phase I: Test Infrastructure -- COMPLETE
+### Phase I: Test Infrastructure -- BROAD SUITE; COVERAGE BASELINE OPEN
 
-~11,500 tests across ~1,150 test files + regression gates. The pytest fixture derives
+13,470 tests across 1,281 test files in the July 19, 2026 snapshot, plus regression
+gates. Test count is not a coverage metric; a repeatable line/branch coverage baseline
+and an agreed gate remain open. The pytest fixture derives
 an isolated port and state directory from the repo path unless
 `HERMES_WEBUI_TEST_PORT` / `HERMES_WEBUI_TEST_STATE_DIR` pin them explicitly.
 Production data never touched.
@@ -1204,9 +1221,9 @@ Test categories:
     Stream status endpoint (1)
     File browser: list dir, path traversal block (2)
 
-Run tests:
-    cd <agent-dir>
-    venv/bin/python -m pytest webui-mvp/tests/test_sprint1.py -v
+Historical note: `webui-mvp/tests/test_sprint1.py` was the original Sprint 1
+suite and no longer exists in the current layout. Use the current runner:
+    ./scripts/test.sh tests/test_regressions.py -v
 
 #### Section 5.5 Update (B3 resolved)
 
@@ -1249,31 +1266,26 @@ Quick-reference table for prioritizing architecture work. Phases are from Sectio
 
 | Phase | Name                        | Priority | Effort | Blocks         | Status     |
 |-------|-----------------------------|----------|--------|----------------|------------|
-| A+E   | File Separation + Frontend  | High     | Medium | F              | COMPLETE Sprint 6+9 (HTML->index.html, JS->6 modules, app.js deleted; server.py pure Python ~1150 lines) |
+| A+E   | Initial File Separation     | High     | Medium | F              | Initial extraction complete; deepening active |
 | B     | Thread-Safe Request Context | Critical | Medium | nothing        | PARTIAL (Sprint 4: per-session lock added; global env vars still used) |
-| C     | Session Store Improvements  | Medium   | Medium | J              | PARTIAL Sprint 5 (index file + LRU cache; LRU eviction policy and pagination still open) |
-| D     | Input Validation            | Medium   | Low    | nothing        | COMPLETE Sprint 6 (approval/respond + file/raw hardened; all endpoints validated) |
-| E     | Frontend Modularization     | Medium   | High   | requires A     | Pending    |
+| C     | Session Store Improvements  | Medium   | Medium | J              | Performance work complete; single-owner mutation Interface active |
+| D     | Input Validation            | Medium   | Low    | nothing        | Broad validation exists; keep verifying new paths |
+| E     | Frontend Modularization     | Medium   | High   | requires A     | Files extracted; global classic-script Interface remains |
 | F     | API Design Cleanup          | Low      | Medium | requires A     | Pending    |
 | G     | Observability               | Low      | Low    | nothing        | Partial (Sprint 7: active_streams+uptime added to /health; log rotation still pending) |
-| H     | Authentication              | Low      | Medium | nothing        | Pending    |
-| I     | Test Infrastructure         | High     | High   | requires A,D   | Partial(*) |
+| H     | Authentication              | Low      | Medium | nothing        | Implemented in `api/auth.py` |
+| I     | Test Infrastructure         | High     | High   | requires A,D   | Broad suite; repeatable coverage baseline open |
 | J     | Performance                 | Low      | High   | requires C     | Pending    |
 
 (*) Phase G is partial: structured request logging done in Sprint 1. Full observability
     (health detail, debug/stats endpoint, log rotation) remains.
-(*) Phase I is partial: HTTP integration test suite started in Sprint 1. Unit tests for
-    isolated modules require Phase A file split first.
-
-Recommended execution order:
-    1. Phase B (thread safety): critical, low risk, no file changes needed
-    2. Phase D (input validation): low effort, improves error messages immediately
-    3. Phase A (file split): enables E, F, and full Phase I
-    4. Phase G remainder (health detail, debug endpoint): 1-2 hours
-    5. Phase C (session index): needed as session count grows
-    6. Phase E (frontend modules + marked.js): biggest UX improvement
-    7. Phase I (full test suite): after A gives us importable modules
-    8. Phase F, H, J: lower priority, tackle when needed
+Recommended current execution order:
+    1. Finish runtime lifecycle ownership behind `runtime_state.py` and `turn_admission.py`.
+    2. Move remaining session mutations behind `session_repository.py`.
+    3. Extract provider discovery and configuration from `config.py` behind deep Interfaces.
+    4. Replace frontend global coupling with native Module Interfaces, one behavior slice at a time.
+    5. Establish repeatable line/branch coverage and harden behavior-level tests.
+    6. Keep current architecture/contracts concise; archive sprint snapshots and validate assets.
 
 ---
 
@@ -1288,7 +1300,7 @@ will be working on this codebase. Read this before touching any file.
 2. Inspect the relevant module under `api/` or `static/`; `server.py` is only the routing shell.
 3. Check the Sprint Log (Section 15) to understand what was recently changed.
 4. Run the relevant test slice first to confirm baseline, for example:
-   venv/bin/python -m pytest tests/test_regressions.py -q
+   ./scripts/test.sh tests/test_regressions.py -q
 5. Check server health: curl -s http://127.0.0.1:8787/health
 
 ### Making Changes
@@ -1298,9 +1310,9 @@ matching when making mechanical patches and verify that the intended old string
 was found before replacing it.
 
 After any change:
-    venv/bin/python -m py_compile server.py             # syntax check
+    .venv/bin/python -m py_compile server.py            # syntax check
     curl -s http://127.0.0.1:8787/health                # server still alive
-    venv/bin/python -m pytest tests/ -v                 # tests still pass
+    ./scripts/test.sh tests/ -v                         # tests still pass
 
 ### Critical Rules (do NOT regress these)
 

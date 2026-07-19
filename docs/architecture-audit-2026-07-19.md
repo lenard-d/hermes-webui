@@ -413,14 +413,21 @@ modules being deepened rather than mixed into one repository-wide refactor.
 
 Priority: medium to high
 
+Remediation status: in progress. The root architecture, testing, and README
+snapshots now use the repo test runner, the current 5-shard matrix, the refreshed
+13,470-test/1,281-file count, and the current runtime/session/admission Module map.
+The architecture roadmap now distinguishes initial file extraction from deeper
+ownership. Archiving the embedded sprint logs and consolidating competing
+architecture indexes remain open.
+
 ### `ARCHITECTURE.md`
 
 The document presents itself as the canonical and exact current architecture,
 but contains several stale snapshots:
 
-- it names version `v0.51.792` from July 1 while the changelog currently reaches
+- it named version `v0.51.792` from July 1 while the changelog currently reaches
   `v0.52.76` from July 18 plus Unreleased changes
-- it describes seven frontend modules while the current page loads 13 main
+- it described seven frontend modules while the current page now loads 15 main
   application scripts
 - it reports `ui.js` at approximately 7,216 lines; the file is approximately
   20,250 lines
@@ -432,7 +439,7 @@ but contains several stale snapshots:
   approximately 8,678 lines
 - it reports `boot.js` at approximately 1,607 lines; the file is approximately
   3,869 lines
-- it marks frontend modularization as complete despite the continuing global
+- it marked frontend modularization as complete despite the continuing global
   script interface
 - its "Current Endpoint Reference" explicitly reflects Sprint 1 / v0.3 and
   lists only a small subset of roughly 234 current literal endpoint paths
@@ -446,8 +453,8 @@ but contains several stale snapshots:
 The document is approximately 1,981 lines and has accumulated chronological
 sprint guidance:
 
-- it claims approximately 11,500 tests; current collection finds 13,461
-- it claims three CI shards; `.github/workflows/tests.yml` uses five shards for
+- it claimed approximately 11,500 tests; the refreshed July 19 collection finds 13,470
+- it claimed three CI shards; `.github/workflows/tests.yml` uses five shards for
   each of three Python versions
 - its coverage reference reflects early sprints rather than the current suite
 - an early section says browser and CSS checks are manual, despite current

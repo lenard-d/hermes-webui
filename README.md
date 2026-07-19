@@ -588,9 +588,10 @@ are still installed into the repo-local virtual environment, not into the
 system/Homebrew interpreter.
 
 Tests run against an isolated server with a separate state directory.
-Production data and real cron jobs are never touched. Current snapshot:
-**~11,500 tests collected** across **~1,150 test files**, run in CI on Python 3.11,
-3.12, and 3.13 (3 parallel shards each).
+Production data and real cron jobs are never touched. The July 19, 2026 checkout
+snapshot contains **13,470 collected tests** across **1,281 test files**. CI runs
+the suite on Python 3.11, 3.12, and 3.13 in 5 parallel shards per interpreter.
+Run `./scripts/test.sh tests/ --collect-only -q` for the current count.
 
 ---
 
@@ -610,6 +611,9 @@ api/
   models.py       Session model + CRUD + CLI/state.db bridge
   onboarding.py   First-run onboarding wizard, OAuth provider support
   profiles.py     Profile state management, hermes_cli wrapper
+  runtime_state.py  Process-local stream and worker lifecycle ownership
+  session_repository.py  Full-load, lock, and persistence protocol for edits
+  turn_admission.py  Atomic local-turn admission and worker launch
   routes.py       All GET + POST route handlers (if/elif dispatch, no decorators)
   state_sync.py   /insights sync — message_count to state.db
   streaming.py    SSE engine, run_agent, cancellation, compression
@@ -635,7 +639,7 @@ boot.js           Mobile nav, voice input, theme/skin boot, bfcache handler
 **Tests + packaging**
 
 ```
-tests/            Pytest suite (~11,500 tests; isolated server/state fixtures)
+tests/            Pytest suite (run the collection command above for the current count)
 pyproject.toml    Tooling config (ruff lint gate) — not a packaged distribution
 Dockerfile        python:3.12-slim container image
 docker-compose.yml  Compose with named volume and optional auth
