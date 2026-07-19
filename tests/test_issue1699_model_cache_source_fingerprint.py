@@ -6,12 +6,44 @@ provider outside WebUI, the browser can keep seeing the previous provider's
 PRIMARY badge until the cache is manually cleared or expires.
 """
 
+import copy
 import json
 import sys
 import time
 import types
 
+import pytest
+
 import api.config as config
+
+
+@pytest.fixture(autouse=True)
+def _restore_process_config_state():
+    """Keep this file's temporary config reloads from escaping the test.
+
+    ``reload_config()`` mutates ``_cfg_cache`` in place and also stamps the
+    process-global config path metadata.  ``monkeypatch`` restores the
+    temporary environment and profile helpers, but cannot undo those direct
+    mutations.  Preserve both the cache contents and its alias relationship so
+    a later test does not observe a vanished temp config path and reload over
+    its own in-memory ``config.cfg`` override.
+    """
+    saved_cache = copy.deepcopy(config._cfg_cache)
+    saved_cfg = config.cfg
+    saved_cfg_was_cache = saved_cfg is config._cfg_cache
+    saved_mtime = config._cfg_mtime
+    saved_path = config._cfg_path
+    saved_fingerprint = config._cfg_fingerprint
+
+    yield
+
+    with config._cfg_lock:
+        config._cfg_cache.clear()
+        config._cfg_cache.update(saved_cache)
+        config._cfg_mtime = saved_mtime
+        config._cfg_path = saved_path
+        config._cfg_fingerprint = saved_fingerprint
+        config.cfg = config._cfg_cache if saved_cfg_was_cache else saved_cfg
 
 
 def _reset_memory_cache() -> None:
