@@ -60,6 +60,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       auth.py              Optional password authentication, signed cookies, passkeys/WebAuthn
       config.py            Discovery, globals, model detection, reloadable config
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
+      insights.py          Usage aggregation across WebUI index and Hermes state.db
       model_catalog.py     Static provider names, aliases, and fallback models
       models.py            Session model + CRUD, per-session profile tracking, CLI/state.db bridge
       profiles.py          Profile state management, hermes_cli wrapper
@@ -232,6 +233,10 @@ larger migration remains incremental:
   fallback model rows. `api.config` re-exports the same mutable catalog objects
   for compatibility, while provider management imports them from their owner
   instead of routing static data through configuration.
+- `api/insights.py` owns usage aggregation across the WebUI session index and
+  Hermes `state.db`. Its Interface accepts query text and storage collaborators
+  and returns a payload; the route wrapper only supplies those values and
+  serializes the response.
 - `static/session_render_cache.js` owns the bounded browser transcript-render
   cache, including LRU order and UTF-16 memory budgets. `static/ui.js` consumes
   its small interface instead of mutating cache counters directly.
@@ -809,6 +814,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         routes.py             GET + POST route dispatch and legacy orchestration
         config.py             Configuration, constants, runtime wiring, model discovery
         helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
+        insights.py           Transport-independent usage aggregation
         model_catalog.py      Static provider and fallback-model catalog
         models.py             Session representation, projections, indexes, CLI bridge
         runtime_state.py      Process-local stream and worker lifecycle owner

@@ -60,6 +60,24 @@ def _day(ts):
     return time.strftime("%Y-%m-%d", time.localtime(ts))
 
 
+def test_insights_aggregation_has_a_transport_independent_owner(tmp_path):
+    from api.insights import build_insights
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    (session_dir / "_index.json").write_text("[]", encoding="utf-8")
+
+    payload = build_insights(
+        "days=not-a-number",
+        session_dir=session_dir,
+        state_db_path=lambda: None,
+    )
+
+    assert payload["period_days"] == 30
+    assert payload["total_sessions"] == 0
+    assert len(payload["daily_tokens"]) == 30
+
+
 def test_insights_daily_tokens_zero_fills_selected_range_and_parses_cost(monkeypatch, tmp_path):
     now = time.mktime((2026, 5, 4, 12, 0, 0, 0, 0, -1))
     two_days_ago = now - (2 * 86400)
@@ -507,4 +525,3 @@ def test_insights_cache_hit_rate_is_none_without_cache_reads(monkeypatch, tmp_pa
     assert data["models"][0]["cache_read_tokens"] == 0
     assert data["models"][0]["cache_hit_percent"] is None
     assert data["total_cache_hit_percent"] is None
-
