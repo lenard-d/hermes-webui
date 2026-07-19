@@ -7,7 +7,7 @@ import threading
 import pytest
 
 import api.config as config
-from api.runtime_state import ProcessRuntimeState
+from api.runtime_state import ProcessRuntimeState, RunProgressSnapshot
 
 
 _STREAM_MAP_NAMES = (
@@ -266,6 +266,145 @@ def test_progress_snapshot_is_immutable_and_does_not_consume_live_buffers():
     assert progress.live_tool_calls == ({"name": "tool"},)
     assert progress.last_event_id == "stream-1:8"
     assert stores["partial_text"]["stream-1"] == "partial"
+
+
+def test_execution_producers_mutate_only_a_live_initialized_run():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    cancel_event = threading.Event()
+    state.register_stream("stream-1", "session-1", object())
+
+    assert state.initialize_execution("stream-1", cancel_event) is True
+    assert state.append_partial_text("stream-1", "hello") is True
+    assert state.replace_partial_text("stream-1", "hello world") is True
+    assert state.append_reasoning_text("stream-1", "think") is True
+    assert state.replace_reasoning_text("stream-1", "thought") is True
+
+    assert stores["cancel_flags"]["stream-1"] is cancel_event
+    assert state.progress_snapshot("stream-1") == RunProgressSnapshot(
+        partial_text="hello world",
+        reasoning_text="thought",
+        live_tool_calls=(),
+        last_event_id=None,
+    )
+
+    state.finish_run("stream-1")
+
+    assert state.append_partial_text("stream-1", "late") is False
+    assert state.replace_partial_text("stream-1", "late") is False
+    assert state.append_reasoning_text("stream-1", "late") is False
+    assert state.replace_reasoning_text("stream-1", "late") is False
+    assert state.initialize_execution("stream-1", threading.Event()) is False
+    assert stores["partial_text"] == {}
+    assert stores["reasoning_text"] == {}
+
+
+def test_runtime_owner_rejects_duplicate_execution_initialization():
+    state, _stores = _runtime_state(clock=lambda: 100.0)
+    state.register_stream("stream-1", "session-1", object())
+    state.initialize_execution("stream-1", threading.Event())
+
+    with pytest.raises(ValueError, match="execution already initialized"):
+        state.initialize_execution("stream-1", threading.Event())
+
+
+def test_runtime_owner_accepts_only_empty_legacy_buffer_preseeding():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    state.register_stream("empty", "session-1", object())
+    stores["partial_text"]["empty"] = ""
+
+    assert state.initialize_execution("empty", threading.Event()) is True
+
+    state.register_stream("progressed", "session-1", object())
+    stores["partial_text"]["progressed"] = "already streamed"
+
+    with pytest.raises(ValueError, match="execution already initialized"):
+        state.initialize_execution("progressed", threading.Event())
+
+
+def test_runtime_owner_tracks_tool_lifecycle_by_stable_identity():
+    state, _stores = _runtime_state(clock=lambda: 100.0)
+    state.register_stream("stream-1", "session-1", object())
+    state.initialize_execution("stream-1", threading.Event())
+
+    assert state.start_tool_call(
+        "stream-1",
+        name="search",
+        args={"q": "first"},
+        tool_call_id="tool-1",
+    ) is True
+    assert state.start_tool_call(
+        "stream-1",
+        name="search",
+        args={"q": "second"},
+        tool_call_id="tool-2",
+    ) is True
+    assert state.finish_tool_call(
+        "stream-1",
+        name="search",
+        tool_call_id="tool-1",
+        snippet="first result",
+    ) is True
+
+    calls = state.progress_snapshot("stream-1").live_tool_calls
+    assert calls == (
+        {
+            "name": "search",
+            "args": {"q": "first"},
+            "done": True,
+            "tid": "tool-1",
+            "snippet": "first result",
+        },
+        {
+            "name": "search",
+            "args": {"q": "second"},
+            "done": False,
+            "tid": "tool-2",
+        },
+    )
+
+
+def test_runtime_owner_does_not_match_conflicting_tool_id_by_name():
+    state, _stores = _runtime_state(clock=lambda: 100.0)
+    state.register_stream("stream-1", "session-1", object())
+    state.initialize_execution("stream-1", threading.Event())
+    state.start_tool_call(
+        "stream-1",
+        name="search",
+        args={},
+        tool_call_id="tool-1",
+    )
+
+    assert state.finish_tool_call(
+        "stream-1",
+        name="search",
+        tool_call_id="different-id",
+    ) is False
+    assert state.progress_snapshot("stream-1").live_tool_calls[0]["done"] is False
+
+
+def test_runtime_owner_fails_closed_without_tool_identity():
+    state, _stores = _runtime_state(clock=lambda: 100.0)
+    state.register_stream("stream-1", "session-1", object())
+    state.initialize_execution("stream-1", threading.Event())
+
+    assert state.start_tool_call("stream-1", name=None, args={}) is False
+    assert state.finish_tool_call("stream-1", name=None) is False
+    assert state.progress_snapshot("stream-1").live_tool_calls == ()
+
+
+def test_runtime_owner_attaches_agent_only_while_execution_is_live():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    agent = object()
+    state.register_stream("stream-1", "session-1", object())
+    state.initialize_execution("stream-1", threading.Event())
+
+    assert state.attach_agent("stream-1", agent) is True
+    assert stores["agent_instances"]["stream-1"] is agent
+
+    state.finish_run("stream-1")
+
+    assert state.attach_agent("stream-1", object()) is False
+    assert stores["agent_instances"] == {}
 
 
 def test_runtime_views_hide_mutable_registry_ownership_from_callers():

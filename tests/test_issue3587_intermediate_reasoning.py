@@ -90,8 +90,8 @@ class TestOnReasoningPerMessageIndexing:
         """cancel_stream() uses STREAM_REASONING_TEXT for its own partial-message
         persist path; this mirror must remain even after the per-message fix."""
         body = self._on_reasoning_body()
-        assert 'STREAM_REASONING_TEXT' in body, (
-            "on_reasoning must still mirror to STREAM_REASONING_TEXT so "
+        assert 'append_runtime_reasoning_text' in body, (
+            "on_reasoning must still mirror through the runtime owner so "
             "cancel_stream() can persist reasoning on mid-stream cancellation"
         )
 

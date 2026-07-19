@@ -195,6 +195,163 @@ class ProcessRuntimeState:
         with self._streams_lock:
             self._last_event_ids[stream_id] = event_id
 
+    def initialize_execution(self, stream_id: str, cancel_event: Any) -> bool:
+        """Attach execution buffers only while the admitted transport is live.
+
+        Returning ``False`` means teardown already won. Producers must not
+        recreate per-run state after that point. Re-initializing a live run is
+        a caller error because it would discard progress needed for recovery.
+        """
+        stream_id = self._required_id(stream_id, "stream_id")
+        if cancel_event is None:
+            raise ValueError("cancel_event is required")
+        with self._streams_lock:
+            if stream_id not in self._streams:
+                return False
+            # A few compatibility callers still pre-seed one or more empty
+            # legacy buffer aliases before invoking a worker. Accept only that
+            # zero-progress shape while migration is in flight; an existing
+            # cancel owner or any real progress means this is a destructive
+            # second initialization and must fail closed.
+            partial = self._partial_text.get(stream_id, "")
+            reasoning = self._reasoning_text.get(stream_id, "")
+            tool_calls = self._live_tool_calls.get(stream_id, [])
+            if (
+                stream_id in self._cancel_flags
+                or bool(partial)
+                or bool(reasoning)
+                or bool(tool_calls)
+            ):
+                raise ValueError(f"execution already initialized: {stream_id}")
+            self._cancel_flags[stream_id] = cancel_event
+            self._partial_text[stream_id] = ""
+            self._reasoning_text[stream_id] = ""
+            self._live_tool_calls[stream_id] = []
+        return True
+
+    def append_partial_text(self, stream_id: str, text: Any) -> bool:
+        """Append visible output without reviving a released run."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        with self._streams_lock:
+            if stream_id not in self._partial_text:
+                return False
+            self._partial_text[stream_id] += str(text)
+        return True
+
+    def replace_partial_text(self, stream_id: str, text: Any) -> bool:
+        """Replace visible output without reviving a released run."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        with self._streams_lock:
+            if stream_id not in self._partial_text:
+                return False
+            self._partial_text[stream_id] = str(text)
+        return True
+
+    def append_reasoning_text(self, stream_id: str, text: Any) -> bool:
+        """Append reasoning output without reviving a released run."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        with self._streams_lock:
+            if stream_id not in self._reasoning_text:
+                return False
+            self._reasoning_text[stream_id] += str(text)
+        return True
+
+    def replace_reasoning_text(self, stream_id: str, text: Any) -> bool:
+        """Replace reasoning output without reviving a released run."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        with self._streams_lock:
+            if stream_id not in self._reasoning_text:
+                return False
+            self._reasoning_text[stream_id] = str(text)
+        return True
+
+    def start_tool_call(
+        self,
+        stream_id: str,
+        *,
+        name: Any,
+        args: Any,
+        tool_call_id: Any = None,
+    ) -> bool:
+        """Append one recoverable tool-call record to a live execution."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        stable_id = str(tool_call_id or "").strip()
+        if not stable_id and not str(name or "").strip():
+            return False
+        call = {
+            "name": name,
+            "args": dict(args) if isinstance(args, dict) else {},
+            "done": False,
+        }
+        if stable_id:
+            call["tid"] = stable_id
+        with self._streams_lock:
+            calls = self._live_tool_calls.get(stream_id)
+            if calls is None:
+                return False
+            calls.append(call)
+        return True
+
+    def finish_tool_call(
+        self,
+        stream_id: str,
+        *,
+        name: Any = None,
+        tool_call_id: Any = None,
+        **metadata: Any,
+    ) -> bool:
+        """Complete the latest matching unfinished tool call.
+
+        A stable tool id is authoritative. Name fallback is allowed only for a
+        legacy start record that had no id; a conflicting id must never settle
+        a sibling call that happens to share the same tool name.
+        """
+        stream_id = self._required_id(stream_id, "stream_id")
+        stable_id = str(tool_call_id or "").strip()
+        if not stable_id and not str(name or "").strip():
+            return False
+        safe_metadata = dict(metadata)
+        for identity_key in ("name", "args", "done", "tid"):
+            safe_metadata.pop(identity_key, None)
+        with self._streams_lock:
+            calls = self._live_tool_calls.get(stream_id)
+            if calls is None:
+                return False
+            for call in reversed(calls):
+                if not isinstance(call, dict) or call.get("done"):
+                    continue
+                candidate_id = str(call.get("tid") or "").strip()
+                if stable_id:
+                    matches = candidate_id == stable_id or (
+                        not candidate_id
+                        and bool(name)
+                        and call.get("name") == name
+                    )
+                else:
+                    matches = not name or call.get("name") == name
+                if not matches:
+                    continue
+                call.update(safe_metadata)
+                call["done"] = True
+                return True
+        return False
+
+    def attach_agent(self, stream_id: str, agent: Any) -> bool:
+        """Expose an interruptible agent only while its execution is live."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        if agent is None:
+            raise ValueError("agent is required")
+        with self._streams_lock:
+            cancel_event = self._cancel_flags.get(stream_id)
+            if (
+                stream_id not in self._streams
+                or cancel_event is None
+                or cancel_event.is_set()
+            ):
+                return False
+            self._agent_instances[stream_id] = agent
+        return True
+
     def blocking_stream_for_session(
         self,
         session_id: str,

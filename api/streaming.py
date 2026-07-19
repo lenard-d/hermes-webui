@@ -27,13 +27,20 @@ logger = logging.getLogger(__name__)
 
 from api.config import (
     get_config,
-    STREAMS, STREAMS_LOCK, CANCEL_FLAGS, AGENT_INSTANCES, STREAM_PARTIAL_TEXT,
-    STREAM_REASONING_TEXT, STREAM_LIVE_TOOL_CALLS,
-    STREAM_GOAL_RELATED, PENDING_GOAL_CONTINUATION,
+    STREAMS as STREAMS, STREAMS_LOCK as STREAMS_LOCK,
+    CANCEL_FLAGS, AGENT_INSTANCES as AGENT_INSTANCES,
+    STREAM_PARTIAL_TEXT, STREAM_REASONING_TEXT,
+    STREAM_LIVE_TOOL_CALLS as STREAM_LIVE_TOOL_CALLS,
+    PENDING_GOAL_CONTINUATION,
     LOCK, SESSIONS, SESSIONS_MAX, SESSION_DIR,
     _get_session_agent_lock, _set_thread_env, _clear_thread_env,
+    append_runtime_partial_text, append_runtime_reasoning_text,
+    attach_runtime_agent, finish_runtime_tool_call,
+    initialize_runtime_execution,
     register_active_run, update_active_run, finish_runtime_run,
     note_runtime_last_event_id,
+    replace_runtime_reasoning_text,
+    runtime_transport, start_runtime_tool_call,
     alias_session_agent_lock,
     resolve_model_provider,
     resolve_custom_provider_connection,
@@ -6926,7 +6933,7 @@ def _run_agent_streaming(
     """
     _turn_route_model = model
     _turn_route_provider = model_provider
-    q = STREAMS.get(stream_id)
+    q = runtime_transport(stream_id)
     if q is None:
         # The transport disappeared before the worker started, so its normal
         # teardown finally will never run. Release every value owned by this
@@ -6974,11 +6981,9 @@ def _run_agent_streaming(
 
     # Sprint 10: create a cancel event for this stream
     cancel_event = threading.Event()
-    with STREAMS_LOCK:
-        CANCEL_FLAGS[stream_id] = cancel_event
-        STREAM_PARTIAL_TEXT[stream_id] = ''  # start accumulating partial text (#893)
-        STREAM_REASONING_TEXT[stream_id] = ''  # start accumulating reasoning trace (#1361 §A)
-        STREAM_LIVE_TOOL_CALLS[stream_id] = []  # start accumulating tool calls (#1361 §B)
+    if not initialize_runtime_execution(stream_id, cancel_event):
+        finish_runtime_run(stream_id)
+        return
 
     agent = None
     _live_prompt_estimate_tokens = [0]
@@ -7739,7 +7744,7 @@ def _run_agent_streaming(
                         text,
                     )
                     if did_remove:
-                        STREAM_REASONING_TEXT[stream_id] = next_text
+                        replace_runtime_reasoning_text(stream_id, next_text)
                         removed = True
                 next_buffer, did_remove_buffer = _strip_compact_echo_suffix(_reasoning_buffer[0], text)
                 if did_remove_buffer:
@@ -7770,30 +7775,9 @@ def _run_agent_streaming(
                 # first so the live Thinking stream is complete before/at the transition.
                 _flush_reasoning_buffer()
                 _token_sent = True
-                # Accumulate partial text so cancel_stream() can persist it (#893).
-                #
-                # STREAMS_LOCK contract for the three STREAM_* buffers (partial text,
-                # reasoning, live tool calls): the per-token hot path below mirrors
-                # into them WITHOUT holding STREAMS_LOCK, while snapshot readers hold
-                # STREAMS_LOCK (_snapshot_and_append_partial_on_error / cancel_stream).
-                # This is deliberate and safe for two reasons, NOT because `+=` is one
-                # bytecode (it is not — `d[k] += s` compiles to load/add/STORE_SUBSCR):
-                #  1. Single writer: only this streaming thread ever writes a given
-                #     stream_id's buffers, so there is no writer/writer race to tear.
-                #  2. Reader/writer atomicity under the GIL: `+=` builds a complete new
-                #     immutable str, then the final STORE_SUBSCR that binds it into the
-                #     dict is a single atomic bytecode; a concurrent reader's dict.get
-                #     therefore returns either the old or the new *complete* string
-                #     object (strings are immutable — never a half-built one). Same for
-                #     the atomic list.append / single-key dict writes on the other two.
-                # So a reader sees a complete-but-possibly-stale value, never a torn one.
-                # The snapshot is a best-effort partial that later journal/SSE events
-                # reconcile, so exact-latest is not required. Taking STREAMS_LOCK per
-                # token would add real contention against readers copying large buffers
-                # and would entangle the documented LOCK -> STREAMS_LOCK ordering — not
-                # worth it for a recoverable staleness window.
-                if stream_id in STREAM_PARTIAL_TEXT:
-                    STREAM_PARTIAL_TEXT[stream_id] += str(text)
+                # Mirror recoverable partial text through its lifecycle owner;
+                # a late callback cannot recreate buffers after teardown.
+                append_runtime_partial_text(stream_id, text)
                 put('token', {'text': text})
                 # Update live throughput from stream delta callbacks, not from
                 # byte/character length. If a backend cannot provide live deltas,
@@ -7824,9 +7808,7 @@ def _run_agent_streaming(
                 # Mirror full concatenation to shared dict so cancel_stream() can persist
                 # it (#1361 §A). Cancel only creates one partial message, so the flat
                 # concatenation is correct there.
-                # Lock-free GIL-atomic mirror — see the STREAMS_LOCK contract in on_token.
-                if stream_id in STREAM_REASONING_TEXT:
-                    STREAM_REASONING_TEXT[stream_id] += reasoning_delta
+                append_runtime_reasoning_text(stream_id, reasoning_delta)
                 # Accumulate into a coalescing buffer so every delta reaches the
                 # browser — reasoning deltas are incremental, not idempotent.
                 _reasoning_buffer[0] += reasoning_delta
@@ -7948,10 +7930,8 @@ def _run_agent_streaming(
                         _reasoning_segments[_current_reasoning_idx] = (
                             _reasoning_segments.get(_current_reasoning_idx, '') + reason_delta
                         )
-                        # Mirror full concatenation to shared dict (#1361 §A)
-                        # Lock-free GIL-atomic mirror — see STREAMS_LOCK contract in on_token.
-                        if stream_id in STREAM_REASONING_TEXT:
-                            STREAM_REASONING_TEXT[stream_id] += reason_delta
+                        # Mirror full concatenation for cancellation recovery.
+                        append_runtime_reasoning_text(stream_id, reason_delta)
                         put('reasoning', {'text': reason_delta})
                         _metering_reasoning_deltas[0] += 1
                         meter().record_reasoning(stream_id, _metering_reasoning_deltas[0])
@@ -7981,14 +7961,12 @@ def _run_agent_streaming(
                         'name': name,
                         'args': args if isinstance(args, dict) else {},
                     })
-                    # Mirror to shared dict so cancel_stream() can persist it (#1361 §B)
-                    # Lock-free GIL-atomic mirror — see STREAMS_LOCK contract in on_token.
-                    if stream_id in STREAM_LIVE_TOOL_CALLS:
-                        STREAM_LIVE_TOOL_CALLS[stream_id].append({
-                            'name': name,
-                            'args': args if isinstance(args, dict) else {},
-                            'done': False,
-                        })
+                    # Mirror to the runtime owner so cancellation can persist it.
+                    start_runtime_tool_call(
+                        stream_id,
+                        name=name,
+                        args=args if isinstance(args, dict) else {},
+                    )
                     put('tool', {
                         'event_type': event_type or 'tool.started',
                         'name': name,
@@ -8044,16 +8022,12 @@ def _run_agent_streaming(
                             live_tc['duration'] = cb_kwargs.get('duration')
                             live_tc['is_error'] = bool(cb_kwargs.get('is_error', False))
                             break
-                    # Mirror done state to shared dict (#1361 §B)
-                    if stream_id in STREAM_LIVE_TOOL_CALLS:
-                        for shared_tc in reversed(STREAM_LIVE_TOOL_CALLS[stream_id]):
-                            if shared_tc.get('done'):
-                                continue
-                            if not name or shared_tc.get('name') == name:
-                                shared_tc['done'] = True
-                                shared_tc['duration'] = cb_kwargs.get('duration')
-                                shared_tc['is_error'] = bool(cb_kwargs.get('is_error', False))
-                                break
+                    finish_runtime_tool_call(
+                        stream_id,
+                        name=name,
+                        duration=cb_kwargs.get('duration'),
+                        is_error=bool(cb_kwargs.get('is_error', False)),
+                    )
                     # Signal the checkpoint thread that new work has completed (Issue #765).
                     # Each completed tool call is a meaningful unit of progress worth persisting.
                     _checkpoint_activity[0] += 1
@@ -8110,15 +8084,12 @@ def _run_agent_streaming(
                             'args': args if isinstance(args, dict) else {},
                             'tid': tool_call_id,
                         })
-                        # Mirror to shared dict so cancel_stream() can persist it (#1361 §B)
-                        # Lock-free GIL-atomic mirror — see STREAMS_LOCK contract in on_token.
-                        if stream_id in STREAM_LIVE_TOOL_CALLS:
-                            STREAM_LIVE_TOOL_CALLS[stream_id].append({
-                                'name': name,
-                                'args': args if isinstance(args, dict) else {},
-                                'done': False,
-                                'tid': tool_call_id,
-                            })
+                        start_runtime_tool_call(
+                            stream_id,
+                            name=name,
+                            args=args if isinstance(args, dict) else {},
+                            tool_call_id=tool_call_id,
+                        )
                         put('tool', {
                             'event_type': 'tool.started',
                             'name': name,
@@ -8146,14 +8117,12 @@ def _run_agent_streaming(
                                 live_tc['done'] = True
                                 live_tc['snippet'] = result_snippet
                                 break
-                        if stream_id in STREAM_LIVE_TOOL_CALLS:
-                            for shared_tc in reversed(STREAM_LIVE_TOOL_CALLS[stream_id]):
-                                if shared_tc.get('done'):
-                                    continue
-                                if shared_tc.get('tid') == tool_call_id or (not shared_tc.get('tid') and shared_tc.get('name') == name):
-                                    shared_tc['done'] = True
-                                    shared_tc['snippet'] = result_snippet
-                                    break
+                        finish_runtime_tool_call(
+                            stream_id,
+                            name=name,
+                            tool_call_id=tool_call_id,
+                            snippet=result_snippet,
+                        )
                         _checkpoint_activity[0] += 1
                         put('tool_complete', {
                             'event_type': 'tool.completed',
@@ -8670,19 +8639,17 @@ def _run_agent_streaming(
                     logger.debug('[webui] Created new agent for session %s', session_id)
 
             # Store agent instance for cancel/interrupt propagation
-            with STREAMS_LOCK:
-                AGENT_INSTANCES[stream_id] = agent
-                # Check if cancel was requested during agent initialization
-                if stream_id in CANCEL_FLAGS and CANCEL_FLAGS[stream_id].is_set():
-                    # Cancel arrived during agent creation - interrupt immediately
-                    try:
-                        agent.interrupt("Cancelled before start")
-                    except Exception:
-                        logger.debug("Failed to interrupt agent before start")
-                    with _agent_lock:
-                        _finalize_cancelled_turn(s, ephemeral=ephemeral, message='Task cancelled before start.')
-                    put('cancel', _cancel_event_payload('Cancelled by user'))
-                    return
+            if not attach_runtime_agent(stream_id, agent):
+                # Teardown/cancel won while the provider agent was being built.
+                # Do not republish the instance after its runtime owner ended.
+                try:
+                    agent.interrupt("Cancelled before start")
+                except Exception:
+                    logger.debug("Failed to interrupt agent before start")
+                with _agent_lock:
+                    _finalize_cancelled_turn(s, ephemeral=ephemeral, message='Task cancelled before start.')
+                put('cancel', _cancel_event_payload('Cancelled by user'))
+                return
 
             # Prepend workspace context so the agent always knows which directory
             # to use for file operations, regardless of session age or AGENTS.md defaults.
@@ -9282,8 +9249,12 @@ def _run_agent_streaming(
                             if 'credential_pool' in _agent_params:
                                 _agent_kwargs['credential_pool'] = _heal_rt.get('credential_pool')
                             agent = _AIAgent(**_agent_kwargs)
-                            with STREAMS_LOCK:
-                                AGENT_INSTANCES[stream_id] = agent
+                            if not attach_runtime_agent(stream_id, agent):
+                                try:
+                                    agent.interrupt("Cancelled during agent replacement")
+                                except Exception:
+                                    logger.debug("Failed to interrupt replacement agent")
+                                return
                             from api.config import SESSION_AGENT_CACHE as _SAC, SESSION_AGENT_CACHE_LOCK as _SAC_L
                             with _SAC_L:
                                 _SAC[session_id] = (agent, _agent_sig)
@@ -10503,8 +10474,12 @@ def _run_agent_streaming(
                     if 'credential_pool' in _agent_params:
                         _heal_kwargs['credential_pool'] = _heal_rt.get('credential_pool')
                     _heal_agent = _AIAgent(**_heal_kwargs)
-                    with STREAMS_LOCK:
-                        AGENT_INSTANCES[stream_id] = _heal_agent
+                    if not attach_runtime_agent(stream_id, _heal_agent):
+                        try:
+                            _heal_agent.interrupt("Cancelled during agent replacement")
+                        except Exception:
+                            logger.debug("Failed to interrupt replacement agent")
+                        return
                     from api.config import SESSION_AGENT_CACHE as _SAC2, SESSION_AGENT_CACHE_LOCK as _SAC2_L
                     with _SAC2_L:
                         _SAC2[session_id] = (_heal_agent, _agent_sig)

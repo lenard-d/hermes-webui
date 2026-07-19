@@ -8466,6 +8466,62 @@ def note_runtime_last_event_id(stream_id: str, event_id: str) -> None:
     RUNTIME_STATE.note_last_event_id(stream_id, event_id)
 
 
+def initialize_runtime_execution(stream_id: str, cancel_event) -> bool:
+    """Initialize recoverable producer buffers for an admitted live run."""
+    return RUNTIME_STATE.initialize_execution(stream_id, cancel_event)
+
+
+def append_runtime_partial_text(stream_id: str, text) -> bool:
+    return RUNTIME_STATE.append_partial_text(stream_id, text)
+
+
+def replace_runtime_partial_text(stream_id: str, text) -> bool:
+    return RUNTIME_STATE.replace_partial_text(stream_id, text)
+
+
+def append_runtime_reasoning_text(stream_id: str, text) -> bool:
+    return RUNTIME_STATE.append_reasoning_text(stream_id, text)
+
+
+def replace_runtime_reasoning_text(stream_id: str, text) -> bool:
+    return RUNTIME_STATE.replace_reasoning_text(stream_id, text)
+
+
+def start_runtime_tool_call(
+    stream_id: str,
+    *,
+    name,
+    args,
+    tool_call_id=None,
+) -> bool:
+    return RUNTIME_STATE.start_tool_call(
+        stream_id,
+        name=name,
+        args=args,
+        tool_call_id=tool_call_id,
+    )
+
+
+def finish_runtime_tool_call(
+    stream_id: str,
+    *,
+    name=None,
+    tool_call_id=None,
+    **metadata,
+) -> bool:
+    return RUNTIME_STATE.finish_tool_call(
+        stream_id,
+        name=name,
+        tool_call_id=tool_call_id,
+        **metadata,
+    )
+
+
+def attach_runtime_agent(stream_id: str, agent) -> bool:
+    """Expose an agent for cancellation only while its run remains live."""
+    return RUNTIME_STATE.attach_agent(stream_id, agent)
+
+
 def runtime_progress_snapshot(stream_id: str):
     """Return an immutable copy of terminally relevant live progress."""
     return RUNTIME_STATE.progress_snapshot(stream_id)

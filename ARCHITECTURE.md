@@ -188,13 +188,18 @@ See Architecture Phase B for the fix.
 Four ownership seams now replace repeated state manipulation while the
 larger migration remains incremental:
 
-- `api/runtime_state.py` owns publication, immutable progress/cancellation snapshots, and terminal
-  cleanup of process-local stream/run registries. It also owns the cross-registry
-  admission decision and bounded stale-worker reconciliation. Callers register a
-  stream through `register_runtime_stream()`, read terminal progress through
+- `api/runtime_state.py` owns publication, execution-buffer initialization,
+  partial/reasoning/tool progress, agent attachment, immutable
+  progress/cancellation snapshots, and terminal cleanup of process-local
+  stream/run registries. It also owns the cross-registry admission decision and
+  bounded stale-worker reconciliation. Callers register a stream through
+  `register_runtime_stream()`, publish execution progress through the
+  `*_runtime_*` producer functions, read terminal progress through
   `runtime_progress_snapshot()`, claim cancel through `begin_runtime_cancel()`,
-  and finish through `finish_runtime_run()`; they must
-  not independently clear individual per-run dictionaries. Route diagnostics,
+  and finish through `finish_runtime_run()`; they must not independently mutate
+  or clear individual per-run dictionaries. Empty legacy buffer aliases remain
+  temporarily compatible, but cannot revive a released run or reset real
+  progress. Route diagnostics,
   SSE attachment, cursor lookup, and model recovery consume immutable registry
   views rather than importing the dictionaries; local and Gateway event
   producers publish their durable cursor through the same owner. This is not yet the complete

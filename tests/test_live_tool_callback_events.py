@@ -32,7 +32,8 @@ def test_tool_start_callback_emits_existing_tool_sse_event_with_tool_id():
     assert "_live_tool_event_start_ids" in block, (
         "Tool start SSE emission should be idempotent per callback id."
     )
-    assert "STREAM_LIVE_TOOL_CALLS" in block and "'done': False" in block
+    assert "start_runtime_tool_call(" in block
+    assert "tool_call_id=tool_call_id" in block
 
 
 def test_tool_complete_callback_emits_existing_tool_complete_sse_event_with_tool_id():

@@ -82,8 +82,12 @@ internal. It is substantially deeper than similarly sized global script files.
 Priority: critical
 
 Remediation status: in progress. `api/runtime_state.py` now owns process-local
-liveness, admission blocking, immutable progress/cancellation snapshots, stale-worker
-reconciliation, terminal cleanup, and copied views for route/model consumers.
+liveness, admission blocking, execution-buffer initialization, partial and
+reasoning text, tool-call lifecycle, agent attachment, immutable
+progress/cancellation snapshots, stale-worker reconciliation, terminal cleanup,
+and copied views for route/model consumers. Local and Gateway execution now use
+the same producer Interface; a late callback cannot recreate buffers or an agent
+after teardown, and a stable tool-call ID cannot complete a same-name sibling.
 `api/routes.py` and `api/models.py` no longer import the mutable transport,
 worker, or event-cursor registries, and both local and Gateway producers record
 the cursor through the runtime owner. `api/turn_admission.py` now owns the
