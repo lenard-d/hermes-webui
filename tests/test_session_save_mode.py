@@ -5,8 +5,8 @@ import pytest
 
 import api.config as config
 import api.models as models
-import api.routes as routes
 import api.streaming as streaming
+import api.turn_admission as turn_admission
 from api.models import Session, new_session
 
 
@@ -56,9 +56,9 @@ def test_eager_mode_still_does_not_save_empty_new_sessions(_isolate_state, monke
 def test_deferred_chat_start_persists_pending_only_before_thread(_isolate_state, monkeypatch):
     monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "deferred"}})
     s = new_session(workspace=str(_isolate_state.parent))
-    routes._prepare_chat_start_session_for_stream(
+    turn_admission.prepare_session_for_turn(
         s,
-        msg="hello deferred",
+        message="hello deferred",
         attachments=[],
         workspace=str(_isolate_state.parent),
         model=s.model,
@@ -74,9 +74,9 @@ def test_deferred_chat_start_persists_pending_only_before_thread(_isolate_state,
 def test_eager_chat_start_checkpoints_first_user_message_before_thread(_isolate_state, monkeypatch):
     monkeypatch.setattr(config, "cfg", {"webui": {"session_save_mode": "eager"}})
     s = new_session(workspace=str(_isolate_state.parent))
-    routes._prepare_chat_start_session_for_stream(
+    turn_admission.prepare_session_for_turn(
         s,
-        msg="hello eager",
+        message="hello eager",
         attachments=[{"name": "note.txt", "path": "", "mime": "text/plain"}],
         workspace=str(_isolate_state.parent),
         model=s.model,

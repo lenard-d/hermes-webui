@@ -75,51 +75,52 @@ def test_streaming_sets_pending_goal_continuation_on_goal_continue():
     assert goal_continue_idx != -1 and pending_idx != -1
 
 
-# ---------------------------------------------------------------------------
-# Test 5: routes.py reads PENDING_GOAL_CONTINUATION and marks stream
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("explicit_goal", [False, True])
+def test_turn_admission_marks_continuation_and_explicit_goal_streams(
+    monkeypatch,
+    explicit_goal,
+):
+    """Both goal entry paths publish the accepted stream as goal-related."""
+    import api.config as config
+    import api.turn_admission as turn_admission
 
-def test_routes_reads_pending_goal_continuation():
-    """The chat/start handler must check PENDING_GOAL_CONTINUATION and mark
-    the new stream as goal-related."""
-    from pathlib import Path
-    routes_py = (Path(__file__).resolve().parents[1] / "api" / "routes.py").read_text()
+    class Session:
+        session_id = f"goal-admission-{explicit_goal}"
+        profile = None
+        title = "Goal"
+        active_stream_id = None
+        pending_user_message = None
+        pending_started_at = None
+        messages = []
+        worktree_path = None
 
-    assert "PENDING_GOAL_CONTINUATION" in routes_py, (
-        "routes.py must reference PENDING_GOAL_CONTINUATION"
-    )
-    assert "STREAM_GOAL_RELATED" in routes_py, (
-        "routes.py must reference STREAM_GOAL_RELATED to mark goal-related streams"
-    )
+        def save(self, *args, **kwargs):
+            return None
 
-
-# ---------------------------------------------------------------------------
-# Test 6: routes.py marks goal kickoff streams as goal-related
-# ---------------------------------------------------------------------------
-
-def test_routes_marks_goal_kickoff_as_goal_related():
-    """The /api/goal handler must mark the kickoff stream as goal-related."""
-    from pathlib import Path
-    routes_py = (Path(__file__).resolve().parents[1] / "api" / "routes.py").read_text()
-
-    # After kickoff stream is started, it must mark the stream
-    kickoff_idx = routes_py.find("kickoff_prompt")
-    stream_goal_idx = routes_py.find("STREAM_GOAL_RELATED")
-    assert kickoff_idx != -1 and stream_goal_idx != -1
-
-
-# ---------------------------------------------------------------------------
-# Test 7: _start_chat_stream_for_session passes goal_related through
-# ---------------------------------------------------------------------------
-
-def test_start_chat_stream_accepts_goal_related():
-    """_start_chat_stream_for_session must accept goal_related kwarg."""
-    from pathlib import Path
-    routes_py = (Path(__file__).resolve().parents[1] / "api" / "routes.py").read_text()
-
-    assert "goal_related" in routes_py, (
-        "routes.py must reference goal_related parameter"
-    )
+    session = Session()
+    if not explicit_goal:
+        config.PENDING_GOAL_CONTINUATION.add(session.session_id)
+    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_a, **_k: {})
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
+    try:
+        result = turn_admission.start_local_turn(
+            session,
+            turn_admission.LocalTurnRequest(
+                message="continue goal",
+                attachments=[],
+                workspace="/tmp/workspace",
+                model="test-model",
+                goal_related=explicit_goal,
+            ),
+            worker_target=lambda *_a, **_k: None,
+            clear_stale_stream=lambda _session: False,
+        )
+        assert config.STREAM_GOAL_RELATED[result["stream_id"]] is True
+        assert session.session_id not in config.PENDING_GOAL_CONTINUATION
+    finally:
+        config.PENDING_GOAL_CONTINUATION.discard(session.session_id)
+        if "result" in locals():
+            config.finish_runtime_run(result["stream_id"])
 
 
 # ---------------------------------------------------------------------------
@@ -214,13 +215,13 @@ def test_goal_evaluate_after_turn_only_increments_for_user_initiated(monkeypatch
     monkeypatch.setattr(webui_goals, "_default_max_turns", lambda: 10)
 
     # user_initiated=True should increment
-    result1 = webui_goals.evaluate_goal_after_turn(
+    webui_goals.evaluate_goal_after_turn(
         "sid-1", "goal response", user_initiated=True, profile_home=None
     )
     assert len(turns_incremented) == 1
 
     # user_initiated=False should NOT increment
-    result2 = webui_goals.evaluate_goal_after_turn(
+    webui_goals.evaluate_goal_after_turn(
         "sid-1", "unrelated response", user_initiated=False, profile_home=None
     )
     assert len(turns_incremented) == 1, (

@@ -444,9 +444,9 @@ def test_runner_owned_start_run_does_not_enter_local_stream_barrier(monkeypatch)
 @pytest.mark.parametrize("gateway_owned", [False, True])
 def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gateway_owned):
     """The barrier and worker must share one immutable backend decision."""
+    from api import config
     from api import routes
-    from api import turn_journal
-    from api.config import unregister_stream_owner
+    from api import turn_admission
 
     gateway_reads = []
     revision_checks = []
@@ -483,12 +483,11 @@ def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gatew
         "ensure_agent_runtime_current",
         lambda: revision_checks.append(True),
     )
-    monkeypatch.setattr(routes, "_active_run_stream_for_session", lambda _sid: None)
-    monkeypatch.setattr(routes, "_is_hidden_empty_session", lambda _session: False)
-    monkeypatch.setattr(routes, "_prepare_chat_start_session_for_stream", prepare)
-    monkeypatch.setattr(routes, "set_last_workspace", lambda _workspace: None)
-    monkeypatch.setattr(routes.threading, "Thread", FakeThread)
-    monkeypatch.setattr(turn_journal, "append_turn_journal_event", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(turn_admission, "_was_hidden_empty_session", lambda _session: False)
+    monkeypatch.setattr(turn_admission, "prepare_session_for_turn", prepare)
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _workspace: None)
+    monkeypatch.setattr(turn_admission.threading, "Thread", FakeThread)
+    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_args, **_kwargs: {})
 
     response = routes._start_chat_stream_for_session(
         session,
@@ -511,10 +510,7 @@ def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gatew
         assert worker_targets == [expected_worker]
     finally:
         stream_id = str(response.get("stream_id") or "")
-        with routes.STREAMS_LOCK:
-            routes.STREAMS.pop(stream_id, None)
-        unregister_stream_owner(stream_id)
-        routes.STREAM_GOAL_RELATED.pop(stream_id, None)
+        config.finish_runtime_run(stream_id)
 
 
 @pytest.mark.parametrize(

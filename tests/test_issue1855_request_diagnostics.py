@@ -91,20 +91,55 @@ def test_all_sessions_reports_internal_index_stages(tmp_path, monkeypatch):
     assert "all_sessions.lineage_metadata" in diag.stages
 
 
-def test_issue1855_target_routes_are_wired_to_diagnostics():
+def test_issue1855_target_routes_are_wired_to_diagnostics(monkeypatch):
+    import api.config as config
+    import api.turn_admission as turn_admission
+
     src = Path("api/routes.py").read_text(encoding="utf-8")
 
     assert 'RequestDiagnostics.maybe_start("GET", parsed.path' in src
     assert "all_sessions(diag=diag, include_lineage_metadata=False)" in src
     assert 'RequestDiagnostics.maybe_start("POST", parsed.path' in src
     assert "_handle_chat_start(handler, body, diag=diag)" in src
-    for stage in (
-        "read_body",
-        "resolve_model_provider",
-        "session_lock_wait",
-        "save_pending_state",
-        "stream_registration",
-        "worker_thread_start",
-        "response_write",
-    ):
+    for stage in ("read_body", "resolve_model_provider", "response_write"):
         assert stage in src
+
+    class Session:
+        session_id = "diagnostic-admission"
+        profile = None
+        title = "Diagnostics"
+        active_stream_id = None
+        pending_user_message = None
+        pending_started_at = None
+        messages = []
+        worktree_path = None
+
+        def save(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_a, **_k: {})
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
+    diag = _StageRecorder()
+    result = turn_admission.start_local_turn(
+        Session(),
+        turn_admission.LocalTurnRequest(
+            message="trace admission",
+            attachments=[],
+            workspace="/tmp/workspace",
+            model="test-model",
+        ),
+        worker_target=lambda *_a, **_k: None,
+        clear_stale_stream=lambda _session: False,
+        diag=diag,
+    )
+    try:
+        for stage in (
+            "active_stream_check",
+            "session_lock_wait",
+            "save_pending_state",
+            "stream_registration",
+            "worker_thread_start",
+        ):
+            assert stage in diag.stages
+    finally:
+        config.finish_runtime_run(result["stream_id"])

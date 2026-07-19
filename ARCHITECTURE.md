@@ -63,6 +63,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       profiles.py          Profile state management, hermes_cli wrapper
       runtime_state.py     Process-local stream/run ownership and terminal cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
+      turn_admission.py    Atomic local-turn admission, pending persistence, journal, stream, worker
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            All GET + POST route handlers (if/elif dispatch, no decorators)
       startup.py           Startup helpers: auto_install_agent_deps()
@@ -175,14 +176,22 @@ See Architecture Phase B for the fix.
 
 ### 4.0 Implemented ownership seams
 
-Three narrow ownership seams now replace repeated state manipulation while the
+Four ownership seams now replace repeated state manipulation while the
 larger migration remains incremental:
 
 - `api/runtime_state.py` owns publication and terminal cleanup of process-local
-  stream/run registries. Callers register a stream through
+  stream/run registries. It also owns the cross-registry admission decision and
+  bounded stale-worker reconciliation. Callers register a stream through
   `register_runtime_stream()` and finish it through `finish_runtime_run()`;
   they must not independently clear individual per-run dictionaries. This is
   not yet the complete browser-turn runtime described by the run-adapter RFC.
+- `api/turn_admission.py` owns the synchronous local-turn transition after HTTP
+  validation: claim the session, consume single-use continuation markers,
+  persist pending ownership, append the submitted journal event, publish the
+  SSE stream, and launch exactly one worker. `api/routes.py` chooses the local
+  or gateway worker and delegates this transition instead of coordinating the
+  registries itself. Provider execution and terminal persistence remain in the
+  runtime adapter and streaming Modules.
 - `api/session_repository.py` owns the mutation protocol for WebUI session
   sidecars: acquire the per-session owner lock, reject identity mismatches,
   upgrade metadata-only projections, publish the full object to the LRU, and

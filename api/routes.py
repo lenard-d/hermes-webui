@@ -2794,10 +2794,11 @@ from api.config import (
     MAX_UPLOAD_BYTES,
     ACTIVE_RUNS,
     ACTIVE_RUNS_LOCK,
-    register_stream_owner,
     register_runtime_stream,
     stream_owner_session_id,
-    unregister_stream_owner,
+    blocking_runtime_stream,
+    runtime_stream_alive,
+    runtime_worker_alive,
     CHAT_LOCK,
     _get_session_agent_lock,
     SESSION_AGENT_LOCKS,
@@ -2814,9 +2815,6 @@ from api.config import (
     set_reasoning_display,
     set_reasoning_effort,
     create_stream_channel,
-    get_webui_session_save_mode,
-    STREAM_GOAL_RELATED,
-    PENDING_GOAL_CONTINUATION,
     _get_config_path,
     _load_yaml_config_file,
     _save_yaml_config_file,
@@ -2844,6 +2842,10 @@ from api.agent_health import build_agent_health_payload
 from api.gateway_chat import gateway_chat_config_status
 from api.request_diagnostics import RequestDiagnostics
 from api.system_health import build_system_health_payload
+from api.turn_admission import (
+    LocalTurnRequest,
+    start_local_turn,
+)
 
 
 def _kanban_unknown_endpoint(handler, parsed, method: str) -> bool:
@@ -2875,17 +2877,9 @@ def _clear_stale_stream_state(session) -> bool:
     stream_id = getattr(session, "active_stream_id", None)
     if not stream_id:
         return False
-    with STREAMS_LOCK:
-        stream_alive = stream_id in STREAMS
-    if stream_alive:
+    if runtime_stream_alive(stream_id):
         return False
-    try:
-        from api import config as _live_config
-        with _live_config.ACTIVE_RUNS_LOCK:
-            worker_alive = stream_id in (_live_config.ACTIVE_RUNS or {})
-    except Exception:
-        worker_alive = False
-    if worker_alive:
+    if runtime_worker_alive(stream_id):
         logger.debug(
             "_clear_stale_stream_state: stream %s for session %s missing SSE channel "
             "but worker bookkeeping is still active; deferring stale cleanup",
@@ -20850,144 +20844,6 @@ def _handle_background(handler, body):
     return j(handler, {"task_id": task_id, "stream_id": stream_id, "session_id": bg.session_id})
 
 
-def _checkpoint_user_message_for_eager_session_save(s, msg: str, attachments, started_at: float | None, source: str = "webui") -> None:
-    """Materialize the current user turn for eager first-turn persistence.
-
-    The streaming thread still receives ``pending_user_message`` so existing
-    cancel/recovery/final-merge paths keep their current contract. Eager mode
-    only adds a durable display-message checkpoint before the agent launches.
-    """
-    if not msg:
-        return
-    existing = list(getattr(s, "messages", None) or [])
-    if existing:
-        latest = existing[-1]
-        if isinstance(latest, dict) and latest.get("role") == "user":
-            latest_text = " ".join(str(latest.get("content") or "").split())
-            msg_text = " ".join(str(msg or "").split())
-            if latest_text == msg_text:
-                return
-    user_msg = {"role": "user", "content": msg}
-    if source and source != "webui":
-        user_msg["_source"] = source
-    if isinstance(started_at, (int, float)) and started_at > 0:
-        user_msg["timestamp"] = int(started_at)
-    if attachments:
-        user_msg["attachments"] = list(attachments)
-    s.messages.append(user_msg)
-    # The new user turn is now committed to messages (#3831): advance the
-    # truncation watermark to the new message's timestamp so that
-    # merge_session_messages_append_only() still filters out replaced
-    # pre-edit rows from state.db whose timestamps fall below the boundary.
-    # The merge's sidecar_advanced_past_watermark guard (models.py:5172)
-    # allows state.db rows newer than the watermark, so post-edit turns
-    # are not dropped. Never 0.0 (the truncate-to-empty sentinel, #2914).
-    if getattr(s, "truncation_watermark", None):
-        s.truncation_watermark = user_msg.get("timestamp") or time.time()
-
-
-def _is_default_or_empty_session_title(title) -> bool:
-    return str(title or "").strip() in ("", "Untitled", "New Chat")
-
-
-def _provisional_title_from_prompt(prompt: str, fallback: str = "Untitled") -> str:
-    text = str(prompt or "").strip()
-    if not text:
-        return fallback
-    return title_from([{"role": "user", "content": text}], fallback) or fallback
-
-
-def _prepare_chat_start_session_for_stream(
-    s,
-    *,
-    msg: str,
-    attachments,
-    workspace: str,
-    model: str,
-    model_provider,
-    stream_id: str,
-    started_at: float | None = None,
-    source: str = "webui",
-):
-    """Persist chat-start state according to webui.session_save_mode.
-
-    ``deferred`` keeps the existing sidecar/WAL-backed behaviour: save pending
-    fields but leave the display transcript empty until the agent merges the
-    result. ``eager`` additionally writes the current user turn into messages so
-    a process restart immediately after /api/chat/start preserves the prompt as
-    a normal session message. Empty sessions are never saved here because this
-    helper only runs after a non-empty message is validated.
-    """
-    s.workspace = workspace
-    s.model = model
-    s.model_provider = model_provider
-    s.active_stream_id = stream_id
-    s.post_compression_context_tokens_estimate = None
-    s.pending_user_message = msg
-    s.pending_attachments = attachments
-    s.pending_started_at = started_at if started_at is not None else time.time()
-    s.pending_user_source = source
-    current_title = getattr(s, "title", None)
-    if _is_default_or_empty_session_title(current_title):
-        provisional_title = _provisional_title_from_prompt(msg, current_title or "Untitled")
-        if provisional_title and not _is_default_or_empty_session_title(provisional_title):
-            s.title = provisional_title
-    if get_webui_session_save_mode() == "eager":
-        _checkpoint_user_message_for_eager_session_save(
-            s,
-            msg,
-            attachments,
-            s.pending_started_at,
-            source=source,
-        )
-    s.save()
-
-
-def _is_hidden_empty_session(s) -> bool:
-    return (
-        getattr(s, "title", "Untitled") == "Untitled"
-        and not getattr(s, "messages", None)
-        and not getattr(s, "active_stream_id", None)
-        and not getattr(s, "pending_user_message", None)
-        and not getattr(s, "worktree_path", None)
-    )
-
-
-def _active_stream_blocks_chat_start(session, stream_id: str | None) -> bool:
-    """Return whether an active_stream_id still owns this session's next turn.
-
-    ``active_stream_id`` is written before the SSE channel is registered, so a
-    very fresh pending turn must also block duplicate chat_start requests. If we
-    only check STREAMS here, a second request can race through the registration
-    gap and overwrite the sidecar owner.
-    """
-    if not stream_id:
-        return False
-    with STREAMS_LOCK:
-        if stream_id in STREAMS:
-            return True
-    try:
-        from api import config as _live_config
-        with _live_config.ACTIVE_RUNS_LOCK:
-            if stream_id in (_live_config.ACTIVE_RUNS or {}):
-                return True
-    except Exception:
-        pass
-    if getattr(session, "pending_user_message", None):
-        try:
-            from api.models import _REPAIR_STALE_PENDING_GRACE_SECONDS
-            grace_seconds = float(_REPAIR_STALE_PENDING_GRACE_SECONDS)
-        except Exception:
-            grace_seconds = 30.0
-        try:
-            pending_started_at = float(getattr(session, "pending_started_at", None) or 0)
-        except Exception:
-            pending_started_at = 0.0
-        if pending_started_at and time.time() - pending_started_at < grace_seconds:
-            return True
-    return False
-
-
 def _active_run_stream_for_session(session_id: str | None) -> str | None:
     """Return a live worker stream for this session even if sidecar stream id is clear.
 
@@ -21004,55 +20860,10 @@ def _active_run_stream_for_session(session_id: str | None) -> str | None:
     or leaked by SIGKILL without restart) must NOT 409 the session forever — so an
     entry older than the unwind ceiling (180s) is treated as stale and ignored
     here. A legitimately long-running turn keeps ``active_stream_id`` SET
-    and is handled by ``_active_stream_blocks_chat_start`` above; this guard only
-    covers the cleared-stream-id unwind window. (Codex brick-gate hardening, #3822.)
+    and is handled by turn admission; this helper covers only the
+    cleared-stream-id unwind window. (Codex brick-gate hardening, #3822.)
     """
-    sid = str(session_id or "").strip()
-    if not sid:
-        return None
-    ceiling = 180.0  # generous vs the 15s checkpoint-join unwind; finite to avoid permanent-409
-    now = time.time()
-    try:
-        from api import config as _live_config
-        # Snapshot the live-worker set BEFORE taking ACTIVE_RUNS_LOCK (sequential,
-        # not nested, so no lock-ordering/deadlock risk). A long turn whose
-        # active_stream_id was already cleared during final writeback can still be
-        # mid-teardown — its STREAMS entry present — past the age ceiling, so age
-        # alone must NOT pop its lifecycle row (health / background-wakeup /
-        # active-agent-cache consumers read ACTIVE_RUNS as worker-lifecycle truth).
-        with _live_config.STREAMS_LOCK:
-            live_stream_ids = set(_live_config.STREAMS.keys())
-        stale_stream_ids = []
-        with _live_config.ACTIVE_RUNS_LOCK:
-            for run_stream_id, raw in list((_live_config.ACTIVE_RUNS or {}).items()):
-                stream_id = str((raw or {}).get("stream_id") or run_stream_id or "").strip()
-                run_sid = str((raw or {}).get("session_id") or "").strip()
-                if run_sid != sid or not stream_id:
-                    continue
-                try:
-                    started_at = float((raw or {}).get("started_at") or 0)
-                except (TypeError, ValueError):
-                    started_at = 0.0
-                # Past the unwind ceiling: never block a successor on it (the
-                # anti-permanent-409 guarantee, #3822). Additionally reconcile the
-                # zombie out of ACTIVE_RUNS so health/recovery polling stops seeing a
-                # half-alive run — but ONLY when the worker is truly gone from
-                # STREAMS, so a still-live / still-tearing-down worker keeps its
-                # lifecycle row. Pop by the real dict key. (Codex gate, #4492)
-                if started_at and (now - started_at) > ceiling:
-                    if run_stream_id not in live_stream_ids and stream_id not in live_stream_ids:
-                        stale_stream_ids.append(run_stream_id)
-                    continue
-                return stream_id
-            for stale_stream_id in stale_stream_ids:
-                (_live_config.ACTIVE_RUNS or {}).pop(stale_stream_id, None)
-                # The zombie run is pruned directly here (not via the normal teardown
-                # finally / unregister_active_run), so release its stream-owner entry too
-                # or STREAM_SESSION_OWNERS leaks for every reconciled zombie. (#5198 gate)
-                unregister_stream_owner(stale_stream_id)
-    except Exception:
-        return None
-    return None
+    return blocking_runtime_stream(str(session_id or ""))
 
 
 def _agent_runtime_barrier_response(
@@ -21095,7 +20906,7 @@ def _start_chat_stream_for_session(
     moa_config=None,
     external_runtime_owned: bool | None = None,
 ):
-    """Persist pending state, register an SSE channel, and start an agent turn."""
+    """Select the execution owner and delegate local admission as one transition."""
     if external_runtime_owned is None:
         external_runtime_owned = webui_gateway_chat_enabled(get_config())
     backend_is_gateway = bool(external_runtime_owned)
@@ -21105,147 +20916,24 @@ def _start_chat_stream_for_session(
     if stale_response is not None:
         stale_response["_status"] = 409
         return stale_response
-    attachments = attachments or []
-    # Prevent duplicate runs in the same session while a stream is still active.
-    # This commonly happens after page refresh/reconnect races and can produce
-    # duplicated clarify cards for what appears to be a single user request.
-    diag.stage("active_stream_check") if diag else None
-    current_stream_id = getattr(s, "active_stream_id", None)
-    if current_stream_id:
-        if _active_stream_blocks_chat_start(s, current_stream_id):
-            diag.stage("response_write") if diag else None
-            return {
-                "error": "session already has an active stream",
-                "active_stream_id": current_stream_id,
-                "_status": 409,
-            }
-        # Stale stream id from a previous run; clear and continue.
-        diag.stage("stale_stream_cleanup") if diag else None
-        _clear_stale_stream_state(s)
-
-    # #1932: check if this session has a pending goal continuation flag.
-    # The streaming hook sets PENDING_GOAL_CONTINUATION when goal_continue fires,
-    # so the next chat/start for this session is automatically treated as goal-related.
-    if not goal_related and s.session_id in PENDING_GOAL_CONTINUATION:
-        goal_related = True
-        PENDING_GOAL_CONTINUATION.discard(s.session_id)
-
-    # process_complete wakeup (ours-original, Option B): if this session has a
-    # pending process_complete marker (set by api/background_process.py drain),
-    # discard it atomically here. Mirrors the goal_continue pattern (#1932).
-    # The marker is server-internal telemetry; the actual wakeup is delivered
-    # either server-side (Option Z) or via the PR #2279 next-turn drain.
-    if s.session_id in PENDING_BG_TASK_COMPLETIONS:
-        PENDING_BG_TASK_COMPLETIONS.discard(s.session_id)
-
-    session_lock = _get_session_agent_lock(s.session_id)
-    diag.stage("session_lock_wait") if diag else None
-    while True:
-        with session_lock:
-            locked_stream_id = getattr(s, "active_stream_id", None)
-            if locked_stream_id:
-                if _active_stream_blocks_chat_start(s, locked_stream_id):
-                    diag.stage("response_write") if diag else None
-                    return {
-                        "error": "session already has an active stream",
-                        "active_stream_id": locked_stream_id,
-                        "_status": 409,
-                    }
-                needs_stale_cleanup = True
-            else:
-                blocking_run_stream_id = _active_run_stream_for_session(s.session_id)
-                if blocking_run_stream_id:
-                    diag.stage("response_write") if diag else None
-                    return {
-                        "error": "session already has an active stream",
-                        "active_stream_id": blocking_run_stream_id,
-                        "_status": 409,
-                    }
-                needs_stale_cleanup = False
-                stream_id = uuid.uuid4().hex
-                diag.stage("save_pending_state") if diag else None
-                was_hidden_empty_session = _is_hidden_empty_session(s)
-                _prepare_chat_start_session_for_stream(
-                    s,
-                    msg=msg,
-                    attachments=attachments,
-                    workspace=workspace,
-                    model=model,
-                    model_provider=model_provider,
-                    stream_id=stream_id,
-                    source=source,
-                )
-                break
-        if needs_stale_cleanup:
-            diag.stage("stale_stream_cleanup") if diag else None
-            cleared = _clear_stale_stream_state(s)
-            if not cleared and getattr(s, "active_stream_id", None):
-                diag.stage("response_write") if diag else None
-                return {
-                    "error": "session already has an active stream",
-                    "active_stream_id": getattr(s, "active_stream_id", None),
-                    "_status": 409,
-                }
-    if was_hidden_empty_session:
-        publish_session_list_changed(
-            "session_new",
-            profile=getattr(s, "profile", None),
-            session_id=getattr(s, "session_id", None),
-        )
-    diag.stage("turn_journal_submitted") if diag else None
-    journal_event = {}
-    try:
-        from api.turn_journal import append_turn_journal_event
-        journal_event = append_turn_journal_event(
-            s.session_id,
-            {
-                "event": "submitted",
-                "stream_id": stream_id,
-                "role": "user",
-                "content": msg,
-                "attachments": attachments,
-                "workspace": workspace,
-                "model": model,
-                "model_provider": model_provider,
-                "created_at": s.pending_started_at,
-            },
-        )
-    except Exception:
-        logger.warning("Failed to append submitted turn journal event", exc_info=True)
-    diag.stage("set_last_workspace") if diag else None
-    set_last_workspace(workspace)
-    diag.stage("stream_registration") if diag else None
-    stream = create_stream_channel()
-    register_runtime_stream(
-        stream_id,
-        s.session_id,
-        stream,
-        goal_related=goal_related,
-    )
-    diag.stage("worker_thread_start") if diag else None
     worker_target = _run_gateway_chat_streaming if backend_is_gateway else _run_agent_streaming
-    worker_kwargs = {"model_provider": model_provider, "goal_related": goal_related}
-    if moa_config and not backend_is_gateway:
-        worker_kwargs["moa_config"] = moa_config
-    thr = threading.Thread(
-        target=worker_target,
-        args=(s.session_id, msg, model, workspace, stream_id, attachments),
-        kwargs=worker_kwargs,
-        daemon=True,
+    return start_local_turn(
+        s,
+        LocalTurnRequest(
+            message=msg,
+            attachments=list(attachments or []),
+            workspace=workspace,
+            model=model,
+            model_provider=model_provider,
+            normalized_model=normalized_model,
+            goal_related=goal_related,
+            source=source,
+            moa_config=moa_config if not backend_is_gateway else None,
+        ),
+        worker_target=worker_target,
+        clear_stale_stream=_clear_stale_stream_state,
+        diag=diag,
     )
-    thr.start()
-    response = {
-        "stream_id": stream_id,
-        "session_id": s.session_id,
-        "pending_started_at": s.pending_started_at,
-        "turn_id": journal_event.get("turn_id"),
-        "title": s.title,
-    }
-    if normalized_model:
-        response["effective_model"] = model
-    if model_provider:
-        response["effective_model_provider"] = model_provider
-    return response
 
 
 def _runtime_runner_client_factory():

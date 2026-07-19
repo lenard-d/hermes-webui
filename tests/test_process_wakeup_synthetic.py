@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from api.models import Session, _append_recovered_pending_turn, _apply_core_sync_or_error_marker
-from api.routes import _checkpoint_user_message_for_eager_session_save
+from api.turn_admission import checkpoint_user_message
 from api.streaming import _materialize_pending_user_turn_before_error, _merge_display_messages_after_agent_result
 
 
@@ -55,9 +55,9 @@ def test_checkpoint_user_message_stamps_process_wakeup_source():
     """Verify eager-path checkpoint stamps _source on message dict when source is process_wakeup."""
     s = Session(session_id="test-session-4")
     s.messages = []
-    _checkpoint_user_message_for_eager_session_save(
+    checkpoint_user_message(
         s,
-        msg="[IMPORTANT: Wakeup prompt]",
+        message="[IMPORTANT: Wakeup prompt]",
         attachments=[],
         started_at=time.time(),
         source="process_wakeup",
@@ -73,9 +73,9 @@ def test_checkpoint_user_message_skips_webui_source():
     """Verify eager-path checkpoint does NOT stamp _source when source is webui (default)."""
     s = Session(session_id="test-session-5")
     s.messages = []
-    _checkpoint_user_message_for_eager_session_save(
+    checkpoint_user_message(
         s,
-        msg="Normal user message",
+        message="Normal user message",
         attachments=[],
         started_at=time.time(),
         source="webui",
@@ -91,9 +91,9 @@ def test_checkpoint_user_message_defaults_to_no_source():
     """Verify eager-path checkpoint does NOT stamp _source when source is omitted (defaults to webui)."""
     s = Session(session_id="test-session-6")
     s.messages = []
-    _checkpoint_user_message_for_eager_session_save(
+    checkpoint_user_message(
         s,
-        msg="Another user message",
+        message="Another user message",
         attachments=[],
         started_at=time.time(),
     )

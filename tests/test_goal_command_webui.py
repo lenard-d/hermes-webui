@@ -1,7 +1,5 @@
 """Regression tests for first-class WebUI /goal command parity."""
 
-import io
-import json
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -389,7 +387,7 @@ def test_routes_register_goal_endpoint_and_kickoff_stream():
 
 def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_path):
     from api import routes
-    import api.turn_journal as turn_journal
+    import api.turn_admission as turn_admission
 
     class FakeSession:
         session_id = "sid-goal-related-gateway"
@@ -414,17 +412,15 @@ def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_pat
         session.pending_started_at = 123.0
         session.title = "Goal Chat"
 
-    monkeypatch.setattr(routes, "_get_session_agent_lock", lambda *args, **kwargs: threading.Lock())
-    monkeypatch.setattr(routes, "_active_stream_blocks_chat_start", lambda *args, **kwargs: False)
-    monkeypatch.setattr(routes, "_active_run_stream_for_session", lambda *args, **kwargs: None)
-    monkeypatch.setattr(routes, "_prepare_chat_start_session_for_stream", fake_prepare)
-    monkeypatch.setattr(routes, "_is_hidden_empty_session", lambda *args, **kwargs: False)
-    monkeypatch.setattr(routes, "publish_session_list_changed", lambda *args, **kwargs: None)
-    monkeypatch.setattr(routes, "set_last_workspace", lambda *args, **kwargs: None)
-    monkeypatch.setattr(turn_journal, "append_turn_journal_event", lambda *args, **kwargs: {})
+    monkeypatch.setattr(turn_admission, "_get_session_agent_lock", lambda *args, **kwargs: threading.Lock())
+    monkeypatch.setattr(turn_admission, "prepare_session_for_turn", fake_prepare)
+    monkeypatch.setattr(turn_admission, "_was_hidden_empty_session", lambda *args, **kwargs: False)
+    monkeypatch.setattr(turn_admission, "publish_session_list_changed", lambda *args, **kwargs: None)
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda *args, **kwargs: None)
+    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *args, **kwargs: {})
     monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda *args, **kwargs: True)
-    monkeypatch.setattr(routes.threading, "Thread", FakeThread)
-    monkeypatch.setattr(routes.uuid, "uuid4", lambda: SimpleNamespace(hex="goal-stream-id"))
+    monkeypatch.setattr(turn_admission.threading, "Thread", FakeThread)
+    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: SimpleNamespace(hex="goal-stream-id"))
 
     response = routes._start_chat_stream_for_session(
         FakeSession(),

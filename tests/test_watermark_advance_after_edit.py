@@ -21,6 +21,7 @@ from types import SimpleNamespace
 
 import api.models as models
 import api.routes as routes
+import api.turn_admission as turn_admission
 from api.models import Session
 
 
@@ -71,7 +72,7 @@ def _post_truncate(monkeypatch, sid, keep_count):
 def _checkpoint_user(s, msg, started_at, monkeypatch):
     """Call the eager checkpoint path (simulates sending a new message)."""
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
-    routes._checkpoint_user_message_for_eager_session_save(
+    turn_admission.checkpoint_user_message(
         s, msg, None, started_at=started_at
     )
 

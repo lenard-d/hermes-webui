@@ -115,15 +115,15 @@ def test_post_compression_estimate_uses_compressor_budget_counter_without_metada
 
 def test_chat_start_clears_expired_post_compression_estimate(tmp_path, monkeypatch):
     from api.models import Session
-    from api.routes import _prepare_chat_start_session_for_stream
+    from api.turn_admission import prepare_session_for_turn
 
     saved = []
     monkeypatch.setattr(Session, "save", lambda self, *args, **kwargs: saved.append(self.post_compression_context_tokens_estimate))
     session = Session(session_id="issue4685-clear", post_compression_context_tokens_estimate=4_096)
 
-    _prepare_chat_start_session_for_stream(
+    prepare_session_for_turn(
         session,
-        msg="next turn",
+        message="next turn",
         attachments=[],
         workspace=str(tmp_path),
         model="test-model",

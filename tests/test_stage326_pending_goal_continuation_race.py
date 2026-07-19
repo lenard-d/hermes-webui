@@ -45,29 +45,86 @@ def test_streaming_finally_does_not_discard_pending_goal_continuation():
         config.finish_runtime_run(stream_id)
 
 
-def test_routes_consumer_discards_atomically_on_read():
-    """The routes.py consumer must discard the marker after consuming it,
-    so the marker is single-use (one continuation = one auto-flag).
-    """
-    src = _read_routes()
+def test_turn_admission_consumes_goal_marker_only_after_it_claims_the_session(monkeypatch):
+    """A rejected duplicate start must not steal the next goal continuation."""
+    import api.config as config
+    import api.turn_admission as turn_admission
 
-    # Find the consumption check.
-    m = re.search(
-        r"if not goal_related and s\.session_id in PENDING_GOAL_CONTINUATION:.*?PENDING_GOAL_CONTINUATION\.discard",
-        src,
-        re.DOTALL,
+    class Session:
+        session_id = "goal-continuation-admission"
+        profile = None
+        title = "Goal"
+        messages = []
+        worktree_path = None
+
+        def __init__(self):
+            self.active_stream_id = None
+            self.pending_user_message = None
+            self.pending_started_at = None
+
+        def save(self, *args, **kwargs):
+            return None
+
+    session = Session()
+    request = turn_admission.LocalTurnRequest(
+        message="continue",
+        attachments=[],
+        workspace="/tmp/workspace",
+        model="test-model",
     )
-    assert m is not None, (
-        "routes.py must consume PENDING_GOAL_CONTINUATION atomically: "
-        "check + set goal_related + discard in the same block"
-    )
-    # The discard must be within ~10 lines of the check (atomic block).
-    block = m.group(0)
-    line_count = block.count("\n")
-    assert line_count <= 10, (
-        f"PENDING_GOAL_CONTINUATION check + discard span {line_count} lines; "
-        "should be tight atomic block"
-    )
+    config.PENDING_GOAL_CONTINUATION.add(session.session_id)
+    monkeypatch.setattr(turn_admission, "append_turn_journal_event", lambda *_a, **_k: {})
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda _path: None)
+    waiting_for_lock = __import__("threading").Event()
+    result = {}
+
+    class Diag:
+        def stage(self, name):
+            if name == "session_lock_wait":
+                waiting_for_lock.set()
+
+    def competing_start():
+        result["rejected"] = turn_admission.start_local_turn(
+            session,
+            request,
+            worker_target=lambda *_a, **_k: None,
+            clear_stale_stream=lambda _session: False,
+            diag=Diag(),
+        )
+
+    try:
+        lock = config._get_session_agent_lock(session.session_id)
+        with lock:
+            thread = __import__("threading").Thread(target=competing_start)
+            thread.start()
+            assert waiting_for_lock.wait(2)
+            session.active_stream_id = "existing"
+            session.pending_user_message = "running"
+            session.pending_started_at = 1.0
+            config.register_runtime_stream("existing", session.session_id, object())
+        thread.join(2)
+        assert not thread.is_alive()
+        rejected = result["rejected"]
+        assert rejected["_status"] == 409
+        assert session.session_id in config.PENDING_GOAL_CONTINUATION
+
+        config.finish_runtime_run("existing")
+        session.active_stream_id = None
+        session.pending_user_message = None
+        session.pending_started_at = None
+        accepted = turn_admission.start_local_turn(
+            session,
+            request,
+            worker_target=lambda *_a, **_k: None,
+            clear_stale_stream=lambda _session: False,
+        )
+        assert session.session_id not in config.PENDING_GOAL_CONTINUATION
+        assert config.STREAM_GOAL_RELATED[accepted["stream_id"]] is True
+    finally:
+        config.PENDING_GOAL_CONTINUATION.discard(session.session_id)
+        config.finish_runtime_run("existing")
+        if "accepted" in locals():
+            config.finish_runtime_run(accepted["stream_id"])
 
 
 def test_pending_goal_continuation_is_a_set():

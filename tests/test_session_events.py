@@ -5,6 +5,7 @@ from pathlib import Path
 ROUTES = Path("api/routes.py").read_text(encoding="utf-8")
 SESSION_EVENTS = Path("api/session_events.py").read_text(encoding="utf-8")
 PROFILES = Path("api/profiles.py").read_text(encoding="utf-8")
+TURN_ADMISSION = Path("api/turn_admission.py").read_text(encoding="utf-8")
 
 
 def test_session_events_endpoint_and_bus_are_defined():
@@ -39,8 +40,8 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
             assert f'"{reason}",' in ROUTES, reason
 
     assert 'if worktree_info:\n            publish_session_list_changed(\n                "session_new",' in ROUTES
-    assert "was_hidden_empty_session = _is_hidden_empty_session(s)" in ROUTES
-    assert 'if was_hidden_empty_session:\n        publish_session_list_changed(\n            "session_new",' in ROUTES
+    assert "was_hidden = _was_hidden_empty_session(session)" in TURN_ADMISSION
+    assert 'if was_hidden:\n        publish_session_list_changed(\n            "session_new",' in TURN_ADMISSION
     assert 'publish_session_list_changed(\n                "session_duplicate",' in ROUTES
     assert 'publish_session_list_changed(\n            "session_rename",' in ROUTES
     assert '_persist_generated_session_title(s, next_title, event_reason="session_title_regenerate")' in ROUTES

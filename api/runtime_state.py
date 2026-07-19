@@ -89,6 +89,93 @@ class ProcessRuntimeState:
                 if goal_related:
                     self._goal_related[stream_id] = True
 
+    def has_stream(self, stream_id: str) -> bool:
+        """Return whether the process still exposes a transport for a run."""
+        stream_id = str(stream_id or "").strip()
+        if not stream_id:
+            return False
+        with self._streams_lock:
+            return stream_id in self._streams
+
+    def has_worker(self, stream_id: str) -> bool:
+        """Return whether a worker still owns execution for a run."""
+        stream_id = str(stream_id or "").strip()
+        if not stream_id:
+            return False
+        with self._active_runs_lock:
+            return stream_id in self._active_runs
+
+    def blocking_stream_for_session(
+        self,
+        session_id: str,
+        *,
+        active_stream_id: str | None = None,
+        pending_user_message: str | None = None,
+        pending_started_at: float | None = None,
+        pending_grace_seconds: float = 30.0,
+        worker_unwind_seconds: float = 180.0,
+    ) -> str | None:
+        """Return the run that must finish before a session can start again.
+
+        The transport registry, worker registry, and short publication gap are
+        one admission decision. Dead workers older than the bounded unwind
+        window are reconciled here so callers cannot disagree about liveness.
+        A worker that still has a transport is retained even after the window:
+        it is genuinely live, but its old post-cancel row no longer blocks a
+        successor solely because of age.
+        """
+        session_id = str(session_id or "").strip()
+        if not session_id:
+            return None
+        active_stream_id = str(active_stream_id or "").strip() or None
+        now = self._clock()
+
+        with self._streams_lock:
+            live_stream_ids = set(self._streams)
+        if active_stream_id in live_stream_ids:
+            return active_stream_id
+
+        stale_worker_ids: list[str] = []
+        blocking_worker_id: str | None = None
+        with self._active_runs_lock:
+            for worker_key, raw in list(self._active_runs.items()):
+                entry = raw or {}
+                stream_id = str(entry.get("stream_id") or worker_key or "").strip()
+                owner_session_id = str(entry.get("session_id") or "").strip()
+                if owner_session_id != session_id or not stream_id:
+                    continue
+                try:
+                    started_at = float(entry.get("started_at") or 0)
+                except (TypeError, ValueError):
+                    started_at = 0.0
+                expired = bool(
+                    started_at
+                    and worker_unwind_seconds >= 0
+                    and now - started_at > worker_unwind_seconds
+                )
+                if expired:
+                    if worker_key not in live_stream_ids and stream_id not in live_stream_ids:
+                        stale_worker_ids.append(worker_key)
+                    continue
+                blocking_worker_id = stream_id
+                break
+            for worker_key in stale_worker_ids:
+                self._active_runs.pop(worker_key, None)
+
+        for worker_key in stale_worker_ids:
+            self.unregister_owner(worker_key)
+        if blocking_worker_id:
+            return blocking_worker_id
+
+        if active_stream_id and pending_user_message:
+            try:
+                pending_started = float(pending_started_at or 0)
+            except (TypeError, ValueError):
+                pending_started = 0.0
+            if pending_started and now - pending_started < pending_grace_seconds:
+                return active_stream_id
+        return None
+
     def register_owner(self, stream_id: str, session_id: str) -> None:
         stream_id = str(stream_id or "").strip()
         session_id = str(session_id or "").strip()

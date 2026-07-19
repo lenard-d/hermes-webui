@@ -5,29 +5,12 @@ from pathlib import Path
 
 import api.config as config
 import api.routes as routes
+import api.turn_admission as turn_admission
 
 REPO = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
 SW_SRC = (REPO / "static" / "sw.js").read_text(encoding="utf-8")
-
-
-class _GateLock:
-    def __init__(self):
-        self._lock = threading.Lock()
-        self.lookup_finished = threading.Event()
-        self.writer_finished = threading.Event()
-
-    def __enter__(self):
-        self._lock.acquire()
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self._lock.release()
-        if not self.lookup_finished.is_set():
-            self.lookup_finished.set()
-            assert self.writer_finished.wait(2), "writer did not finish race setup"
-        return False
 
 
 class _FakeSession:
@@ -77,10 +60,16 @@ def test_session_load_clears_stale_stream_before_response():
 
 
 def test_chat_start_clears_stale_pending_state_not_only_active_id():
-    stale_comment_pos = ROUTES_SRC.index("# Stale stream id from a previous run; clear and continue.")
-    cleanup_pos = ROUTES_SRC.index("_clear_stale_stream_state(s)", stale_comment_pos)
-    stream_id_pos = ROUTES_SRC.index("stream_id = uuid.uuid4().hex", cleanup_pos)
-    assert stale_comment_pos < cleanup_pos < stream_id_pos
+    config.STREAMS.clear()
+    config.ACTIVE_RUNS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
+    session = _FakeSession()
+
+    assert routes._clear_stale_stream_state(session) is True
+    assert session.active_stream_id is None
+    assert session.pending_user_message is None
+    assert session.pending_attachments == []
+    assert session.pending_started_at is None
 
 
 def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_path):
@@ -133,11 +122,11 @@ def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_p
         def start(self):
             return None
 
-    monkeypatch.setattr(routes, "_get_session_agent_lock", lambda sid: MutatingSessionLock())
-    monkeypatch.setattr(routes.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
-    monkeypatch.setattr(routes, "set_last_workspace", lambda workspace: None)
-    monkeypatch.setattr(routes, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(routes.threading, "Thread", NoopThread)
+    monkeypatch.setattr(turn_admission, "_get_session_agent_lock", lambda sid: MutatingSessionLock())
+    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
+    monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
+    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
 
     try:
         response = routes._start_chat_stream_for_session(
@@ -199,10 +188,10 @@ def test_chat_start_blocks_same_session_active_run_after_cancel_clears_stream_id
         def start(self):
             return None
 
-    monkeypatch.setattr(routes.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
-    monkeypatch.setattr(routes, "set_last_workspace", lambda workspace: None)
-    monkeypatch.setattr(routes, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(routes.threading, "Thread", NoopThread)
+    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
+    monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
+    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
 
     try:
         response = routes._start_chat_stream_for_session(
@@ -257,10 +246,10 @@ def test_chat_start_allows_same_session_after_active_run_unregisters(monkeypatch
         def start(self):
             return None
 
-    monkeypatch.setattr(routes.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
-    monkeypatch.setattr(routes, "set_last_workspace", lambda workspace: None)
-    monkeypatch.setattr(routes, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(routes.threading, "Thread", NoopThread)
+    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
+    monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
+    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
 
     response = routes._start_chat_stream_for_session(
         session,
@@ -332,10 +321,10 @@ def test_chat_start_not_permanently_blocked_by_stale_active_run(monkeypatch, tmp
         def start(self):
             return None
 
-    monkeypatch.setattr(routes.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
-    monkeypatch.setattr(routes, "set_last_workspace", lambda workspace: None)
-    monkeypatch.setattr(routes, "create_stream_channel", lambda: queue.Queue())
-    monkeypatch.setattr(routes.threading, "Thread", NoopThread)
+    monkeypatch.setattr(turn_admission.uuid, "uuid4", lambda: type("FakeUuid", (), {"hex": "new-stream"})())
+    monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)
+    monkeypatch.setattr(turn_admission, "create_stream_channel", lambda: queue.Queue())
+    monkeypatch.setattr(turn_admission.threading, "Thread", NoopThread)
 
     try:
         response = routes._start_chat_stream_for_session(
@@ -391,18 +380,24 @@ def test_stale_stream_cleanup_does_not_clobber_concurrent_chat_start(monkeypatch
     """
     config.STREAMS.clear()
     config.SESSION_AGENT_LOCKS.clear()
-    gate_lock = _GateLock()
+    lookup_finished = threading.Event()
+    writer_finished = threading.Event()
     session = _FakeSession()
     new_stream_id = "new-stream"
     result = {}
 
-    monkeypatch.setattr(routes, "STREAMS_LOCK", gate_lock)
+    def report_stale_after_concurrent_writer(_stream_id):
+        lookup_finished.set()
+        assert writer_finished.wait(2), "writer did not reach race point"
+        return False
+
+    monkeypatch.setattr(routes, "runtime_stream_alive", report_stale_after_concurrent_writer)
 
     def cleanup_stale_stream():
         result["cleared"] = routes._clear_stale_stream_state(session)
 
     def start_new_stream():
-        assert gate_lock.lookup_finished.wait(2), "cleanup did not reach race point"
+        assert lookup_finished.wait(2), "cleanup did not reach race point"
         with routes.STREAMS_LOCK:
             routes.STREAMS[new_stream_id] = queue.Queue()
         with routes._get_session_agent_lock(session.session_id):
@@ -411,7 +406,7 @@ def test_stale_stream_cleanup_does_not_clobber_concurrent_chat_start(monkeypatch
             session.pending_attachments = ["new.txt"]
             session.pending_started_at = 456
             session.save()
-        gate_lock.writer_finished.set()
+        writer_finished.set()
 
     cleanup_thread = threading.Thread(target=cleanup_stale_stream)
     writer_thread = threading.Thread(target=start_new_stream)

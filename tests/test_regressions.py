@@ -612,16 +612,44 @@ def test_queue_card_clear_helper_tracks_render_epoch(cleanup_test_sessions):
     assert "(_chips.getAttribute('data-queue-render-epoch')||'')===_epoch" in src
 
 
-def test_chat_start_persists_pending_turn_metadata_for_reload_recovery(cleanup_test_sessions):
+def test_chat_start_persists_pending_turn_metadata_for_reload_recovery(
+    cleanup_test_sessions,
+    monkeypatch,
+):
     """R15c: chat/start must expose enough pending-turn metadata for a reload to
     rebuild the in-flight conversation instead of showing a blank session.
     """
-    routes_src = (REPO_ROOT / "api/routes.py").read_text()
-    assert 's.active_stream_id = stream_id' in routes_src
-    assert 's.pending_user_message = msg' in routes_src
-    assert 's.pending_attachments = attachments' in routes_src
-    assert '"active_stream_id": getattr(s, "active_stream_id", None)' in routes_src
-    assert '"pending_user_message": getattr(s, "pending_user_message", None)' in routes_src
+    import api.turn_admission as turn_admission
+
+    class Session:
+        title = "Existing"
+        messages = []
+        truncation_watermark = None
+
+        def __init__(self):
+            self.saved = False
+
+        def save(self, *args, **kwargs):
+            self.saved = True
+
+    monkeypatch.setattr(turn_admission, "get_webui_session_save_mode", lambda: "deferred")
+    session = Session()
+    turn_admission.prepare_session_for_turn(
+        session,
+        message="recover me",
+        attachments=[{"name": "note.txt"}],
+        workspace="/tmp/workspace",
+        model="test-model",
+        model_provider="test-provider",
+        stream_id="stream-recovery",
+        started_at=123.0,
+    )
+
+    assert session.saved is True
+    assert session.active_stream_id == "stream-recovery"
+    assert session.pending_user_message == "recover me"
+    assert session.pending_attachments == [{"name": "note.txt"}]
+    assert session.pending_started_at == 123.0
 
 
 def test_session_detail_uses_runtime_streaming_state(cleanup_test_sessions):

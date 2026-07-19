@@ -201,17 +201,17 @@ def test_eager_checkpoint_advances_positive_watermark():
     in routes.py) inlines the same advance. A committed user turn advances a
     stale positive watermark to the new message timestamp; the 0.0 sentinel is
     preserved."""
-    import api.routes as routes
+    from api.turn_admission import checkpoint_user_message
 
     s = _FakeSession(100.0)
-    routes._checkpoint_user_message_for_eager_session_save(
+    checkpoint_user_message(
         s, "eager new turn", None, started_at=200.0
     )
     assert s.truncation_watermark == 200.0
     assert any(m.get("content") == "eager new turn" for m in s.messages)
 
     s0 = _FakeSession(0.0)
-    routes._checkpoint_user_message_for_eager_session_save(
+    checkpoint_user_message(
         s0, "eager new turn", None, started_at=200.0
     )
     assert s0.truncation_watermark == 0.0

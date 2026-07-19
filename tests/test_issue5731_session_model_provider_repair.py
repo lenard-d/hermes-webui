@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import api.routes as routes
+import api.turn_admission as turn_admission
 
 
 def _catalog(*groups):
@@ -58,9 +59,9 @@ def test_poisoned_pair_repairs_at_chat_start(monkeypatch, tmp_path):
 
     def start_run(s, **kwargs):
         captured.update(kwargs)
-        routes._prepare_chat_start_session_for_stream(
+        turn_admission.prepare_session_for_turn(
             s,
-            msg=kwargs["msg"],
+            message=kwargs["msg"],
             attachments=kwargs["attachments"],
             workspace=kwargs["workspace"],
             model=kwargs["model"],

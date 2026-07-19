@@ -8993,6 +8993,34 @@ def register_runtime_stream(
     )
 
 
+def blocking_runtime_stream(
+    session_id: str,
+    *,
+    active_stream_id: str | None = None,
+    pending_user_message: str | None = None,
+    pending_started_at: float | None = None,
+    pending_grace_seconds: float = 30.0,
+    worker_unwind_seconds: float = 180.0,
+) -> str | None:
+    """Return the process-local run that currently blocks session admission."""
+    return RUNTIME_STATE.blocking_stream_for_session(
+        session_id,
+        active_stream_id=active_stream_id,
+        pending_user_message=pending_user_message,
+        pending_started_at=pending_started_at,
+        pending_grace_seconds=pending_grace_seconds,
+        worker_unwind_seconds=worker_unwind_seconds,
+    )
+
+
+def runtime_stream_alive(stream_id: str) -> bool:
+    return RUNTIME_STATE.has_stream(stream_id)
+
+
+def runtime_worker_alive(stream_id: str) -> bool:
+    return RUNTIME_STATE.has_worker(stream_id)
+
+
 def finish_runtime_run(stream_id: str) -> bool:
     """Release every process-local value owned by a completed run."""
     global LAST_RUN_FINISHED_AT

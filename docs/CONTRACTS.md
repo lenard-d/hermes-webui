@@ -84,8 +84,10 @@ verification for the relevant invariant.
 
 Current implementation seams for incremental migration are recorded in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md#40-implemented-ownership-seams). In
-particular, process-local run cleanup belongs to `api/runtime_state.py`, and
-ordinary mutable session persistence belongs to `api/session_repository.py`.
+particular, process-local run liveness and cleanup belong to
+`api/runtime_state.py`, synchronous local-turn admission belongs to
+`api/turn_admission.py`, and ordinary mutable session persistence belongs to
+`api/session_repository.py`.
 The RFCs remain the broader target contracts; these shipped seams must not be
 described as complete runtime-adapter or unified-database implementations.
 
