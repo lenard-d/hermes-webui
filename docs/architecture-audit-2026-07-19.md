@@ -277,8 +277,11 @@ dynamic available-models build now uses a generation- and ticket-based
 publication fence: invalidation revokes both older synchronous builders and
 detached publishers, and only the current owner may update memory, provenance,
 disk state, or build status. `/api/models/refresh` also clears the separate
-route-level live-model TTL cache. A profile-scoped catalog owner/interface is
-still outstanding.
+route-level live-model TTL cache. Send-path catalog warmup publishes only
+validated disk provenance and advertised IDs while leaving the full in-memory
+catalog cold, so stale disk data cannot gain a fresh 24-hour memory TTL or
+suppress a later live rebuild. A profile-scoped catalog owner/interface is still
+outstanding.
 The 276-line Insights aggregation has moved from `api/routes.py` into
 `api/insights.py`; its Interface returns transport-independent data from
 explicit session-index and `state.db` collaborators, leaving a small route
