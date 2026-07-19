@@ -162,16 +162,19 @@ def test_conditional_get_returns_304(isolated_static):
 
 def test_etag_changes_when_file_changes(isolated_static):
     """Cache must invalidate when (size, mtime) changes — guards redeploy correctness."""
-    import time
+    import os
     from api import routes
 
     f = _make_static_file(isolated_static, "ui.js", b"v1" * 1000)
     first = _serve(routes, "/static/ui.js")
     etag_v1 = first.header("ETag")
+    initial_stat = f.stat()
 
-    # Touch with a later mtime (1 s granularity matches the ETag formula).
-    time.sleep(1.1)
+    # Give the replacement an explicitly later mtime so cache invalidation is
+    # deterministic without waiting for the wall clock or filesystem tick.
     f.write_bytes(b"v2-different-content" * 50)
+    later_mtime_ns = initial_stat.st_mtime_ns + 1_000_000_000
+    os.utime(f, ns=(initial_stat.st_atime_ns, later_mtime_ns))
 
     second = _serve(routes, "/static/ui.js")
     etag_v2 = second.header("ETag")
