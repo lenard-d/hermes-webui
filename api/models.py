@@ -42,6 +42,7 @@ from api.agent_sessions import (
     read_importable_agent_session_rows,
     read_session_lineage_metadata,
 )
+from api.session_sources import import_source_metadata
 
 logger = logging.getLogger(__name__)
 CLI_VISIBLE_SESSION_LIMIT = 20
@@ -6224,25 +6225,7 @@ def import_cli_session(
     keep their lineage in the WebUI store and sidebar instead of reappearing as
     detached orphan chats.
     """
-    allowed_source_fields = {
-        key: source_metadata[key]
-        for key in (
-            'is_cli_session',
-            'source_tag',
-            'raw_source',
-            'session_source',
-            'source_label',
-            'user_id',
-            'chat_id',
-            'chat_type',
-            'thread_id',
-            'session_key',
-            'platform',
-            'project_id',
-            'model_provider',
-        )
-        if isinstance(source_metadata, dict) and key in source_metadata
-    }
+    allowed_source_fields = import_source_metadata(source_metadata)
     s = Session(
         session_id=session_id,
         title=title,

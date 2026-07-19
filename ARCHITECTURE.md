@@ -64,6 +64,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       profiles.py          Profile state management, hermes_cli wrapper
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
+      session_sources.py   Allowlisted source identity for imported session sidecars
       turn_admission.py    Atomic local-turn admission, pending persistence, journal, stream, worker
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            All GET + POST route handlers (if/elif dispatch, no decorators)
@@ -213,10 +214,14 @@ larger migration remains incremental:
   recreate the session. Empty-sidecar and index-ghost cleanup is also a
   repository reconciliation operation; it reloads candidates under the owner
   lock, preserves active turns, and removes recovery backups with their
-  sidecars. CLI
-  imports persist allowlisted origin metadata with their initial write. JSON sidecars remain authoritative; the
+  sidecars. CLI imports persist allowlisted origin metadata with their initial
+  write. JSON sidecars remain authoritative; the
   repository is the migration seam, not a claim that unified SQLite storage is
   shipped.
+- `api/session_sources.py` owns which foreign source-identity fields may enter
+  a WebUI sidecar and normalizes the raw-source fallback. Materialization,
+  archive, and CLI import paths use this Interface instead of maintaining
+  parallel field-copy blocks.
 - `static/session_render_cache.js` owns the bounded browser transcript-render
   cache, including LRU order and UTF-16 memory budgets. `static/ui.js` consumes
   its small interface instead of mutating cache counters directly.
@@ -797,6 +802,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         models.py             Session representation, projections, indexes, CLI bridge
         runtime_state.py      Process-local stream and worker lifecycle owner
         session_repository.py Full-load, lock, and persistence protocol for edits
+        session_sources.py    Imported-session source identity policy
         turn_admission.py     Atomic local-turn admission and worker launch
         workspace.py          File ops and workspace management
         upload.py             Multipart parser and file upload handler
@@ -856,10 +862,11 @@ All three problems fixed in Sprint 5:
 
 These performance fixes do not make every session mutation use one Interface.
 `session_repository.py` now owns ordinary full-load/lock/save edits and reloads
-the current record under the owner lock before mutation. CLI imports also write
-their allowlisted origin metadata atomically instead of creating a partial
-sidecar and patching it afterward. Delete, recovery, migration, projections, and
-several route-specific mutations still need to move behind that owner.
+the current record under the owner lock before mutation. It also owns deletion
+and empty/index-ghost cleanup. CLI imports write their allowlisted origin
+metadata atomically, with the allowlist owned by `session_sources.py`. Recovery,
+migration, projections, and several route-specific mutations still need to move
+behind the repository owner.
 
 ### Phase D: Input Validation and Error Handling -- COMPLETE
 

@@ -69,6 +69,7 @@ from api.session_repository import (
     edit_session,
     get_full_session,
 )
+from api.session_sources import apply_cli_source_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -4968,20 +4969,6 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
     if cli_meta.get("read_only") or _is_messaging_session_record(cli_meta):
         raise PermissionError("read-only imported session")
 
-    # Preserve source metadata fields
-    def _apply_source_meta(s):
-        s.is_cli_session = is_cli_session_row(cli_meta)
-        s.source_tag = cli_meta.get("source_tag")
-        s.raw_source = cli_meta.get("raw_source") or cli_meta.get("source_tag")
-        s.session_source = cli_meta.get("session_source")
-        s.source_label = cli_meta.get("source_label")
-        s.user_id = cli_meta.get("user_id")
-        s.chat_id = cli_meta.get("chat_id")
-        s.chat_type = cli_meta.get("chat_type")
-        s.thread_id = cli_meta.get("thread_id")
-        s.session_key = cli_meta.get("session_key")
-        s.platform = cli_meta.get("platform")
-
     if _is_messaging_session_record(cli_meta):
         # Messaging sessions: lightweight Session with no messages (state.db is source of truth)
         s = Session(
@@ -4992,7 +4979,11 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
             created_at=cli_meta.get("created_at"),
             updated_at=cli_meta.get("updated_at"),
         )
-        _apply_source_meta(s)
+        apply_cli_source_metadata(
+            s,
+            cli_meta,
+            is_cli_session=is_cli_session_row(cli_meta),
+        )
         s.save(touch_updated_at=False)
     else:
         # Regular CLI/agent sessions: import full message history
@@ -5009,7 +5000,11 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
             updated_at=cli_meta.get("updated_at"),
             source_metadata=cli_meta,
         )
-        _apply_source_meta(s)
+        apply_cli_source_metadata(
+            s,
+            cli_meta,
+            is_cli_session=is_cli_session_row(cli_meta),
+        )
 
     return s
 
@@ -15915,17 +15910,11 @@ def handle_post(handler, parsed) -> bool:
                     created_at=cli_meta.get("created_at"),
                     updated_at=cli_meta.get("updated_at"),
                 )
-                s.is_cli_session = is_cli_session_row(cli_meta)
-                s.source_tag = cli_meta.get("source_tag")
-                s.raw_source = cli_meta.get("raw_source") or cli_meta.get("source_tag")
-                s.session_source = cli_meta.get("session_source")
-                s.source_label = cli_meta.get("source_label")
-                s.user_id = cli_meta.get("user_id")
-                s.chat_id = cli_meta.get("chat_id")
-                s.chat_type = cli_meta.get("chat_type")
-                s.thread_id = cli_meta.get("thread_id")
-                s.session_key = cli_meta.get("session_key")
-                s.platform = cli_meta.get("platform")
+                apply_cli_source_metadata(
+                    s,
+                    cli_meta,
+                    is_cli_session=is_cli_session_row(cli_meta),
+                )
                 s.save(touch_updated_at=False)
             else:
                 msgs = get_cli_session_messages(sid)
@@ -15941,17 +15930,11 @@ def handle_post(handler, parsed) -> bool:
                     updated_at=cli_meta.get("updated_at"),
                     source_metadata=cli_meta,
                 )
-                s.is_cli_session = is_cli_session_row(cli_meta)
-                s.source_tag = cli_meta.get("source_tag")
-                s.raw_source = cli_meta.get("raw_source") or cli_meta.get("source_tag")
-                s.session_source = cli_meta.get("session_source")
-                s.source_label = cli_meta.get("source_label")
-                s.user_id = cli_meta.get("user_id")
-                s.chat_id = cli_meta.get("chat_id")
-                s.chat_type = cli_meta.get("chat_type")
-                s.thread_id = cli_meta.get("thread_id")
-                s.session_key = cli_meta.get("session_key")
-                s.platform = cli_meta.get("platform")
+                apply_cli_source_metadata(
+                    s,
+                    cli_meta,
+                    is_cli_session=is_cli_session_row(cli_meta),
+                )
         with edit_session(sid, session=s, touch_updated_at=False) as s:
             s.archived = bool(body.get("archived", True))
         publish_session_list_changed(

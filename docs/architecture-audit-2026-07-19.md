@@ -168,8 +168,11 @@ Local handoff-summary transcript markers now use the same mutation owner, so a
 delayed handoff write cannot overwrite messages that arrived after its initial
 read. Refreshing an already imported CLI session now fetches foreign data
 outside the lock, then re-authorizes and merges it into the repository-current
-record under the owner lock, preserving newer local turns. Recovery, migration,
-broader reconciliation, and sidebar projections remain distributed.
+record under the owner lock, preserving newer local turns.
+`api/session_sources.py` now owns the foreign source-field allowlist and
+raw-source fallback used by CLI materialization, import, and archive paths,
+replacing three parallel copy blocks. Recovery, migration, broader
+reconciliation, and sidebar projections remain distributed.
 
 Relevant areas:
 
@@ -177,6 +180,7 @@ Relevant areas:
 - `api/session_index.py`
 - `api/session_db_adapter.py`
 - `api/agent_session_db.py`
+- `api/session_sources.py`
 - `api/routes.py`
 - `api/streaming.py`
 - `docs/architecture/unified-session-db.md`
