@@ -5283,8 +5283,6 @@ def _has_explicit_pool_credentials(provider_id: str) -> bool:
     cost more than once per TTL window.
     """
     return bool(_pool_entry_payloads(provider_id))
-_provider_models_invalidated_ts: dict[str, float] = {}  # provider_id -> timestamp of last invalidation
-
 # Disk-backed in-memory cache for get_available_models().
 # Written to disk on every cache population so the cache survives server restarts.
 # Invalidated (file deleted) whenever a provider is added/changed/removed or
@@ -5892,10 +5890,7 @@ def invalidate_provider_models_cache(provider_id: str):
     """Invalidate cached models for a single provider.
 
     Also invalidates the full cache so that the next get_available_models()
-    call rebuilds all groups cleanly (the rebuilt provider is merged with any
-    other cached groups from the 24h TTL window).  After the next
-    get_available_models() call, _provider_models_invalidated_ts[provider_id]
-    is cleared so the provider's fresh models are used.
+    call rebuilds all groups cleanly.
 
     Args:
         provider_id: canonical provider id (e.g. 'openai', 'anthropic', 'custom:my-key')
@@ -5909,7 +5904,6 @@ def invalidate_provider_models_cache(provider_id: str):
         _available_models_cache_source_fingerprint = None
         _sync_models_cache_provenance()
         _invalidate_models_build_locked()
-        _provider_models_invalidated_ts[provider_id] = time.time()
         # Also evict the credential pool so the next cold path re-loads it.
         # Must evict both the original key and its canonical form (load_pool
         # may be called with either, and both paths cache under their own key),
