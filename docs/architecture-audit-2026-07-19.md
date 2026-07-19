@@ -273,7 +273,13 @@ queueing mechanism. The 369-line static provider-name, alias, and fallback-model
 catalog has also moved to `api/model_catalog.py`. `api.config` re-exports the
 same objects for compatibility, while `api.providers` now reads the catalog
 from its owner rather than through the configuration dependency hub. The
-276-line Insights aggregation has moved from `api/routes.py` into
+dynamic available-models build now uses a generation- and ticket-based
+publication fence: invalidation revokes both older synchronous builders and
+detached publishers, and only the current owner may update memory, provenance,
+disk state, or build status. `/api/models/refresh` also clears the separate
+route-level live-model TTL cache. A profile-scoped catalog owner/interface is
+still outstanding.
+The 276-line Insights aggregation has moved from `api/routes.py` into
 `api/insights.py`; its Interface returns transport-independent data from
 explicit session-index and `state.db` collaborators, leaving a small route
 adapter.
