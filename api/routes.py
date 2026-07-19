@@ -24232,19 +24232,18 @@ def _is_matching_handoff_summary_content(content: object, target_payload: dict |
 
 def _persist_handoff_summary_locally(sid: str, message: dict) -> bool:
     """Persist a handoff summary marker into a local WebUI session file."""
+    changed = False
     try:
-        from api.models import get_session
-
-        s = get_session(sid)
+        with edit_session(sid, save_when=lambda _session: changed) as session:
+            if session.messages and _is_matching_handoff_summary_message(
+                session.messages[-1], message
+            ):
+                return True
+            session.messages.append(message)
+            changed = True
+        return True
     except KeyError:
         return False
-
-    try:
-        if s.messages and _is_matching_handoff_summary_message(s.messages[-1], message):
-            return True
-        s.messages.append(message)
-        s.save()
-        return True
     except Exception as e:
         logger.warning("Failed to persist handoff summary marker in local session %s: %s", sid, e)
         return False

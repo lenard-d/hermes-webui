@@ -164,8 +164,10 @@ holding the same lock, closing both active-writeback and queued-start races.
 Empty-sidecar and index-only-ghost cleanup is now a repository reconciliation
 operation rather than route logic; it reloads candidates under their owner
 lock, skips live turns, and removes recovery backups with deleted sidecars.
-Recovery, migration,
-reconciliation, and sidebar projections remain distributed.
+Local handoff-summary transcript markers now use the same mutation owner, so a
+delayed handoff write cannot overwrite messages that arrived after its initial
+read. Recovery, migration, broader reconciliation, and sidebar projections
+remain distributed.
 
 Relevant areas:
 

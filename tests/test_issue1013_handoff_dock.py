@@ -3,6 +3,7 @@
 import json
 import time
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 import sys
 import types
@@ -43,6 +44,49 @@ def _new_state_db(path: Path) -> sqlite3.Connection:
         """
     )
     return conn
+
+
+def test_local_handoff_persistence_edits_the_repository_current_session(monkeypatch):
+    """A delayed handoff write must not overwrite a newer transcript snapshot."""
+    import api.routes as routes
+
+    class _Session:
+        def __init__(self, messages):
+            self.messages = list(messages)
+            self.saved = 0
+
+        def save(self):
+            self.saved += 1
+
+    stale = _Session([{"role": "user", "content": "old"}])
+    current = _Session(
+        [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "newer"},
+        ]
+    )
+    marker = routes._build_handoff_summary_tool_message(
+        "handoff-current-session",
+        "Continue with the current transcript",
+        None,
+    )
+
+    monkeypatch.setattr("api.models.get_session", lambda _sid: stale)
+
+    @contextmanager
+    def _edit_current(sid, **kwargs):
+        assert sid == "handoff-current-session"
+        yield current
+        current.save()
+
+    monkeypatch.setattr(routes, "edit_session", _edit_current)
+
+    assert routes._persist_handoff_summary_locally("handoff-current-session", marker) is True
+    assert [message["content"] for message in current.messages[:2]] == ["old", "newer"]
+    assert current.messages[-1] == marker
+    assert current.saved == 1
+    assert stale.messages == [{"role": "user", "content": "old"}]
+    assert stale.saved == 0
 
 
 def _extract_handoff_marker_payload(message):
