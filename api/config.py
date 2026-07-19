@@ -9021,6 +9021,11 @@ def runtime_worker_alive(stream_id: str) -> bool:
     return RUNTIME_STATE.has_worker(stream_id)
 
 
+def runtime_progress_snapshot(stream_id: str):
+    """Return an immutable copy of terminally relevant live progress."""
+    return RUNTIME_STATE.progress_snapshot(stream_id)
+
+
 def begin_runtime_cancel(stream_id: str):
     """Claim cancellation and snapshot the process-local run state."""
     return RUNTIME_STATE.begin_cancel(stream_id)

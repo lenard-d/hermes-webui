@@ -213,3 +213,20 @@ def test_begin_cancel_accepts_detached_worker_and_rejects_unknown_run():
     assert cancellation.partial_text == "detached partial"
     assert stores["active_runs"]["detached"]["phase"] == "cancelling"
     assert state.begin_cancel("missing") is None
+
+
+def test_progress_snapshot_is_immutable_and_does_not_consume_live_buffers():
+    state, stores = _runtime_state(clock=lambda: 100.0)
+    stores["partial_text"]["stream-1"] = "partial"
+    stores["reasoning_text"]["stream-1"] = "reasoning"
+    stores["live_tool_calls"]["stream-1"] = [{"name": "tool"}]
+    stores["last_event_ids"]["stream-1"] = "stream-1:8"
+
+    progress = state.progress_snapshot("stream-1")
+    stores["live_tool_calls"]["stream-1"][0]["name"] = "changed"
+
+    assert progress.partial_text == "partial"
+    assert progress.reasoning_text == "reasoning"
+    assert progress.live_tool_calls == ({"name": "tool"},)
+    assert progress.last_event_id == "stream-1:8"
+    assert stores["partial_text"]["stream-1"] == "partial"

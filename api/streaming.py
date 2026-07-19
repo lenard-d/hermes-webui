@@ -6412,55 +6412,19 @@ def _build_partial_message(content_text, reasoning_text, tool_calls) -> dict | N
 
 
 def _snapshot_and_append_partial_on_error(session, stream_id) -> dict | None:
-    """Snapshot streaming buffers under STREAMS_LOCK and append a _partial message.
+    """Snapshot runtime-owned progress and append a _partial message.
 
     Uses _build_partial_message() for the shared thinking-strip + dict-build logic.
     """
     from api import config as _live_config
 
-    streams_lock = STREAMS_LOCK
-    partial_texts = STREAM_PARTIAL_TEXT
-    reasoning_texts = STREAM_REASONING_TEXT
-    live_tool_calls = STREAM_LIVE_TOOL_CALLS
+    progress = _live_config.runtime_progress_snapshot(stream_id)
 
-    # Defensive check for live config (similar to cancel_stream)
-    if getattr(_live_config, 'STREAMS_LOCK', streams_lock) is not streams_lock:
-        streams_lock = _live_config.STREAMS_LOCK
-        partial_texts = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
-        reasoning_texts = getattr(_live_config, 'STREAM_REASONING_TEXT', reasoning_texts)
-        live_tool_calls = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', live_tool_calls)
-
-    _snap_partial_text = None
-    _snap_reasoning = None
-    _snap_tool_calls = None
-
-    # The streaming thread mirrors these three buffers lock-free (GIL-atomic; see
-    # the STREAMS_LOCK contract note at on_token in the streaming loop). We take
-    # STREAMS_LOCK here to read atomically w.r.t. the worker's cleanup `finally`
-    # (which pops all three under STREAMS_LOCK) — NOT w.r.t. the writer, which
-    # holds no lock, so the three reads may still reflect slightly different
-    # points in time. That is acceptable: each individual read is complete (never
-    # torn) and a slightly-stale partial is reconciled by later journal/SSE events.
-    with streams_lock:
-        _snap_partial_text = partial_texts.get(stream_id, '')
-        if not _snap_partial_text:
-            _live_partials = getattr(_live_config, 'STREAM_PARTIAL_TEXT', partial_texts)
-            if _live_partials is not partial_texts:
-                _snap_partial_text = _live_partials.get(stream_id, '')
-
-        _snap_reasoning = reasoning_texts.get(stream_id, '')
-        if not _snap_reasoning:
-            _live_reasoning = getattr(_live_config, 'STREAM_REASONING_TEXT', reasoning_texts)
-            if _live_reasoning is not reasoning_texts:
-                _snap_reasoning = _live_reasoning.get(stream_id, '')
-
-        _snap_tool_calls = list(live_tool_calls.get(stream_id, []) or [])
-        if not _snap_tool_calls:
-            _live_tools = getattr(_live_config, 'STREAM_LIVE_TOOL_CALLS', live_tool_calls)
-            if _live_tools is not live_tool_calls:
-                _snap_tool_calls = list(_live_tools.get(stream_id, []) or [])
-
-    _partial_msg = _build_partial_message(_snap_partial_text, _snap_reasoning, _snap_tool_calls)
+    _partial_msg = _build_partial_message(
+        progress.partial_text,
+        progress.reasoning_text,
+        progress.live_tool_calls,
+    )
     if _partial_msg is None:
         return None
     if not isinstance(session.messages, list):

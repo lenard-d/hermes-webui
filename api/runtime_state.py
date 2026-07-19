@@ -17,7 +17,17 @@ from typing import Any, Callable
 
 
 @dataclass(frozen=True)
-class RunCancellationSnapshot:
+class RunProgressSnapshot:
+    """Immutable copy of progress that may need terminal persistence."""
+
+    partial_text: str
+    reasoning_text: str
+    live_tool_calls: tuple
+    last_event_id: str | None
+
+
+@dataclass(frozen=True)
+class RunCancellationSnapshot(RunProgressSnapshot):
     """Immutable process-local state captured before a run is interrupted."""
 
     stream_id: str
@@ -25,10 +35,6 @@ class RunCancellationSnapshot:
     channel: Any
     cancel_event: Any
     agent: Any
-    partial_text: str
-    reasoning_text: str
-    live_tool_calls: tuple
-    last_event_id: str | None
     had_transport: bool
     had_worker: bool
 
@@ -249,6 +255,26 @@ class ProcessRuntimeState:
         self.unregister_owner(stream_id)
         return removed
 
+    def _progress_snapshot_unlocked(self, stream_id: str) -> RunProgressSnapshot:
+        raw_tool_calls = self._live_tool_calls.get(stream_id, []) or []
+        return RunProgressSnapshot(
+            partial_text=str(self._partial_text.get(stream_id, "") or ""),
+            reasoning_text=str(self._reasoning_text.get(stream_id, "") or ""),
+            live_tool_calls=tuple(
+                dict(item) if isinstance(item, dict) else item
+                for item in raw_tool_calls
+            ),
+            last_event_id=(
+                str(self._last_event_ids.get(stream_id) or "").strip() or None
+            ),
+        )
+
+    def progress_snapshot(self, stream_id: str) -> RunProgressSnapshot:
+        """Copy live progress without consuming worker-owned buffers."""
+        stream_id = self._required_id(stream_id, "stream_id")
+        with self._streams_lock:
+            return self._progress_snapshot_unlocked(stream_id)
+
     def begin_cancel(self, stream_id: str) -> RunCancellationSnapshot | None:
         """Claim cancellation and eagerly release transport admission state.
 
@@ -265,14 +291,7 @@ class ProcessRuntimeState:
             channel = self._streams.get(stream_id)
             cancel_event = self._cancel_flags.get(stream_id)
             agent = self._agent_instances.get(stream_id)
-            partial_text = str(self._partial_text.get(stream_id, "") or "")
-            reasoning_text = str(self._reasoning_text.get(stream_id, "") or "")
-            raw_tool_calls = self._live_tool_calls.get(stream_id, []) or []
-            live_tool_calls = tuple(
-                dict(item) if isinstance(item, dict) else item
-                for item in raw_tool_calls
-            )
-            last_event_id = self._last_event_ids.get(stream_id)
+            progress = self._progress_snapshot_unlocked(stream_id)
             if had_transport:
                 self._streams.pop(stream_id, None)
                 self._cancel_flags.pop(stream_id, None)
@@ -303,10 +322,10 @@ class ProcessRuntimeState:
             channel=channel,
             cancel_event=cancel_event,
             agent=agent,
-            partial_text=partial_text,
-            reasoning_text=reasoning_text,
-            live_tool_calls=live_tool_calls,
-            last_event_id=str(last_event_id or "").strip() or None,
+            partial_text=progress.partial_text,
+            reasoning_text=progress.reasoning_text,
+            live_tool_calls=progress.live_tool_calls,
+            last_event_id=progress.last_event_id,
             had_transport=had_transport,
             had_worker=had_worker,
         )

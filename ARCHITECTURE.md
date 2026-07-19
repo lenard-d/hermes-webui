@@ -181,11 +181,12 @@ See Architecture Phase B for the fix.
 Four ownership seams now replace repeated state manipulation while the
 larger migration remains incremental:
 
-- `api/runtime_state.py` owns publication, cancellation snapshots, and terminal
+- `api/runtime_state.py` owns publication, immutable progress/cancellation snapshots, and terminal
   cleanup of process-local stream/run registries. It also owns the cross-registry
   admission decision and bounded stale-worker reconciliation. Callers register a
-  stream through `register_runtime_stream()`, claim cancel through
-  `begin_runtime_cancel()`, and finish through `finish_runtime_run()`; they must
+  stream through `register_runtime_stream()`, read terminal progress through
+  `runtime_progress_snapshot()`, claim cancel through `begin_runtime_cancel()`,
+  and finish through `finish_runtime_run()`; they must
   not independently clear individual per-run dictionaries. This is not yet the
   complete browser-turn runtime described by the run-adapter RFC.
 - `api/turn_admission.py` owns the synchronous local-turn transition after HTTP
