@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 import api.config as config
 import api.routes as routes
 import api.turn_admission as turn_admission
@@ -12,6 +14,15 @@ REPO = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
 SW_SRC = (REPO / "static" / "sw.js").read_text(encoding="utf-8")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_session_cache():
+    with config.LOCK:
+        config.SESSIONS.clear()
+    yield
+    with config.LOCK:
+        config.SESSIONS.clear()
 
 
 class _FakeSession:
@@ -61,6 +72,39 @@ def test_chat_start_clears_stale_pending_state_not_only_active_id():
     assert session.pending_user_message is None
     assert session.pending_attachments == []
     assert session.pending_started_at is None
+
+
+def test_stale_stream_cleanup_rechecks_runtime_liveness_under_owner(monkeypatch):
+    config.STREAMS.clear()
+    config.ACTIVE_RUNS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
+    session = _FakeSession()
+    liveness_checks = []
+
+    def stream_alive(_stream_id):
+        liveness_checks.append(True)
+        return len(liveness_checks) > 1
+
+    monkeypatch.setattr(routes, "runtime_stream_alive", stream_alive)
+
+    assert routes._clear_stale_stream_state(session) is False
+    assert len(liveness_checks) == 2
+    assert session.active_stream_id == "stale-stream"
+    assert session.pending_user_message == "old prompt"
+
+
+def test_stale_stream_cleanup_reports_persistence_failure(monkeypatch):
+    config.STREAMS.clear()
+    config.ACTIVE_RUNS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
+    session = _FakeSession()
+    monkeypatch.setattr(
+        session,
+        "save",
+        lambda **_kwargs: (_ for _ in ()).throw(OSError("disk unavailable")),
+    )
+
+    assert routes._clear_stale_stream_state(session) is False
 
 
 def test_chat_start_rechecks_active_stream_under_session_lock(monkeypatch, tmp_path):
@@ -457,6 +501,51 @@ def test_stale_stream_cleanup_does_not_clobber_concurrent_chat_start(monkeypatch
     assert session.pending_user_message == "new prompt"
     assert session.pending_attachments == ["new.txt"]
     assert session.pending_started_at == 456
+
+
+def test_stale_stream_cleanup_reloads_repository_current_generation(tmp_path, monkeypatch):
+    """A detached full object must not overwrite a newer cached/durable owner."""
+    from collections import OrderedDict
+
+    import api.models as models
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
+
+    current = models.Session(
+        session_id="stale-detached-owner",
+        title="Current",
+        messages=[{"role": "user", "content": "current transcript"}],
+    )
+    current.active_stream_id = "new-stream"
+    current.pending_user_message = "new prompt"
+    current.pending_attachments = ["new.txt"]
+    current.pending_started_at = 0
+    current.save()
+    models.cache_full_session(current.session_id, current)
+
+    detached = models.Session(
+        session_id=current.session_id,
+        title="Stale",
+        messages=[{"role": "user", "content": "stale transcript"}],
+    )
+    detached.active_stream_id = "old-stream"
+    detached.pending_user_message = "old prompt"
+    detached.pending_attachments = ["old.txt"]
+    detached.pending_started_at = 0
+
+    assert routes._clear_stale_stream_state(detached) is False
+
+    persisted = models.Session.load(current.session_id)
+    assert persisted.active_stream_id == "new-stream"
+    assert persisted.pending_user_message == "new prompt"
+    assert persisted.pending_attachments == ["new.txt"]
+    assert [message["content"] for message in persisted.messages] == [
+        "current transcript"
+    ]
 
 
 def test_frontend_drops_inflight_cache_when_server_session_is_idle():

@@ -251,8 +251,12 @@ larger migration remains incremental:
   to that same owner before publishing the continuation. Empty-sidecar and
   index-ghost cleanup is also a repository reconciliation operation; it reloads
   candidates under the owner lock, preserves active turns, and removes recovery
-  backups with their sidecars. CLI imports persist allowlisted origin metadata
-  with their initial write. JSON sidecars remain authoritative; the
+  backups with their sidecars. Read-side stale-stream reconciliation uses the
+  same edit owner: it upgrades metadata projections, reloads the current stream
+  generation under the lock, rechecks process-local liveness, and reports a
+  failed durable save as an unsuccessful cleanup. A detached object therefore
+  cannot clear a newer admitted turn. CLI imports persist allowlisted origin
+  metadata with their initial write. JSON sidecars remain authoritative; the
   repository is the migration seam, not a claim that unified SQLite storage is
   shipped.
 - `api/session_sources.py` owns which foreign source-identity fields may enter

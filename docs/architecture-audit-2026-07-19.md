@@ -192,6 +192,11 @@ aliases old and new session IDs to that identity before publishing the new ID.
 Empty-sidecar and index-only-ghost cleanup is now a repository reconciliation
 operation rather than route logic; it reloads candidates under their owner
 lock, skips live turns, and removes recovery backups with deleted sidecars.
+Read-side stale-stream repair now uses the same repository edit protocol. It
+upgrades metadata-only projections and reloads the current generation under the
+owner lock before clearing anything, then rechecks runtime liveness at the point
+of use. Detached full objects cannot overwrite a newer stream, and persistence
+failure is no longer reported as successful cleanup.
 Local handoff-summary transcript markers now use the same mutation owner, so a
 delayed handoff write cannot overwrite messages that arrived after its initial
 read. Refreshing an already imported CLI session now fetches foreign data

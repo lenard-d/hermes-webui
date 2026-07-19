@@ -2858,6 +2858,19 @@ def _kanban_unknown_endpoint(handler, parsed, method: str) -> bool:
     ) or True
 
 
+def _clear_session_stream_fields(session) -> None:
+    """Project one session object into the durable idle-stream shape."""
+    session.active_stream_id = None
+    if hasattr(session, "pending_user_message"):
+        session.pending_user_message = None
+    if hasattr(session, "pending_attachments"):
+        session.pending_attachments = []
+    if hasattr(session, "pending_started_at"):
+        session.pending_started_at = None
+    if hasattr(session, "pending_user_source"):
+        session.pending_user_source = None
+
+
 def _clear_stale_stream_state(session) -> bool:
     """Clear persisted streaming flags when the in-memory stream no longer exists.
 
@@ -2865,11 +2878,9 @@ def _clear_stale_stream_state(session) -> bool:
     session JSON while STREAMS is empty. The frontend then keeps reconnecting to
     a dead stream and shows a permanent running/thinking state.
 
-    SAFETY (#1558): If ``session`` was loaded with ``metadata_only=True``, its
-    ``messages`` array is empty by design and calling ``save()`` would
-    atomically overwrite the on-disk JSON, wiping the conversation. In that
-    case we re-load the full session before mutating, so the persisted
-    write carries the real messages forward.
+    The repository reloads the full current generation only after acquiring its
+    owner lock. A metadata-only projection or detached stale object therefore
+    cannot overwrite the durable transcript or a newer stream generation.
     """
     stream_id = getattr(session, "active_stream_id", None)
     if not stream_id:
@@ -2907,130 +2918,87 @@ def _clear_stale_stream_state(session) -> bool:
         )
         return False
 
-    # ── #1558 P0 safety: if we were handed a metadata-only stub, reload the
-    # full session before touching persisted state. The original
-    # metadata-only object is left untouched so the caller's read path is
-    # unaffected.
-    original_stub = session  # SHOULD-FIX #1 (Opus): keep reference so we can
-                             # patch the caller's in-memory copy after a
-                             # successful clear, avoiding one ghost SSE
-                             # reconnect on the very next /api/session GET.
-    if getattr(session, "_loaded_metadata_only", False):
-        try:
-            from api.models import get_session as _get_session
-            session = _get_session(session.session_id, metadata_only=False)
-        except Exception:
-            # If we cannot upgrade to a full load (file gone, decode error,
-            # etc.) bail without clearing — better to leave a stale
-            # active_stream_id than to wipe the conversation.
-            logger.warning(
-                "_clear_stale_stream_state: refused to clear stale stream %s "
-                "for session %s — full reload failed and we will not save a "
-                "metadata-only stub. See #1558.",
-                stream_id, getattr(session, "session_id", "?"),
-            )
-            return False
-        if session is None:
-            return False
-        # The full-load path may have already repaired stale pending fields
-        # via _repair_stale_pending(); only re-assert if still set.
-        if not getattr(session, "active_stream_id", None):
-            # Patch the caller's stub so its read path also sees the cleared
-            # field (matches the Opus SHOULD-FIX #1 — without this, /api/session
-            # would briefly return the stale active_stream_id and the frontend
-            # would attempt one ghost SSE reconnect before recovering).
-            try:
-                original_stub.active_stream_id = None
-                if hasattr(original_stub, "pending_user_message"):
-                    original_stub.pending_user_message = None
-                if hasattr(original_stub, "pending_attachments"):
-                    original_stub.pending_attachments = []
-                if hasattr(original_stub, "pending_started_at"):
-                    original_stub.pending_started_at = None
-                if hasattr(original_stub, "pending_user_source"):
-                    original_stub.pending_user_source = None
-            except Exception:
-                pass
-            return False
+    original_projection = session
+    authoritative_session = None
+    cleared = False
+    repair_persisted = False
 
-    # ── #1533 race fix: acquire the per-session lock and re-read
-    # active_stream_id under it. A concurrent chat_start may have already
-    # registered a new stream after our STREAMS_LOCK check above; in that
-    # case we must NOT clobber its session.active_stream_id.
-    with _get_session_agent_lock(session.session_id):
-        if getattr(session, "active_stream_id", None) != stream_id:
-            return False
-        if getattr(session, "pending_user_message", None):
-            try:
-                from api.models import _apply_core_sync_or_error_marker, _get_profile_home
-                profile_home = _get_profile_home(getattr(session, "profile", None))
-                core_path = profile_home / "sessions" / f"session_{session.session_id}.json"
-                repaired = _apply_core_sync_or_error_marker(
-                    session,
-                    core_path,
-                    stream_id_for_recheck=stream_id,
-                    touch_updated_at=False,
-                )
-            except Exception:
-                logger.exception(
-                    "_clear_stale_stream_state: failed to repair stale pending stream %s "
-                    "for session %s",
-                    stream_id, getattr(session, "session_id", "?"),
-                )
-                repaired = False
-            if repaired:
-                if original_stub is not session:
-                    try:
-                        original_stub.active_stream_id = None
-                        if hasattr(original_stub, "pending_user_message"):
-                            original_stub.pending_user_message = None
-                        if hasattr(original_stub, "pending_attachments"):
-                            original_stub.pending_attachments = []
-                        if hasattr(original_stub, "pending_started_at"):
-                            original_stub.pending_started_at = None
-                        if hasattr(original_stub, "pending_user_source"):
-                            original_stub.pending_user_source = None
-                    except Exception:
-                        pass
-                return True
-            if getattr(session, "active_stream_id", None) != stream_id:
+    try:
+        # Runtime cleanup is not user activity; do not bubble old sessions to
+        # the top of the sidebar. ``save_when`` also avoids a second save when
+        # the recovery helper already persisted its richer repair atomically.
+        with edit_session(
+            session.session_id,
+            session=session,
+            touch_updated_at=False,
+            save_when=lambda _current: cleared and not repair_persisted,
+        ) as current:
+            authoritative_session = current
+            # A concurrent chat start may have replaced the old generation
+            # while this cleanup waited for the same repository owner lock.
+            if getattr(current, "active_stream_id", None) != stream_id:
                 return False
-        _materialize_pending_user_turn_before_error(session)
-        session.active_stream_id = None
-        if hasattr(session, "pending_user_message"):
-            session.pending_user_message = None
-        if hasattr(session, "pending_attachments"):
-            session.pending_attachments = []
-        if hasattr(session, "pending_started_at"):
-            session.pending_started_at = None
-        if hasattr(session, "pending_user_source"):
-            session.pending_user_source = None
+            if runtime_stream_alive(stream_id) or runtime_worker_alive(stream_id):
+                logger.debug(
+                    "_clear_stale_stream_state: stream %s for session %s became "
+                    "live while cleanup waited for its owner",
+                    stream_id,
+                    getattr(current, "session_id", "?"),
+                )
+                return False
+
+            if getattr(current, "pending_user_message", None):
+                try:
+                    from api.models import (
+                        _apply_core_sync_or_error_marker,
+                        _get_profile_home,
+                    )
+
+                    profile_home = _get_profile_home(getattr(current, "profile", None))
+                    core_path = (
+                        profile_home
+                        / "sessions"
+                        / f"session_{current.session_id}.json"
+                    )
+                    repair_persisted = _apply_core_sync_or_error_marker(
+                        current,
+                        core_path,
+                        stream_id_for_recheck=stream_id,
+                        touch_updated_at=False,
+                    )
+                except Exception:
+                    logger.exception(
+                        "_clear_stale_stream_state: failed to repair stale pending "
+                        "stream %s for session %s",
+                        stream_id,
+                        getattr(current, "session_id", "?"),
+                    )
+                    repair_persisted = False
+                if repair_persisted:
+                    cleared = True
+                elif getattr(current, "active_stream_id", None) != stream_id:
+                    return False
+
+            if not repair_persisted:
+                _materialize_pending_user_turn_before_error(current)
+                _clear_session_stream_fields(current)
+                cleared = True
+    except Exception:
+        logger.exception(
+            "_clear_stale_stream_state: repository mutation failed for session %s",
+            getattr(session, "session_id", "?"),
+        )
+        return False
+
+    # Patch the caller's read projection only after durable persistence was
+    # confirmed, avoiding one ghost reconnect without publishing an uncommitted
+    # idle state after a save failure.
+    if cleared and original_projection is not authoritative_session:
         try:
-            # Runtime cleanup is not user activity; do not bubble old sessions
-            # to the top of the sidebar just because a stale stream flag was
-            # repaired during a read/list path.
-            session.save(touch_updated_at=False)
-        except Exception:
-            logger.exception(
-                "_clear_stale_stream_state: save() failed for session %s",
-                getattr(session, "session_id", "?"),
-            )
-    # Patch the caller's stub (if different from the full-load object) so
-    # its in-memory active_stream_id matches what just got persisted.
-    if original_stub is not session:
-        try:
-            original_stub.active_stream_id = None
-            if hasattr(original_stub, "pending_user_message"):
-                original_stub.pending_user_message = None
-            if hasattr(original_stub, "pending_attachments"):
-                original_stub.pending_attachments = []
-            if hasattr(original_stub, "pending_started_at"):
-                original_stub.pending_started_at = None
-            if hasattr(original_stub, "pending_user_source"):
-                original_stub.pending_user_source = None
+            _clear_session_stream_fields(original_projection)
         except Exception:
             pass
-    return True
+    return cleared
 
 
 def _run_journal_status_payload(summary: dict, *, active: bool = False) -> dict:
