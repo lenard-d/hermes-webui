@@ -43,7 +43,7 @@ def resolve_prefill_path(api: ModuleType, raw: str) -> Path:
     path = api.Path(str(raw)).expanduser()
     if not path.is_absolute():
         try:
-            from api.config import _get_config_path
+            from api.config import get_config_path as _get_config_path
             path = _get_config_path().parent / path
         except Exception:
             path = api.Path.cwd() / path

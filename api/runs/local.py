@@ -606,8 +606,8 @@ def run_agent_streaming(
 
             # Per-profile toolsets — use _resolve_cli_toolsets() so MCP
             # server toolsets are included, matching native CLI behaviour.
-            from api.config import _resolve_cli_toolsets
-            _toolsets = _resolve_cli_toolsets(_cfg)
+            from api.config import resolve_cli_toolsets
+            _toolsets = resolve_cli_toolsets(_cfg)
 
             # Per-session toolset override (#493): if the session has
             # enabled_toolsets set, use that instead of the global config.

@@ -382,7 +382,7 @@ def _handle_live_models(handler, parsed):
         # without normalization, provider_model_ids() misses the alias and returns [].
         # Uses the WebUI-owned table (api/config._resolve_provider_alias) which
         # works even when hermes_cli is not on sys.path.
-        from api.config import _resolve_provider_alias
+        from api.config import resolve_provider_alias as _resolve_provider_alias
         provider = _resolve_provider_alias(provider)
 
         cache_key = _live_models_cache_key(provider)
@@ -418,7 +418,7 @@ def _handle_live_models(handler, parsed):
                 if not (provider == "custom" or provider.startswith("custom:")):
                     return []
                 try:
-                    from api.config import _custom_provider_slug_from_name
+                    from api.config import custom_provider_slug_from_name
                     _cp_entries = cfg.get("custom_providers", [])
                     if not isinstance(_cp_entries, list):
                         return []
@@ -426,7 +426,7 @@ def _handle_live_models(handler, parsed):
                     for _cp in _cp_entries:
                         if not isinstance(_cp, dict):
                             continue
-                        _slug = _custom_provider_slug_from_name(_cp.get("name", ""))
+                        _slug = custom_provider_slug_from_name(_cp.get("name", ""))
                         if provider.startswith("custom:"):
                             if _slug == provider:
                                 _matches.append(_cp)
@@ -499,9 +499,9 @@ def _handle_live_models(handler, parsed):
                 # Fallback: try credential pool for base_url + api_key
                 if (not _base_url or not _api_key) and provider.startswith("custom:"):
                     try:
-                        from api.config import _has_explicit_pool_credentials
+                        from api.config import provider_has_explicit_pool_credentials
 
-                        if _has_explicit_pool_credentials(provider):
+                        if provider_has_explicit_pool_credentials(provider):
                             from agent.credential_pool import load_pool as _lpool
                             _resolved = _resolve_provider_alias(provider)
                             _lm_pool = _lpool(_resolved)
@@ -611,24 +611,24 @@ def _handle_live_models(handler, parsed):
         # this endpoint is only a dropdown-enrichment surface. (#1567, #3691)
         if provider == "nous":
             try:
-                from api.config import _build_nous_featured_set
+                from api.config import build_nous_featured_models
                 _default_model = (cfg.get("model", {}) or {}).get("model") if isinstance(cfg.get("model"), dict) else None
-                _featured, _ = _build_nous_featured_set(ids, selected_model_id=_default_model)
+                _featured, _ = build_nous_featured_models(ids, selected_model_id=_default_model)
                 ids = _featured
             except Exception:
                 logger.debug("Failed to apply Nous featured-set cap for /api/models/live")
         else:
-            from api.config import _MODEL_PICKER_OVERFLOW_THRESHOLD, _MODEL_PICKER_VISIBLE_TARGET
-            if len(ids) > _MODEL_PICKER_OVERFLOW_THRESHOLD:
-                ids = ids[:_MODEL_PICKER_VISIBLE_TARGET]
+            from api.config import MODEL_PICKER_OVERFLOW_THRESHOLD, MODEL_PICKER_VISIBLE_TARGET
+            if len(ids) > MODEL_PICKER_OVERFLOW_THRESHOLD:
+                ids = ids[:MODEL_PICKER_VISIBLE_TARGET]
 
         # Normalise to {id, label} — provider_model_ids() returns plain string IDs.
         # For ollama-cloud use the shared Ollama formatter (handles `:variant` suffix).
         # For all other providers use a simpler hyphen-split capitaliser.
         from api.config import (
-            _format_ollama_label as _fmt_ollama,
-            _is_openai_family_provider as _is_fast_tier_provider,
-            _model_supports_fast_tier_for_provider,
+            format_ollama_model_label as _fmt_ollama,
+            is_openai_family_provider as _is_fast_tier_provider,
+            model_supports_fast_tier_for_provider as _model_supports_fast_tier_for_provider,
         )
 
         def _make_label(mid):

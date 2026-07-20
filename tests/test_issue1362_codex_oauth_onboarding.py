@@ -22,12 +22,13 @@ NODE = shutil.which("node")
 
 
 def test_onboarding_codex_oauth_routes_use_post_start_cancel_and_get_poll():
-    routes = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-    get_idx = routes.find("def handle_get(")
-    post_idx = routes.find("def handle_post(")
-    assert get_idx != -1 and post_idx != -1
-    get_body = routes[get_idx:post_idx]
-    post_body = routes[post_idx:]
+    get_body = (REPO / "api" / "http" / "routes" / "workspace_queries.py").read_text(
+        encoding="utf-8"
+    )
+    post_body = (REPO / "api" / "http" / "routes" / "profile_mutations.py").read_text(
+        encoding="utf-8"
+    )
+    routes = get_body + post_body
 
     assert '"/api/onboarding/oauth/poll"' in get_body
     assert '"/api/onboarding/oauth/start"' not in get_body
@@ -551,7 +552,9 @@ def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path)
 
 def test_runtime_provider_reads_use_anthropic_env_lock():
     streaming_src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
-    routes_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    routes_src = (REPO / "api" / "routes_parts" / "chat_runs.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "resolve_runtime_provider_with_anthropic_env_lock" in streaming_src
     assert "resolve_runtime_provider_with_anthropic_env_lock" in routes_src
@@ -573,7 +576,7 @@ def test_anthropic_onboarding_setup_allows_linked_oauth_without_api_key(monkeypa
     (home / "auth.json").write_text(json.dumps({
         "credential_pool": {"anthropic": [{"auth_type": "oauth", "source": "claude_code_linked"}]}
     }), encoding="utf-8")
-    monkeypatch.setattr(onboarding, "_get_config_path", lambda: cfg_path)
+    monkeypatch.setattr(onboarding, "get_config_path", lambda: cfg_path)
     monkeypatch.setattr(onboarding, "get_active_hermes_home", lambda: home)
     monkeypatch.setattr(onboarding, "get_onboarding_status", lambda: {"ok": True})
     monkeypatch.setattr(onboarding, "reload_config", lambda: None)

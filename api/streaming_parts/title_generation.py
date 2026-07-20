@@ -480,7 +480,9 @@ def generate_title_raw_via_aux(
     model = model or configured.get('model', '') or ''
     base_url = base_url or configured.get('base_url', '') or ''
     try:
-        from api.profiles import _split_webui_provider_model_value
+        from api.profiles import (
+            split_webui_provider_model_value as _split_webui_provider_model_value,
+        )
 
         normalized_model, normalized_provider = _split_webui_provider_model_value(
             model or None,

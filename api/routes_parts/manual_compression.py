@@ -19,7 +19,7 @@ if TYPE_CHECKING:
         require_ai_agent_class,
     )
     from api.compression_anchor import visible_messages_for_anchor
-    from api.config import _resolve_cli_toolsets
+    from api.config import resolve_cli_toolsets as _resolve_cli_toolsets
     from api.helpers import (
         _sanitize_error,
         bad,

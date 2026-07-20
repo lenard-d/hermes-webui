@@ -372,13 +372,14 @@ class TestIssue1436SourceMarkers:
     drop the fallback."""
 
     def test_routes_load_path_imports_get_model_context_length(self):
-        src = ROUTES.read_text(encoding="utf-8")
+        src = (ROUTES.parent / "http" / "routes" / "session_queries.py").read_text(
+            encoding="utf-8"
+        )
         owner_src = (ROUTES.parent / "routes_parts" / "session_models.py").read_text(
             encoding="utf-8"
         )
-        # The session load path can call a helper, but the lazy import must
-        # remain in routes.py so WebUI still works with older/missing agent
-        # bundles by swallowing metadata-resolution failures.
+        # The session load owner can call a helper; agent metadata lookup stays
+        # in session_models so older/missing agent bundles degrade safely.
         start = src.find('if parsed.path == "/api/session":')
         end = src.find('if parsed.path == "/api/projects":', start)
         block = src[start:end]
@@ -393,7 +394,9 @@ class TestIssue1436SourceMarkers:
 
     def test_routes_load_path_marks_fix_with_issue_number(self):
         """Comment must reference #1436 so future maintainers find this trail."""
-        src = ROUTES.read_text(encoding="utf-8")
+        src = (ROUTES.parent / "http" / "routes" / "session_queries.py").read_text(
+            encoding="utf-8"
+        )
         # Find the load-path block (between "if parsed.path == \"/api/session\":"
         # and the next `if parsed.path` after it).
         start = src.find('if parsed.path == "/api/session":')

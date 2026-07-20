@@ -822,8 +822,8 @@ def _run_gateway_chat_streaming(
         base_url = _gateway_base_url(cfg)
         api_key = _gateway_api_key()
         try:
-            from api.config import _main_model_request_overrides
-            _gw_overrides = _main_model_request_overrides(
+            from api.config import main_model_request_overrides
+            _gw_overrides = main_model_request_overrides(
                 cfg,
                 effective_model=model,
                 effective_provider=model_provider,

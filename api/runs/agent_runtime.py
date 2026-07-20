@@ -15,7 +15,9 @@ import threading
 
 # Retain the discovered path as a diagnostic/test-visible compatibility value;
 # runtime identity is deliberately captured from the loaded module below.
-from api.config import _AGENT_DIR  # noqa: F401
+from api.config import get_agent_source_dir
+
+_AGENT_DIR = get_agent_source_dir()  # compatibility/test diagnostic seam
 
 _RESTART_MESSAGE = (
     "Hermes Agent was updated while Hermes WebUI was running. "

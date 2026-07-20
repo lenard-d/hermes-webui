@@ -315,9 +315,9 @@ def _canonical_context_provider(value: str | None) -> str:
     if not provider:
         return ""
     try:
-        from api.config import _resolve_provider_alias
+        from api.config import resolve_provider_alias
 
-        provider = _resolve_provider_alias(provider)
+        provider = resolve_provider_alias(provider)
     except Exception:
         pass
     return str(provider or "").strip().lower()
@@ -325,9 +325,9 @@ def _canonical_context_provider(value: str | None) -> str:
 
 def _custom_provider_slug_for_context(name: object) -> str:
     try:
-        from api.config import _custom_provider_slug_from_name
+        from api.config import custom_provider_slug_from_name
 
-        return _custom_provider_slug_from_name(name)
+        return custom_provider_slug_from_name(name)
     except Exception:
         raw = str(name or "").strip().lower()
         if not raw:
@@ -386,9 +386,9 @@ def _custom_provider_api_key_for_context(entry: dict, provider: str) -> str:
             return resolved
 
     try:
-        from api.config import _lookup_custom_api_key_env
+        from api.config import lookup_custom_api_key_env
 
-        return _lookup_custom_api_key_env(provider) or ""
+        return lookup_custom_api_key_env(provider) or ""
     except Exception:
         return ""
 
@@ -812,16 +812,16 @@ def _repair_bare_custom_provider_model(
         if prov != "custom" and not str(prov).startswith("custom:"):
             return None
         from api.config import (
-            _custom_provider_entries,
-            _custom_provider_slug_from_name,
+            custom_provider_entries,
+            custom_provider_slug_from_name,
             get_config,
         )
 
         if isinstance(config_obj, dict):
-            _entries = _custom_provider_entries(config_obj)
+            _entries = custom_provider_entries(config_obj)
         else:
             _cfg = get_config()
-            _entries = _custom_provider_entries(
+            _entries = custom_provider_entries(
                 _cfg if isinstance(_cfg, dict) else None
             )
         prov_norm = str(prov).strip().lower()
@@ -829,7 +829,7 @@ def _repair_bare_custom_provider_model(
         _matching_cp = None
         for _entry in _entries:
             entry_name = str(_entry.get("name") or "").strip().lower()
-            slug = _custom_provider_slug_from_name(_entry.get("name"))
+            slug = custom_provider_slug_from_name(_entry.get("name"))
             if not slug:
                 continue
             if (

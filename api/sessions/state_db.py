@@ -84,7 +84,7 @@ def get_session_for_file_ops(sid: str):
             return _ExternalSessionView(str(sid), str(get_last_workspace()))
         raise
 
-    from api.profiles import _profiles_match, get_active_profile_name
+    from api.profiles import get_active_profile_name, profiles_match as _profiles_match
 
     session_profile = getattr(session, 'profile', None)
     active_profile = get_active_profile_name()

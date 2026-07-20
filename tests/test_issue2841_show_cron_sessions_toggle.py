@@ -95,7 +95,7 @@ def test_show_webhook_sessions_kwarg_passthrough():
 
 
 def test_show_webhook_sessions_invalidates_session_cache_on_settings_save():
-    src = _read("api/routes.py")
+    src = _read("api/http/routes/profile_mutations.py")
     invalidation_block = src.split("Settings that change which sessions appear in the sidebar", 1)[1]
     invalidation_block = invalidation_block.split("auth_enabled_after", 1)[0]
     assert '"show_webhook_sessions"' in invalidation_block, (

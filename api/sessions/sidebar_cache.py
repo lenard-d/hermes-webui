@@ -11,7 +11,7 @@ from api.config import LOCK, SESSION_DIR, SESSIONS, SETTINGS_FILE
 from api.sessions.external import _sqlite_content_fingerprint
 from api.sessions.records import _active_stream_ids
 from api.sessions.state_db import _active_state_db_path
-from api.profiles import _profiles_match
+from api.profiles import profiles_match as _profiles_match
 
 
 _SESSIONS_CACHE_TTL_SECONDS = 2.5
@@ -349,9 +349,9 @@ def _session_list_cache_source_stamp(key: tuple) -> tuple[tuple[int, int], tuple
 
 def _session_list_cache_settings_write_version() -> int:
     try:
-        from api.config import _SETTINGS_WRITE_VERSION
+        from api.config import get_settings_write_version
 
-        return int(_SETTINGS_WRITE_VERSION)
+        return int(get_settings_write_version())
     except Exception:
         return 0
 

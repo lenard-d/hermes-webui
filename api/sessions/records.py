@@ -38,7 +38,7 @@ from api.compression_anchor import is_context_compression_marker
 from api.config import (
     SESSION_DIR, SESSION_INDEX_FILE, SESSIONS, SESSIONS_MAX,
     LOCK, DEFAULT_WORKSPACE, DEFAULT_MODEL, PROJECTS_FILE, HOME,
-    get_effective_default_model, _get_session_agent_lock,
+    get_effective_default_model, session_agent_lock as _get_session_agent_lock,
 )
 from api.workspace import get_last_workspace
 from api.usage import prompt_cache_hit_percent

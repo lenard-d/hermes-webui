@@ -15,7 +15,7 @@ from urllib.parse import parse_qs
 if TYPE_CHECKING:
     from api.helpers import bad, j, require
     from api.sessions.store import _active_state_db_path
-    from api.profiles import _profiles_match
+    from api.profiles import profiles_match as _profiles_match
     from api.routes import _publish_session_list_changed, logger
 
 _RUNNING_CRON_JOBS: dict[str, float] = {}

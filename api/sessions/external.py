@@ -768,7 +768,7 @@ def _all_profiles_cli_contexts() -> tuple[list[tuple[Path, Path, str | None]], t
     """Return per-profile CLI scan contexts plus a cache key fragment."""
     try:
         from api.profiles import (
-            _profiles_root,
+            profiles_root as _profiles_root,
             get_active_profile_name,
             get_hermes_home_for_profile,
             list_profiles_api,

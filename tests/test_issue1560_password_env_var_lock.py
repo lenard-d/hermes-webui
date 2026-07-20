@@ -25,12 +25,12 @@ def _read(rel_path):
     return (REPO / rel_path).read_text(encoding='utf-8')
 
 
-# ── Backend (api/routes.py) ───────────────────────────────────────────────
+# ── Backend route owners ──────────────────────────────────────────────────
 
 
 def test_get_settings_surfaces_password_env_var_flag():
     """GET /api/settings handler must include `password_env_var: bool(env)`."""
-    src = _read('api/routes.py')
+    src = _read('api/http/routes/configuration_queries.py')
     # Locate the GET /api/settings block (by handler comment + path string)
     start = src.index('if parsed.path == "/api/settings":')
     # Block ends at next top-level `if parsed.path == ...` or `if parsed.path.startswith`
@@ -45,7 +45,7 @@ def test_get_settings_surfaces_password_env_var_flag():
 
 def test_post_settings_refuses_set_password_when_env_var_shadowed():
     """POST /api/settings with _set_password must return 409 when env var is set."""
-    src = _read('api/routes.py')
+    src = _read('api/http/routes/profile_mutations.py')
     # The guard lives near the POST /api/settings handler; locate it via the
     # canonical error-message substring (defense-in-depth comment + bad() call).
     assert 'HERMES_WEBUI_PASSWORD env var is set' in src, \
@@ -55,7 +55,7 @@ def test_post_settings_refuses_set_password_when_env_var_shadowed():
 
 def test_post_settings_refuses_clear_password_when_env_var_shadowed():
     """POST /api/settings with _clear_password=true must also be refused."""
-    src = _read('api/routes.py')
+    src = _read('api/http/routes/profile_mutations.py')
     # Same guard must cover both paths
     assert '_clear_password' in src
     # Find the guard and verify it tests both flags

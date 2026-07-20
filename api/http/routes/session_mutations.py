@@ -350,9 +350,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
                     )
                     s.threshold_tokens = 0
                     s.last_prompt_tokens = 0
-                    from api.config import _evict_session_agent
+                    from api.config import evict_session_agent
 
-                    _evict_session_agent(body["session_id"])
+                    evict_session_agent(body["session_id"])
         if str(old_ws or "") != str(new_ws or ""):
             try:
                 from api.terminal import close_terminal
@@ -544,9 +544,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         # Evict cached agent outside the per-session lock.  Eviction may run a
         # boundary memory commit for batch-extraction providers, and provider
         # I/O must not hold the session mutation lock.
-        from api.config import _evict_session_agent
+        from api.config import evict_session_agent
 
-        _evict_session_agent(sid)
+        evict_session_agent(sid)
         return j(handler, {"ok": True, "session": s.compact()})
 
     if parsed.path == "/api/session/truncate":
@@ -592,9 +592,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
                 len(getattr(s, "context_messages", None) or []),
                 s.truncation_watermark or 0,
             )
-        from api.config import _evict_session_agent
+        from api.config import evict_session_agent
 
-        _evict_session_agent(body["session_id"])
+        evict_session_agent(body["session_id"])
         return j(
             handler, {"ok": True, "session": s.compact() | {"messages": s.messages}}
         )

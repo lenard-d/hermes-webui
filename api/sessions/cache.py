@@ -763,7 +763,7 @@ def _compression_recovery_child_matches(
 ) -> bool:
     if source_profile is not _COMPRESSION_RECOVERY_PROFILE_UNSET:
         try:
-            from api.profiles import _profiles_match
+            from api.profiles import profiles_match as _profiles_match
         except (ImportError, AttributeError):
             logger.debug("Failed to profile-check compression recovery session", exc_info=True)
             return False
