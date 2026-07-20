@@ -115,8 +115,8 @@ def test_moa_config_is_per_turn_not_persisted():
     streaming_path = (
         Path(__file__).resolve().parent.parent
         / "api"
-        / "streaming_parts"
-        / "local_run.py"
+        / "runs"
+        / "local.py"
     )
     source = streaming_path.read_text(encoding="utf-8")
     # moa_config is threaded into the live agent turn as a per-turn kwarg. It is

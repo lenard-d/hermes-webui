@@ -6,14 +6,16 @@ Tests for issues #373, #374, and #375.
 #375: Model dropdown should fetch live models from provider
 """
 import pathlib
-from tests.frontend_asset_contract import family_source
+from collections import defaultdict
+from contextlib import nullcontext
+from types import SimpleNamespace
 
 from api.config.static_catalog import FALLBACK_MODELS, PROVIDER_MODELS
+from tests.frontend_asset_contract import family_source
 
 REPO = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 CONFIG_PY    = (REPO / "api" / "config" / "static_catalog.py").read_text(encoding="utf-8")
-ROUTES_PY    = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 LIVE_MODELS_PY = (REPO / "api" / "routes_parts" / "live_models.py").read_text(encoding="utf-8")
 MESSAGES_JS  = family_source("messages")
 UI_JS        = family_source("ui")
@@ -156,11 +158,38 @@ class TestStaleModelListCleanup:
 class TestLiveModelFetching:
     """Backend and frontend must support live model fetching from provider APIs."""
 
-    def test_live_models_endpoint_exists_in_routes(self):
-        """routes.py must have a /api/models/live endpoint (#375)."""
-        assert "/api/models/live" in ROUTES_PY, (
-            "routes.py must define /api/models/live endpoint (#375)"
+    def test_live_models_endpoint_dispatches_to_live_model_owner(self, monkeypatch):
+        """The configuration route delegates /api/models/live to its domain owner."""
+        import api.profiles as profiles
+        from api.http.routes import configuration_queries
+
+        marker = object()
+        seen = []
+        monkeypatch.setattr(
+            profiles,
+            "profile_env_for_active_request",
+            lambda *_args, **_kwargs: nullcontext(),
         )
+        def unused(*_args, **_kwargs):
+            return None
+
+        context = defaultdict(lambda: unused)
+        context.update(
+            {
+                "_handle_live_models": lambda handler, parsed: seen.append(
+                    (handler, parsed.path)
+                )
+                or marker,
+            }
+        )
+        handler = object()
+
+        assert configuration_queries.handle_get(
+            handler,
+            SimpleNamespace(path="/api/models/live", query="provider=nous"),
+            context,
+        ) is marker
+        assert seen == [(handler, "/api/models/live")]
 
     def test_live_models_handler_function_exists(self):
         """The live-model owner must define _handle_live_models() (#375)."""
@@ -213,15 +242,33 @@ class TestLiveModelFetching:
                 "_fetchLiveModels must not skip anthropic — backend now handles it (#375 upgrade)"
             )
 
-    def test_live_models_endpoint_wired_in_routes(self):
-        """The /api/models/live path must be handled in handle_get()."""
-        # Find handle_get and check our route appears inside it
-        handle_get_pos = ROUTES_PY.find("def handle_get(")
-        live_route_pos = ROUTES_PY.find('"/api/models/live"')
-        assert handle_get_pos != -1 and live_route_pos != -1
-        assert live_route_pos > handle_get_pos, (
-            "/api/models/live must be inside handle_get() (#375)"
+    def test_live_models_endpoint_wired_through_http_composition_root(self, monkeypatch):
+        """The HTTP composition root reaches the configuration route group."""
+        from api.http import router
+        from api.http.context import UNHANDLED
+        from api.http.routes import configuration_queries, observability_queries, public
+
+        seen = []
+        monkeypatch.setattr(public, "handle_get", lambda *_args: UNHANDLED)
+        monkeypatch.setattr(
+            observability_queries, "handle_get", lambda *_args: UNHANDLED
         )
+        monkeypatch.setattr(
+            configuration_queries,
+            "handle_get",
+            lambda _handler, parsed, _ctx: seen.append(parsed.path) or True,
+        )
+        context = {
+            "_handle_extension_sidecar_proxy": lambda *_args, **_kwargs: False,
+            "_guard_request_session_visibility": lambda *_args, **_kwargs: True,
+        }
+
+        assert router.handle_get(
+            object(),
+            SimpleNamespace(path="/api/models/live", query=""),
+            context,
+        ) is True
+        assert seen == ["/api/models/live"]
 
 
 # ── #669: Gemini model IDs must be valid for Google AI Studio endpoint ────────

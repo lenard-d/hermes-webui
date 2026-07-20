@@ -1,17 +1,17 @@
 """Regression coverage for #749 profile creation model/provider selection."""
 
+from collections import defaultdict
 from pathlib import Path
-from tests.frontend_asset_contract import family_source
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
 import api.profiles as profiles
-
+from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parent.parent
 PANELS_JS = family_source("panels")
-ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
 
 def test_profile_create_form_exposes_model_picker():
@@ -31,14 +31,46 @@ def test_profile_create_payload_preserves_provider_context():
     assert "payload.model_provider" in fn_body
 
 
-def test_profile_create_route_passes_model_fields_to_profile_api():
-    route_start = ROUTES_PY.find('if parsed.path == "/api/profile/create":')
-    assert route_start != -1
-    route_body = ROUTES_PY[route_start : ROUTES_PY.find('if parsed.path == "/api/profile/delete":', route_start)]
-    assert 'default_model = body.get("default_model"' in route_body
-    assert 'model_provider = body.get("model_provider"' in route_body
-    assert "default_model=default_model" in route_body
-    assert "model_provider=model_provider" in route_body
+def test_profile_create_route_passes_model_fields_to_profile_api(monkeypatch):
+    from api.http.routes import profile_mutations
+
+    captured = {}
+
+    def create_profile_api(name, **kwargs):
+        captured.update(name=name, **kwargs)
+        return {"name": name}
+
+    monkeypatch.setattr(profiles, "create_profile_api", create_profile_api)
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    context.update(
+        {
+            "j": lambda _handler, payload, **_kwargs: payload,
+            "bad": lambda _handler, message, status=400: {
+                "error": message,
+                "status": status,
+            },
+        }
+    )
+    body = {
+        "name": "research",
+        "default_model": "anthropic/claude-opus-4.6",
+        "model_provider": "nous",
+    }
+
+    result = profile_mutations.handle_post(
+        object(),
+        SimpleNamespace(path="/api/profile/create"),
+        body,
+        None,
+        context,
+    )
+
+    assert result == {"ok": True, "profile": {"name": "research"}}
+    assert captured["default_model"] == "anthropic/claude-opus-4.6"
+    assert captured["model_provider"] == "nous"
 
 
 def test_profile_model_config_writer_persists_default_and_provider(tmp_path):

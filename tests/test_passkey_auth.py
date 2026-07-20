@@ -1,13 +1,14 @@
 import base64
-from tests.frontend_asset_contract import family_source
+import hashlib
 import io
 import json
-import hashlib
+from collections import defaultdict
 from types import SimpleNamespace
 
 from cryptography.hazmat.primitives import hashes
-
 from cryptography.hazmat.primitives.asymmetric import ec
+
+from tests.frontend_asset_contract import family_source
 
 
 def b64u(data: bytes) -> str:
@@ -187,8 +188,8 @@ class RouteFakeHandler:
 
 def test_passkey_options_rate_limit_errors_return_429(monkeypatch):
     import api.auth as auth
-    from api.auth import passkeys
     import api.routes as routes
+    from api.auth import passkeys
 
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: True)
@@ -208,8 +209,8 @@ def test_passkey_options_rate_limit_errors_return_429(monkeypatch):
 
 def test_passkey_register_options_handles_base_passkey_errors(monkeypatch):
     import api.auth as auth
-    from api.auth import passkeys
     import api.routes as routes
+    from api.auth import passkeys
 
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: True)
@@ -329,22 +330,45 @@ def test_passkey_registration_requires_valid_session_when_auth_is_enabled(monkey
         assert json.loads(handler.wfile.getvalue())["error"] == "Authentication required"
 
 
-def test_auth_status_reports_passkey_availability_source_contract():
-    src = open("api/routes.py", encoding="utf-8").read()
-    assert '"passkeys_enabled"' in src
-    assert '"passkeys_count"' in src
-    assert '"password_auth_enabled"' in src
-    assert '"passwordless_enabled"' in src
-    assert 'registered_credentials()' in src
+def test_auth_status_reports_passkey_availability_contract(monkeypatch):
+    import api.auth as auth
+    from api.http.routes import public
+
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda: False)
+    monkeypatch.setattr(auth, "is_oidc_auth_enabled", lambda: False)
+    monkeypatch.setattr(auth, "is_trusted_auth_enabled", lambda: False)
+    monkeypatch.setattr(auth, "passkey_feature_enabled", lambda: True)
+    monkeypatch.setattr(auth, "registered_credentials", lambda: [{"id": "cred-1"}])
+    monkeypatch.setattr(auth, "get_password_hash", lambda: None)
+    captured = {}
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    context.update(
+        {
+            "load_settings": lambda: {},
+            "j": lambda _handler, payload, **_kwargs: captured.update(payload) or True,
+        }
+    )
+
+    assert public.handle_get(
+        object(),
+        SimpleNamespace(path="/api/auth/status", query=""),
+        context,
+    ) is True
+    assert captured["passkeys_enabled"] is True
+    assert captured["passkeys_count"] == 1
+    assert captured["password_auth_enabled"] is False
+    assert captured["passwordless_enabled"] is True
 
 
 def test_login_page_has_default_hidden_passkey_button_and_script_wiring():
-    from api import routes
+    from api.routes_parts.login import _LOGIN_PAGE_HTML
 
-    login_page = routes._LOGIN_PAGE_HTML
     login_js = open("static/login.js", encoding="utf-8").read()
-    assert 'id="passkey-login"' in login_page
-    assert 'style="display:none"' in login_page
+    assert 'id="passkey-login"' in _LOGIN_PAGE_HTML
+    assert 'style="display:none"' in _LOGIN_PAGE_HTML
     assert "api/auth/passkey/options" in login_js
     assert "navigator.credentials.get" in login_js
 
@@ -383,15 +407,66 @@ def test_passkey_feature_flag_via_config(monkeypatch, tmp_path):
     assert auth.are_passkeys_enabled() is True
 
 
-def test_passwordless_settings_and_last_passkey_guard_are_wired():
-    routes = open("api/routes.py", encoding="utf-8").read()
+def test_passwordless_settings_and_last_passkey_guard_are_wired(monkeypatch):
+    import os
+
+    import api.auth as auth
+    from api.http.routes import auth_mutations, profile_mutations
+
     panels = family_source("panels")
     index = open("static/index.html", encoding="utf-8").read()
 
-    assert "_passwordless" in routes
-    assert "Register a passkey before going passwordless." in routes
-    assert "Set a password or disable auth before removing the last passkey." in routes
-    assert "clear_credentials()" in routes
+    monkeypatch.setattr(auth, "is_auth_enabled", lambda: False)
+    monkeypatch.setattr(auth, "get_password_hash", lambda: None)
+    monkeypatch.setattr(auth, "parse_cookie", lambda _handler: None)
+    monkeypatch.setattr(auth, "passkey_feature_enabled", lambda: True)
+    monkeypatch.setattr(auth, "registered_credentials", lambda: [])
+    errors = []
+    def unused(*_args, **_kwargs):
+        return None
+
+    profile_context = defaultdict(lambda: unused)
+    profile_context.update(
+        {
+            "os": os,
+            "bad": lambda _handler, message, status=400: errors.append(
+                (message, status)
+            )
+            or True,
+        }
+    )
+    assert profile_mutations.handle_post(
+        RouteFakeHandler(),
+        SimpleNamespace(path="/api/settings"),
+        {"_passwordless": True},
+        None,
+        profile_context,
+    ) is True
+    assert errors == [("Register a passkey before going passwordless.", 409)]
+
+    monkeypatch.setattr(auth, "registered_credentials", lambda: [{"id": "cred-1"}])
+    delete_errors = []
+    auth_context = {
+        "_require_passkey_registration_auth": unused,
+        "_security_headers": unused,
+        "bad": lambda _handler, message, status=400: delete_errors.append(
+            (message, status)
+        )
+        or True,
+        "j": unused,
+        "json": json,
+    }
+    assert auth_mutations.handle_post(
+        RouteFakeHandler(),
+        SimpleNamespace(path="/api/auth/passkey/delete"),
+        {"id": "cred-1"},
+        None,
+        auth_context,
+    ) is True
+    assert delete_errors == [
+        ("Set a password or disable auth before removing the last passkey.", 409)
+    ]
+
     assert "id=\"btnGoPasswordless\"" in index
     assert "async function goPasswordless" in panels
     assert "prompt(" not in panels

@@ -10,21 +10,23 @@ Covers:
 6. /api/media endpoint: integration test via live server (requires 8788)
 """
 from __future__ import annotations
-from tests.frontend_asset_contract import family_source
 
 import json
 import os
 import pathlib
 import tempfile
 import unittest
-from types import SimpleNamespace
-from unittest import mock
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import defaultdict
+from types import SimpleNamespace
+from unittest import mock
 
+from api.routes_parts import media_files
 from tests._pytest_port import BASE, TEST_STATE_DIR
 from tests.conftest import TEST_WORKSPACE
+from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 UI_JS = family_source("ui")
@@ -268,17 +270,32 @@ class TestMediaEndpointUnit(unittest.TestCase):
     """Test route registration and handler logic via imports."""
 
     def test_handle_media_function_exists(self):
-        from api import routes
-        self.assertTrue(
-            hasattr(routes, "_handle_media"),
-            "_handle_media must be defined in api/routes.py",
-        )
+        self.assertTrue(callable(media_files._handle_media))
 
     def test_api_media_route_registered(self):
         """The GET dispatch must include the /api/media path."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-        self.assertIn('"/api/media"', routes_src,
-                      '/api/media must be registered in the GET route dispatch')
+        from api.http.routes import workspace_queries
+
+        marker = object()
+        seen = []
+        def unused(*_args, **_kwargs):
+            return None
+
+        context = defaultdict(lambda: unused)
+        context["_handle_media"] = (
+            lambda handler, parsed: seen.append((handler, parsed.path)) or marker
+        )
+        handler = object()
+
+        self.assertIs(
+            workspace_queries.handle_get(
+                handler,
+                SimpleNamespace(path="/api/media", query=""),
+                context,
+            ),
+            marker,
+        )
+        self.assertEqual(seen, [(handler, "/api/media")])
 
     def test_allowed_roots_include_tmp(self):
         """Handler must allow /tmp so screenshot paths work."""
@@ -334,29 +351,25 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
     def test_path_is_within_root_treats_commonpath_valueerror_as_not_within(self):
         """Windows cross-drive commonpath() errors must not crash /api/media."""
-        from api import routes
-
         with mock.patch.object(
-            routes.os.path,
+            media_files.os.path,
             "commonpath",
             side_effect=ValueError("Paths don't have the same drive"),
         ):
             self.assertFalse(
-                routes._path_is_within_root(
+                media_files._path_is_within_root(
                     pathlib.Path("D:/outputs/card.png"),
                     pathlib.Path("C:/Users/agent/.hermes"),
                 )
             )
 
     def test_path_is_within_root_accepts_child_path(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             root = pathlib.Path(tmpd).resolve()
             child = root / "media" / "card.png"
             child.parent.mkdir()
             child.write_bytes(b"png")
-            self.assertTrue(routes._path_is_within_root(child.resolve(), root))
+            self.assertTrue(media_files._path_is_within_root(child.resolve(), root))
 
     def test_active_workspace_carveout_gated_against_hermes_roots(self):
         """#3234: the active-workspace carve-out must NOT re-open the disclosure
@@ -364,8 +377,6 @@ class TestMediaEndpointUnit(unittest.TestCase):
         ($HOME, ~/.hermes, a profile root, etc.). A state.db sitting under such a
         workspace must still be denied (403), not served.
         """
-        from api import routes
-
         class _Handler:
             def __init__(self):
                 self.status = None
@@ -393,9 +404,12 @@ class TestMediaEndpointUnit(unittest.TestCase):
                 query=f"path={urllib.parse.quote(str(target))}", path="/api/media"
             )
             with mock.patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}), \
-                 mock.patch.object(routes, "get_last_workspace", lambda: str(hermes_home)), \
                  mock.patch("api.auth.is_auth_enabled", lambda: False):
-                routes._handle_media(handler, parsed)
+                media_files._handle_media(
+                    handler,
+                    parsed,
+                    workspace_getter=lambda: str(hermes_home),
+                )
 
             self.assertEqual(
                 handler.status, 403,
@@ -410,8 +424,6 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
         Regression for the over-block where STATE_DIR was denied wholesale.
         """
-        from api import routes
-
         class _Handler:
             def __init__(self):
                 self.status = None
@@ -451,22 +463,31 @@ class TestMediaEndpointUnit(unittest.TestCase):
                 "HERMES_WEBUI_STATE_DIR": str(state_dir),
             }
             with mock.patch.dict(os.environ, env), \
-                 mock.patch.object(routes, "get_last_workspace", lambda: str(ws)), \
                  mock.patch("api.auth.is_auth_enabled", lambda: False), \
                  mock.patch("api.config.STATE_DIR", state_dir):
                 # workspace media → not blocked by the #3234 deny
                 h1 = _Handler()
-                routes._handle_media(h1, SimpleNamespace(
-                    query=f"path={urllib.parse.quote(str(shot.resolve()))}&inline=1",
-                    path="/api/media"))
+                media_files._handle_media(
+                    h1,
+                    SimpleNamespace(
+                        query=f"path={urllib.parse.quote(str(shot.resolve()))}&inline=1",
+                        path="/api/media",
+                    ),
+                    workspace_getter=lambda: str(ws),
+                )
                 self.assertNotEqual(
                     h1.status, 403,
                     "STATE_DIR/workspace/shot.png must NOT be blocked (legit media)")
                 # sessions state → still denied
                 h2 = _Handler()
-                routes._handle_media(h2, SimpleNamespace(
-                    query=f"path={urllib.parse.quote(str(sess_file.resolve()))}",
-                    path="/api/media"))
+                media_files._handle_media(
+                    h2,
+                    SimpleNamespace(
+                        query=f"path={urllib.parse.quote(str(sess_file.resolve()))}",
+                        path="/api/media",
+                    ),
+                    workspace_getter=lambda: str(ws),
+                )
                 self.assertEqual(
                     h2.status, 403,
                     "STATE_DIR/sessions/abc.json must stay denied (internal state)")
@@ -479,8 +500,6 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
         Regression for the over-block where the whole `profiles` tree was denied.
         """
-        from api import routes
-
         class _Handler:
             def __init__(self):
                 self.status = None
@@ -516,28 +535,42 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
             active = base / "profiles" / "p1"  # active profile HERMES_HOME
             with mock.patch.dict(os.environ, {"HERMES_HOME": str(active)}), \
-                 mock.patch.object(routes, "get_last_workspace", lambda: str(p1_ws)), \
                  mock.patch("api.auth.is_auth_enabled", lambda: False), \
                  mock.patch("api.profiles._DEFAULT_HERMES_HOME", base):
                 # named-profile workspace media → served
                 h1 = _Handler()
-                routes._handle_media(h1, SimpleNamespace(
-                    query=f"path={urllib.parse.quote(str((p1_ws / 'shot.png').resolve()))}&inline=1",
-                    path="/api/media"))
+                media_files._handle_media(
+                    h1,
+                    SimpleNamespace(
+                        query=f"path={urllib.parse.quote(str((p1_ws / 'shot.png').resolve()))}&inline=1",
+                        path="/api/media",
+                    ),
+                    workspace_getter=lambda: str(p1_ws),
+                )
                 self.assertNotEqual(
                     h1.status, 403,
                     "named-profile workspace media must NOT be blocked")
                 # this profile's own secret → denied
                 h2 = _Handler()
-                routes._handle_media(h2, SimpleNamespace(
-                    query=f"path={urllib.parse.quote(str(p1_secret.resolve()))}",
-                    path="/api/media"))
+                media_files._handle_media(
+                    h2,
+                    SimpleNamespace(
+                        query=f"path={urllib.parse.quote(str(p1_secret.resolve()))}",
+                        path="/api/media",
+                    ),
+                    workspace_getter=lambda: str(p1_ws),
+                )
                 self.assertEqual(h2.status, 403, "profile auth.json must be denied")
                 # sibling profile's secret → denied
                 h3 = _Handler()
-                routes._handle_media(h3, SimpleNamespace(
-                    query=f"path={urllib.parse.quote(str(other_secret.resolve()))}",
-                    path="/api/media"))
+                media_files._handle_media(
+                    h3,
+                    SimpleNamespace(
+                        query=f"path={urllib.parse.quote(str(other_secret.resolve()))}",
+                        path="/api/media",
+                    ),
+                    workspace_getter=lambda: str(p1_ws),
+                )
                 self.assertEqual(h3.status, 403, "sibling profile auth.json must be denied")
                 # per-profile webui_state/sessions → denied (not a direct child of root)
                 ws_sess = active / "webui_state" / "sessions"
@@ -545,17 +578,20 @@ class TestMediaEndpointUnit(unittest.TestCase):
                 ws_sess_file = ws_sess / "s1.json"
                 ws_sess_file.write_text('{"messages":[]}', encoding="utf-8")
                 h4 = _Handler()
-                routes._handle_media(h4, SimpleNamespace(
-                    query=f"path={urllib.parse.quote(str(ws_sess_file.resolve()))}",
-                    path="/api/media"))
+                media_files._handle_media(
+                    h4,
+                    SimpleNamespace(
+                        query=f"path={urllib.parse.quote(str(ws_sess_file.resolve()))}",
+                        path="/api/media",
+                    ),
+                    workspace_getter=lambda: str(p1_ws),
+                )
                 self.assertEqual(
                     h4.status, 403,
                     "profile webui_state/sessions/*.json must be denied")
 
     def test_media_allowed_roots_env_var_serves_outside_hermes_root(self):
         """MEDIA_ALLOWED_ROOTS must still allow legitimate outside-root media."""
-        from api import routes
-
         class _Handler:
             def __init__(self):
                 self.status = None
@@ -591,18 +627,15 @@ class TestMediaEndpointUnit(unittest.TestCase):
                     "HERMES_HOME": str(hermes_home),
                     "MEDIA_ALLOWED_ROOTS": str(outside_root),
                 },
-            ), mock.patch.object(
-                routes, "get_last_workspace", lambda: str(hermes_home / "workspace")
-            ), mock.patch(
-                "api.auth.is_auth_enabled", lambda: False
-            ):
+            ), mock.patch("api.auth.is_auth_enabled", lambda: False):
                 handler = _Handler()
-                routes._handle_media(
+                media_files._handle_media(
                     handler,
                     SimpleNamespace(
                         query=f"path={urllib.parse.quote(str(image))}&inline=1",
                         path="/api/media",
                     ),
+                    workspace_getter=lambda: str(hermes_home / "workspace"),
                 )
 
             self.assertEqual(
@@ -617,92 +650,90 @@ class TestMediaEndpointUnit(unittest.TestCase):
         self.assertIn("206", routes_src)
 
     def test_session_media_token_allows_exact_image_path(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             image = pathlib.Path(tmpd) / "card.png"
             image.write_bytes(b"\x89PNG\r\n\x1a\n")
             session = SimpleNamespace(messages=[{"role": "assistant", "content": f"MEDIA:{image}"}])
-            with mock.patch.object(routes, "get_session", return_value=session):
-                self.assertTrue(
-                    routes._session_media_token_allows_image_path(
-                        "s-media", image, {"image/png"}
-                    )
+            self.assertTrue(
+                media_files._session_media_token_allows_image_path(
+                    "s-media",
+                    image,
+                    {"image/png"},
+                    session_loader=lambda _sid: session,
                 )
+            )
 
     def test_session_media_token_rejects_unmentioned_image_path(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             image = pathlib.Path(tmpd) / "card.png"
             image.write_bytes(b"\x89PNG\r\n\x1a\n")
             session = SimpleNamespace(messages=[{"role": "assistant", "content": "MEDIA:/tmp/other.png"}])
-            with mock.patch.object(routes, "get_session", return_value=session):
-                self.assertFalse(
-                    routes._session_media_token_allows_image_path(
-                        "s-media", image, {"image/png"}
-                    )
+            self.assertFalse(
+                media_files._session_media_token_allows_image_path(
+                    "s-media",
+                    image,
+                    {"image/png"},
+                    session_loader=lambda _sid: session,
                 )
+            )
 
     def test_session_media_token_rejects_non_image_path(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             text_file = pathlib.Path(tmpd) / "notes.txt"
             text_file.write_text("secret", encoding="utf-8")
             session = SimpleNamespace(messages=[{"role": "assistant", "content": f"MEDIA:{text_file}"}])
-            with mock.patch.object(routes, "get_session", return_value=session):
-                self.assertFalse(
-                    routes._session_media_token_allows_image_path(
-                        "s-media", text_file, {"image/png"}
-                    )
+            self.assertFalse(
+                media_files._session_media_token_allows_image_path(
+                    "s-media",
+                    text_file,
+                    {"image/png"},
+                    session_loader=lambda _sid: session,
                 )
+            )
 
     def test_session_media_token_allows_exact_html_path_when_mime_is_safe(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             html = pathlib.Path(tmpd) / "report.html"
             html.write_text("<h1>Report</h1>", encoding="utf-8")
             session = SimpleNamespace(messages=[{"role": "assistant", "content": f"MEDIA:{html}"}])
-            with mock.patch.object(routes, "get_session", return_value=session):
-                self.assertTrue(
-                    routes._session_media_token_allows_path(
-                        "s-media", html, {"text/html"}
-                    )
+            self.assertTrue(
+                media_files._session_media_token_allows_path(
+                    "s-media",
+                    html,
+                    {"text/html"},
+                    session_loader=lambda _sid: session,
                 )
+            )
 
     def test_session_media_token_rejects_mentioned_html_when_mime_not_allowed(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             html = pathlib.Path(tmpd) / "report.html"
             html.write_text("<h1>Report</h1>", encoding="utf-8")
             session = SimpleNamespace(messages=[{"role": "assistant", "content": f"MEDIA:{html}"}])
-            with mock.patch.object(routes, "get_session", return_value=session):
-                self.assertFalse(
-                    routes._session_media_token_allows_path(
-                        "s-media", html, {"image/png"}
-                    )
+            self.assertFalse(
+                media_files._session_media_token_allows_path(
+                    "s-media",
+                    html,
+                    {"image/png"},
+                    session_loader=lambda _sid: session,
                 )
+            )
 
     def test_session_media_token_rejects_user_authored_html_path(self):
-        from api import routes
-
         with tempfile.TemporaryDirectory() as tmpd:
             html = pathlib.Path(tmpd) / "report.html"
             html.write_text("<h1>Report</h1>", encoding="utf-8")
             session = SimpleNamespace(messages=[{"role": "user", "content": f"MEDIA:{html}"}])
-            with mock.patch.object(routes, "get_session", return_value=session):
-                self.assertFalse(
-                    routes._session_media_token_allows_path(
-                        "s-media", html, {"text/html"}
-                    )
+            self.assertFalse(
+                media_files._session_media_token_allows_path(
+                    "s-media",
+                    html,
+                    {"text/html"},
+                    session_loader=lambda _sid: session,
                 )
+            )
 
     def test_handle_media_session_authorizes_html_artifact_outside_roots(self):
-        from api import routes
-
         class _Handler:
             def __init__(self):
                 self.status = None
@@ -734,11 +765,9 @@ class TestMediaEndpointUnit(unittest.TestCase):
             html.write_text("<h1>Report</h1>", encoding="utf-8")
             session = SimpleNamespace(messages=[{"role": "assistant", "content": f"MEDIA:{html}"}])
             with mock.patch.dict(os.environ, {"HERMES_HOME": str(hermes_home), "MEDIA_ALLOWED_ROOTS": ""}), \
-                 mock.patch.object(routes, "get_last_workspace", lambda: str(ws)), \
-                 mock.patch.object(routes, "get_session", return_value=session), \
                  mock.patch("api.auth.is_auth_enabled", lambda: False):
                 handler = _Handler()
-                routes._handle_media(
+                media_files._handle_media(
                     handler,
                     SimpleNamespace(
                         query=(
@@ -747,6 +776,8 @@ class TestMediaEndpointUnit(unittest.TestCase):
                         ),
                         path="/api/media",
                     ),
+                    workspace_getter=lambda: str(ws),
+                    session_loader=lambda _sid: session,
                 )
 
             self.assertEqual(handler.status, 200)

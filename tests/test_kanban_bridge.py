@@ -15,6 +15,7 @@ import importlib
 import sys
 import time
 import types
+from collections import defaultdict
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -486,18 +487,56 @@ def test_kanban_events_payload_matches_polling_shape(monkeypatch):
     assert {"id", "task_id", "run_id", "kind", "payload", "created_at"} <= set(events["events"][0])
 
 
-def test_routes_dispatches_api_kanban_get_to_package():
-    src = open("api/routes.py", encoding="utf-8").read()
-    assert 'parsed.path.startswith("/api/kanban/")' in src
-    assert "from api.kanban import handle_kanban_get" in src
-    assert "handle_kanban_get(handler, parsed)" in src
+def test_http_owner_dispatches_api_kanban_get_to_package(monkeypatch):
+    import api.kanban as kanban
+    from api.http.routes import observability_queries
+
+    seen = []
+    monkeypatch.setattr(
+        kanban,
+        "handle_kanban_get",
+        lambda handler, parsed: seen.append((handler, parsed.path)) or True,
+    )
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    handler = object()
+
+    assert observability_queries.handle_get(
+        handler,
+        SimpleNamespace(path="/api/kanban/board", query=""),
+        context,
+    ) is True
+    assert seen == [(handler, "/api/kanban/board")]
 
 
-def test_routes_dispatches_api_kanban_post_to_package():
-    src = open("api/routes.py", encoding="utf-8").read()
-    assert 'parsed.path.startswith("/api/kanban/")' in src
-    assert "from api.kanban import handle_kanban_post" in src
-    assert "handle_kanban_post(handler, parsed, body)" in src
+def test_http_owner_dispatches_api_kanban_post_to_package(monkeypatch):
+    import api.kanban as kanban
+    from api.http.routes import platform_mutations
+
+    seen = []
+    monkeypatch.setattr(
+        kanban,
+        "handle_kanban_post",
+        lambda handler, parsed, body: seen.append((handler, parsed.path, body))
+        or True,
+    )
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    handler = object()
+    body = {"title": "Ship"}
+
+    assert platform_mutations.handle_post(
+        handler,
+        SimpleNamespace(path="/api/kanban/tasks", query=""),
+        body,
+        None,
+        context,
+    ) is True
+    assert seen == [(handler, "/api/kanban/tasks", body)]
 
 
 def test_legacy_bridge_reexports_package_handlers_without_owning_dispatch():
@@ -547,16 +586,47 @@ def test_kanban_only_mine_bulk_dispatch_and_block_unblock(monkeypatch):
 
 
 
-def test_routes_dispatches_canonical_kanban_patch_and_delete_verbs():
-    src = open("api/routes.py", encoding="utf-8").read()
+def test_http_router_dispatches_canonical_kanban_patch_and_delete_verbs(monkeypatch):
+    import api.kanban as kanban
+    from api.http import router
+
     server = open("server.py", encoding="utf-8").read()
     assert "def do_PATCH" in server
     assert "def do_DELETE" in server
     assert "self._handle_write(handle_patch)" in server
     assert "self._handle_write(handle_delete)" in server
-    assert 'parsed.path.startswith("/api/kanban/")' in src
-    assert "handle_kanban_patch(handler, parsed, body)" in src
-    assert "handle_kanban_delete(handler, parsed, body)" in src
+
+    seen = []
+    monkeypatch.setattr(
+        kanban,
+        "handle_kanban_patch",
+        lambda _handler, parsed, body: seen.append(("PATCH", parsed.path, body))
+        or True,
+    )
+    monkeypatch.setattr(
+        kanban,
+        "handle_kanban_delete",
+        lambda _handler, parsed, body: seen.append(("DELETE", parsed.path, body))
+        or True,
+    )
+    body = {"board": "default"}
+    context = {
+        "_check_csrf": lambda _handler: True,
+        "_csrf_rejection_error": lambda _handler: "rejected",
+        "_handle_extension_sidecar_proxy": lambda *_args, **_kwargs: False,
+        "read_body": lambda _handler: body,
+        "_guard_request_session_visibility": lambda *_args, **_kwargs: True,
+        "_kanban_unknown_endpoint": lambda *_args: False,
+        "j": lambda *_args, **_kwargs: True,
+    }
+    parsed = SimpleNamespace(path="/api/kanban/boards/default", query="")
+
+    assert router.handle_patch(object(), parsed, context) is True
+    assert router.handle_delete(object(), parsed, context) is True
+    assert seen == [
+        ("PATCH", "/api/kanban/boards/default", body),
+        ("DELETE", "/api/kanban/boards/default", body),
+    ]
 
 
 def test_patch_status_running_is_rejected_to_protect_dispatcher_contract(monkeypatch):
@@ -1090,8 +1160,8 @@ def test_sse_handler_runs_in_thread_and_streams_event(monkeypatch):
     behavioural integration test the SSE-handler-pre-release rule
     requires for every long-lived handler that crosses module boundaries.
     """
-    import threading
     import io
+    import threading
 
     bridge = _load_bridge(monkeypatch)
     # Speed up the SSE poll cycle and heartbeat for the test
@@ -1215,8 +1285,8 @@ def test_sse_emits_id_lines_so_browser_can_resume_via_last_event_id(monkeypatch)
     server can resume from there on reconnect without re-streaming the
     backlog.
     """
-    import threading
     import io
+    import threading
 
     bridge = _load_bridge(monkeypatch)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
@@ -1263,8 +1333,8 @@ def test_sse_honours_last_event_id_header_when_since_absent(monkeypatch):
     sends Last-Event-ID automatically. The handler must use it to resume
     when no explicit ?since= is given.
     """
-    import threading
     import io
+    import threading
 
     bridge = _load_bridge(monkeypatch)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)

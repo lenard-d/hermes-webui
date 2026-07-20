@@ -1,11 +1,34 @@
-import pathlib
+from collections import defaultdict
+from types import SimpleNamespace
 
 from tests.frontend_asset_contract import family_source
 
 
 def test_workspace_suggest_endpoint_is_wired():
-    src = pathlib.Path("api/routes.py").read_text(encoding="utf-8")
-    assert '"/api/workspaces/suggest"' in src
+    from api.http.routes import workspace_queries
+
+    captured = {}
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    context.update(
+        {
+            "parse_qs": lambda _query: {"prefix": ["/tmp/her"]},
+            "list_workspace_suggestions": lambda prefix: [prefix + "mes"],
+            "j": lambda _handler, payload, **_kwargs: captured.update(payload) or True,
+        }
+    )
+
+    assert workspace_queries.handle_get(
+        object(),
+        SimpleNamespace(path="/api/workspaces/suggest", query="prefix=/tmp/her"),
+        context,
+    ) is True
+    assert captured == {
+        "suggestions": ["/tmp/hermes"],
+        "prefix": "/tmp/her",
+    }
 
 
 def test_spaces_panel_uses_workspace_suggest_autocomplete():

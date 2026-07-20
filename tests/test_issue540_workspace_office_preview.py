@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import io
 import json
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -21,8 +21,7 @@ from docx import Document as DocxDocument
 from openpyxl import Workbook
 
 import api.office_documents as office_documents
-import api.routes as routes
-
+from api.routes_parts import media_files, workspace_files
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_JS = family_source("workspace")
@@ -84,6 +83,9 @@ def _extract_workspace_function(name: str) -> str:
 
 
 def _patch_file_ops(monkeypatch, workspace: Path):
+    from api.helpers import _sanitize_error, require, safe_resolve
+    from api.workspace import open_anchored_write_fd
+
     session = SimpleNamespace(workspace=str(workspace))
     captured = {}
 
@@ -96,19 +98,38 @@ def _patch_file_ops(monkeypatch, workspace: Path):
         captured["bad"] = (message, status)
         return True
 
-    monkeypatch.setattr(routes, "get_session_for_file_ops", lambda sid: session)
-    monkeypatch.setattr(routes, "j", fake_j)
-    monkeypatch.setattr(routes, "bad", fake_bad)
-    return captured
+    def session_lookup(_sid):
+        return session
+
+    monkeypatch.setattr(media_files, "j", fake_j)
+    monkeypatch.setattr(media_files, "bad", fake_bad)
+    monkeypatch.setattr(workspace_files, "get_session_for_file_ops", session_lookup, raising=False)
+    monkeypatch.setattr(workspace_files, "j", fake_j, raising=False)
+    monkeypatch.setattr(workspace_files, "bad", fake_bad, raising=False)
+    monkeypatch.setattr(workspace_files, "require", require, raising=False)
+    monkeypatch.setattr(workspace_files, "safe_resolve", safe_resolve, raising=False)
+    monkeypatch.setattr(workspace_files, "_sanitize_error", _sanitize_error, raising=False)
+    monkeypatch.setattr(
+        workspace_files,
+        "open_anchored_write_fd",
+        open_anchored_write_fd,
+        raising=False,
+    )
+    return captured, session_lookup
 
 
 def test_file_read_returns_office_preview_payload_for_docx(tmp_path, monkeypatch):
     workspace = tmp_path / "ws"
     workspace.mkdir()
     (workspace / "story.docx").write_bytes(_simple_docx_bytes("alpha", "beta"))
-    captured = _patch_file_ops(monkeypatch, workspace)
+    captured, session_lookup = _patch_file_ops(monkeypatch, workspace)
 
-    routes._handle_file_read(object(), urlparse("/api/file?session_id=sid&path=story.docx"))
+    media_files._handle_file_read(
+        object(),
+        urlparse("/api/file?session_id=sid&path=story.docx"),
+        session_lookup=session_lookup,
+        file_reader=media_files.read_file_content,
+    )
 
     payload = captured["ok"]
     assert payload["preview_kind"] == "office"
@@ -122,14 +143,17 @@ def test_file_read_returns_503_when_office_parsers_are_missing(tmp_path, monkeyp
     workspace = tmp_path / "ws"
     workspace.mkdir()
     (workspace / "story.docx").write_bytes(_simple_docx_bytes("alpha"))
-    captured = _patch_file_ops(monkeypatch, workspace)
+    captured, session_lookup = _patch_file_ops(monkeypatch, workspace)
 
     def fail_read(*_args, **_kwargs):
         raise ImportError(office_documents.OFFICE_DEPENDENCY_HINT)
 
-    monkeypatch.setattr(routes, "read_file_content", fail_read)
-
-    routes._handle_file_read(object(), urlparse("/api/file?session_id=sid&path=story.docx"))
+    media_files._handle_file_read(
+        object(),
+        urlparse("/api/file?session_id=sid&path=story.docx"),
+        session_lookup=session_lookup,
+        file_reader=fail_read,
+    )
 
     assert captured["bad"] == (office_documents.OFFICE_DEPENDENCY_HINT, 503)
 
@@ -142,9 +166,9 @@ def test_office_save_route_accepts_safe_docx_and_rejects_preview_only_formats(tm
     xlsx_path = workspace / "budget.xlsx"
     xlsx_path.write_bytes(_simple_xlsx_bytes())
 
-    captured = _patch_file_ops(monkeypatch, workspace)
+    captured, _session_lookup = _patch_file_ops(monkeypatch, workspace)
 
-    routes._handle_office_file_save(
+    workspace_files._handle_office_file_save(
         object(),
         {"session_id": "sid", "path": "story.docx", "content": "alpha\nbeta\ngamma"},
     )
@@ -160,7 +184,7 @@ def test_office_save_route_accepts_safe_docx_and_rejects_preview_only_formats(tm
     ]
 
     captured.clear()
-    routes._handle_office_file_save(
+    workspace_files._handle_office_file_save(
         object(),
         {"session_id": "sid", "path": "budget.xlsx", "content": "ignored"},
     )
@@ -172,14 +196,14 @@ def test_office_save_route_returns_503_when_office_parsers_are_missing(tmp_path,
     workspace = tmp_path / "ws"
     workspace.mkdir()
     (workspace / "story.docx").write_bytes(_simple_docx_bytes("alpha"))
-    captured = _patch_file_ops(monkeypatch, workspace)
+    captured, _session_lookup = _patch_file_ops(monkeypatch, workspace)
 
     def fail_save(*_args, **_kwargs):
         raise ImportError(office_documents.OFFICE_DEPENDENCY_HINT)
 
     monkeypatch.setattr(office_documents, "save_office_document", fail_save)
 
-    routes._handle_office_file_save(
+    workspace_files._handle_office_file_save(
         object(),
         {"session_id": "sid", "path": "story.docx", "content": "beta"},
     )

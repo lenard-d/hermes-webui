@@ -1,19 +1,21 @@
 """Regression coverage for #716 Hermes agent/gateway heartbeat monitor."""
 
 from __future__ import annotations
-from tests.frontend_asset_contract import family_source
 
 import json
 import pathlib
 import sys
 import types
+from collections import defaultdict
+from types import SimpleNamespace
+
+from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 
 UI_JS = family_source("ui")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
-ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
 
 class _FakeGatewayStatus:
@@ -194,14 +196,32 @@ def test_agent_health_payload_unknown_when_gateway_is_not_configured(monkeypatch
 
 
 def test_agent_health_route_is_registered_with_tri_state_payload_shape():
-    assert 'parsed.path == "/api/health/agent"' in ROUTES_PY
-    assert "build_agent_health_payload()" in ROUTES_PY
-    assert "gateway_chat_config_status()" in ROUTES_PY
-    assert 'payload["gateway_chat"]' in ROUTES_PY
-    src = (REPO_ROOT / "api" / "agent_ops" / "health.py").read_text(encoding="utf-8")
-    assert '"alive"' in src
-    assert '"checked_at"' in src
-    assert '"details"' in src
+    from api.http.routes import observability_queries
+
+    payload = {
+        "alive": None,
+        "checked_at": "2026-05-04T12:00:00+00:00",
+        "details": {"state": "unknown"},
+    }
+    captured = {}
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    context.update(
+        {
+            "build_agent_health_payload": lambda: dict(payload),
+            "gateway_chat_config_status": lambda: {"enabled": False},
+            "j": lambda _handler, body, **_kwargs: captured.update(body) or True,
+        }
+    )
+
+    assert observability_queries.handle_get(
+        object(),
+        SimpleNamespace(path="/api/health/agent"),
+        context,
+    ) is True
+    assert captured == payload | {"gateway_chat": {"enabled": False}}
 
 
 def test_agent_health_banner_markup_and_styles_exist():
