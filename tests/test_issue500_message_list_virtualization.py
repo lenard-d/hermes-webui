@@ -1,5 +1,5 @@
 """Regression coverage for issue #500 transcript virtualization."""
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 import json
 import shutil
@@ -53,7 +53,7 @@ function extractFunc(name) {{
   }}
   return src.slice(start, i);
 }}
-"""
+""" + UI_TEST_BINDING_PROXIES
 
 
 def test_message_virtual_window_virtualizes_older_history_but_keeps_recent_tail():

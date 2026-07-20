@@ -98,12 +98,12 @@ def _served_family_source(path, family):
 
 def test_app_js_contains_edit_message(cleanup_test_sessions):
     """Verify editMessage function is present in ui.js (Sprint 9: module split)."""
-    src = _served_family_source("/static/ui.js", "ui")
+    src = _served_family_source("/static/modules/ui/index.js", "ui")
     assert "editMessage" in src
     assert "msg-edit-area" in src
 
 def test_app_js_contains_regenerate(cleanup_test_sessions):
-    src = _served_family_source("/static/ui.js", "ui")
+    src = _served_family_source("/static/modules/ui/index.js", "ui")
     assert "regenerateResponse" in src
 
 def test_app_js_contains_clear_conversation(cleanup_test_sessions):
@@ -112,7 +112,7 @@ def test_app_js_contains_clear_conversation(cleanup_test_sessions):
     assert "api/session/clear" in src
 
 def test_app_js_contains_highlight_code(cleanup_test_sessions):
-    src = _served_family_source("/static/ui.js", "ui")
+    src = _served_family_source("/static/modules/ui/index.js", "ui")
     assert "highlightCode" in src
     assert "Prism" in src
 

@@ -1,3 +1,9 @@
+import { getModelLabel } from './activity-and-scroll.js';
+import { MODEL_STATE_KEY, PENDING_SESSION_MODEL_MAX_AGE_MS, PENDING_SESSION_MODEL_PREFIX } from './media-and-quota.js';
+import { _positionModelDropdown, syncModelChip } from './model-catalog.js';
+import { closeSettingsModelDropdown, renderModelDropdown, selectSettingsModelFromDropdown, syncSettingsModelChip } from './model-selection.js';
+import { $, S } from './state.js';
+
 // ── Smart model resolver ────────────────────────────────────────────────────
 // Finds the best matching option value in a <select> for a given model ID.
 // Handles mismatches like 'claude-sonnet-4-6' vs 'anthropic/claude-sonnet-4.6'.
@@ -542,8 +548,6 @@ function _persistSessionModelCorrection(model, provider, opts){
   });
   return opts&&opts.propagateErrors ? request : request.catch(()=>{});
 }
-let _modelDropdownRequestSeq=0;
-let _modelCatalogFallbackRetried=false;
 
 function _applySessionModelFallback(sel){
   if(!sel) return null;
@@ -565,8 +569,68 @@ function _applySessionModelFallback(sel){
 }
 
 
-window.HermesUI.register('modelState', {
+
+export {
+  _getOptionProviderId,
+  _providerFromModelValue,
+  _modelPickerOptionIdentity,
+  _deduplicateModelPickerOptions,
+  _providerSkipsModelMismatchWarning,
+  _providerDefersMissingModelFallback,
+  _modelStateForSelect,
   _captureModelDropdownSelection,
+  _modelProviderForSend,
+  _reconcileModelDropdownSelection,
+  _providerQualifiedModelValueForSelect,
+  _readPersistedModelState,
+  _writePersistedModelState,
+  _clearPersistedModelState,
+  _pendingSessionModelKey,
+  _rememberPendingSessionModel,
+  _readPendingSessionModel,
+  _clearPendingSessionModel,
+  _deliberateSessionModelPick,
+  _reArmRecoveryPick,
   _applyPendingSessionModelForSession,
+  _findModelInDropdown,
+  _refreshOpenModelDropdown,
+  _applyModelToDropdown,
+  _ensureModelOptionInDropdown,
+  _modelStateFromAppliedDropdown,
+  _persistSessionModelCorrection,
   _applySessionModelFallback,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _getOptionProviderId: { enumerable: true, get: () => _getOptionProviderId, set: (value) => { _getOptionProviderId = value; } },
+  _providerFromModelValue: { enumerable: true, get: () => _providerFromModelValue, set: (value) => { _providerFromModelValue = value; } },
+  _modelPickerOptionIdentity: { enumerable: true, get: () => _modelPickerOptionIdentity, set: (value) => { _modelPickerOptionIdentity = value; } },
+  _deduplicateModelPickerOptions: { enumerable: true, get: () => _deduplicateModelPickerOptions, set: (value) => { _deduplicateModelPickerOptions = value; } },
+  _providerSkipsModelMismatchWarning: { enumerable: true, get: () => _providerSkipsModelMismatchWarning, set: (value) => { _providerSkipsModelMismatchWarning = value; } },
+  _providerDefersMissingModelFallback: { enumerable: true, get: () => _providerDefersMissingModelFallback, set: (value) => { _providerDefersMissingModelFallback = value; } },
+  _modelStateForSelect: { enumerable: true, get: () => _modelStateForSelect, set: (value) => { _modelStateForSelect = value; } },
+  _captureModelDropdownSelection: { enumerable: true, get: () => _captureModelDropdownSelection, set: (value) => { _captureModelDropdownSelection = value; } },
+  _modelProviderForSend: { enumerable: true, get: () => _modelProviderForSend, set: (value) => { _modelProviderForSend = value; } },
+  _reconcileModelDropdownSelection: { enumerable: true, get: () => _reconcileModelDropdownSelection, set: (value) => { _reconcileModelDropdownSelection = value; } },
+  _providerQualifiedModelValueForSelect: { enumerable: true, get: () => _providerQualifiedModelValueForSelect, set: (value) => { _providerQualifiedModelValueForSelect = value; } },
+  _readPersistedModelState: { enumerable: true, get: () => _readPersistedModelState, set: (value) => { _readPersistedModelState = value; } },
+  _writePersistedModelState: { enumerable: true, get: () => _writePersistedModelState, set: (value) => { _writePersistedModelState = value; } },
+  _clearPersistedModelState: { enumerable: true, get: () => _clearPersistedModelState, set: (value) => { _clearPersistedModelState = value; } },
+  _pendingSessionModelKey: { enumerable: true, get: () => _pendingSessionModelKey, set: (value) => { _pendingSessionModelKey = value; } },
+  _rememberPendingSessionModel: { enumerable: true, get: () => _rememberPendingSessionModel, set: (value) => { _rememberPendingSessionModel = value; } },
+  _readPendingSessionModel: { enumerable: true, get: () => _readPendingSessionModel, set: (value) => { _readPendingSessionModel = value; } },
+  _clearPendingSessionModel: { enumerable: true, get: () => _clearPendingSessionModel, set: (value) => { _clearPendingSessionModel = value; } },
+  _deliberateSessionModelPick: { enumerable: true, get: () => _deliberateSessionModelPick, set: (value) => { _deliberateSessionModelPick = value; } },
+  _reArmRecoveryPick: { enumerable: true, get: () => _reArmRecoveryPick, set: (value) => { _reArmRecoveryPick = value; } },
+  _applyPendingSessionModelForSession: { enumerable: true, get: () => _applyPendingSessionModelForSession, set: (value) => { _applyPendingSessionModelForSession = value; } },
+  _findModelInDropdown: { enumerable: true, get: () => _findModelInDropdown, set: (value) => { _findModelInDropdown = value; } },
+  _refreshOpenModelDropdown: { enumerable: true, get: () => _refreshOpenModelDropdown, set: (value) => { _refreshOpenModelDropdown = value; } },
+  _applyModelToDropdown: { enumerable: true, get: () => _applyModelToDropdown, set: (value) => { _applyModelToDropdown = value; } },
+  _ensureModelOptionInDropdown: { enumerable: true, get: () => _ensureModelOptionInDropdown, set: (value) => { _ensureModelOptionInDropdown = value; } },
+  _modelStateFromAppliedDropdown: { enumerable: true, get: () => _modelStateFromAppliedDropdown, set: (value) => { _modelStateFromAppliedDropdown = value; } },
+  _persistSessionModelCorrection: { enumerable: true, get: () => _persistSessionModelCorrection, set: (value) => { _persistSessionModelCorrection = value; } },
+  _applySessionModelFallback: { enumerable: true, get: () => _applySessionModelFallback, set: (value) => { _applySessionModelFallback = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

@@ -1,3 +1,13 @@
+import { _ensureLiveActivityBaseline, _setActivityElapsedStartedAt, _startActivityElapsedTimer, scrollIfPinned } from './activity-and-scroll.js';
+import { _messageUserUnpinned, _syncTransparentEventTimestamp } from './composer-controls.js';
+import { _captureMessageScrollSnapshot, _moveLiveRunStatusToTurnEnd, _sessionHtmlCache, _transparentRevealKey, _transparentRevealedTurns } from './live-activity.js';
+import { _assistantAnchorSceneFinalAnswerText, _assistantTurnBlocks, _attachCopyButton, _captureWorklogDetailDisclosureState, _createAssistantTurn, _decorateTransparentEventRow, _restoreWorklogDetailDisclosureState, _setTransparentCardOpen, _syncTransparentEventControls, _wireTransparentHeaderToggle, chatActivityMode, isCompactWorklogMode, isSimplifiedToolCalling, isTransparentStream, msgContent } from './presentation.js';
+import { _restoreMessageScrollSnapshotSameFrame } from './render-support.js';
+import { $, S, esc } from './state.js';
+import { _findLatestVisibleLiveAssistant, _findLatestVisibleLiveAssistantByBurst, _findLiveAssistantAnchorForSegment, _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
+import { _activityKeyForLiveTurn, _anchorSceneLastNonTerminalWorkRowIndex, _anchorSceneRowTimestampSeconds, _anchorSceneRowsForRendering, _anchorSceneTransparentNodeForRow, _anchorSceneWorklogGroup, _copyActivityDisclosureState, _dedupeLiveProcessedWorklogAnchors, _liveActivityUserExpanded, _prepareLiveAnchorScrollRebuildGuard, _projectLiveAnchorActivitySceneForStream, _readActivityDisclosureState, _renderAnchorSceneRowsIntoWorklog, _resetMismatchedLiveAssistantTurnForSession, _syncWorklogReasonFromAnchor, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
+import { compatibilityBindings as transparentWorklogBindings } from './transparent-worklog.js';
+
 function renderLiveAnchorActivityScene(streamId, scene, opts){
   opts=opts||{};
   const requestedMode=opts.mode;
@@ -848,7 +858,7 @@ function _syncLiveWorklogReasonsForAnchor(anchor, displayTextOverride){
   if(group) _syncWorklogReasonFromAnchor(group, anchor, displayTextOverride);
 }
 function _clearLiveActivityUserIntent(){
-  _liveActivityUserExpanded = undefined;
+  transparentWorklogBindings._liveActivityUserExpanded = undefined;
 }
 function ensureActivityGroup(inner, opts){
   opts=opts||{};
@@ -1028,8 +1038,82 @@ function ensureRunActivityGroup(inner, opts){
   return group;
 }
 
-window.HermesUI.register('anchorScenes', {
+
+export {
   renderLiveAnchorActivityScene,
+  _renderLiveAnchorActivitySceneTransparent,
+  _transparentLiveRowKey,
+  _transparentLiveRowsCompatible,
+  _transparentLiveRowAttributePairs,
+  _transparentLiveRowInteractiveState,
+  _rehydrateTransparentLiveRow,
+  _refreshTransparentThinkingLiveRow,
+  _bindTransparentFadeCleanup,
+  _appendTransparentFadeText,
+  _refreshTransparentFadeProseRow,
+  _refreshTransparentLiveRow,
+  _renderLiveAnchorActivitySceneForStream,
+  _renderLiveAnchorActivitySceneSnapshotForStream,
+  _anchorSceneSceneHasWorklogWorthyRows,
+  _anchorSceneHasErroredTerminalState,
+  _renderSettledAnchorSceneTransparentForMessage,
+  _tOrDefault,
+  _buildTransparentEarlierStepsAffordance,
+  _revealTransparentEarlierSteps,
+  _computeTransparentHiddenPrefixCount,
+  _shouldKeepSettledWorklogOpenForStreamSettle,
+  _armKeepSettledWorklogOpen,
+  _disarmKeepSettledWorklogOpen,
+  _isKeepSettledWorklogOpenArmed,
+  _renderSettledAnchorSceneForMessage,
+  _syncLiveWorklogReasonsForAnchor,
+  _clearLiveActivityUserIntent,
   ensureActivityGroup,
+  normalizeLiveActivityGroupPlacement,
   ensureRunActivityGroup,
+  _ANCHOR_SCENE_ERRORED_TERMINAL_STATES,
+  _TRANSPARENT_SETTLED_ROW_CAP,
+  _TRANSPARENT_SETTLED_ROW_CAP_SLACK,
+  _keepSettledWorklogOpenForStreamId,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  renderLiveAnchorActivityScene: { enumerable: true, get: () => renderLiveAnchorActivityScene, set: (value) => { renderLiveAnchorActivityScene = value; } },
+  _renderLiveAnchorActivitySceneTransparent: { enumerable: true, get: () => _renderLiveAnchorActivitySceneTransparent, set: (value) => { _renderLiveAnchorActivitySceneTransparent = value; } },
+  _transparentLiveRowKey: { enumerable: true, get: () => _transparentLiveRowKey, set: (value) => { _transparentLiveRowKey = value; } },
+  _transparentLiveRowsCompatible: { enumerable: true, get: () => _transparentLiveRowsCompatible, set: (value) => { _transparentLiveRowsCompatible = value; } },
+  _transparentLiveRowAttributePairs: { enumerable: true, get: () => _transparentLiveRowAttributePairs, set: (value) => { _transparentLiveRowAttributePairs = value; } },
+  _transparentLiveRowInteractiveState: { enumerable: true, get: () => _transparentLiveRowInteractiveState, set: (value) => { _transparentLiveRowInteractiveState = value; } },
+  _rehydrateTransparentLiveRow: { enumerable: true, get: () => _rehydrateTransparentLiveRow, set: (value) => { _rehydrateTransparentLiveRow = value; } },
+  _refreshTransparentThinkingLiveRow: { enumerable: true, get: () => _refreshTransparentThinkingLiveRow, set: (value) => { _refreshTransparentThinkingLiveRow = value; } },
+  _bindTransparentFadeCleanup: { enumerable: true, get: () => _bindTransparentFadeCleanup, set: (value) => { _bindTransparentFadeCleanup = value; } },
+  _appendTransparentFadeText: { enumerable: true, get: () => _appendTransparentFadeText, set: (value) => { _appendTransparentFadeText = value; } },
+  _refreshTransparentFadeProseRow: { enumerable: true, get: () => _refreshTransparentFadeProseRow, set: (value) => { _refreshTransparentFadeProseRow = value; } },
+  _refreshTransparentLiveRow: { enumerable: true, get: () => _refreshTransparentLiveRow, set: (value) => { _refreshTransparentLiveRow = value; } },
+  _renderLiveAnchorActivitySceneForStream: { enumerable: true, get: () => _renderLiveAnchorActivitySceneForStream, set: (value) => { _renderLiveAnchorActivitySceneForStream = value; } },
+  _renderLiveAnchorActivitySceneSnapshotForStream: { enumerable: true, get: () => _renderLiveAnchorActivitySceneSnapshotForStream, set: (value) => { _renderLiveAnchorActivitySceneSnapshotForStream = value; } },
+  _anchorSceneSceneHasWorklogWorthyRows: { enumerable: true, get: () => _anchorSceneSceneHasWorklogWorthyRows, set: (value) => { _anchorSceneSceneHasWorklogWorthyRows = value; } },
+  _anchorSceneHasErroredTerminalState: { enumerable: true, get: () => _anchorSceneHasErroredTerminalState, set: (value) => { _anchorSceneHasErroredTerminalState = value; } },
+  _renderSettledAnchorSceneTransparentForMessage: { enumerable: true, get: () => _renderSettledAnchorSceneTransparentForMessage, set: (value) => { _renderSettledAnchorSceneTransparentForMessage = value; } },
+  _tOrDefault: { enumerable: true, get: () => _tOrDefault, set: (value) => { _tOrDefault = value; } },
+  _buildTransparentEarlierStepsAffordance: { enumerable: true, get: () => _buildTransparentEarlierStepsAffordance, set: (value) => { _buildTransparentEarlierStepsAffordance = value; } },
+  _revealTransparentEarlierSteps: { enumerable: true, get: () => _revealTransparentEarlierSteps, set: (value) => { _revealTransparentEarlierSteps = value; } },
+  _computeTransparentHiddenPrefixCount: { enumerable: true, get: () => _computeTransparentHiddenPrefixCount, set: (value) => { _computeTransparentHiddenPrefixCount = value; } },
+  _shouldKeepSettledWorklogOpenForStreamSettle: { enumerable: true, get: () => _shouldKeepSettledWorklogOpenForStreamSettle, set: (value) => { _shouldKeepSettledWorklogOpenForStreamSettle = value; } },
+  _armKeepSettledWorklogOpen: { enumerable: true, get: () => _armKeepSettledWorklogOpen, set: (value) => { _armKeepSettledWorklogOpen = value; } },
+  _disarmKeepSettledWorklogOpen: { enumerable: true, get: () => _disarmKeepSettledWorklogOpen, set: (value) => { _disarmKeepSettledWorklogOpen = value; } },
+  _isKeepSettledWorklogOpenArmed: { enumerable: true, get: () => _isKeepSettledWorklogOpenArmed, set: (value) => { _isKeepSettledWorklogOpenArmed = value; } },
+  _renderSettledAnchorSceneForMessage: { enumerable: true, get: () => _renderSettledAnchorSceneForMessage, set: (value) => { _renderSettledAnchorSceneForMessage = value; } },
+  _syncLiveWorklogReasonsForAnchor: { enumerable: true, get: () => _syncLiveWorklogReasonsForAnchor, set: (value) => { _syncLiveWorklogReasonsForAnchor = value; } },
+  _clearLiveActivityUserIntent: { enumerable: true, get: () => _clearLiveActivityUserIntent, set: (value) => { _clearLiveActivityUserIntent = value; } },
+  ensureActivityGroup: { enumerable: true, get: () => ensureActivityGroup, set: (value) => { ensureActivityGroup = value; } },
+  normalizeLiveActivityGroupPlacement: { enumerable: true, get: () => normalizeLiveActivityGroupPlacement, set: (value) => { normalizeLiveActivityGroupPlacement = value; } },
+  ensureRunActivityGroup: { enumerable: true, get: () => ensureRunActivityGroup, set: (value) => { ensureRunActivityGroup = value; } },
+  _ANCHOR_SCENE_ERRORED_TERMINAL_STATES: { enumerable: true, get: () => _ANCHOR_SCENE_ERRORED_TERMINAL_STATES },
+  _TRANSPARENT_SETTLED_ROW_CAP: { enumerable: true, get: () => _TRANSPARENT_SETTLED_ROW_CAP },
+  _TRANSPARENT_SETTLED_ROW_CAP_SLACK: { enumerable: true, get: () => _TRANSPARENT_SETTLED_ROW_CAP_SLACK },
+  _keepSettledWorklogOpenForStreamId: { enumerable: true, get: () => _keepSettledWorklogOpenForStreamId, set: (value) => { _keepSettledWorklogOpenForStreamId = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

@@ -94,7 +94,14 @@ def test_session_crud_still_works(cleanup_test_sessions):
     post("/api/session/delete", {"session_id": sid})
 
 def test_static_files_still_served(cleanup_test_sessions):
-    for f in ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "modules/panels/index.js", "modules/boot/index.js"]:
+    for f in [
+        "modules/ui/index.js",
+        "workspace.js",
+        "modules/sessions/index.js",
+        "modules/messages/index.js",
+        "modules/panels/index.js",
+        "modules/boot/index.js",
+    ]:
         src, status = get_text(f"/static/{f}")
         assert status == 200, f"/static/{f} returned {status}"
         assert len(src) > 100
@@ -263,12 +270,12 @@ def test_tool_card_running_dot_in_css(cleanup_test_sessions):
     assert "tool-card-running-dot" in src
 
 def test_tool_card_show_more_in_ui_js(cleanup_test_sessions):
-    src, _ = get_family_text("ui", "/static/ui.js")
+    src, _ = get_family_text("ui", "/static/modules/ui/index.js")
     assert "Show more" in src
     assert "tool-card-more" in src
 
 def test_tool_card_smart_truncation_in_ui_js(cleanup_test_sessions):
-    src, _ = get_family_text("ui", "/static/ui.js")
+    src, _ = get_family_text("ui", "/static/modules/ui/index.js")
     assert "displaySnippet" in src
     assert "lastBreak" in src
 

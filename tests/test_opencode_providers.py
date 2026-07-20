@@ -164,7 +164,7 @@ def test_live_models_ui_no_longer_skips_any_provider():
     """
     import pathlib
     ui_src = (
-        pathlib.Path(__file__).parent.parent / "static" / "ui.js"
+        pathlib.Path(__file__).parent.parent / "static" / "modules" / "ui" / "model-catalog.js"
     ).read_text(encoding="utf-8")
     # The old exclusion list must be gone
     assert "includes(provider)" not in ui_src or "anthropic" not in ui_src[:ui_src.find("includes(provider)")+100], (

@@ -9,7 +9,7 @@ INDEX_HTML = Path("static/index.html").read_text(encoding="utf-8")
 
 def test_ui_routes_session_html_caching_through_the_owned_cache_module():
     cache_script = 'src="static/session_render_cache_adapter.js?v=__WEBUI_VERSION__"'
-    ui_script = 'src="static/ui.js?v=__WEBUI_VERSION__"'
+    ui_script = 'src="static/modules/ui/index.js?v=__WEBUI_VERSION__"'
 
     assert INDEX_HTML.index(cache_script) < INDEX_HTML.index(ui_script)
     assert f'<script type="module" {cache_script}></script>' in INDEX_HTML

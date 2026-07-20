@@ -1,3 +1,18 @@
+import { _sanitizeThinkingDisplayText, _stripVisibleAssistantEchoFromThinking } from './activity-and-scroll.js';
+import { _revealTransparentEarlierSteps } from './anchor-scenes.js';
+import { _syncTransparentEventTimestamp, syncToolsetsChip } from './composer-controls.js';
+import { showToast } from './composer.js';
+import { _postProcessWithAnchorSuppression, _renderThinkingInto } from './content-postprocessing.js';
+import { _topbarMessageMetaText } from './health-and-updates.js';
+import { _isMarkerOnlyAssistantCompressionMessage } from './live-activity.js';
+import { _liveModelFetchPending, syncModelChip } from './model-catalog.js';
+import { syncReasoningChip } from './model-selection.js';
+import { _applyModelToDropdown, _applySessionModelFallback, _ensureModelOptionInDropdown, _persistSessionModelCorrection, _providerDefersMissingModelFallback } from './model-state.js';
+import { $, S, assistantDisplayName, esc } from './state.js';
+import { _redactToolTargetLabel, _shortToolLabel, _toolActionKind, _toolCardAllowsDetail, _toolVisibleTargetLabel, buildToolCard } from './tool-worklog.js';
+import { _anchorSceneRowsForRendering, _anchorSceneToolCallFromRow, _applyTransparentRowFading, _wireTransparentTurnToggle } from './transparent-worklog.js';
+import { _syncWorkspaceHeadingState } from './workspace-and-uploads.js';
+
 function syncTopbar(){
   if(!S.session){
     document.title=assistantDisplayName();
@@ -1265,10 +1280,140 @@ function _setTransparentRowsExpanded(root, expanded){
   });
 }
 
-window.HermesUI.register('messagePresentation', {
+
+export {
   syncTopbar,
   msgContent,
+  _isRecoveryControlMessageText,
+  _isRecoveryControlMessage,
+  _assistantAnchorSceneFinalAnswerText,
+  _assistantMessageHasVisibleContent,
+  _fmtDateSep,
+  _messageHasReasoningPayload,
+  _isAssistantEmptyPlaceholderContent,
+  _formatTurnTps,
+  isTpsDisplayEnabled,
+  _assistantRoleHtml,
+  _setAssistantTurnTps,
+  _setLiveAssistantTps,
+  _createAssistantTurn,
+  _setLatestAssistantTurnLandmark,
+  _assistantTurnBlocks,
+  _assistantMessageBelongsInWorklog,
+  _assistantThinkingBelongsInWorklog,
+  _assistantReasoningPayloadText,
+  _stripLeadingAssistantThinkingMarkup,
+  _assistantVisibleContentForReasoningCompare,
+  _assistantTurnFinalVisibleContentMap,
+  _assistantTurnVisibleContentMap,
+  _worklogReasoningTextFromMessage,
+  _worklogDetailsExpandedDefault,
+  _applyWorklogDetailsExpandedDefault,
+  _worklogDetailTextKey,
+  _worklogDetailHashKey,
+  _worklogDetailBaseKey,
+  _worklogDetailDisclosureIsOpen,
+  _worklogDetailScrollableBody,
+  _setWorklogDetailDisclosureOpen,
+  _worklogDetailDisclosureKeyForElement,
+  _captureWorklogDetailDisclosureState,
+  _restoreWorklogDetailDisclosureState,
+  _thinkingCardHtml,
+  isSimplifiedToolCalling,
+  _thinkingActivityNode,
+  chatActivityMode,
   isTransparentStream,
   isFinalAnswerOnlyMode,
   isCompactWorklogMode,
+  _toolShortName,
+  _transparentEventPreview,
+  _transparentToolStatus,
+  _transparentToolSummary,
+  _copyEventToClipboard,
+  _attachCopyButton,
+  _transparentEventCountLabel,
+  _setTransparentDetailMode,
+  _setTransparentCardOpen,
+  _transparentToolRowHasDetail,
+  _materializeTransparentToolDetail,
+  _transparentToolCallFromRowDataset,
+  _wireTransparentHeaderToggle,
+  _transparentToolDetailHtml,
+  _syncTransparentEventControls,
+  _rehydrateTransparentStreamDom,
+  _decorateTransparentEventRow,
+  _attachProgressBar,
+  _setTransparentRowsExpanded,
+  _ERR_MSG_RE,
+  _worklogDetailDisclosureSelector,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  syncTopbar: { enumerable: true, get: () => syncTopbar, set: (value) => { syncTopbar = value; } },
+  msgContent: { enumerable: true, get: () => msgContent, set: (value) => { msgContent = value; } },
+  _isRecoveryControlMessageText: { enumerable: true, get: () => _isRecoveryControlMessageText, set: (value) => { _isRecoveryControlMessageText = value; } },
+  _isRecoveryControlMessage: { enumerable: true, get: () => _isRecoveryControlMessage, set: (value) => { _isRecoveryControlMessage = value; } },
+  _assistantAnchorSceneFinalAnswerText: { enumerable: true, get: () => _assistantAnchorSceneFinalAnswerText, set: (value) => { _assistantAnchorSceneFinalAnswerText = value; } },
+  _assistantMessageHasVisibleContent: { enumerable: true, get: () => _assistantMessageHasVisibleContent, set: (value) => { _assistantMessageHasVisibleContent = value; } },
+  _fmtDateSep: { enumerable: true, get: () => _fmtDateSep, set: (value) => { _fmtDateSep = value; } },
+  _messageHasReasoningPayload: { enumerable: true, get: () => _messageHasReasoningPayload, set: (value) => { _messageHasReasoningPayload = value; } },
+  _isAssistantEmptyPlaceholderContent: { enumerable: true, get: () => _isAssistantEmptyPlaceholderContent, set: (value) => { _isAssistantEmptyPlaceholderContent = value; } },
+  _formatTurnTps: { enumerable: true, get: () => _formatTurnTps, set: (value) => { _formatTurnTps = value; } },
+  isTpsDisplayEnabled: { enumerable: true, get: () => isTpsDisplayEnabled, set: (value) => { isTpsDisplayEnabled = value; } },
+  _assistantRoleHtml: { enumerable: true, get: () => _assistantRoleHtml, set: (value) => { _assistantRoleHtml = value; } },
+  _setAssistantTurnTps: { enumerable: true, get: () => _setAssistantTurnTps, set: (value) => { _setAssistantTurnTps = value; } },
+  _setLiveAssistantTps: { enumerable: true, get: () => _setLiveAssistantTps, set: (value) => { _setLiveAssistantTps = value; } },
+  _createAssistantTurn: { enumerable: true, get: () => _createAssistantTurn, set: (value) => { _createAssistantTurn = value; } },
+  _setLatestAssistantTurnLandmark: { enumerable: true, get: () => _setLatestAssistantTurnLandmark, set: (value) => { _setLatestAssistantTurnLandmark = value; } },
+  _assistantTurnBlocks: { enumerable: true, get: () => _assistantTurnBlocks, set: (value) => { _assistantTurnBlocks = value; } },
+  _assistantMessageBelongsInWorklog: { enumerable: true, get: () => _assistantMessageBelongsInWorklog, set: (value) => { _assistantMessageBelongsInWorklog = value; } },
+  _assistantThinkingBelongsInWorklog: { enumerable: true, get: () => _assistantThinkingBelongsInWorklog, set: (value) => { _assistantThinkingBelongsInWorklog = value; } },
+  _assistantReasoningPayloadText: { enumerable: true, get: () => _assistantReasoningPayloadText, set: (value) => { _assistantReasoningPayloadText = value; } },
+  _stripLeadingAssistantThinkingMarkup: { enumerable: true, get: () => _stripLeadingAssistantThinkingMarkup, set: (value) => { _stripLeadingAssistantThinkingMarkup = value; } },
+  _assistantVisibleContentForReasoningCompare: { enumerable: true, get: () => _assistantVisibleContentForReasoningCompare, set: (value) => { _assistantVisibleContentForReasoningCompare = value; } },
+  _assistantTurnFinalVisibleContentMap: { enumerable: true, get: () => _assistantTurnFinalVisibleContentMap, set: (value) => { _assistantTurnFinalVisibleContentMap = value; } },
+  _assistantTurnVisibleContentMap: { enumerable: true, get: () => _assistantTurnVisibleContentMap, set: (value) => { _assistantTurnVisibleContentMap = value; } },
+  _worklogReasoningTextFromMessage: { enumerable: true, get: () => _worklogReasoningTextFromMessage, set: (value) => { _worklogReasoningTextFromMessage = value; } },
+  _worklogDetailsExpandedDefault: { enumerable: true, get: () => _worklogDetailsExpandedDefault, set: (value) => { _worklogDetailsExpandedDefault = value; } },
+  _applyWorklogDetailsExpandedDefault: { enumerable: true, get: () => _applyWorklogDetailsExpandedDefault, set: (value) => { _applyWorklogDetailsExpandedDefault = value; } },
+  _worklogDetailTextKey: { enumerable: true, get: () => _worklogDetailTextKey, set: (value) => { _worklogDetailTextKey = value; } },
+  _worklogDetailHashKey: { enumerable: true, get: () => _worklogDetailHashKey, set: (value) => { _worklogDetailHashKey = value; } },
+  _worklogDetailBaseKey: { enumerable: true, get: () => _worklogDetailBaseKey, set: (value) => { _worklogDetailBaseKey = value; } },
+  _worklogDetailDisclosureIsOpen: { enumerable: true, get: () => _worklogDetailDisclosureIsOpen, set: (value) => { _worklogDetailDisclosureIsOpen = value; } },
+  _worklogDetailScrollableBody: { enumerable: true, get: () => _worklogDetailScrollableBody, set: (value) => { _worklogDetailScrollableBody = value; } },
+  _setWorklogDetailDisclosureOpen: { enumerable: true, get: () => _setWorklogDetailDisclosureOpen, set: (value) => { _setWorklogDetailDisclosureOpen = value; } },
+  _worklogDetailDisclosureKeyForElement: { enumerable: true, get: () => _worklogDetailDisclosureKeyForElement, set: (value) => { _worklogDetailDisclosureKeyForElement = value; } },
+  _captureWorklogDetailDisclosureState: { enumerable: true, get: () => _captureWorklogDetailDisclosureState, set: (value) => { _captureWorklogDetailDisclosureState = value; } },
+  _restoreWorklogDetailDisclosureState: { enumerable: true, get: () => _restoreWorklogDetailDisclosureState, set: (value) => { _restoreWorklogDetailDisclosureState = value; } },
+  _thinkingCardHtml: { enumerable: true, get: () => _thinkingCardHtml, set: (value) => { _thinkingCardHtml = value; } },
+  isSimplifiedToolCalling: { enumerable: true, get: () => isSimplifiedToolCalling, set: (value) => { isSimplifiedToolCalling = value; } },
+  _thinkingActivityNode: { enumerable: true, get: () => _thinkingActivityNode, set: (value) => { _thinkingActivityNode = value; } },
+  chatActivityMode: { enumerable: true, get: () => chatActivityMode, set: (value) => { chatActivityMode = value; } },
+  isTransparentStream: { enumerable: true, get: () => isTransparentStream, set: (value) => { isTransparentStream = value; } },
+  isFinalAnswerOnlyMode: { enumerable: true, get: () => isFinalAnswerOnlyMode, set: (value) => { isFinalAnswerOnlyMode = value; } },
+  isCompactWorklogMode: { enumerable: true, get: () => isCompactWorklogMode, set: (value) => { isCompactWorklogMode = value; } },
+  _toolShortName: { enumerable: true, get: () => _toolShortName, set: (value) => { _toolShortName = value; } },
+  _transparentEventPreview: { enumerable: true, get: () => _transparentEventPreview, set: (value) => { _transparentEventPreview = value; } },
+  _transparentToolStatus: { enumerable: true, get: () => _transparentToolStatus, set: (value) => { _transparentToolStatus = value; } },
+  _transparentToolSummary: { enumerable: true, get: () => _transparentToolSummary, set: (value) => { _transparentToolSummary = value; } },
+  _copyEventToClipboard: { enumerable: true, get: () => _copyEventToClipboard, set: (value) => { _copyEventToClipboard = value; } },
+  _attachCopyButton: { enumerable: true, get: () => _attachCopyButton, set: (value) => { _attachCopyButton = value; } },
+  _transparentEventCountLabel: { enumerable: true, get: () => _transparentEventCountLabel, set: (value) => { _transparentEventCountLabel = value; } },
+  _setTransparentDetailMode: { enumerable: true, get: () => _setTransparentDetailMode, set: (value) => { _setTransparentDetailMode = value; } },
+  _setTransparentCardOpen: { enumerable: true, get: () => _setTransparentCardOpen, set: (value) => { _setTransparentCardOpen = value; } },
+  _transparentToolRowHasDetail: { enumerable: true, get: () => _transparentToolRowHasDetail, set: (value) => { _transparentToolRowHasDetail = value; } },
+  _materializeTransparentToolDetail: { enumerable: true, get: () => _materializeTransparentToolDetail, set: (value) => { _materializeTransparentToolDetail = value; } },
+  _transparentToolCallFromRowDataset: { enumerable: true, get: () => _transparentToolCallFromRowDataset, set: (value) => { _transparentToolCallFromRowDataset = value; } },
+  _wireTransparentHeaderToggle: { enumerable: true, get: () => _wireTransparentHeaderToggle, set: (value) => { _wireTransparentHeaderToggle = value; } },
+  _transparentToolDetailHtml: { enumerable: true, get: () => _transparentToolDetailHtml, set: (value) => { _transparentToolDetailHtml = value; } },
+  _syncTransparentEventControls: { enumerable: true, get: () => _syncTransparentEventControls, set: (value) => { _syncTransparentEventControls = value; } },
+  _rehydrateTransparentStreamDom: { enumerable: true, get: () => _rehydrateTransparentStreamDom, set: (value) => { _rehydrateTransparentStreamDom = value; } },
+  _decorateTransparentEventRow: { enumerable: true, get: () => _decorateTransparentEventRow, set: (value) => { _decorateTransparentEventRow = value; } },
+  _attachProgressBar: { enumerable: true, get: () => _attachProgressBar, set: (value) => { _attachProgressBar = value; } },
+  _setTransparentRowsExpanded: { enumerable: true, get: () => _setTransparentRowsExpanded, set: (value) => { _setTransparentRowsExpanded = value; } },
+  _ERR_MSG_RE: { enumerable: true, get: () => _ERR_MSG_RE },
+  _worklogDetailDisclosureSelector: { enumerable: true, get: () => _worklogDetailDisclosureSelector },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

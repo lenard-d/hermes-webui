@@ -62,7 +62,7 @@ def test_scroll_to_bottom_settles_across_late_markdown_layout_growth():
     assert "_settleMessageScrollToBottom(false, true)" in scroll
     assert "_settleMessageScrollToBottom(false)" in pinned
     assert "!_scrollPinned" in settle
-    assert "const token=++_bottomSettleToken" in settle
+    assert "const token=++composerControlsBindings._bottomSettleToken" in settle
     assert "token!==_bottomSettleToken" in settle
 
 

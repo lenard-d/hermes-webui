@@ -268,14 +268,14 @@ def test_send_btn_mobile_override_no_padding():
 
 def test_ui_js_update_send_btn_function():
     """ui.js must define updateSendBtn() function."""
-    js, status = get_family_text("ui", "/static/ui.js")
+    js, status = get_family_text("ui", "/static/modules/ui/index.js")
     assert status == 200
     assert 'function updateSendBtn' in js
 
 
 def test_update_send_btn_checks_content():
     """Composer primary action helper must check textarea value length."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     fn_idx = js.find('function _composerHasContent')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -286,7 +286,7 @@ def test_update_send_btn_checks_content():
 
 def test_update_send_btn_checks_pending_files():
     """Composer primary action helper must also count attached files as content."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     fn_idx = js.find('function _composerHasContent')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -295,7 +295,7 @@ def test_update_send_btn_checks_pending_files():
 
 def test_update_send_btn_uses_visible_class():
     """updateSendBtn must add .visible class to trigger the pop-in animation."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     fn_idx = js.find('function updateSendBtn')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -304,7 +304,7 @@ def test_update_send_btn_uses_visible_class():
 
 def test_update_send_btn_uses_disabled():
     """updateSendBtn must disable the button when no content or busy."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     fn_idx = js.find('function updateSendBtn')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -313,7 +313,7 @@ def test_update_send_btn_uses_disabled():
 
 def test_set_busy_calls_update_send_btn():
     """setBusy must call updateSendBtn() so button hides while agent is responding."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     busy_idx = js.find('function setBusy')
     busy_end = js.find('\n}', busy_idx) + 2
     busy_body = js[busy_idx:busy_end]
@@ -322,7 +322,7 @@ def test_set_busy_calls_update_send_btn():
 
 def test_render_tray_calls_update_send_btn():
     """renderTray must call updateSendBtn() so button appears when files are attached."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     tray_idx = js.find('function renderTray')
     tray_end = js.find('\n}', tray_idx) + 2
     tray_body = js[tray_idx:tray_end]
@@ -364,7 +364,7 @@ def test_send_button_still_has_send_btn_class():
 
 def test_ui_js_set_busy_calls_update_send_btn():
     """setBusy must call updateSendBtn to manage button disabled state."""
-    js, _ = get_family_text("ui", "/static/ui.js")
+    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     busy_idx = js.find('function setBusy')
     busy_end = js.find('\n}', busy_idx) + 2
     busy_body = js[busy_idx:busy_end]

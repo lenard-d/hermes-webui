@@ -32,4 +32,12 @@ export default [
       "no-import-assign": "error",
     },
   },
+  {
+    files: [
+      "**/modules/**/*.js",
+      "**/session_render_cache.js",
+      "**/session_render_cache_adapter.js",
+    ],
+    languageOptions: { ecmaVersion: "latest", sourceType: "module" },
+  },
 ];

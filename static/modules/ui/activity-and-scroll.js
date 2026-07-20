@@ -1,3 +1,10 @@
+import { _activityClockLabel, _activityElapsedLabel, _activityElapsedStartedAt, _activityElapsedTimer, _activityElapsedTimerGroup, _activityMarkObserved, _activityNowSeconds, _activityProcessedElapsedLabel, _bottomSettleToken, _clearNewMessageScrollCue, _deferClearProgrammaticScroll, _fmtTokens, _lastMessageClientHeight, _lastScrollTop, _messageUserUnpinned, _nearBottomCount, _programmaticScroll, _programmaticScrollSetAt, _recentMessageKeyScrollIntent, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _recentMessageWheelIntent, _recentNonMessageScrollIntent, _scrollPinned, _settleFinalTimer, _settleRAF, _settleRO, _settleTimer, _syncScrollToBottomCue, openComposerContextMenu } from './composer-controls.js';
+import { _dynamicModelLabels } from './media-and-quota.js';
+import { _compactComposerModelChipLabel } from './model-catalog.js';
+import { _updateSessionStartJumpButton } from './navigation.js';
+import { $, S, esc } from './state.js';
+import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
+
 function _activityStatusNode({kind='info',label='',detail='',status='done',ts=null,id=''}){
   const row=document.createElement('div');
   row.className=`agent-activity-status agent-activity-status-${kind} agent-activity-status-${status}`;
@@ -63,21 +70,21 @@ function _startActivityElapsedTimer(group){
   // Last-resort fallback for recovered live renders that arrive before session metadata.
   if(!group.getAttribute('data-turn-started-at')) group.setAttribute('data-turn-started-at',String(_activityNowSeconds()));
   if(_activityElapsedTimerGroup&&_activityElapsedTimerGroup!==group)_clearActivityElapsedTimer();
-  _activityElapsedTimerGroup=group;
+  composerControlsBindings._activityElapsedTimerGroup=group;
   _updateActiveActivityElapsedTimer();
-  if(!_activityElapsedTimer)_activityElapsedTimer=setInterval(_updateActiveActivityElapsedTimer,1000);
+  if(!composerControlsBindings._activityElapsedTimer)composerControlsBindings._activityElapsedTimer=setInterval(_updateActiveActivityElapsedTimer,1000);
 }
 function _clearActivityElapsedTimer(){
   if(_activityElapsedTimer){
     clearInterval(_activityElapsedTimer);
-    _activityElapsedTimer=null;
+    composerControlsBindings._activityElapsedTimer=null;
   }
   if(_activityElapsedTimerGroup&&_activityElapsedTimerGroup.isConnected){
     _activityElapsedTimerGroup.removeAttribute('data-active-turn-elapsed');
     const durationEl=_activityElapsedTimerGroup.querySelector('.tool-call-group-duration');
     if(durationEl){durationEl.textContent='';durationEl.style.display='none';}
   }
-  _activityElapsedTimerGroup=null;
+  composerControlsBindings._activityElapsedTimerGroup=null;
 }
 
 const _MOBILE_CONFIG_BASE_LABEL='Workspace, model, quota, reasoning, and context settings';
@@ -340,11 +347,11 @@ document.addEventListener('DOMContentLoaded',function(){
 function _setMessageScrollToBottom(){
   const el=$('messages');
   if(!el) return;
-  _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+  composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
   el.scrollTop=el.scrollHeight;
-  _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-  _nearBottomCount=2;
-  _scrollPinned=true;
+  composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+  composerControlsBindings._nearBottomCount=2;
+  composerControlsBindings._scrollPinned=true;
   requestAnimationFrame(()=>{
     // Retry the bottom write on the next layout frame so a DOM rebuild that
     // grows the transcript after the first write doesn't strand a pinned
@@ -357,9 +364,9 @@ function _setMessageScrollToBottom(){
       return;
     }
     el.scrollTop=el.scrollHeight;
-    _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-    _nearBottomCount=2;
-    _scrollPinned=true;
+    composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+    composerControlsBindings._nearBottomCount=2;
+    composerControlsBindings._scrollPinned=true;
     _deferClearProgrammaticScroll();
   });
 }
@@ -424,9 +431,9 @@ function _settleMessageScrollToBottom(force, explicit){
   // resizes (no scrollHeight polling needed). On each notification we write
   // scrollTop once via rAF (batches multiple resize callbacks per frame into
   // a single write). After 300ms of no resize events, the observer disconnects.
-  const token=++_bottomSettleToken;
+  const token=++composerControlsBindings._bottomSettleToken;
   cancelAnimationFrame(_settleRAF);
-  if(_settleRO){ _settleRO.disconnect(); _settleRO=null; }
+  if(composerControlsBindings._settleRO){ composerControlsBindings._settleRO.disconnect(); composerControlsBindings._settleRO=null; }
   clearTimeout(_settleTimer);
   clearTimeout(_settleFinalTimer);
 
@@ -447,28 +454,28 @@ function _settleMessageScrollToBottom(force, explicit){
   // superseded settle) only ever disconnects its own observer, never the newer
   // active one that may now be in the global _settleRO. (Codex review #3.)
   const ro=new ResizeObserver(()=>{
-    if(token!==_bottomSettleToken){ ro.disconnect(); if(_settleRO===ro) _settleRO=null; return; }
+    if(token!==_bottomSettleToken){ ro.disconnect(); if(composerControlsBindings._settleRO===ro) composerControlsBindings._settleRO=null; return; }
     if((!_autoScrollFollow&&!explicit)||!_scrollPinned||_messageUserUnpinned||_recentNonMessageScrollIntent()){
-      ro.disconnect(); if(_settleRO===ro) _settleRO=null;
-      _programmaticScroll=false;
+      ro.disconnect(); if(composerControlsBindings._settleRO===ro) composerControlsBindings._settleRO=null;
+      composerControlsBindings._programmaticScroll=false;
       return;
     }
     // Write scrollTop once per frame — ResizeObserver batches multiple
     // notifications per frame, so this is at most one write per frame.
     cancelAnimationFrame(_settleRAF);
-    _settleRAF=requestAnimationFrame(()=>{
+    composerControlsBindings._settleRAF=requestAnimationFrame(()=>{
       if(token!==_bottomSettleToken) return;
       _setMessageScrollToBottom();
     });
     // After 300ms of quiet, disconnect — layout is stable.
     clearTimeout(_settleTimer);
-    _settleTimer=setTimeout(()=>{
+    composerControlsBindings._settleTimer=setTimeout(()=>{
       if(token!==_bottomSettleToken) return;
-      ro.disconnect(); if(_settleRO===ro) _settleRO=null;
+      ro.disconnect(); if(composerControlsBindings._settleRO===ro) composerControlsBindings._settleRO=null;
       _setMessageScrollToBottom();
     },300);
   });
-  _settleRO=ro;
+  composerControlsBindings._settleRO=ro;
   ro.observe(observed);
   // #4702: for an explicit (user/open) settle, also observe the SCROLLER itself.
   // On iOS the transcript content (#msgInner) may not resize, but the scroller
@@ -484,10 +491,10 @@ function _settleMessageScrollToBottom(force, explicit){
   // that case. The token check inside _settleFinalScroll makes this a no-op if a
   // newer settle started, and it self-skips if the user unpinned. (Review #2/#3.)
   clearTimeout(_settleFinalTimer);
-  _settleFinalTimer=setTimeout(()=>{
+  composerControlsBindings._settleFinalTimer=setTimeout(()=>{
     if(token!==_bottomSettleToken) return;
-    ro.disconnect(); if(_settleRO===ro) _settleRO=null;
-    if((!_autoScrollFollow&&!explicit)||!_scrollPinned||_messageUserUnpinned||_recentNonMessageScrollIntent()){ _programmaticScroll=false; return; }
+    ro.disconnect(); if(composerControlsBindings._settleRO===ro) composerControlsBindings._settleRO=null;
+    if((!_autoScrollFollow&&!explicit)||!_scrollPinned||_messageUserUnpinned||_recentNonMessageScrollIntent()){ composerControlsBindings._programmaticScroll=false; return; }
     _settleFinalScroll(token);
   },2000);
 }
@@ -495,16 +502,16 @@ function _settleMessageScrollToBottom(force, explicit){
 function _settleFinalScroll(token){
   if(token!==_bottomSettleToken) return;
   const el=document.getElementById('messages');
-  if(!el){ _programmaticScroll=false; return; }
+  if(!el){ composerControlsBindings._programmaticScroll=false; return; }
   if(_messageUserUnpinned||!_scrollPinned||_recentNonMessageScrollIntent()||_recentMessageTouchScrollIntent()){
-    _programmaticScroll=false;
+    composerControlsBindings._programmaticScroll=false;
     return;
   }
-  _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+  composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
   el.scrollTop=el.scrollHeight;
-  _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-  _nearBottomCount=2;
-  _scrollPinned=true;
+  composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+  composerControlsBindings._nearBottomCount=2;
+  composerControlsBindings._scrollPinned=true;
   _deferClearProgrammaticScroll();
 }
 function scrollIfPinned(){
@@ -519,13 +526,13 @@ function scrollIfPinned(){
     // key, touch) and non-message intent, so an active scroll-up near the tail
     // is never overridden. Uses the same _nearBottomCount debounce as the
     // scroll listener (~4859-4866).
-    if(_recentNonMessageScrollIntent()||_recentMessageScrollIntent()||_recentMessageTouchScrollIntent()||_recentMessageWheelIntent()||_recentMessageKeyScrollIntent()){ _nearBottomCount=0; return; }
-    if(_messageBottomDistance()>80){ _nearBottomCount=0; return; }
-    _nearBottomCount=_nearBottomCount+1;
+    if(_recentNonMessageScrollIntent()||_recentMessageScrollIntent()||_recentMessageTouchScrollIntent()||_recentMessageWheelIntent()||_recentMessageKeyScrollIntent()){ composerControlsBindings._nearBottomCount=0; return; }
+    if(_messageBottomDistance()>80){ composerControlsBindings._nearBottomCount=0; return; }
+    composerControlsBindings._nearBottomCount=composerControlsBindings._nearBottomCount+1;
     if(_nearBottomCount<2) return;
-    _nearBottomCount=0;
-    _messageUserUnpinned=false;
-    _scrollPinned=true;
+    composerControlsBindings._nearBottomCount=0;
+    composerControlsBindings._messageUserUnpinned=false;
+    composerControlsBindings._scrollPinned=true;
   }
   if(!_scrollPinned) return;
   if(_recentNonMessageScrollIntent()) return;
@@ -534,8 +541,8 @@ function scrollIfPinned(){
 }
 function scrollToBottom(){
   _clearNewMessageScrollCue();
-  _scrollPinned=true;
-  _messageUserUnpinned=false;
+  composerControlsBindings._scrollPinned=true;
+  composerControlsBindings._messageUserUnpinned=false;
   // Write scrollTop once synchronously to anchor the viewport, then let
   // ResizeObserver settle handle any late layout growth (Prism, KaTeX,
   // Mermaid, images).  Using force=false so the observer runs — force=true
@@ -724,8 +731,80 @@ function _stripVisibleAssistantEchoFromThinking(thinkingText, ...visibleTexts){
 }
 
 
-window.HermesUI.register('activity', {
+
+export {
+  _activityStatusNode,
+  _appendActivityEvent,
+  _ensureLiveActivityBaseline,
+  _setActivityElapsedStartedAt,
+  _updateActiveActivityElapsedTimer,
+  _startActivityElapsedTimer,
+  _clearActivityElapsedTimer,
+  _setCtxCompressButton,
+  _syncMobileCtxDisplay,
+  _mergeUsageForCtxIndicator,
+  _syncCtxIndicator,
+  _setMessageScrollToBottom,
+  _isMessagePaneNearBottom,
+  _messageBottomDistance,
+  _repinMessagesAfterComposerResize,
+  _shouldFollowMessagesOnDomReplace,
+  _followMessagesAfterDomReplace,
+  _settleMessageScrollToBottom,
+  _settleFinalScroll,
   scrollIfPinned,
   scrollToBottom,
+  _fmtOllamaLabel,
   getModelLabel,
+  _gatewayProviderName,
+  _gatewayRoutingLabel,
+  _formatGatewayModelLabel,
+  _gatewayRoutingFailoverText,
+  _gatewayModelWarningText,
+  _latestGatewayRoutingForSession,
+  _stripXmlToolCallsDisplay,
+  _sanitizeThinkingDisplayText,
+  _normalizeThinkingEchoCompare,
+  _stripVisibleAssistantEchoFromThinking,
+  _MOBILE_CONFIG_BASE_LABEL,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _activityStatusNode: { enumerable: true, get: () => _activityStatusNode, set: (value) => { _activityStatusNode = value; } },
+  _appendActivityEvent: { enumerable: true, get: () => _appendActivityEvent, set: (value) => { _appendActivityEvent = value; } },
+  _ensureLiveActivityBaseline: { enumerable: true, get: () => _ensureLiveActivityBaseline, set: (value) => { _ensureLiveActivityBaseline = value; } },
+  _setActivityElapsedStartedAt: { enumerable: true, get: () => _setActivityElapsedStartedAt, set: (value) => { _setActivityElapsedStartedAt = value; } },
+  _updateActiveActivityElapsedTimer: { enumerable: true, get: () => _updateActiveActivityElapsedTimer, set: (value) => { _updateActiveActivityElapsedTimer = value; } },
+  _startActivityElapsedTimer: { enumerable: true, get: () => _startActivityElapsedTimer, set: (value) => { _startActivityElapsedTimer = value; } },
+  _clearActivityElapsedTimer: { enumerable: true, get: () => _clearActivityElapsedTimer, set: (value) => { _clearActivityElapsedTimer = value; } },
+  _setCtxCompressButton: { enumerable: true, get: () => _setCtxCompressButton, set: (value) => { _setCtxCompressButton = value; } },
+  _syncMobileCtxDisplay: { enumerable: true, get: () => _syncMobileCtxDisplay, set: (value) => { _syncMobileCtxDisplay = value; } },
+  _mergeUsageForCtxIndicator: { enumerable: true, get: () => _mergeUsageForCtxIndicator, set: (value) => { _mergeUsageForCtxIndicator = value; } },
+  _syncCtxIndicator: { enumerable: true, get: () => _syncCtxIndicator, set: (value) => { _syncCtxIndicator = value; } },
+  _setMessageScrollToBottom: { enumerable: true, get: () => _setMessageScrollToBottom, set: (value) => { _setMessageScrollToBottom = value; } },
+  _isMessagePaneNearBottom: { enumerable: true, get: () => _isMessagePaneNearBottom, set: (value) => { _isMessagePaneNearBottom = value; } },
+  _messageBottomDistance: { enumerable: true, get: () => _messageBottomDistance, set: (value) => { _messageBottomDistance = value; } },
+  _repinMessagesAfterComposerResize: { enumerable: true, get: () => _repinMessagesAfterComposerResize, set: (value) => { _repinMessagesAfterComposerResize = value; } },
+  _shouldFollowMessagesOnDomReplace: { enumerable: true, get: () => _shouldFollowMessagesOnDomReplace, set: (value) => { _shouldFollowMessagesOnDomReplace = value; } },
+  _followMessagesAfterDomReplace: { enumerable: true, get: () => _followMessagesAfterDomReplace, set: (value) => { _followMessagesAfterDomReplace = value; } },
+  _settleMessageScrollToBottom: { enumerable: true, get: () => _settleMessageScrollToBottom, set: (value) => { _settleMessageScrollToBottom = value; } },
+  _settleFinalScroll: { enumerable: true, get: () => _settleFinalScroll, set: (value) => { _settleFinalScroll = value; } },
+  scrollIfPinned: { enumerable: true, get: () => scrollIfPinned, set: (value) => { scrollIfPinned = value; } },
+  scrollToBottom: { enumerable: true, get: () => scrollToBottom, set: (value) => { scrollToBottom = value; } },
+  _fmtOllamaLabel: { enumerable: true, get: () => _fmtOllamaLabel, set: (value) => { _fmtOllamaLabel = value; } },
+  getModelLabel: { enumerable: true, get: () => getModelLabel, set: (value) => { getModelLabel = value; } },
+  _gatewayProviderName: { enumerable: true, get: () => _gatewayProviderName, set: (value) => { _gatewayProviderName = value; } },
+  _gatewayRoutingLabel: { enumerable: true, get: () => _gatewayRoutingLabel, set: (value) => { _gatewayRoutingLabel = value; } },
+  _formatGatewayModelLabel: { enumerable: true, get: () => _formatGatewayModelLabel, set: (value) => { _formatGatewayModelLabel = value; } },
+  _gatewayRoutingFailoverText: { enumerable: true, get: () => _gatewayRoutingFailoverText, set: (value) => { _gatewayRoutingFailoverText = value; } },
+  _gatewayModelWarningText: { enumerable: true, get: () => _gatewayModelWarningText, set: (value) => { _gatewayModelWarningText = value; } },
+  _latestGatewayRoutingForSession: { enumerable: true, get: () => _latestGatewayRoutingForSession, set: (value) => { _latestGatewayRoutingForSession = value; } },
+  _stripXmlToolCallsDisplay: { enumerable: true, get: () => _stripXmlToolCallsDisplay, set: (value) => { _stripXmlToolCallsDisplay = value; } },
+  _sanitizeThinkingDisplayText: { enumerable: true, get: () => _sanitizeThinkingDisplayText, set: (value) => { _sanitizeThinkingDisplayText = value; } },
+  _normalizeThinkingEchoCompare: { enumerable: true, get: () => _normalizeThinkingEchoCompare, set: (value) => { _normalizeThinkingEchoCompare = value; } },
+  _stripVisibleAssistantEchoFromThinking: { enumerable: true, get: () => _stripVisibleAssistantEchoFromThinking, set: (value) => { _stripVisibleAssistantEchoFromThinking = value; } },
+  _MOBILE_CONFIG_BASE_LABEL: { enumerable: true, get: () => _MOBILE_CONFIG_BASE_LABEL },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

@@ -64,11 +64,11 @@ def test_session_static_css_returns_text_css_mime(monkeypatch):
 
 
 def test_session_static_js_returns_javascript_mime(monkeypatch):
-    """/session/<id>/static/ui.js must return application/javascript, not text/html."""
+    """Native UI modules under session routes must return JavaScript, not HTML."""
     from api.routes import handle_get
 
     handler = _FakeHandler()
-    parsed = urlparse("http://example.com/session/static/ui.js")
+    parsed = urlparse("http://example.com/session/static/modules/ui/index.js")
     assert handle_get(handler, parsed) is True
     assert handler.status == 200
     ct = handler.header("Content-Type") or ""

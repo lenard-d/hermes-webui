@@ -19,7 +19,7 @@ Every behavioral test below is designed to FAIL on the pre-guard code and PASS o
 the guard. Node-harness pattern (extractFunc + mock DOM) shared with the sibling scroll
 regression suites.
 """
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 import json
 import pathlib
@@ -80,7 +80,7 @@ function extractFunc(name) {
   }
   return src.slice(start, i);
 }"""
-    return prelude + body
+    return prelude + body + UI_TEST_BINDING_PROXIES
 
 
 # ---- realign guard (_restoreMessageViewportAnchor) -------------------------------
@@ -548,4 +548,3 @@ def test_predicate_true_on_android_not_ios():
         platform="Linux armv8l", max_touch_points=5,
     )))
     assert m["touchLike"] is True
-

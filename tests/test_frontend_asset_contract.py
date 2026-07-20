@@ -8,10 +8,12 @@ import pytest
 from tests.frontend_asset_contract import (
     FRONTEND_FAMILIES,
     REPO_ROOT,
+    direct_family_asset_paths,
     family_asset_paths,
     family_direct_asset_paths,
     family_entrypoint_path,
     module_family_paths,
+    ui_module_paths,
 )
 
 
@@ -57,7 +59,7 @@ def _direct_urls_for_family(family: str) -> list[str]:
 def _expected_direct_urls(family: str) -> list[str]:
     if family == "commands":
         return []
-    if family in {"boot", "messages", "panels", "sessions"}:
+    if family in {"boot", "messages", "panels", "sessions", "ui"}:
         entrypoint = family_entrypoint_path(family)
         assert entrypoint is not None
         path = entrypoint.relative_to(REPO_ROOT).as_posix()
@@ -79,13 +81,15 @@ def test_facades_have_the_required_side_of_each_direct_load_order():
         REPO_ROOT / "static" / "modules" / "sessions" / "index.js",
     )
 
-    for family in ("i18n", "ui", "messages"):
+    for family in ("i18n",):
         assert family_asset_paths(family)[0].name == f"{family}.js"
     assert family_direct_asset_paths("messages")[0].as_posix().endswith(
         "static/modules/messages/index.js"
     )
 
     assert family_direct_asset_paths("panels")[0].as_posix().endswith("modules/panels/index.js")
+
+    assert direct_family_asset_paths("ui")[0].as_posix().endswith("modules/ui/index.js")
 
 
 def test_every_frontend_asset_is_precached_at_its_browser_request_url():
@@ -147,3 +151,22 @@ def test_split_families_use_direct_assets_not_runtime_manifests():
 
     assert direct_urls == expected_urls
     assert not any("manifest.json" in url for url in direct_urls)
+
+
+def test_ui_entrypoint_imports_every_semantic_module_once():
+    entrypoint = direct_family_asset_paths("ui")[0]
+    source = entrypoint.read_text(encoding="utf-8")
+    imports = re.findall(r"from './([^']+\.js)'", source)
+
+    assert sorted(imports) == sorted(path.name for path in ui_module_paths())
+    assert len(imports) == len(set(imports))
+
+
+def test_service_worker_precaches_native_ui_dependencies_at_import_urls():
+    sw_source = SERVICE_WORKER.read_text(encoding="utf-8")
+    shell_assets = sw_source[sw_source.index("const SHELL_ASSETS = [") :]
+    shell_assets = shell_assets[: shell_assets.index("]; ") if "]; " in shell_assets else shell_assets.index("];")]
+
+    for path in ui_module_paths():
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        assert f"'./{relative}'," in shell_assets

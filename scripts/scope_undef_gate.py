@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """scope_undef_gate.py — catch the "ReferenceError: X is not defined" brick class.
 
-The WebUI front-end ships as classic (non-module) ``<script>`` tags that all share
-ONE implicit global scope. A function declared *inside* another function is NOT a
-global, so calling it (un-guarded) from a different top-level function throws
-``ReferenceError`` at runtime — but only when that code path actually executes in
-the browser. ``node --check`` (syntax only), source-presence tests, and the
-existing ``no-const-assign`` ESLint runtime gate all MISS it.
+Most WebUI frontend families ship as classic ``<script>`` tags sharing one global
+scope. Native modules under ``static/modules`` instead use explicit imports and
+exports while retaining read access to the legacy browser globals. A function
+declared *inside* another function is NOT visible to either kind of sibling scope,
+so calling it unguarded throws ``ReferenceError`` at runtime.
 
 Canonical bug — #3696 (v0.51.269 regression): ``_sessionAttentionState`` was
 declared *inside* ``renderSessionListFromCache()`` and relied on "function
@@ -16,11 +15,11 @@ cache-render crashed with ``_sessionAttentionState is not defined`` and the
 session list went blank.
 
 How the gate works (and why it has no cross-file false positives):
-  1. It scans every static ``*.js`` file for the union of all TOP-LEVEL symbols
-     (``function NAME``, top-level ``const/let/var``, and ``window.NAME = ...``).
-     That union IS the real shared global namespace at runtime.
-  2. It lints each file individually with ESLint ``no-undef``, supplying that
-     union (plus browser/library builtins) as ``globals``. Cross-file references
+  1. It scans every classic static ``*.js`` file for the union of all TOP-LEVEL
+     symbols. That union is the real shared global namespace at runtime.
+  2. It lints each classic file as a script and each native module as a module with
+     ESLint ``no-undef``, supplying the classic union (plus browser/library
+     builtins) as ``globals``. Cross-file classic references
      (``api``, ``loadSession``, ``renderSessionList`` …) resolve cleanly because
      they ARE top-level somewhere; meanwhile ESLint's per-file scope analysis
      still flags a name that is *defined only nested* and called from a sibling
@@ -104,6 +103,7 @@ PROJECT_DYNAMIC_GLOBALS = {
     "placeLiveToolCardsHost": "typeof-guarded optional (ui/sessions/messages call sites)",
     "watchInflightSession": "typeof-guarded optional fallback (sessions.js)",
     "_applyMediaPlaybackPreferences": "typeof-guarded optional (ui.js / workspace.js)",
+    "HermesI18n": "exposed through the i18n bootstrap's global alias",
 }
 
 
@@ -133,25 +133,51 @@ def main() -> int:
         print(f"❌ static dir not found at {static_dir}")
         return 2
 
-    files = [f for f in sorted(static_dir.glob("*.js")) if not f.name.endswith(".min.js")]
+    files = [
+        f for f in sorted(static_dir.rglob("*.js"))
+        if not f.name.endswith(".min.js") and "vendor" not in f.parts
+    ]
+    module_dir = static_dir / "modules"
+
+    def is_module(path: Path) -> bool:
+        if path.is_relative_to(module_dir):
+            return True
+        source = path.read_text(encoding="utf-8")
+        return bool(re.search(r"^\s*(?:import|export)\s", source, re.M))
+
+    classic_files = [f for f in files if not is_module(f)]
+    module_files = [f for f in files if is_module(f)]
     project_syms: set[str] = set()
-    for f in files:
+    for f in classic_files:
         project_syms |= _toplevel_symbols(f.read_text(encoding="utf-8"))
 
-    allow = project_syms | set(BROWSER_GLOBALS) | set(PROJECT_DYNAMIC_GLOBALS)
-    globals_obj = "{" + ",".join(f'"{n}":"readonly"' for n in sorted(allow)) + "}"
+    # The UI entrypoint deliberately republishes its exported compatibility
+    # surface on window for the still-classic families. Those names are valid in
+    # classic scripts, but must NOT be granted to native modules: a module that
+    # references another module's symbol without importing it should fail here.
+    ui_compat_syms: set[str] = set()
+    for f in module_files:
+        if f.is_relative_to(module_dir / "ui"):
+            ui_compat_syms |= _toplevel_symbols(f.read_text(encoding="utf-8"))
+
+    base_allow = project_syms | set(BROWSER_GLOBALS) | set(PROJECT_DYNAMIC_GLOBALS)
 
     findings: list[tuple[str, int, str]] = []
     with tempfile.TemporaryDirectory() as td:
         config_path = Path(td) / "scope.config.mjs"
-        config_path.write_text(
-            "export default [{files:[\"**/*.js\"],"
-            "languageOptions:{ecmaVersion:\"latest\",sourceType:\"script\","
-            f"globals:{globals_obj}}},"
-            "rules:{\"no-undef\":\"error\"}}];",
-            encoding="utf-8",
-        )
         for f in files:
+            source_type = "module" if is_module(f) else "script"
+            allow = base_allow if source_type == "module" else base_allow | ui_compat_syms
+            globals_obj = "{" + ",".join(
+                f'"{name}":"readonly"' for name in sorted(allow)
+            ) + "}"
+            config_path.write_text(
+                "export default [{files:[\"**/*.js\"],"
+                f"languageOptions:{{ecmaVersion:\"latest\",sourceType:\"{source_type}\","
+                f"globals:{globals_obj}}},"
+                "rules:{\"no-undef\":\"error\"}}];",
+                encoding="utf-8",
+            )
             proc = subprocess.run(
                 [eslint, "--no-config-lookup", "-c", str(config_path), "-f", "json", str(f)],
                 capture_output=True, text=True,
@@ -164,7 +190,11 @@ def main() -> int:
             for file_report in report:
                 for msg in file_report.get("messages", []):
                     if msg.get("ruleId") == "no-undef":
-                        findings.append((f.name, msg.get("line", 0), msg.get("message", "")))
+                        findings.append((
+                            str(f.relative_to(static_dir)),
+                            msg.get("line", 0),
+                            msg.get("message", ""),
+                        ))
 
     if not findings:
         print(f"✅ scope_undef_gate: CLEAN ({len(files)} static files, "

@@ -2,32 +2,35 @@ import re
 import subprocess
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
-STATIC_DIR = ROOT / "static"
-PARTS_DIR = STATIC_DIR / "ui_parts"
+from tests.frontend_asset_contract import UI_ENTRYPOINT, UI_MODULE_DIR, ui_module_paths
 
 
-def _module_paths():
-    return sorted(PARTS_DIR.glob("*.js"))
+REQUIRED_MODULES = {
+    "state.js",
+    "navigation.js",
+    "model-state.js",
+    "model-catalog.js",
+    "model-selection.js",
+    "composer.js",
+    "composer-controls.js",
+    "presentation.js",
+    "render-support.js",
+    "renderer.js",
+}
 
 
-def _combined_source():
-    paths = [STATIC_DIR / "ui.js", *_module_paths()]
-    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
+def test_ui_uses_semantic_native_modules_without_numbered_parts():
+    paths = ui_module_paths()
+    names = {path.name for path in paths}
+
+    assert REQUIRED_MODULES <= names
+    assert all(not re.match(r"\d", name) for name in names)
+    assert not (UI_MODULE_DIR.parents[1] / "ui_parts").exists()
+    assert not (UI_MODULE_DIR.parents[1] / "ui.js").exists()
 
 
-def test_ui_modules_have_an_explicit_stable_load_order():
-    paths = _module_paths()
-    prefixes = [int(path.name[:3]) for path in paths]
-
-    assert len(paths) == 20
-    assert prefixes == list(range(1, len(paths) + 1))
-    assert all(re.fullmatch(r"\d{3}-[a-z0-9-]+\.js", path.name) for path in paths)
-
-
-def test_ui_modules_are_individually_parseable_classic_scripts():
-    for path in _module_paths():
+def test_ui_modules_are_individually_parseable():
+    for path in (UI_ENTRYPOINT, *ui_module_paths()):
         result = subprocess.run(
             ["node", "--check", str(path)],
             check=False,
@@ -37,105 +40,93 @@ def test_ui_modules_are_individually_parseable_classic_scripts():
         assert result.returncode == 0, f"{path.name}: {result.stderr}"
 
 
-def test_ui_modules_register_explicit_compatibility_apis():
-    namespaces = []
-
-    for path in _module_paths():
+def test_ui_modules_declare_explicit_interfaces_and_dependencies():
+    for path in ui_module_paths():
         source = path.read_text(encoding="utf-8")
-        matches = re.findall(r"window\.HermesUI\.register\('([^']+)'", source)
-        assert len(matches) == 1, f"{path.name} must register exactly one module API"
-        namespaces.extend(matches)
+        assert "export {" in source
+        assert "compatibilityBindings" in source
+        assert "window.HermesUI.register" not in source
+        assert "ui_parts" not in source
 
-    assert len(namespaces) == len(set(namespaces))
+        for target in re.findall(r"from './([^']+\.js)'", source):
+            assert (UI_MODULE_DIR / target).is_file(), f"{path.name}: missing {target}"
 
 
-def test_ui_module_sizes_remain_reviewable():
-    for path in _module_paths():
+def test_ui_entrypoint_is_the_complete_module_inventory():
+    source = UI_ENTRYPOINT.read_text(encoding="utf-8")
+    imports = re.findall(r"from './([^']+\.js)'", source)
+
+    assert sorted(imports) == sorted(path.name for path in ui_module_paths())
+    assert len(imports) == len(set(imports))
+    assert "exposeCompatibilityBinding" in source
+    assert "hermes-ui-ready" in source
+
+
+def test_cohesive_ui_owners_remain_reviewable():
+    for path in ui_module_paths():
         line_count = len(path.read_text(encoding="utf-8").splitlines())
-        if path.name == "017-message-renderer.js":
-            # renderMessages is kept whole to preserve its lifecycle invariants.
-            assert line_count <= 1600
+        if path.name == "renderer.js":
+            assert line_count <= 1800
         else:
-            assert line_count <= 1300, f"{path.name} has grown beyond a cohesive module"
-
-    facade_lines = len((STATIC_DIR / "ui.js").read_text(encoding="utf-8").splitlines())
-    assert facade_lines <= 500
+            assert line_count <= 1500, f"{path.name} has grown beyond a cohesive owner"
 
 
-def test_full_ui_load_order_is_syntax_valid(tmp_path):
-    combined_path = tmp_path / "ui-combined.js"
-    combined_path.write_text(_combined_source(), encoding="utf-8")
+def test_primary_ui_interfaces_have_one_authoritative_owner():
+    sources = {path.name: path.read_text(encoding="utf-8") for path in ui_module_paths()}
+    expected = {
+        "renderModelDropdown": "model-selection.js",
+        "renderMd": "composer.js",
+        "renderMessages": "renderer.js",
+        "buildToolCard": "tool-worklog.js",
+        "renderFileTree": "workspace-and-uploads.js",
+        "uploadPendingFiles": "workspace-and-uploads.js",
+    }
 
-    result = subprocess.run(
-        ["node", "--check", str(combined_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
+    for function_name, owner in expected.items():
+        declaration = f"function {function_name}("
+        matches = [name for name, source in sources.items() if declaration in source]
+        assert matches == [owner]
 
 
-def test_adjacent_worklog_modules_register_in_browser_load_order():
+def test_native_ui_entrypoint_installs_live_classic_compatibility_bindings():
     runner = r"""
-const fs = require('fs');
-const vm = require('vm');
-const modules = Object.create(null);
-const compat = Object.create(null);
-const context = vm.createContext({console});
-context.window = context;
-context.HermesUI = {
-  modules,
-  compat,
-  register(name, exports) {
-    modules[name] = exports;
-    Object.assign(compat, exports);
-  },
+    const { pathToFileURL } = require('node:url');
+globalThis.window = globalThis;
+globalThis.CustomEvent = class CustomEvent { constructor(type){ this.type = type; } };
+globalThis.addEventListener = () => {};
+globalThis.dispatchEvent = () => true;
+globalThis.navigator = { onLine: true };
+globalThis.location = { href: 'http://localhost/', origin: 'http://localhost/' };
+globalThis.localStorage = { getItem(){ return null; }, setItem(){}, removeItem(){} };
+globalThis.document = {
+  readyState: 'loading',
+  baseURI: 'http://localhost/',
+  addEventListener(){},
+  getElementById(){ return null; },
+  querySelector(){ return null; },
+  querySelectorAll(){ return []; },
+  createElement(){ return {style:{},classList:{add(){},remove(){},toggle(){}},appendChild(){},setAttribute(){},querySelector(){return null;},querySelectorAll(){return [];}}; },
 };
-
-for (const path of process.argv.slice(1)) {
-  vm.runInContext(fs.readFileSync(path, 'utf8'), context, {filename: path});
-}
-
-if (typeof modules.transparentWorklog.ensureLiveWorklogContainer !== 'function') {
-  throw new Error('transparentWorklog module did not register its worklog owner');
-}
-if (typeof modules.anchorScenes.ensureRunActivityGroup !== 'function') {
-  throw new Error('anchorScenes module did not register its run-activity owner');
-}
-if (compat.ensureRunActivityGroup !== modules.anchorScenes.ensureRunActivityGroup) {
-  throw new Error('run-activity compatibility export is not owned by anchorScenes');
-}
+globalThis.MutationObserver = class { observe(){} disconnect(){} };
+globalThis.IntersectionObserver = class { observe(){} disconnect(){} };
+globalThis.ResizeObserver = class { observe(){} disconnect(){} };
+globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });
+globalThis.HermesSessionRenderCache = { create(){ return {}; } };
+globalThis.matchMedia = () => ({ matches: false, addEventListener(){}, removeEventListener(){} });
+(async () => {
+await import(pathToFileURL(process.argv[1]));
+if (!window.HermesUI?.ready) throw new Error('HermesUI did not become ready');
+if (typeof window.renderMessages !== 'function') throw new Error('renderer compatibility binding missing');
+if (window.S !== window.HermesUI.modules.state.S) throw new Error('state binding is not live');
+window._messageRenderWindowSize = 321;
+if (window.HermesUI.modules.state._messageRenderWindowSize !== 321) throw new Error('mutable compatibility binding is not live');
+})().catch((error) => { console.error(error); process.exitCode = 1; });
 """
     result = subprocess.run(
-        [
-            "node",
-            "-e",
-            runner,
-            str(PARTS_DIR / "013-transparent-worklog.js"),
-            str(PARTS_DIR / "014-anchor-scenes.js"),
-        ],
+        ["node", "-e", runner, str(UI_ENTRYPOINT)],
         check=False,
         capture_output=True,
         text=True,
     )
 
     assert result.returncode == 0, result.stderr
-
-
-def test_compatibility_surface_keeps_primary_entry_points():
-    source = _combined_source()
-
-    for declaration in (
-        "function renderModelDropdown(",
-        "function renderMd(",
-        "function renderMessages(",
-        "function buildToolCard(",
-        "function renderFileTree(",
-        "function uploadPendingFiles(",
-    ):
-        assert source.count(declaration) == 1
-
-    facade = (STATIC_DIR / "ui.js").read_text(encoding="utf-8")
-    assert "window.HermesUI.modules" in facade
-    assert "window.HermesUI.compat" in facade

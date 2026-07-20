@@ -4,7 +4,7 @@ The fix needs a scroll restore that keeps the semantic message anchor authoritat
 even when DOM height grows while the user is manually unpinned.
 """
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 import subprocess
 from pathlib import Path
@@ -44,6 +44,7 @@ def test_restore_message_scroll_snapshot_remounts_virtual_anchor_and_keeps_unpin
     """
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _programmaticScroll = false;
 let _messageVirtualWindowKey = 'old-window';
@@ -114,6 +115,7 @@ def test_live_anchor_rebuild_guard_holds_height_and_marks_reader_unpinned():
     """Live anchor rebuilds must not let the scroll container collapse mid-read."""
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _messageUserUnpinned = true;
 let _scrollPinned = false;
@@ -175,6 +177,7 @@ def test_live_anchor_rebuild_guard_keeps_pinned_follower_pinned_on_large_growth(
     === false), not a raw scrollTop>0, or pinned live streams stop auto-following."""
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _messageUserUnpinned = false;
 let _scrollPinned = true;
@@ -214,6 +217,7 @@ assert.strictEqual(inner.style.minHeight, '');
 
 def test_restore_message_scroll_snapshot_keeps_intermediate_distance_state():
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _programmaticScroll = false;
 let _messageVirtualWindowKey = 'old-window';
@@ -268,6 +272,7 @@ def test_capture_snapshot_treats_recent_scroll_away_as_manual_reader():
     """
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _messageUserUnpinned = false;
 let _scrollPinned = true;
@@ -309,6 +314,7 @@ def test_capture_snapshot_keeps_true_pinned_follower_pinned_despite_large_gap():
     """
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _messageUserUnpinned = false;
 let _scrollPinned = true;
@@ -341,6 +347,7 @@ def test_wheel_scroll_intent_only_records_when_reader_is_away_from_bottom():
     """Downward wheel intent should protect manual reading, not bottom following."""
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _lastNonMessageScrollIntentMs = -Infinity;
 let _lastMessageWheelIntentMs = -Infinity;
@@ -396,6 +403,7 @@ def test_touch_scroll_intent_only_records_when_reader_is_away_from_bottom():
     """Touch recency is broad, but snapshot intent is bottom-distance guarded."""
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _lastNonMessageScrollIntentMs = -Infinity;
 let _lastMessageWheelIntentMs = -Infinity;
@@ -451,7 +459,7 @@ def test_restore_message_scroll_snapshot_prefers_semantic_anchor_with_virtual_fa
     assert "_messageVirtualWindowKey=''" in helper_compact
     assert "renderMessages({preserveScroll:true});" in helper_compact
     assert "_messageViewportAnchorRemounting=true" in helper_compact
-    assert "setTimeout(()=>{_programmaticScroll=false;},0);" in helper_compact
+    assert "setTimeout(()=>{composerControlsBindings._programmaticScroll=false;},0);" in helper_compact
 
 
 def test_restore_message_scroll_snapshot_keeps_user_unpinned_state_authoritative_mid_stream():
@@ -459,7 +467,7 @@ def test_restore_message_scroll_snapshot_keeps_user_unpinned_state_authoritative
     compact = _compact(body)
 
     assert "constbottomDistance=el.scrollHeight-el.scrollTop-el.clientHeight;" in compact
-    assert "if(snapshot.userUnpinned===true){_messageUserUnpinned=true;_scrollPinned=false;_nearBottomCount=0;}elseif(snapshot.pinned===true){_messageUserUnpinned=false;_scrollPinned=true;_nearBottomCount=2;}else{" in compact
+    assert "if(snapshot.userUnpinned===true){composerControlsBindings._messageUserUnpinned=true;composerControlsBindings._scrollPinned=false;composerControlsBindings._nearBottomCount=0;}elseif(snapshot.pinned===true){composerControlsBindings._messageUserUnpinned=false;composerControlsBindings._scrollPinned=true;composerControlsBindings._nearBottomCount=2;}else{" in compact
     assert "_messageUserUnpinned=false;_scrollPinned=false;_nearBottomCount=0;" not in compact
 
 
@@ -491,6 +499,7 @@ def test_stale_content_key_recovers_via_session_index_and_compensates_height():
     """
 
     script = f"""
+{UI_TEST_BINDING_PROXIES}
 const assert = require('assert');
 let _programmaticScroll = false;
 let _programmaticScrollSetAt = 0;

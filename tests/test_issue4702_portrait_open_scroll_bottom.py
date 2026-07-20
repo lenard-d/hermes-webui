@@ -31,7 +31,10 @@ def test_client_height_seeded_with_scrolltop_on_programmatic_writes():
         "_lastMessageClientHeight=el.clientHeight seed (#4702)."
     )
     # The paired form is present at the programmatic-write sites.
-    assert UI_JS.count("_lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;") >= 4
+    assert UI_JS.count(
+        "composerControlsBindings._lastScrollTop=el.scrollTop;"
+        "composerControlsBindings._lastMessageClientHeight=el.clientHeight;"
+    ) >= 4
 
 
 def test_client_height_growth_guard_declared():

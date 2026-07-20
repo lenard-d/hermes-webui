@@ -1,3 +1,11 @@
+import { _setMessageScrollToBottom } from './activity-and-scroll.js';
+import { showToast } from './composer.js';
+import { _compressionStateForCurrentSession } from './live-activity.js';
+import { closeModelDropdown, closeReasoningDropdown } from './model-selection.js';
+import { _isSessionEndlessScrollEnabled, _scheduleMessageVirtualizedRender, _updateSessionStartJumpButton } from './navigation.js';
+import { $, S, _markMessageVirtualScrollActive, _scrollbarDragActive } from './state.js';
+import { compatibilityBindings as stateBindings } from './state.js';
+
 // ── Session toolsets chip (#493) ───────────────────────────────────────────
 let _currentSessionToolsets = null; // null = active profile defaults, array = custom list
 let _toolsetsCatalog = null;
@@ -726,21 +734,21 @@ if(typeof window!=='undefined'){
   const el=document.getElementById('messages');
   if(!el) return;
   el.addEventListener('pointerdown',(e)=>{
-    if(e.target===el&&e.offsetX>=el.clientWidth) _scrollbarDragActive=true;
+    if(e.target===el&&e.offsetX>=el.clientWidth) stateBindings._scrollbarDragActive=true;
   },{passive:true});
   window.addEventListener('pointerup',()=>{
     if(!_scrollbarDragActive) return;
-    _scrollbarDragActive=false;
+    stateBindings._scrollbarDragActive=false;
     _scheduleMessageVirtualizedRender(true);
   },{passive:true});
   window.addEventListener('pointercancel',()=>{
     if(!_scrollbarDragActive) return;
-    _scrollbarDragActive=false;
+    stateBindings._scrollbarDragActive=false;
     _scheduleMessageVirtualizedRender(true);
   },{passive:true});
-  window.addEventListener('blur',()=>{ _scrollbarDragActive=false; },{passive:true});
+  window.addEventListener('blur',()=>{ stateBindings._scrollbarDragActive=false; },{passive:true});
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden') _scrollbarDragActive=false;
+    if(document.visibilityState==='hidden') stateBindings._scrollbarDragActive=false;
   },{passive:true});
   // #4970 review (greptile P1): record keyboard-driven message-pane scrolling as
   // user intent. PageUp/PageDown, Arrow keys, Space/Shift+Space, Home/End scroll
@@ -1129,9 +1137,214 @@ function _syncTransparentEventTimestamp(row, header, opts){
   return timeEl;
 }
 
-window.HermesUI.register('composerControls', {
+
+export {
+  _applyToolsetsChip,
+  _syncToolsetsChip,
   syncToolsetsChip,
+  _normalizeToolsetsCatalog,
+  _loadToolsetsCatalog,
+  invalidateToolsetsCatalog,
+  _toolsetsInputList,
+  _ensureToolsetsPresetSection,
+  _appendToolsetsLabel,
+  _renderToolsetsPresetSections,
+  _populateToolsetsDropdown,
+  _positionToolsetsDropdown,
   toggleToolsetsDropdown,
+  closeToolsetsDropdown,
+  _applySessionToolsets,
+  _syncMobileComposerConfigButton,
+  closeMobileComposerConfig,
   openMobileComposerConfig,
+  toggleMobileComposerConfig,
   openComposerContextMenu,
+  _deferClearProgrammaticScroll,
+  _recentMessageRenderArtifactWindow,
+  _cancelBottomSettle,
+  _markMessageTouchScrollIntent,
+  _recentMessageTouchScrollIntent,
+  _recentMessageWheelIntent,
+  _recentMessageScrollIntent,
+  _recentMessageKeyScrollIntent,
+  _isMessageReaderUnpinned,
+  _olderMessagesPrefetchReady,
+  _scheduleDeferredOlderMessagesLoad,
+  _recordNonMessageScrollIntent,
+  _recentNonMessageScrollIntent,
+  _setScrollToBottomCueText,
+  _syncScrollToBottomCue,
+  _showNewMessageScrollCue,
+  _clearNewMessageScrollCue,
+  _maybeShowNewMessageScrollCue,
+  _resetScrollDirectionTracker,
+  _resetStreamScrollFollow,
+  _fmtTokens,
+  _formatTurnDuration,
+  _formatFirstToken,
+  _formatActiveElapsedTimer,
+  _processedElapsedLabel,
+  _compressionElapsedStartedAt,
+  _compressionElapsedLabel,
+  _compressionElapsedExpired,
+  _compressionLiveCardNode,
+  _compressionLiveCardState,
+  _updateCompressionElapsedCards,
+  _updateCompressionElapsedTimer,
+  _startCompressionElapsedTimer,
+  _clearCompressionElapsedTimer,
+  _activityNowSeconds,
+  _isActivityTimerGroup,
+  _activityElapsedStartedAt,
+  _activityElapsedLabel,
+  _activityProcessedElapsedLabel,
+  _activitySettledProcessedLabel,
+  _activityMarkObserved,
+  _activityLastObservedAge,
+  _activityClockLabel,
+  _activityFullClockLabel,
+  _timestampSeconds,
+  _firstValidTimestampSeconds,
+  _transparentEventTimestampSeconds,
+  _syncTransparentEventTimestamp,
+  NON_MESSAGE_SCROLL_INTENT_SUPPRESS_MS,
+  MESSAGE_TOUCH_SCROLL_SUPPRESS_MS,
+  MESSAGE_WHEEL_INTENT_SUPPRESS_MS,
+  MESSAGE_KEY_SCROLL_INTENT_SUPPRESS_MS,
+  _COMPRESSION_ELAPSED_MAX_SECONDS,
+  _currentSessionToolsets,
+  _toolsetsCatalog,
+  _scrollPinned,
+  _programmaticScroll,
+  _programmaticScrollSetAt,
+  _programmaticScrollResetTimer,
+  _nearBottomCount,
+  _lastScrollTop,
+  _lastMessageClientHeight,
+  _lastNonMessageScrollIntentMs,
+  _messageUserUnpinned,
+  _bottomSettleToken,
+  _settleRAF,
+  _settleRO,
+  _settleTimer,
+  _settleFinalTimer,
+  _touchStartY,
+  _messageTouchScrollActive,
+  _lastMessageTouchScrollIntentMs,
+  _deferredOlderMessagesTimer,
+  _lastMessageWheelIntentMs,
+  _lastMessageScrollIntentMs,
+  _lastMessageKeyScrollIntentMs,
+  _newMessageCueVisible,
+  _lastMessageRenderAt,
+  _compressionElapsedTimer,
+  _activityElapsedTimer,
+  _activityElapsedTimerGroup,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _applyToolsetsChip: { enumerable: true, get: () => _applyToolsetsChip, set: (value) => { _applyToolsetsChip = value; } },
+  _syncToolsetsChip: { enumerable: true, get: () => _syncToolsetsChip, set: (value) => { _syncToolsetsChip = value; } },
+  syncToolsetsChip: { enumerable: true, get: () => syncToolsetsChip, set: (value) => { syncToolsetsChip = value; } },
+  _normalizeToolsetsCatalog: { enumerable: true, get: () => _normalizeToolsetsCatalog, set: (value) => { _normalizeToolsetsCatalog = value; } },
+  _loadToolsetsCatalog: { enumerable: true, get: () => _loadToolsetsCatalog, set: (value) => { _loadToolsetsCatalog = value; } },
+  invalidateToolsetsCatalog: { enumerable: true, get: () => invalidateToolsetsCatalog, set: (value) => { invalidateToolsetsCatalog = value; } },
+  _toolsetsInputList: { enumerable: true, get: () => _toolsetsInputList, set: (value) => { _toolsetsInputList = value; } },
+  _ensureToolsetsPresetSection: { enumerable: true, get: () => _ensureToolsetsPresetSection, set: (value) => { _ensureToolsetsPresetSection = value; } },
+  _appendToolsetsLabel: { enumerable: true, get: () => _appendToolsetsLabel, set: (value) => { _appendToolsetsLabel = value; } },
+  _renderToolsetsPresetSections: { enumerable: true, get: () => _renderToolsetsPresetSections, set: (value) => { _renderToolsetsPresetSections = value; } },
+  _populateToolsetsDropdown: { enumerable: true, get: () => _populateToolsetsDropdown, set: (value) => { _populateToolsetsDropdown = value; } },
+  _positionToolsetsDropdown: { enumerable: true, get: () => _positionToolsetsDropdown, set: (value) => { _positionToolsetsDropdown = value; } },
+  toggleToolsetsDropdown: { enumerable: true, get: () => toggleToolsetsDropdown, set: (value) => { toggleToolsetsDropdown = value; } },
+  closeToolsetsDropdown: { enumerable: true, get: () => closeToolsetsDropdown, set: (value) => { closeToolsetsDropdown = value; } },
+  _applySessionToolsets: { enumerable: true, get: () => _applySessionToolsets, set: (value) => { _applySessionToolsets = value; } },
+  _syncMobileComposerConfigButton: { enumerable: true, get: () => _syncMobileComposerConfigButton, set: (value) => { _syncMobileComposerConfigButton = value; } },
+  closeMobileComposerConfig: { enumerable: true, get: () => closeMobileComposerConfig, set: (value) => { closeMobileComposerConfig = value; } },
+  openMobileComposerConfig: { enumerable: true, get: () => openMobileComposerConfig, set: (value) => { openMobileComposerConfig = value; } },
+  toggleMobileComposerConfig: { enumerable: true, get: () => toggleMobileComposerConfig, set: (value) => { toggleMobileComposerConfig = value; } },
+  openComposerContextMenu: { enumerable: true, get: () => openComposerContextMenu, set: (value) => { openComposerContextMenu = value; } },
+  _deferClearProgrammaticScroll: { enumerable: true, get: () => _deferClearProgrammaticScroll, set: (value) => { _deferClearProgrammaticScroll = value; } },
+  _recentMessageRenderArtifactWindow: { enumerable: true, get: () => _recentMessageRenderArtifactWindow, set: (value) => { _recentMessageRenderArtifactWindow = value; } },
+  _cancelBottomSettle: { enumerable: true, get: () => _cancelBottomSettle, set: (value) => { _cancelBottomSettle = value; } },
+  _markMessageTouchScrollIntent: { enumerable: true, get: () => _markMessageTouchScrollIntent, set: (value) => { _markMessageTouchScrollIntent = value; } },
+  _recentMessageTouchScrollIntent: { enumerable: true, get: () => _recentMessageTouchScrollIntent, set: (value) => { _recentMessageTouchScrollIntent = value; } },
+  _recentMessageWheelIntent: { enumerable: true, get: () => _recentMessageWheelIntent, set: (value) => { _recentMessageWheelIntent = value; } },
+  _recentMessageScrollIntent: { enumerable: true, get: () => _recentMessageScrollIntent, set: (value) => { _recentMessageScrollIntent = value; } },
+  _recentMessageKeyScrollIntent: { enumerable: true, get: () => _recentMessageKeyScrollIntent, set: (value) => { _recentMessageKeyScrollIntent = value; } },
+  _isMessageReaderUnpinned: { enumerable: true, get: () => _isMessageReaderUnpinned, set: (value) => { _isMessageReaderUnpinned = value; } },
+  _olderMessagesPrefetchReady: { enumerable: true, get: () => _olderMessagesPrefetchReady, set: (value) => { _olderMessagesPrefetchReady = value; } },
+  _scheduleDeferredOlderMessagesLoad: { enumerable: true, get: () => _scheduleDeferredOlderMessagesLoad, set: (value) => { _scheduleDeferredOlderMessagesLoad = value; } },
+  _recordNonMessageScrollIntent: { enumerable: true, get: () => _recordNonMessageScrollIntent, set: (value) => { _recordNonMessageScrollIntent = value; } },
+  _recentNonMessageScrollIntent: { enumerable: true, get: () => _recentNonMessageScrollIntent, set: (value) => { _recentNonMessageScrollIntent = value; } },
+  _setScrollToBottomCueText: { enumerable: true, get: () => _setScrollToBottomCueText, set: (value) => { _setScrollToBottomCueText = value; } },
+  _syncScrollToBottomCue: { enumerable: true, get: () => _syncScrollToBottomCue, set: (value) => { _syncScrollToBottomCue = value; } },
+  _showNewMessageScrollCue: { enumerable: true, get: () => _showNewMessageScrollCue, set: (value) => { _showNewMessageScrollCue = value; } },
+  _clearNewMessageScrollCue: { enumerable: true, get: () => _clearNewMessageScrollCue, set: (value) => { _clearNewMessageScrollCue = value; } },
+  _maybeShowNewMessageScrollCue: { enumerable: true, get: () => _maybeShowNewMessageScrollCue, set: (value) => { _maybeShowNewMessageScrollCue = value; } },
+  _resetScrollDirectionTracker: { enumerable: true, get: () => _resetScrollDirectionTracker, set: (value) => { _resetScrollDirectionTracker = value; } },
+  _resetStreamScrollFollow: { enumerable: true, get: () => _resetStreamScrollFollow, set: (value) => { _resetStreamScrollFollow = value; } },
+  _fmtTokens: { enumerable: true, get: () => _fmtTokens, set: (value) => { _fmtTokens = value; } },
+  _formatTurnDuration: { enumerable: true, get: () => _formatTurnDuration, set: (value) => { _formatTurnDuration = value; } },
+  _formatFirstToken: { enumerable: true, get: () => _formatFirstToken, set: (value) => { _formatFirstToken = value; } },
+  _formatActiveElapsedTimer: { enumerable: true, get: () => _formatActiveElapsedTimer, set: (value) => { _formatActiveElapsedTimer = value; } },
+  _processedElapsedLabel: { enumerable: true, get: () => _processedElapsedLabel, set: (value) => { _processedElapsedLabel = value; } },
+  _compressionElapsedStartedAt: { enumerable: true, get: () => _compressionElapsedStartedAt, set: (value) => { _compressionElapsedStartedAt = value; } },
+  _compressionElapsedLabel: { enumerable: true, get: () => _compressionElapsedLabel, set: (value) => { _compressionElapsedLabel = value; } },
+  _compressionElapsedExpired: { enumerable: true, get: () => _compressionElapsedExpired, set: (value) => { _compressionElapsedExpired = value; } },
+  _compressionLiveCardNode: { enumerable: true, get: () => _compressionLiveCardNode, set: (value) => { _compressionLiveCardNode = value; } },
+  _compressionLiveCardState: { enumerable: true, get: () => _compressionLiveCardState, set: (value) => { _compressionLiveCardState = value; } },
+  _updateCompressionElapsedCards: { enumerable: true, get: () => _updateCompressionElapsedCards, set: (value) => { _updateCompressionElapsedCards = value; } },
+  _updateCompressionElapsedTimer: { enumerable: true, get: () => _updateCompressionElapsedTimer, set: (value) => { _updateCompressionElapsedTimer = value; } },
+  _startCompressionElapsedTimer: { enumerable: true, get: () => _startCompressionElapsedTimer, set: (value) => { _startCompressionElapsedTimer = value; } },
+  _clearCompressionElapsedTimer: { enumerable: true, get: () => _clearCompressionElapsedTimer, set: (value) => { _clearCompressionElapsedTimer = value; } },
+  _activityNowSeconds: { enumerable: true, get: () => _activityNowSeconds, set: (value) => { _activityNowSeconds = value; } },
+  _isActivityTimerGroup: { enumerable: true, get: () => _isActivityTimerGroup, set: (value) => { _isActivityTimerGroup = value; } },
+  _activityElapsedStartedAt: { enumerable: true, get: () => _activityElapsedStartedAt, set: (value) => { _activityElapsedStartedAt = value; } },
+  _activityElapsedLabel: { enumerable: true, get: () => _activityElapsedLabel, set: (value) => { _activityElapsedLabel = value; } },
+  _activityProcessedElapsedLabel: { enumerable: true, get: () => _activityProcessedElapsedLabel, set: (value) => { _activityProcessedElapsedLabel = value; } },
+  _activitySettledProcessedLabel: { enumerable: true, get: () => _activitySettledProcessedLabel, set: (value) => { _activitySettledProcessedLabel = value; } },
+  _activityMarkObserved: { enumerable: true, get: () => _activityMarkObserved, set: (value) => { _activityMarkObserved = value; } },
+  _activityLastObservedAge: { enumerable: true, get: () => _activityLastObservedAge, set: (value) => { _activityLastObservedAge = value; } },
+  _activityClockLabel: { enumerable: true, get: () => _activityClockLabel, set: (value) => { _activityClockLabel = value; } },
+  _activityFullClockLabel: { enumerable: true, get: () => _activityFullClockLabel, set: (value) => { _activityFullClockLabel = value; } },
+  _timestampSeconds: { enumerable: true, get: () => _timestampSeconds, set: (value) => { _timestampSeconds = value; } },
+  _firstValidTimestampSeconds: { enumerable: true, get: () => _firstValidTimestampSeconds, set: (value) => { _firstValidTimestampSeconds = value; } },
+  _transparentEventTimestampSeconds: { enumerable: true, get: () => _transparentEventTimestampSeconds, set: (value) => { _transparentEventTimestampSeconds = value; } },
+  _syncTransparentEventTimestamp: { enumerable: true, get: () => _syncTransparentEventTimestamp, set: (value) => { _syncTransparentEventTimestamp = value; } },
+  NON_MESSAGE_SCROLL_INTENT_SUPPRESS_MS: { enumerable: true, get: () => NON_MESSAGE_SCROLL_INTENT_SUPPRESS_MS },
+  MESSAGE_TOUCH_SCROLL_SUPPRESS_MS: { enumerable: true, get: () => MESSAGE_TOUCH_SCROLL_SUPPRESS_MS },
+  MESSAGE_WHEEL_INTENT_SUPPRESS_MS: { enumerable: true, get: () => MESSAGE_WHEEL_INTENT_SUPPRESS_MS },
+  MESSAGE_KEY_SCROLL_INTENT_SUPPRESS_MS: { enumerable: true, get: () => MESSAGE_KEY_SCROLL_INTENT_SUPPRESS_MS },
+  _COMPRESSION_ELAPSED_MAX_SECONDS: { enumerable: true, get: () => _COMPRESSION_ELAPSED_MAX_SECONDS },
+  _currentSessionToolsets: { enumerable: true, get: () => _currentSessionToolsets, set: (value) => { _currentSessionToolsets = value; } },
+  _toolsetsCatalog: { enumerable: true, get: () => _toolsetsCatalog, set: (value) => { _toolsetsCatalog = value; } },
+  _scrollPinned: { enumerable: true, get: () => _scrollPinned, set: (value) => { _scrollPinned = value; } },
+  _programmaticScroll: { enumerable: true, get: () => _programmaticScroll, set: (value) => { _programmaticScroll = value; } },
+  _programmaticScrollSetAt: { enumerable: true, get: () => _programmaticScrollSetAt, set: (value) => { _programmaticScrollSetAt = value; } },
+  _programmaticScrollResetTimer: { enumerable: true, get: () => _programmaticScrollResetTimer, set: (value) => { _programmaticScrollResetTimer = value; } },
+  _nearBottomCount: { enumerable: true, get: () => _nearBottomCount, set: (value) => { _nearBottomCount = value; } },
+  _lastScrollTop: { enumerable: true, get: () => _lastScrollTop, set: (value) => { _lastScrollTop = value; } },
+  _lastMessageClientHeight: { enumerable: true, get: () => _lastMessageClientHeight, set: (value) => { _lastMessageClientHeight = value; } },
+  _lastNonMessageScrollIntentMs: { enumerable: true, get: () => _lastNonMessageScrollIntentMs, set: (value) => { _lastNonMessageScrollIntentMs = value; } },
+  _messageUserUnpinned: { enumerable: true, get: () => _messageUserUnpinned, set: (value) => { _messageUserUnpinned = value; } },
+  _bottomSettleToken: { enumerable: true, get: () => _bottomSettleToken, set: (value) => { _bottomSettleToken = value; } },
+  _settleRAF: { enumerable: true, get: () => _settleRAF, set: (value) => { _settleRAF = value; } },
+  _settleRO: { enumerable: true, get: () => _settleRO, set: (value) => { _settleRO = value; } },
+  _settleTimer: { enumerable: true, get: () => _settleTimer, set: (value) => { _settleTimer = value; } },
+  _settleFinalTimer: { enumerable: true, get: () => _settleFinalTimer, set: (value) => { _settleFinalTimer = value; } },
+  _touchStartY: { enumerable: true, get: () => _touchStartY, set: (value) => { _touchStartY = value; } },
+  _messageTouchScrollActive: { enumerable: true, get: () => _messageTouchScrollActive, set: (value) => { _messageTouchScrollActive = value; } },
+  _lastMessageTouchScrollIntentMs: { enumerable: true, get: () => _lastMessageTouchScrollIntentMs, set: (value) => { _lastMessageTouchScrollIntentMs = value; } },
+  _deferredOlderMessagesTimer: { enumerable: true, get: () => _deferredOlderMessagesTimer, set: (value) => { _deferredOlderMessagesTimer = value; } },
+  _lastMessageWheelIntentMs: { enumerable: true, get: () => _lastMessageWheelIntentMs, set: (value) => { _lastMessageWheelIntentMs = value; } },
+  _lastMessageScrollIntentMs: { enumerable: true, get: () => _lastMessageScrollIntentMs, set: (value) => { _lastMessageScrollIntentMs = value; } },
+  _lastMessageKeyScrollIntentMs: { enumerable: true, get: () => _lastMessageKeyScrollIntentMs, set: (value) => { _lastMessageKeyScrollIntentMs = value; } },
+  _newMessageCueVisible: { enumerable: true, get: () => _newMessageCueVisible, set: (value) => { _newMessageCueVisible = value; } },
+  _lastMessageRenderAt: { enumerable: true, get: () => _lastMessageRenderAt, set: (value) => { _lastMessageRenderAt = value; } },
+  _compressionElapsedTimer: { enumerable: true, get: () => _compressionElapsedTimer, set: (value) => { _compressionElapsedTimer = value; } },
+  _activityElapsedTimer: { enumerable: true, get: () => _activityElapsedTimer, set: (value) => { _activityElapsedTimer = value; } },
+  _activityElapsedTimerGroup: { enumerable: true, get: () => _activityElapsedTimerGroup, set: (value) => { _activityElapsedTimerGroup = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

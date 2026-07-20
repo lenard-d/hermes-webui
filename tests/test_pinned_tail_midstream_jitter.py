@@ -34,7 +34,7 @@ import tempfile
 
 import pytest
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 ROOT = pathlib.Path(__file__).parent.parent
 UI_JS = family_source("ui")
@@ -105,6 +105,7 @@ let _nearBottomCount = 0;
 let _scrollPinned = false;
 const performance = { now: () => 0 };
 """
+        + UI_TEST_BINDING_PROXIES
         + body
         + "\n"
         + scenario_js

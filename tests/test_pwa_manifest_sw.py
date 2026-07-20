@@ -213,7 +213,7 @@ class TestIndexHtmlIntegration:
     def test_index_uses_version_placeholders_for_static_assets(self):
         src = INDEX.read_text(encoding="utf-8")
         assert "sw.js?v=__WEBUI_VERSION__" in src
-        assert "static/ui.js?v=__WEBUI_VERSION__" in src
+        assert "static/modules/ui/index.js?v=__WEBUI_VERSION__" in src
 
     def test_index_versions_stylesheet(self):
         """Regression for #1507: the `<link rel=stylesheet>` for style.css MUST
@@ -253,7 +253,7 @@ class TestIndexHtmlIntegration:
             "style.css",
             "modules/boot/index.js",
             "session_render_cache_adapter.js",
-            "ui.js",
+            "modules/ui/index.js",
             "modules/messages/index.js",
             "modules/sessions/index.js",
             "modules/panels/index.js",
@@ -310,7 +310,7 @@ class TestIndexHtmlIntegration:
         src = INDEX.read_text(encoding="utf-8")
         preload_pos = src.find('href="static/pwa-startup.js?v=__WEBUI_VERSION__"')
         script_pos = src.find('src="static/pwa-startup.js?v=__WEBUI_VERSION__"')
-        ui_pos = src.find('static/ui.js?v=__WEBUI_VERSION__')
+        ui_pos = src.find('static/modules/ui/index.js?v=__WEBUI_VERSION__')
         assert preload_pos != -1, "index.html must preload the PWA startup helper"
         assert script_pos != -1, "index.html must load the PWA startup helper"
         assert ui_pos != -1, "index.html must load the main UI bundle"

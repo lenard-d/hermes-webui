@@ -1,3 +1,13 @@
+import { _clearActivityElapsedTimer, scrollIfPinned } from './activity-and-scroll.js';
+import { _copyText } from './dialogs-and-reconnect.js';
+import { isCompressionUiRunning } from './live-activity.js';
+import { _dynamicModelLabels, _inlineMediaHtmlForRef, _isSafeDataImageUri, _mdImageHtml } from './media-and-quota.js';
+import { syncModelChip } from './model-catalog.js';
+import { _applyModelToDropdown } from './model-state.js';
+import { $, S, SESSION_QUEUES, _clearPersistedSessionQueue, _getSessionQueue, _isBacktickFenceClose, _matchBacktickFenceLine, _persistSessionQueueStorage, _queueDrainSid, assistantDisplayName, esc, getQueuedSessionCount, queueSessionMessage, shiftQueuedSessionMessage } from './state.js';
+import { renderTray } from './workspace-and-uploads.js';
+import { compatibilityBindings as stateBindings } from './state.js';
+
 function renderMd(raw){
   let s=(raw||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
   // ── Entity decode: must run FIRST so &gt; lines become > for the blockquote
@@ -820,7 +830,7 @@ function setBusy(v){
     setStatus('');
     setComposerStatus('');
     const sid=_queueDrainSid||(S.session&&S.session.session_id);
-    _queueDrainSid=null;
+    stateBindings._queueDrainSid=null;
     updateQueueBadge(sid);
     // Drain one queued message for the finished session after UI settles
     const _isViewedSid=!S.session||sid===S.session.session_id;
@@ -1174,10 +1184,72 @@ function showToast(msg,ms,type){
 }
 
 
-window.HermesUI.register('markdown', {
+
+export {
   renderMd,
+  _stripAttachedFilesMarkerForDisplay,
   setStatus,
-  setBusy,
+  setComposerStatus,
+  lockComposerForClarify,
+  unlockComposerForClarify,
+  _composerHasContent,
+  _getExplicitBusyCommandAction,
+  getComposerPrimaryAction,
+  _applyBusyComposerPlaceholder,
+  _setComposerPrimaryButtonIcon,
   updateSendBtn,
+  setBusy,
+  _clearQueueCardDisplay,
+  _renderQueueChips,
+  _updateQueuePill,
+  updateQueueBadge,
+  clearToastDismissTimer,
+  setToastDismissTimer,
+  dismissToast,
+  copyToastText,
   showToast,
+  handleComposerPrimaryAction,
+  _queueRenderKeys,
+  _queueCollapsed,
+  TOAST_DEFAULT_MS,
+  TOAST_ERROR_DEFAULT_MS,
+  _composerLockState,
+  _compressionPlaceholderSaved,
+  _queueRenderEpoch,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  renderMd: { enumerable: true, get: () => renderMd, set: (value) => { renderMd = value; } },
+  _stripAttachedFilesMarkerForDisplay: { enumerable: true, get: () => _stripAttachedFilesMarkerForDisplay, set: (value) => { _stripAttachedFilesMarkerForDisplay = value; } },
+  setStatus: { enumerable: true, get: () => setStatus, set: (value) => { setStatus = value; } },
+  setComposerStatus: { enumerable: true, get: () => setComposerStatus, set: (value) => { setComposerStatus = value; } },
+  lockComposerForClarify: { enumerable: true, get: () => lockComposerForClarify, set: (value) => { lockComposerForClarify = value; } },
+  unlockComposerForClarify: { enumerable: true, get: () => unlockComposerForClarify, set: (value) => { unlockComposerForClarify = value; } },
+  _composerHasContent: { enumerable: true, get: () => _composerHasContent, set: (value) => { _composerHasContent = value; } },
+  _getExplicitBusyCommandAction: { enumerable: true, get: () => _getExplicitBusyCommandAction, set: (value) => { _getExplicitBusyCommandAction = value; } },
+  getComposerPrimaryAction: { enumerable: true, get: () => getComposerPrimaryAction, set: (value) => { getComposerPrimaryAction = value; } },
+  _applyBusyComposerPlaceholder: { enumerable: true, get: () => _applyBusyComposerPlaceholder, set: (value) => { _applyBusyComposerPlaceholder = value; } },
+  _setComposerPrimaryButtonIcon: { enumerable: true, get: () => _setComposerPrimaryButtonIcon, set: (value) => { _setComposerPrimaryButtonIcon = value; } },
+  updateSendBtn: { enumerable: true, get: () => updateSendBtn, set: (value) => { updateSendBtn = value; } },
+  setBusy: { enumerable: true, get: () => setBusy, set: (value) => { setBusy = value; } },
+  _clearQueueCardDisplay: { enumerable: true, get: () => _clearQueueCardDisplay, set: (value) => { _clearQueueCardDisplay = value; } },
+  _renderQueueChips: { enumerable: true, get: () => _renderQueueChips, set: (value) => { _renderQueueChips = value; } },
+  _updateQueuePill: { enumerable: true, get: () => _updateQueuePill, set: (value) => { _updateQueuePill = value; } },
+  updateQueueBadge: { enumerable: true, get: () => updateQueueBadge, set: (value) => { updateQueueBadge = value; } },
+  clearToastDismissTimer: { enumerable: true, get: () => clearToastDismissTimer, set: (value) => { clearToastDismissTimer = value; } },
+  setToastDismissTimer: { enumerable: true, get: () => setToastDismissTimer, set: (value) => { setToastDismissTimer = value; } },
+  dismissToast: { enumerable: true, get: () => dismissToast, set: (value) => { dismissToast = value; } },
+  copyToastText: { enumerable: true, get: () => copyToastText, set: (value) => { copyToastText = value; } },
+  showToast: { enumerable: true, get: () => showToast, set: (value) => { showToast = value; } },
+  handleComposerPrimaryAction: { enumerable: true, get: () => handleComposerPrimaryAction, set: (value) => { handleComposerPrimaryAction = value; } },
+  _queueRenderKeys: { enumerable: true, get: () => _queueRenderKeys },
+  _queueCollapsed: { enumerable: true, get: () => _queueCollapsed },
+  TOAST_DEFAULT_MS: { enumerable: true, get: () => TOAST_DEFAULT_MS },
+  TOAST_ERROR_DEFAULT_MS: { enumerable: true, get: () => TOAST_ERROR_DEFAULT_MS },
+  _composerLockState: { enumerable: true, get: () => _composerLockState, set: (value) => { _composerLockState = value; } },
+  _compressionPlaceholderSaved: { enumerable: true, get: () => _compressionPlaceholderSaved, set: (value) => { _compressionPlaceholderSaved = value; } },
+  _queueRenderEpoch: { enumerable: true, get: () => _queueRenderEpoch, set: (value) => { _queueRenderEpoch = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

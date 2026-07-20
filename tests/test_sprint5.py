@@ -46,7 +46,7 @@ def test_server_running_from_new_location():
 
 def test_app_js_served():
     """Sprint 9: app.js replaced by modules. Verify ui.js (contains renderMd) is served."""
-    raw, ct, status = get_raw("/static/ui.js")
+    raw, ct, status = get_raw("/static/modules/ui/index.js")
     assert status == 200 and "javascript" in ct and raw
     assert "renderMd" in family_source("ui")
 

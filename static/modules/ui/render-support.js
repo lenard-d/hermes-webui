@@ -1,3 +1,14 @@
+import { _followMessagesAfterDomReplace, scrollIfPinned, scrollToBottom } from './activity-and-scroll.js';
+import { _deferClearProgrammaticScroll, _firstValidTimestampSeconds, _lastMessageClientHeight, _lastScrollTop, _maybeShowNewMessageScrollCue, _messageUserUnpinned, _nearBottomCount, _programmaticScroll, _programmaticScrollSetAt, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _scrollPinned } from './composer-controls.js';
+import { _stripAttachedFilesMarkerForDisplay } from './composer.js';
+import { _captureMessageScrollSnapshot, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _desktopAnchorRealignDelta, _restoreMessageScrollSnapshot, _restorePinnedMessageScrollSnapshot, _sessionHtmlCache, _sessionHtmlCacheSid, _toolArgsSnapshot } from './live-activity.js';
+import { _isTouchLikeMessageViewport, _messageViewportIntersectsRenderedRow, _remountMessageViewportAnchor, _restoreMessageViewportAnchor } from './navigation.js';
+import { _assistantAnchorSceneFinalAnswerText, _stripLeadingAssistantThinkingMarkup, isTransparentStream } from './presentation.js';
+import { renderMessages } from './renderer.js';
+import { $, S, _messageVirtualWindowKey, _stripWorkspaceDisplayPrefix } from './state.js';
+import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
+import { compatibilityBindings as stateBindings } from './state.js';
+
 function _restoreMessageScrollSnapshotSameFrame(snapshot){
   const el=$('messages');
   if(!el||!snapshot) return;
@@ -26,10 +37,10 @@ function _restoreMessageScrollSnapshotSameFrame(snapshot){
     // position. Pinned / near-bottom readers still get the tail-relative restore
     // below (that path is correct and must run).
     if(snapshot.userUnpinned===true&&snapshot.pinned!==true){
-      _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-      _messageUserUnpinned=true;
-      _scrollPinned=false;
-      _nearBottomCount=0;
+      composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+      composerControlsBindings._messageUserUnpinned=true;
+      composerControlsBindings._scrollPinned=false;
+      composerControlsBindings._nearBottomCount=0;
       return;
     }
     const target=(snapshot.pinned===true&&Number.isFinite(bottom))
@@ -59,10 +70,10 @@ function _restoreMessageScrollSnapshotSameFrame(snapshot){
     const _fbTouchHold=(typeof _isTouchLikeMessageViewport==='function' && _isTouchLikeMessageViewport(el));
     if(_fbTouchHold && snapshot.pinned!==true && _grewSinceSnap && !_fbActiveIntent
        && Math.abs((Math.max(0,Math.min(target,maxTop)))-el.scrollTop)>8){
-      _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-      _messageUserUnpinned=true;
-      _scrollPinned=false;
-      _nearBottomCount=0;
+      composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+      composerControlsBindings._messageUserUnpinned=true;
+      composerControlsBindings._scrollPinned=false;
+      composerControlsBindings._nearBottomCount=0;
       return;
     }
     // Desktop stale-snapshot residue fix (issue #5637 follow-up, PR #5742 round-3).
@@ -103,22 +114,22 @@ function _restoreMessageScrollSnapshotSameFrame(snapshot){
         // else: no measurable anchor and no topPad geometry -> keep raw target.
       }
     }
-    _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+    composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
     el.scrollTop=_fbTarget;
   }
-  _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
+  composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
   if(snapshot.pinned===true){
-    _messageUserUnpinned=false;
-    _scrollPinned=true;
-    _nearBottomCount=2;
+    composerControlsBindings._messageUserUnpinned=false;
+    composerControlsBindings._scrollPinned=true;
+    composerControlsBindings._nearBottomCount=2;
   }else if(snapshot.userUnpinned===true){
-    _messageUserUnpinned=true;
-    _scrollPinned=false;
-    _nearBottomCount=0;
+    composerControlsBindings._messageUserUnpinned=true;
+    composerControlsBindings._scrollPinned=false;
+    composerControlsBindings._nearBottomCount=0;
   }
   if(!restoredViaAnchor){
     if(typeof _deferClearProgrammaticScroll==='function') _deferClearProgrammaticScroll();
-    else requestAnimationFrame(()=>{ setTimeout(()=>{ _programmaticScroll=false; },0); });
+    else requestAnimationFrame(()=>{ setTimeout(()=>{ composerControlsBindings._programmaticScroll=false; },0); });
   }
 }
 function _renderMessagesWithScrollSnapshot(options){
@@ -299,11 +310,11 @@ function _reanchorPinnedTailAfterRender(wasNearTail){
   if(!el) return;
   const settledMax=Math.max(0, el.scrollHeight-el.clientHeight);
   if(el.scrollTop < settledMax-1){
-    _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+    composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
     el.scrollTop=settledMax;
-    _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-    _nearBottomCount=2;
-    _scrollPinned=true;
+    composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+    composerControlsBindings._nearBottomCount=2;
+    composerControlsBindings._scrollPinned=true;
   }
 }
 function _scrollAfterMessageRender(preserveScroll, scrollSnapshot){
@@ -370,12 +381,42 @@ function _maybeRecoverVirtualizedBlankViewport(options, preserveScroll, virtualW
   if(_sessionHtmlCacheSid&&S.session&&S.session.session_id===_sessionHtmlCacheSid){
     _sessionHtmlCache.delete(_sessionHtmlCacheSid);
   }
-  _messageVirtualWindowKey='';
+  stateBindings._messageVirtualWindowKey='';
   renderMessages({preserveScroll:true,_virtualFallback:true});
   return true;
 }
 
 
-window.HermesUI.register('messageRenderSupport', {
+
+export {
+  _restoreMessageScrollSnapshotSameFrame,
   _renderMessagesWithScrollSnapshot,
+  _transparentStreamOrderedParts,
+  _legacySettledFallbackHasToolMetadata,
+  _transparentOrderedDisplayText,
+  _collectToolResultSnippetsByTid,
+  _transparentOrderedToolCall,
+  _assistantTurnAnchorSettledFinalAnswer,
+  _reanchorPinnedTailAfterRender,
+  _scrollAfterMessageRender,
+  _maybeRecoverVirtualizedBlankViewport,
+  _assistantTurnAnchorSettledFinalAnswerWarned,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _restoreMessageScrollSnapshotSameFrame: { enumerable: true, get: () => _restoreMessageScrollSnapshotSameFrame, set: (value) => { _restoreMessageScrollSnapshotSameFrame = value; } },
+  _renderMessagesWithScrollSnapshot: { enumerable: true, get: () => _renderMessagesWithScrollSnapshot, set: (value) => { _renderMessagesWithScrollSnapshot = value; } },
+  _transparentStreamOrderedParts: { enumerable: true, get: () => _transparentStreamOrderedParts, set: (value) => { _transparentStreamOrderedParts = value; } },
+  _legacySettledFallbackHasToolMetadata: { enumerable: true, get: () => _legacySettledFallbackHasToolMetadata, set: (value) => { _legacySettledFallbackHasToolMetadata = value; } },
+  _transparentOrderedDisplayText: { enumerable: true, get: () => _transparentOrderedDisplayText, set: (value) => { _transparentOrderedDisplayText = value; } },
+  _collectToolResultSnippetsByTid: { enumerable: true, get: () => _collectToolResultSnippetsByTid, set: (value) => { _collectToolResultSnippetsByTid = value; } },
+  _transparentOrderedToolCall: { enumerable: true, get: () => _transparentOrderedToolCall, set: (value) => { _transparentOrderedToolCall = value; } },
+  _assistantTurnAnchorSettledFinalAnswer: { enumerable: true, get: () => _assistantTurnAnchorSettledFinalAnswer, set: (value) => { _assistantTurnAnchorSettledFinalAnswer = value; } },
+  _reanchorPinnedTailAfterRender: { enumerable: true, get: () => _reanchorPinnedTailAfterRender, set: (value) => { _reanchorPinnedTailAfterRender = value; } },
+  _scrollAfterMessageRender: { enumerable: true, get: () => _scrollAfterMessageRender, set: (value) => { _scrollAfterMessageRender = value; } },
+  _maybeRecoverVirtualizedBlankViewport: { enumerable: true, get: () => _maybeRecoverVirtualizedBlankViewport, set: (value) => { _maybeRecoverVirtualizedBlankViewport = value; } },
+  _assistantTurnAnchorSettledFinalAnswerWarned: { enumerable: true, get: () => _assistantTurnAnchorSettledFinalAnswerWarned, set: (value) => { _assistantTurnAnchorSettledFinalAnswerWarned = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

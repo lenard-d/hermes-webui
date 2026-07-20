@@ -1,3 +1,10 @@
+import { getModelLabel } from './activity-and-scroll.js';
+import { closeToolsetsDropdown } from './composer-controls.js';
+import { showToast } from './composer.js';
+import { _appendOverflowOptionsToGroup, _getConfiguredModelBadge, _isEquivalentConfiguredModelEntry, _normalizeConfiguredModelKey, _positionModelDropdown, _readModelOverflowData, _restoreModelDropdownHome, syncModelChip } from './model-catalog.js';
+import { _deduplicateModelPickerOptions, _ensureModelOptionInDropdown, _modelStateForSelect, _providerFromModelValue } from './model-state.js';
+import { $, S, esc } from './state.js';
+
 function renderModelDropdown(){
   const opts=arguments[0]||{};
   const dd=$(opts.dropdownId||'composerModelDropdown');
@@ -1152,9 +1159,92 @@ document.addEventListener('click',function(e){
 });
 
 
-window.HermesUI.register('modelPicker', {
+
+export {
   renderModelDropdown,
+  closeModelDropdown,
+  closeSettingsModelDropdown,
+  syncSettingsModelChip,
+  selectSettingsModelFromDropdown,
+  openSettingsModelDropdown,
+  toggleSettingsModelDropdown,
+  mountSettingsModelPicker,
+  _repositionOpenModelDropdown,
+  _fitComposerFooter,
+  _scheduleComposerFit,
+  _initComposerFooterFit,
+  _normalizeReasoningEffort,
+  _formatReasoningEffortLabel,
+  _reasoningEffortContext,
+  _reasoningEffortQuery,
+  _applyReasoningOptions,
+  _applyReasoningChip,
+  fetchReasoningChip,
+  refreshProfileTransitionReasoningChip,
+  clearProfileTransitionReasoningContext,
+  syncReasoningChip,
+  _highlightReasoningOption,
+  toggleReasoningDropdown,
+  _positionReasoningDropdown,
+  closeReasoningDropdown,
   selectModelFromDropdown,
   toggleModelDropdown,
-  syncReasoningChip,
+  _modelDropdownRepositionScheduled,
+  _composerFitScheduled,
+  _composerFitResizeObserver,
+  _composerFitMutationObserver,
+  _composerFitObservedFooter,
+  _composerFitResizeListenerBound,
+  _currentReasoningEffort,
+  _currentReasoningEffortsSupported,
+  _currentReasoningToggleSupported,
+  _profileTransitionReasoningContext,
+  _lastReasoningFetchKey,
+  _reasoningFetchSeq,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  renderModelDropdown: { enumerable: true, get: () => renderModelDropdown, set: (value) => { renderModelDropdown = value; } },
+  closeModelDropdown: { enumerable: true, get: () => closeModelDropdown, set: (value) => { closeModelDropdown = value; } },
+  closeSettingsModelDropdown: { enumerable: true, get: () => closeSettingsModelDropdown, set: (value) => { closeSettingsModelDropdown = value; } },
+  syncSettingsModelChip: { enumerable: true, get: () => syncSettingsModelChip, set: (value) => { syncSettingsModelChip = value; } },
+  selectSettingsModelFromDropdown: { enumerable: true, get: () => selectSettingsModelFromDropdown, set: (value) => { selectSettingsModelFromDropdown = value; } },
+  openSettingsModelDropdown: { enumerable: true, get: () => openSettingsModelDropdown, set: (value) => { openSettingsModelDropdown = value; } },
+  toggleSettingsModelDropdown: { enumerable: true, get: () => toggleSettingsModelDropdown, set: (value) => { toggleSettingsModelDropdown = value; } },
+  mountSettingsModelPicker: { enumerable: true, get: () => mountSettingsModelPicker, set: (value) => { mountSettingsModelPicker = value; } },
+  _repositionOpenModelDropdown: { enumerable: true, get: () => _repositionOpenModelDropdown, set: (value) => { _repositionOpenModelDropdown = value; } },
+  _fitComposerFooter: { enumerable: true, get: () => _fitComposerFooter, set: (value) => { _fitComposerFooter = value; } },
+  _scheduleComposerFit: { enumerable: true, get: () => _scheduleComposerFit, set: (value) => { _scheduleComposerFit = value; } },
+  _initComposerFooterFit: { enumerable: true, get: () => _initComposerFooterFit, set: (value) => { _initComposerFooterFit = value; } },
+  _normalizeReasoningEffort: { enumerable: true, get: () => _normalizeReasoningEffort, set: (value) => { _normalizeReasoningEffort = value; } },
+  _formatReasoningEffortLabel: { enumerable: true, get: () => _formatReasoningEffortLabel, set: (value) => { _formatReasoningEffortLabel = value; } },
+  _reasoningEffortContext: { enumerable: true, get: () => _reasoningEffortContext, set: (value) => { _reasoningEffortContext = value; } },
+  _reasoningEffortQuery: { enumerable: true, get: () => _reasoningEffortQuery, set: (value) => { _reasoningEffortQuery = value; } },
+  _applyReasoningOptions: { enumerable: true, get: () => _applyReasoningOptions, set: (value) => { _applyReasoningOptions = value; } },
+  _applyReasoningChip: { enumerable: true, get: () => _applyReasoningChip, set: (value) => { _applyReasoningChip = value; } },
+  fetchReasoningChip: { enumerable: true, get: () => fetchReasoningChip, set: (value) => { fetchReasoningChip = value; } },
+  refreshProfileTransitionReasoningChip: { enumerable: true, get: () => refreshProfileTransitionReasoningChip, set: (value) => { refreshProfileTransitionReasoningChip = value; } },
+  clearProfileTransitionReasoningContext: { enumerable: true, get: () => clearProfileTransitionReasoningContext, set: (value) => { clearProfileTransitionReasoningContext = value; } },
+  syncReasoningChip: { enumerable: true, get: () => syncReasoningChip, set: (value) => { syncReasoningChip = value; } },
+  _highlightReasoningOption: { enumerable: true, get: () => _highlightReasoningOption, set: (value) => { _highlightReasoningOption = value; } },
+  toggleReasoningDropdown: { enumerable: true, get: () => toggleReasoningDropdown, set: (value) => { toggleReasoningDropdown = value; } },
+  _positionReasoningDropdown: { enumerable: true, get: () => _positionReasoningDropdown, set: (value) => { _positionReasoningDropdown = value; } },
+  closeReasoningDropdown: { enumerable: true, get: () => closeReasoningDropdown, set: (value) => { closeReasoningDropdown = value; } },
+  selectModelFromDropdown: { enumerable: true, get: () => selectModelFromDropdown, set: (value) => { selectModelFromDropdown = value; } },
+  toggleModelDropdown: { enumerable: true, get: () => toggleModelDropdown, set: (value) => { toggleModelDropdown = value; } },
+  _modelDropdownRepositionScheduled: { enumerable: true, get: () => _modelDropdownRepositionScheduled, set: (value) => { _modelDropdownRepositionScheduled = value; } },
+  _composerFitScheduled: { enumerable: true, get: () => _composerFitScheduled, set: (value) => { _composerFitScheduled = value; } },
+  _composerFitResizeObserver: { enumerable: true, get: () => _composerFitResizeObserver, set: (value) => { _composerFitResizeObserver = value; } },
+  _composerFitMutationObserver: { enumerable: true, get: () => _composerFitMutationObserver, set: (value) => { _composerFitMutationObserver = value; } },
+  _composerFitObservedFooter: { enumerable: true, get: () => _composerFitObservedFooter, set: (value) => { _composerFitObservedFooter = value; } },
+  _composerFitResizeListenerBound: { enumerable: true, get: () => _composerFitResizeListenerBound, set: (value) => { _composerFitResizeListenerBound = value; } },
+  _currentReasoningEffort: { enumerable: true, get: () => _currentReasoningEffort, set: (value) => { _currentReasoningEffort = value; } },
+  _currentReasoningEffortsSupported: { enumerable: true, get: () => _currentReasoningEffortsSupported, set: (value) => { _currentReasoningEffortsSupported = value; } },
+  _currentReasoningToggleSupported: { enumerable: true, get: () => _currentReasoningToggleSupported, set: (value) => { _currentReasoningToggleSupported = value; } },
+  _profileTransitionReasoningContext: { enumerable: true, get: () => _profileTransitionReasoningContext, set: (value) => { _profileTransitionReasoningContext = value; } },
+  _lastReasoningFetchKey: { enumerable: true, get: () => _lastReasoningFetchKey, set: (value) => { _lastReasoningFetchKey = value; } },
+  _reasoningFetchSeq: { enumerable: true, get: () => _reasoningFetchSeq, set: (value) => { _reasoningFetchSeq = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

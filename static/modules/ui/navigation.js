@@ -1,3 +1,11 @@
+import { _stripXmlToolCallsDisplay } from './activity-and-scroll.js';
+import { _deferClearProgrammaticScroll, _lastScrollTop, _messageUserUnpinned, _programmaticScroll, _programmaticScrollSetAt, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _scrollPinned } from './composer-controls.js';
+import { renderMd, showToast } from './composer.js';
+import { renderMessages } from './renderer.js';
+import { $, MESSAGE_RENDER_WINDOW_DEFAULT, S, _currentMessageVirtualWindow, _getVisibleMessagesWithIdx, _markMessageVirtualMeasurementsSettled, _messageRawIdxForSessionIndex, _messageRenderWindowSize, _messageSessionIndexForRawIdx, _messageVirtualEstimatedRowHeight, _messageVirtualHeightCache, _messageVirtualKeepTailCount, _messageVirtualScrollRaf, _messageVirtualScrollTopForVisibleIdx, _messageVirtualWindowKey, _messageVirtualWindowKeyFor, _messageVisibleIndexForAnchorKey, _messageVisibleIndexForRawIdx, _msgNodeRecycleEnabled, _renderUserFencedBlocks, _scheduleMessageVirtualMeasurementRefresh, _scrollbarDragActive, clearVisibleMessageRowCache, esc } from './state.js';
+import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
+import { compatibilityBindings as stateBindings } from './state.js';
+
 function _captureMessageViewportAnchor(){
   const container=$('messages');
   if(!container) return null;
@@ -193,7 +201,7 @@ function _restoreMessageViewportAnchor(anchor, rawIdxDelta){
       return false;
     }
   }
-  _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+  composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
   // Mobile-only jump fix: the resting overflow-anchor on .messages is `auto` on
   // touch devices (CSS media query keeps it `none` only for hover+fine-pointer
   // desktops). When we write scrollTop here to realign the anchor row, a mobile
@@ -208,7 +216,7 @@ function _restoreMessageViewportAnchor(anchor, rawIdxDelta){
   container.scrollTop+=(rect.top-containerRect.top)-targetTop;
   if(_releaseAnchorSuppression) _releaseAnchorSuppression();
   if(typeof _deferClearProgrammaticScroll==='function') _deferClearProgrammaticScroll();
-  else requestAnimationFrame(()=>{ setTimeout(()=>{ _programmaticScroll=false; },0); });
+  else requestAnimationFrame(()=>{ setTimeout(()=>{ composerControlsBindings._programmaticScroll=false; },0); });
   return true;
 }
 let _messageViewportAnchorRemounting=false;
@@ -239,15 +247,15 @@ function _remountMessageViewportAnchor(anchor){
   if(visIdx<0) return false;
   // A virtualized anchor may be outside the current DOM. Scroll to its virtual
   // row and render once so the semantic restore below has a real target.
-  _programmaticScroll=true;
+  composerControlsBindings._programmaticScroll=true;
   container.scrollTop=_messageVirtualScrollTopForVisibleIdx(visWithIdx,visIdx,container);
-  _messageVirtualWindowKey='';
+  stateBindings._messageVirtualWindowKey='';
   _messageViewportAnchorRemounting=true;
   try{
     renderMessages({preserveScroll:true});
   }finally{
     _messageViewportAnchorRemounting=false;
-    requestAnimationFrame(()=>{ setTimeout(()=>{ _programmaticScroll=false; },0); });
+    requestAnimationFrame(()=>{ setTimeout(()=>{ composerControlsBindings._programmaticScroll=false; },0); });
   }
   if(anchorKey){
     return !!Array.from(container.querySelectorAll('[data-message-anchor-key]')).find(node=>node&&node.dataset&&node.dataset.messageAnchorKey===anchorKey&&(!node.getClientRects||node.getClientRects().length>0));
@@ -296,9 +304,9 @@ function _compensateScrollForMeasurementDelta(renderFn){
     if(Number.isFinite(topPadBefore)){
       const padDelta=topPadAfter-topPadBefore;
       if(Math.abs(padDelta)>=2){
-        _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+        composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
         container.scrollTop=Math.max(0,scrollTopBefore+padDelta);
-        _lastScrollTop=container.scrollTop;
+        composerControlsBindings._lastScrollTop=container.scrollTop;
         _deferClearProgrammaticScroll();
       }
     }
@@ -309,9 +317,9 @@ function _compensateScrollForMeasurementDelta(renderFn){
   const actualOffset=rowRect.top-containerRect.top;
   const delta=actualOffset-anchorBefore.topOffset;
   if(Math.abs(delta)<2) return;
-  _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+  composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
   container.scrollTop=scrollTopBefore+delta;
-  _lastScrollTop=container.scrollTop;
+  composerControlsBindings._lastScrollTop=container.scrollTop;
   _deferClearProgrammaticScroll();
 }
 function _messageViewportIntersectsRenderedRow(){
@@ -442,7 +450,7 @@ function _updateMessageVirtualMeasurements(renderVisWithIdx, renderVisibleIdxs, 
     measuredCount++;
   }
   if(measuredCount>0){
-    _messageVirtualEstimatedRowHeight=Math.max(60, Math.round(measuredTotal/measuredCount));
+    stateBindings._messageVirtualEstimatedRowHeight=Math.max(60, Math.round(measuredTotal/measuredCount));
   }
   if(changed){
     _scheduleMessageVirtualMeasurementRefresh(virtualWindow);
@@ -523,29 +531,29 @@ function _scheduleMessageVirtualizedRender(force){
   const nextKey=_messageVirtualWindowKeyFor(virtualWindow);
   if(!force&&nextKey===_messageVirtualWindowKey) return;
   if(!virtualWindow.virtualized){
-    _messageVirtualWindowKey=nextKey;
+    stateBindings._messageVirtualWindowKey=nextKey;
     return;
   }
   if(_messageVirtualScrollRaf) return;
-  _messageVirtualScrollRaf=requestAnimationFrame(()=>{
-    _messageVirtualScrollRaf=0;
+  stateBindings._messageVirtualScrollRaf=requestAnimationFrame(()=>{
+    stateBindings._messageVirtualScrollRaf=0;
     const liveVisWithIdx=_getVisibleMessagesWithIdx();
     const liveWindow=_currentMessageVirtualWindow(liveVisWithIdx,_messageVirtualKeepTailCount());
     const liveKey=_messageVirtualWindowKeyFor(liveWindow);
     if(!force&&liveKey===_messageVirtualWindowKey) return;
     if(_scrollbarDragActive){
-      _programmaticScroll=true;
-      _programmaticScrollSetAt=performance.now();
+      composerControlsBindings._programmaticScroll=true;
+      composerControlsBindings._programmaticScrollSetAt=performance.now();
       _compensateScrollForMeasurementDelta(()=>{ renderMessages({ preserveScroll:true }); });
       _deferClearProgrammaticScroll();
-      _messageVirtualWindowKey=liveKey;
+      stateBindings._messageVirtualWindowKey=liveKey;
       return;
     }
-    _msgNodeRecycleEnabled=true;
+    stateBindings._msgNodeRecycleEnabled=true;
     try{
       _compensateScrollForMeasurementDelta(()=>{ renderMessages({ preserveScroll:true }); });
     }
-    finally{ _msgNodeRecycleEnabled=false; }
+    finally{ stateBindings._msgNodeRecycleEnabled=false; }
   });
 }
 
@@ -624,9 +632,9 @@ function _updateSessionStartJumpButton(){
 async function jumpToSessionStart(){
   const container=$('messages');
   if(!container||!S.session) return;
-  _scrollPinned=false;
-  _messageUserUnpinned=true;
-  _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+  composerControlsBindings._scrollPinned=false;
+  composerControlsBindings._messageUserUnpinned=true;
+  composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
   try{
     // During active streaming, skip full message load — API response won't
     // include live messages from the current turn, and replacing S.messages
@@ -634,9 +642,9 @@ async function jumpToSessionStart(){
     if(!(S.busy||S.activeStreamId)){
       if(typeof _ensureAllMessagesLoaded==='function') await _ensureAllMessagesLoaded();
     }
-    _messageRenderWindowSize=Math.max(_currentMessageRenderWindowSize(),_messageRenderableMessageCount());
+    stateBindings._messageRenderWindowSize=Math.max(_currentMessageRenderWindowSize(),_messageRenderableMessageCount());
     container.scrollTop=0;
-    _messageVirtualWindowKey='';
+    stateBindings._messageVirtualWindowKey='';
     // During streaming, skip renderMessages — it rebuilds the DOM but tool card
     // insertion is blocked by !S.busy, losing Activity until "done" fires.
     if(!(S.busy||S.activeStreamId)){
@@ -649,7 +657,7 @@ async function jumpToSessionStart(){
     });
   }catch(e){
     console.warn('jumpToSessionStart failed:',e);
-    _programmaticScroll=false;
+    composerControlsBindings._programmaticScroll=false;
   }
 }
 
@@ -702,16 +710,16 @@ async function jumpToTurnQuestion(questionRawIdx, assistantRawIdx){
   const visWithIdx=_getVisibleMessagesWithIdx();
   const visibleIdx=_messageVisibleIndexForRawIdx(questionRawIdx, visWithIdx);
   if(visibleIdx>=0){
-    _scrollPinned=false;
-    _messageUserUnpinned=true;
-    _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+    composerControlsBindings._scrollPinned=false;
+    composerControlsBindings._messageUserUnpinned=true;
+    composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
     container.scrollTop=_messageVirtualScrollTopForVisibleIdx(visWithIdx, visibleIdx, container);
-    _messageVirtualWindowKey='';
+    stateBindings._messageVirtualWindowKey='';
     renderMessages({ preserveScroll:true });
     requestAnimationFrame(()=>{
       if(!scrollToTarget()&&_messageHiddenBeforeCount()>0){
-        _messageRenderWindowSize=Math.max(_currentMessageRenderWindowSize(),_messageRenderableMessageCount());
-        _messageVirtualWindowKey='';
+        stateBindings._messageRenderWindowSize=Math.max(_currentMessageRenderWindowSize(),_messageRenderableMessageCount());
+        stateBindings._messageVirtualWindowKey='';
         renderMessages({ preserveScroll:true });
         requestAnimationFrame(scrollToTarget);
       }
@@ -720,8 +728,8 @@ async function jumpToTurnQuestion(questionRawIdx, assistantRawIdx){
     return;
   }
   if(_messageHiddenBeforeCount()>0){
-    _messageRenderWindowSize=Math.max(_currentMessageRenderWindowSize(),_messageRenderableMessageCount());
-    _messageVirtualWindowKey='';
+    stateBindings._messageRenderWindowSize=Math.max(_currentMessageRenderWindowSize(),_messageRenderableMessageCount());
+    stateBindings._messageVirtualWindowKey='';
     renderMessages({ preserveScroll:true });
     requestAnimationFrame(scrollToTarget);
   }
@@ -948,9 +956,126 @@ if(document.readyState==='complete'){
 
 /* ── Image lightbox — click any .msg-media-img to enlarge ─────────────────── */
 
-window.HermesUI.register('viewport', {
-  clearVisibleMessageRowCache,
+
+export {
+  _captureMessageViewportAnchor,
+  _browserOverflowAnchorActive,
+  _isIOSWebKit,
+  _isTouchLikeMessageViewport,
+  _suppressBrowserOverflowAnchor,
+  _restoreMessageViewportAnchor,
+  _remountMessageViewportAnchor,
+  _compensateScrollForMeasurementDelta,
+  _messageViewportIntersectsRenderedRow,
+  _clearUserRowIntrinsicHeightCache,
+  _rememberUserRowIntrinsicHeight,
+  _estimateUserRowIntrinsicHeight,
+  _applyUserRowIntrinsicHeight,
+  _measureMessageVirtualRow,
+  _updateMessageVirtualMeasurements,
+  _rememberRenderedUserRowIntrinsicHeights,
+  _scheduleMessageVirtualizedRender,
+  _clearRenderCache,
+  _renderCacheKey,
+  _getCachedRender,
+  _currentMessageRenderWindowSize,
+  _messageRenderableMessageCount,
+  _messageHiddenBeforeCount,
+  _isSessionEndlessScrollEnabled,
+  _wireMessageWindowLoadEarlierButton,
+  _isSessionJumpButtonsEnabled,
+  _applySessionNavigationPrefs,
+  _updateSessionStartJumpButton,
+  _userMessageDomId,
+  _questionJumpButtonHtml,
+  _highlightQuestionRow,
+  _dashboardIsBrowserLoopback,
+  _normalizeDashboardEnabledMode,
+  _setDashboardModeForChip,
+  _getDashboardChipRestoreMode,
+  _dashboardBrowserUrl,
+  _stripInlineEventHandlers,
+  _syncNavActionMirrors,
+  _initNavActionMirrors,
+  _applyDashboardStatus,
+  openHermesDashboard,
+  _initDashboardLinkProbe,
   jumpToSessionStart,
   jumpToTurnQuestion,
-  openHermesDashboard,
+  refreshDashboardStatus,
+  loadDashboardSettings,
+  saveDashboardSettings,
+  _userRowIntrinsicHeightBySessionIdx,
+  _renderCache,
+  _renderCacheMax,
+  DASHBOARD_STATUS_TTL_MS,
+  _messageViewportAnchorRemounting,
+  _dashboardStatusCache,
+  _dashboardStatusFetchedAt,
+  _dashboardLastNonNeverMode,
+  _dashboardSettingsLoadSeq,
+  _dashboardSettingsWriteSeq,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _captureMessageViewportAnchor: { enumerable: true, get: () => _captureMessageViewportAnchor, set: (value) => { _captureMessageViewportAnchor = value; } },
+  _browserOverflowAnchorActive: { enumerable: true, get: () => _browserOverflowAnchorActive, set: (value) => { _browserOverflowAnchorActive = value; } },
+  _isIOSWebKit: { enumerable: true, get: () => _isIOSWebKit, set: (value) => { _isIOSWebKit = value; } },
+  _isTouchLikeMessageViewport: { enumerable: true, get: () => _isTouchLikeMessageViewport, set: (value) => { _isTouchLikeMessageViewport = value; } },
+  _suppressBrowserOverflowAnchor: { enumerable: true, get: () => _suppressBrowserOverflowAnchor, set: (value) => { _suppressBrowserOverflowAnchor = value; } },
+  _restoreMessageViewportAnchor: { enumerable: true, get: () => _restoreMessageViewportAnchor, set: (value) => { _restoreMessageViewportAnchor = value; } },
+  _remountMessageViewportAnchor: { enumerable: true, get: () => _remountMessageViewportAnchor, set: (value) => { _remountMessageViewportAnchor = value; } },
+  _compensateScrollForMeasurementDelta: { enumerable: true, get: () => _compensateScrollForMeasurementDelta, set: (value) => { _compensateScrollForMeasurementDelta = value; } },
+  _messageViewportIntersectsRenderedRow: { enumerable: true, get: () => _messageViewportIntersectsRenderedRow, set: (value) => { _messageViewportIntersectsRenderedRow = value; } },
+  _clearUserRowIntrinsicHeightCache: { enumerable: true, get: () => _clearUserRowIntrinsicHeightCache, set: (value) => { _clearUserRowIntrinsicHeightCache = value; } },
+  _rememberUserRowIntrinsicHeight: { enumerable: true, get: () => _rememberUserRowIntrinsicHeight, set: (value) => { _rememberUserRowIntrinsicHeight = value; } },
+  _estimateUserRowIntrinsicHeight: { enumerable: true, get: () => _estimateUserRowIntrinsicHeight, set: (value) => { _estimateUserRowIntrinsicHeight = value; } },
+  _applyUserRowIntrinsicHeight: { enumerable: true, get: () => _applyUserRowIntrinsicHeight, set: (value) => { _applyUserRowIntrinsicHeight = value; } },
+  _measureMessageVirtualRow: { enumerable: true, get: () => _measureMessageVirtualRow, set: (value) => { _measureMessageVirtualRow = value; } },
+  _updateMessageVirtualMeasurements: { enumerable: true, get: () => _updateMessageVirtualMeasurements, set: (value) => { _updateMessageVirtualMeasurements = value; } },
+  _rememberRenderedUserRowIntrinsicHeights: { enumerable: true, get: () => _rememberRenderedUserRowIntrinsicHeights, set: (value) => { _rememberRenderedUserRowIntrinsicHeights = value; } },
+  _scheduleMessageVirtualizedRender: { enumerable: true, get: () => _scheduleMessageVirtualizedRender, set: (value) => { _scheduleMessageVirtualizedRender = value; } },
+  _clearRenderCache: { enumerable: true, get: () => _clearRenderCache, set: (value) => { _clearRenderCache = value; } },
+  _renderCacheKey: { enumerable: true, get: () => _renderCacheKey, set: (value) => { _renderCacheKey = value; } },
+  _getCachedRender: { enumerable: true, get: () => _getCachedRender, set: (value) => { _getCachedRender = value; } },
+  _currentMessageRenderWindowSize: { enumerable: true, get: () => _currentMessageRenderWindowSize, set: (value) => { _currentMessageRenderWindowSize = value; } },
+  _messageRenderableMessageCount: { enumerable: true, get: () => _messageRenderableMessageCount, set: (value) => { _messageRenderableMessageCount = value; } },
+  _messageHiddenBeforeCount: { enumerable: true, get: () => _messageHiddenBeforeCount, set: (value) => { _messageHiddenBeforeCount = value; } },
+  _isSessionEndlessScrollEnabled: { enumerable: true, get: () => _isSessionEndlessScrollEnabled, set: (value) => { _isSessionEndlessScrollEnabled = value; } },
+  _wireMessageWindowLoadEarlierButton: { enumerable: true, get: () => _wireMessageWindowLoadEarlierButton, set: (value) => { _wireMessageWindowLoadEarlierButton = value; } },
+  _isSessionJumpButtonsEnabled: { enumerable: true, get: () => _isSessionJumpButtonsEnabled, set: (value) => { _isSessionJumpButtonsEnabled = value; } },
+  _applySessionNavigationPrefs: { enumerable: true, get: () => _applySessionNavigationPrefs, set: (value) => { _applySessionNavigationPrefs = value; } },
+  _updateSessionStartJumpButton: { enumerable: true, get: () => _updateSessionStartJumpButton, set: (value) => { _updateSessionStartJumpButton = value; } },
+  _userMessageDomId: { enumerable: true, get: () => _userMessageDomId, set: (value) => { _userMessageDomId = value; } },
+  _questionJumpButtonHtml: { enumerable: true, get: () => _questionJumpButtonHtml, set: (value) => { _questionJumpButtonHtml = value; } },
+  _highlightQuestionRow: { enumerable: true, get: () => _highlightQuestionRow, set: (value) => { _highlightQuestionRow = value; } },
+  _dashboardIsBrowserLoopback: { enumerable: true, get: () => _dashboardIsBrowserLoopback, set: (value) => { _dashboardIsBrowserLoopback = value; } },
+  _normalizeDashboardEnabledMode: { enumerable: true, get: () => _normalizeDashboardEnabledMode, set: (value) => { _normalizeDashboardEnabledMode = value; } },
+  _setDashboardModeForChip: { enumerable: true, get: () => _setDashboardModeForChip, set: (value) => { _setDashboardModeForChip = value; } },
+  _getDashboardChipRestoreMode: { enumerable: true, get: () => _getDashboardChipRestoreMode, set: (value) => { _getDashboardChipRestoreMode = value; } },
+  _dashboardBrowserUrl: { enumerable: true, get: () => _dashboardBrowserUrl, set: (value) => { _dashboardBrowserUrl = value; } },
+  _stripInlineEventHandlers: { enumerable: true, get: () => _stripInlineEventHandlers, set: (value) => { _stripInlineEventHandlers = value; } },
+  _syncNavActionMirrors: { enumerable: true, get: () => _syncNavActionMirrors, set: (value) => { _syncNavActionMirrors = value; } },
+  _initNavActionMirrors: { enumerable: true, get: () => _initNavActionMirrors, set: (value) => { _initNavActionMirrors = value; } },
+  _applyDashboardStatus: { enumerable: true, get: () => _applyDashboardStatus, set: (value) => { _applyDashboardStatus = value; } },
+  openHermesDashboard: { enumerable: true, get: () => openHermesDashboard, set: (value) => { openHermesDashboard = value; } },
+  _initDashboardLinkProbe: { enumerable: true, get: () => _initDashboardLinkProbe, set: (value) => { _initDashboardLinkProbe = value; } },
+  jumpToSessionStart: { enumerable: true, get: () => jumpToSessionStart, set: (value) => { jumpToSessionStart = value; } },
+  jumpToTurnQuestion: { enumerable: true, get: () => jumpToTurnQuestion, set: (value) => { jumpToTurnQuestion = value; } },
+  refreshDashboardStatus: { enumerable: true, get: () => refreshDashboardStatus, set: (value) => { refreshDashboardStatus = value; } },
+  loadDashboardSettings: { enumerable: true, get: () => loadDashboardSettings, set: (value) => { loadDashboardSettings = value; } },
+  saveDashboardSettings: { enumerable: true, get: () => saveDashboardSettings, set: (value) => { saveDashboardSettings = value; } },
+  _userRowIntrinsicHeightBySessionIdx: { enumerable: true, get: () => _userRowIntrinsicHeightBySessionIdx },
+  _renderCache: { enumerable: true, get: () => _renderCache },
+  _renderCacheMax: { enumerable: true, get: () => _renderCacheMax },
+  DASHBOARD_STATUS_TTL_MS: { enumerable: true, get: () => DASHBOARD_STATUS_TTL_MS },
+  _messageViewportAnchorRemounting: { enumerable: true, get: () => _messageViewportAnchorRemounting, set: (value) => { _messageViewportAnchorRemounting = value; } },
+  _dashboardStatusCache: { enumerable: true, get: () => _dashboardStatusCache, set: (value) => { _dashboardStatusCache = value; } },
+  _dashboardStatusFetchedAt: { enumerable: true, get: () => _dashboardStatusFetchedAt, set: (value) => { _dashboardStatusFetchedAt = value; } },
+  _dashboardLastNonNeverMode: { enumerable: true, get: () => _dashboardLastNonNeverMode, set: (value) => { _dashboardLastNonNeverMode = value; } },
+  _dashboardSettingsLoadSeq: { enumerable: true, get: () => _dashboardSettingsLoadSeq, set: (value) => { _dashboardSettingsLoadSeq = value; } },
+  _dashboardSettingsWriteSeq: { enumerable: true, get: () => _dashboardSettingsWriteSeq, set: (value) => { _dashboardSettingsWriteSeq = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

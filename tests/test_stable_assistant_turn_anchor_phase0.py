@@ -90,7 +90,7 @@ console.log(JSON.stringify(out));
 def test_phase0_scaffold_is_loaded_before_current_rendering_modules():
     html = _read(INDEX_HTML)
     anchor_pos = html.index('static/modules/assistant-turn-anchors/index.js?v=__WEBUI_VERSION__')
-    ui_pos = html.index('static/ui.js?v=__WEBUI_VERSION__')
+    ui_pos = html.index('static/modules/ui/index.js?v=__WEBUI_VERSION__')
     sessions_pos = html.index('static/modules/sessions/index.js?v=__WEBUI_VERSION__')
     messages_pos = html.index('static/modules/messages/index.js?v=__WEBUI_VERSION__')
 

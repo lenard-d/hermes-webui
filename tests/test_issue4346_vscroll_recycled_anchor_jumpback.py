@@ -15,7 +15,7 @@ delta captured before the re-render.
 Every behavioral test below is designed to FAIL on the known-buggy version
 (bare `if(!row) return`) and PASS only on the fixed version.
 """
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 import json
 import pathlib
@@ -102,7 +102,7 @@ function extractFunc(name) {
   }
   return src.slice(start, i);
 }"""
-    return prelude + body
+    return prelude + body + UI_TEST_BINDING_PROXIES
 
 
 def test_compensate_recovers_via_session_idx_when_rawidx_row_recycled():

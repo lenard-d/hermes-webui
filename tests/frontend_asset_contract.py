@@ -133,6 +133,57 @@ _PANEL_MODULE_NAMES = (
 )
 
 
+UI_MODULE_DIR = STATIC_DIR / "modules" / "ui"
+UI_ENTRYPOINT = UI_MODULE_DIR / "index.js"
+_UI_MODULE_NAMES = (
+    "state.js",
+    "navigation.js",
+    "media-and-quota.js",
+    "model-state.js",
+    "model-catalog.js",
+    "model-selection.js",
+    "composer-controls.js",
+    "activity-and-scroll.js",
+    "composer.js",
+    "dialogs-and-reconnect.js",
+    "health-and-updates.js",
+    "presentation.js",
+    "transparent-worklog.js",
+    "anchor-scenes.js",
+    "live-activity.js",
+    "render-support.js",
+    "renderer.js",
+    "tool-worklog.js",
+    "content-postprocessing.js",
+    "workspace-and-uploads.js",
+)
+
+
+# Extracted-function Node harnesses declare the historical closure variables in
+# their own script. Native modules mutate state owned by another module through
+# these explicit binding objects, so the harness needs the same live-binding
+# semantics without evaluating the complete browser module graph.
+UI_TEST_BINDING_PROXIES = r"""
+function _uiTestBindingProxy() {
+  return new Proxy({}, {
+    get(_target, name) { return eval(String(name)); },
+    set(_target, name, value) { eval(String(name) + ' = value'); return true; },
+  });
+}
+const composerBindings = _uiTestBindingProxy();
+const composerControlsBindings = _uiTestBindingProxy();
+const liveActivityBindings = _uiTestBindingProxy();
+const stateBindings = _uiTestBindingProxy();
+const transparentWorklogBindings = _uiTestBindingProxy();
+"""
+
+
+def ui_module_paths() -> tuple[Path, ...]:
+    """Return the semantic UI modules in stable inventory order."""
+
+    return tuple(UI_MODULE_DIR / name for name in _UI_MODULE_NAMES)
+
+
 def module_family_paths(family: str) -> tuple[Path, ...]:
     """Return a native module family's complete source inventory."""
 
@@ -145,6 +196,8 @@ def module_family_paths(family: str) -> tuple[Path, ...]:
         "sessions": _SESSION_MODULE_NAMES,
     }.get(family)
     if names is None:
+        if family == "ui":
+            return (*ui_module_paths(), UI_ENTRYPOINT)
         raise ValueError(f"unknown frontend module family: {family}")
     return tuple(STATIC_DIR / "modules" / family / name for name in names)
 
@@ -164,7 +217,7 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
             *(STATIC_DIR / "i18n_parts" / name for name in _I18N_PART_NAMES),
         )
     if family == "ui":
-        return (STATIC_DIR / "ui.js", *_numbered_parts("ui_parts", ".js"))
+        return (UI_ENTRYPOINT, *ui_module_paths())
     if family == "workspace":
         return (
             STATIC_DIR / "workspace.js",
@@ -194,6 +247,9 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
 
 def family_source(family: str) -> str:
     """Read one family's implementation sources in their documented order."""
+
+    if family == "ui":
+        return "".join(path.read_text(encoding="utf-8") for path in ui_module_paths())
 
     paths = (
         module_family_paths(family)
@@ -244,6 +300,8 @@ def family_entrypoint_path(family: str) -> Path | None:
         return STATIC_DIR / "modules" / "messages" / "index.js"
     if family == "panels":
         return STATIC_DIR / "modules" / "panels" / "index.js"
+    if family == "ui":
+        return UI_ENTRYPOINT
     paths = family_asset_paths(family)
     return paths[0] if paths else None
 
@@ -252,7 +310,7 @@ def family_direct_asset_paths(family: str) -> tuple[Path, ...]:
     """Return browser entrypoints; native-module dependencies load by import."""
 
     entrypoint = family_entrypoint_path(family)
-    if family in {"boot", "messages", "panels", "sessions"}:
+    if family in {"boot", "messages", "panels", "sessions", "ui"}:
         assert entrypoint is not None
         return (entrypoint,)
     if family == "commands":
@@ -262,5 +320,11 @@ def family_direct_asset_paths(family: str) -> tuple[Path, ...]:
 
 def family_entry_paths(family: str) -> tuple[Path, ...]:
     """Backward-compatible name for the direct browser entrypoint inventory."""
+
+    return family_direct_asset_paths(family)
+
+
+def direct_family_asset_paths(family: str) -> tuple[Path, ...]:
+    """Compatibility alias for the direct browser entrypoint inventory."""
 
     return family_direct_asset_paths(family)

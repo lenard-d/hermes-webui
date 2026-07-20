@@ -1,3 +1,14 @@
+import { _activityStatusNode, _sanitizeThinkingDisplayText, scrollIfPinned } from './activity-and-scroll.js';
+import { ensureActivityGroup } from './anchor-scenes.js';
+import { _firstValidTimestampSeconds, _messageUserUnpinned, _nearBottomCount, _scrollPinned, _timestampSeconds } from './composer-controls.js';
+import { renderMd } from './composer.js';
+import { _postProcessWithAnchorSuppression, _renderThinkingInto } from './content-postprocessing.js';
+import { _autoCompressionWorklogNode } from './live-activity.js';
+import { _assistantTurnBlocks, _decorateTransparentEventRow, _restoreWorklogDetailDisclosureState, _syncTransparentEventControls, _thinkingActivityNode, _transparentToolStatus, _worklogDetailHashKey, isTransparentStream } from './presentation.js';
+import { $, S, esc } from './state.js';
+import { _syncToolCallGroupSummary, _syncToolRowsContainer, _toolWorklogListEl, buildToolCard } from './tool-worklog.js';
+import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
+
 // ── Transparent turn-level collapse (Hermes chat name tag) ───────────────
 // In transparent_stream mode the assistant role label is the turn's "name
 // tag". Clicking it collapses the entire event stack underneath so the
@@ -966,9 +977,9 @@ function _prepareLiveAnchorScrollRebuildGuard(scrollSnapshot){
   scrollSnapshot.pinned=false;
   scrollSnapshot.userUnpinned=true;
   scrollSnapshot.bottom=beforeBottomDistance;
-  _messageUserUnpinned=true;
-  _scrollPinned=false;
-  _nearBottomCount=0;
+  composerControlsBindings._messageUserUnpinned=true;
+  composerControlsBindings._scrollPinned=false;
+  composerControlsBindings._nearBottomCount=0;
   const msgInner=$('msgInner');
   if(!msgInner||!msgInner.style) return {readerAwayFromBottom:true,release:null};
   const guardPreviousKey='liveAnchorScrollGuardPreviousMinHeight';
@@ -1066,6 +1077,120 @@ function _updateLiveAnchorReasoningRowForFallback(turn, text, opts){
   return true;
 }
 
-window.HermesUI.register('transparentWorklog', {
+
+export {
+  _wireTransparentTurnToggle,
+  _applyTransparentRowFading,
+  _transparentTurnFooterHtml,
+  _renderTransparentTurnFooter,
+  _activityDisclosureStorageKey,
+  _readActivityDisclosureState,
+  _writeActivityDisclosureState,
+  _copyActivityDisclosureState,
+  _activityKeyForLiveTurn,
+  _onLiveActivityToggle,
+  _materializeDeferredWorklogRows,
+  _deferredWorklogRowsFromGroup,
+  _rehydrateDeferredWorklogsFromCache,
+  _toggleActivityGroup,
+  _toggleToolWorklogGroup,
+  _finalizeLiveActivityDisclosureGroup,
+  _worklogReasonHtmlFromAnchor,
+  _worklogReasonHtmlFromText,
+  _renderWorklogReasonInto,
+  _worklogReasonNodeFromText,
+  _worklogReasonAnchorKey,
+  _syncWorklogReasonFromAnchor,
   ensureLiveWorklogContainer,
+  _migrateLegacyLiveActivityGroupsToWorklog,
+  _appendWorklogReason,
+  _toolIdentity,
+  _toolDisclosureIdentity,
+  _filterNewWorklogTools,
+  _anchorSceneToolRowLogicalKey,
+  _anchorSceneMergeToolRows,
+  _appendWorklogStep,
+  _anchorSceneRowsForRendering,
+  _anchorSceneIsSettledSuccessfulCompression,
+  _anchorSceneToolCallFromRow,
+  _anchorSceneRowTimestampSeconds,
+  _anchorSceneNodeForRow,
+  _anchorSceneTransparentNodeForRow,
+  _anchorSceneLiveTokenFinalPrefix,
+  _anchorSceneLastNonTerminalWorkRowIndex,
+  _anchorSceneProseMatchesFinalAnswer,
+  _anchorSceneWorklogGroup,
+  _renderAnchorSceneRowsIntoWorklog,
+  _liveProcessedWorklogAnchorScore,
+  _dedupeLiveProcessedWorklogAnchors,
+  isLiveAnchorActivitySceneOwner,
+  _projectLiveAnchorActivitySceneForStream,
+  _prepareLiveAnchorScrollRebuildGuard,
+  _resetMismatchedLiveAssistantTurnForSession,
+  _liveAnchorReasoningRowForFallback,
+  _updateLiveAnchorReasoningRowForFallback,
+  _transparentTurnCollapsedStates,
+  _activityDisclosureStoragePrefix,
+  _liveActivityUserExpanded,
+  _worklogAnchorKeySeq,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _wireTransparentTurnToggle: { enumerable: true, get: () => _wireTransparentTurnToggle, set: (value) => { _wireTransparentTurnToggle = value; } },
+  _applyTransparentRowFading: { enumerable: true, get: () => _applyTransparentRowFading, set: (value) => { _applyTransparentRowFading = value; } },
+  _transparentTurnFooterHtml: { enumerable: true, get: () => _transparentTurnFooterHtml, set: (value) => { _transparentTurnFooterHtml = value; } },
+  _renderTransparentTurnFooter: { enumerable: true, get: () => _renderTransparentTurnFooter, set: (value) => { _renderTransparentTurnFooter = value; } },
+  _activityDisclosureStorageKey: { enumerable: true, get: () => _activityDisclosureStorageKey, set: (value) => { _activityDisclosureStorageKey = value; } },
+  _readActivityDisclosureState: { enumerable: true, get: () => _readActivityDisclosureState, set: (value) => { _readActivityDisclosureState = value; } },
+  _writeActivityDisclosureState: { enumerable: true, get: () => _writeActivityDisclosureState, set: (value) => { _writeActivityDisclosureState = value; } },
+  _copyActivityDisclosureState: { enumerable: true, get: () => _copyActivityDisclosureState, set: (value) => { _copyActivityDisclosureState = value; } },
+  _activityKeyForLiveTurn: { enumerable: true, get: () => _activityKeyForLiveTurn, set: (value) => { _activityKeyForLiveTurn = value; } },
+  _onLiveActivityToggle: { enumerable: true, get: () => _onLiveActivityToggle, set: (value) => { _onLiveActivityToggle = value; } },
+  _materializeDeferredWorklogRows: { enumerable: true, get: () => _materializeDeferredWorklogRows, set: (value) => { _materializeDeferredWorklogRows = value; } },
+  _deferredWorklogRowsFromGroup: { enumerable: true, get: () => _deferredWorklogRowsFromGroup, set: (value) => { _deferredWorklogRowsFromGroup = value; } },
+  _rehydrateDeferredWorklogsFromCache: { enumerable: true, get: () => _rehydrateDeferredWorklogsFromCache, set: (value) => { _rehydrateDeferredWorklogsFromCache = value; } },
+  _toggleActivityGroup: { enumerable: true, get: () => _toggleActivityGroup, set: (value) => { _toggleActivityGroup = value; } },
+  _toggleToolWorklogGroup: { enumerable: true, get: () => _toggleToolWorklogGroup, set: (value) => { _toggleToolWorklogGroup = value; } },
+  _finalizeLiveActivityDisclosureGroup: { enumerable: true, get: () => _finalizeLiveActivityDisclosureGroup, set: (value) => { _finalizeLiveActivityDisclosureGroup = value; } },
+  _worklogReasonHtmlFromAnchor: { enumerable: true, get: () => _worklogReasonHtmlFromAnchor, set: (value) => { _worklogReasonHtmlFromAnchor = value; } },
+  _worklogReasonHtmlFromText: { enumerable: true, get: () => _worklogReasonHtmlFromText, set: (value) => { _worklogReasonHtmlFromText = value; } },
+  _renderWorklogReasonInto: { enumerable: true, get: () => _renderWorklogReasonInto, set: (value) => { _renderWorklogReasonInto = value; } },
+  _worklogReasonNodeFromText: { enumerable: true, get: () => _worklogReasonNodeFromText, set: (value) => { _worklogReasonNodeFromText = value; } },
+  _worklogReasonAnchorKey: { enumerable: true, get: () => _worklogReasonAnchorKey, set: (value) => { _worklogReasonAnchorKey = value; } },
+  _syncWorklogReasonFromAnchor: { enumerable: true, get: () => _syncWorklogReasonFromAnchor, set: (value) => { _syncWorklogReasonFromAnchor = value; } },
+  ensureLiveWorklogContainer: { enumerable: true, get: () => ensureLiveWorklogContainer, set: (value) => { ensureLiveWorklogContainer = value; } },
+  _migrateLegacyLiveActivityGroupsToWorklog: { enumerable: true, get: () => _migrateLegacyLiveActivityGroupsToWorklog, set: (value) => { _migrateLegacyLiveActivityGroupsToWorklog = value; } },
+  _appendWorklogReason: { enumerable: true, get: () => _appendWorklogReason, set: (value) => { _appendWorklogReason = value; } },
+  _toolIdentity: { enumerable: true, get: () => _toolIdentity, set: (value) => { _toolIdentity = value; } },
+  _toolDisclosureIdentity: { enumerable: true, get: () => _toolDisclosureIdentity, set: (value) => { _toolDisclosureIdentity = value; } },
+  _filterNewWorklogTools: { enumerable: true, get: () => _filterNewWorklogTools, set: (value) => { _filterNewWorklogTools = value; } },
+  _anchorSceneToolRowLogicalKey: { enumerable: true, get: () => _anchorSceneToolRowLogicalKey, set: (value) => { _anchorSceneToolRowLogicalKey = value; } },
+  _anchorSceneMergeToolRows: { enumerable: true, get: () => _anchorSceneMergeToolRows, set: (value) => { _anchorSceneMergeToolRows = value; } },
+  _appendWorklogStep: { enumerable: true, get: () => _appendWorklogStep, set: (value) => { _appendWorklogStep = value; } },
+  _anchorSceneRowsForRendering: { enumerable: true, get: () => _anchorSceneRowsForRendering, set: (value) => { _anchorSceneRowsForRendering = value; } },
+  _anchorSceneIsSettledSuccessfulCompression: { enumerable: true, get: () => _anchorSceneIsSettledSuccessfulCompression, set: (value) => { _anchorSceneIsSettledSuccessfulCompression = value; } },
+  _anchorSceneToolCallFromRow: { enumerable: true, get: () => _anchorSceneToolCallFromRow, set: (value) => { _anchorSceneToolCallFromRow = value; } },
+  _anchorSceneRowTimestampSeconds: { enumerable: true, get: () => _anchorSceneRowTimestampSeconds, set: (value) => { _anchorSceneRowTimestampSeconds = value; } },
+  _anchorSceneNodeForRow: { enumerable: true, get: () => _anchorSceneNodeForRow, set: (value) => { _anchorSceneNodeForRow = value; } },
+  _anchorSceneTransparentNodeForRow: { enumerable: true, get: () => _anchorSceneTransparentNodeForRow, set: (value) => { _anchorSceneTransparentNodeForRow = value; } },
+  _anchorSceneLiveTokenFinalPrefix: { enumerable: true, get: () => _anchorSceneLiveTokenFinalPrefix, set: (value) => { _anchorSceneLiveTokenFinalPrefix = value; } },
+  _anchorSceneLastNonTerminalWorkRowIndex: { enumerable: true, get: () => _anchorSceneLastNonTerminalWorkRowIndex, set: (value) => { _anchorSceneLastNonTerminalWorkRowIndex = value; } },
+  _anchorSceneProseMatchesFinalAnswer: { enumerable: true, get: () => _anchorSceneProseMatchesFinalAnswer, set: (value) => { _anchorSceneProseMatchesFinalAnswer = value; } },
+  _anchorSceneWorklogGroup: { enumerable: true, get: () => _anchorSceneWorklogGroup, set: (value) => { _anchorSceneWorklogGroup = value; } },
+  _renderAnchorSceneRowsIntoWorklog: { enumerable: true, get: () => _renderAnchorSceneRowsIntoWorklog, set: (value) => { _renderAnchorSceneRowsIntoWorklog = value; } },
+  _liveProcessedWorklogAnchorScore: { enumerable: true, get: () => _liveProcessedWorklogAnchorScore, set: (value) => { _liveProcessedWorklogAnchorScore = value; } },
+  _dedupeLiveProcessedWorklogAnchors: { enumerable: true, get: () => _dedupeLiveProcessedWorklogAnchors, set: (value) => { _dedupeLiveProcessedWorklogAnchors = value; } },
+  isLiveAnchorActivitySceneOwner: { enumerable: true, get: () => isLiveAnchorActivitySceneOwner, set: (value) => { isLiveAnchorActivitySceneOwner = value; } },
+  _projectLiveAnchorActivitySceneForStream: { enumerable: true, get: () => _projectLiveAnchorActivitySceneForStream, set: (value) => { _projectLiveAnchorActivitySceneForStream = value; } },
+  _prepareLiveAnchorScrollRebuildGuard: { enumerable: true, get: () => _prepareLiveAnchorScrollRebuildGuard, set: (value) => { _prepareLiveAnchorScrollRebuildGuard = value; } },
+  _resetMismatchedLiveAssistantTurnForSession: { enumerable: true, get: () => _resetMismatchedLiveAssistantTurnForSession, set: (value) => { _resetMismatchedLiveAssistantTurnForSession = value; } },
+  _liveAnchorReasoningRowForFallback: { enumerable: true, get: () => _liveAnchorReasoningRowForFallback, set: (value) => { _liveAnchorReasoningRowForFallback = value; } },
+  _updateLiveAnchorReasoningRowForFallback: { enumerable: true, get: () => _updateLiveAnchorReasoningRowForFallback, set: (value) => { _updateLiveAnchorReasoningRowForFallback = value; } },
+  _transparentTurnCollapsedStates: { enumerable: true, get: () => _transparentTurnCollapsedStates },
+  _activityDisclosureStoragePrefix: { enumerable: true, get: () => _activityDisclosureStoragePrefix },
+  _liveActivityUserExpanded: { enumerable: true, get: () => _liveActivityUserExpanded, set: (value) => { _liveActivityUserExpanded = value; } },
+  _worklogAnchorKeySeq: { enumerable: true, get: () => _worklogAnchorKeySeq, set: (value) => { _worklogAnchorKeySeq = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

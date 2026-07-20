@@ -300,7 +300,7 @@ def test_boot_js_mic_status_toggle():
 def test_boot_js_send_stops_mic():
     """btnSend primary action path must stop mic before sending."""
     boot_js = family_source("boot")
-    ui_js, _ = get_family_text("ui", "/static/ui.js")
+    ui_js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     send_onclick_idx = boot_js.find("$('btnSend').onclick")
     assert send_onclick_idx != -1
     assert 'handleComposerPrimaryAction' in boot_js[send_onclick_idx:send_onclick_idx + 200]

@@ -125,7 +125,7 @@ def test_index_shell_and_static_route_use_selected_root(tmp_path, monkeypatch):
     temp_static = _get("/static/ui.js")
     assert temp_static.status == 200
     assert bytes(temp_static.body) == b"console.log('temp static');\n"
-    assert bytes(temp_static.body) != (ROOT / "static" / "ui.js").read_bytes()
+    assert bytes(temp_static.body) != (ROOT / "static" / "modules" / "ui" / "index.js").read_bytes()
 
     traversal = _get("/static/../api/routes.py")
     assert traversal.status == 404

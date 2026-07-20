@@ -1,3 +1,17 @@
+import { _clearActivityElapsedTimer, _sanitizeThinkingDisplayText, scrollIfPinned } from './activity-and-scroll.js';
+import { _renderLiveAnchorActivitySceneForStream } from './anchor-scenes.js';
+import { _firstValidTimestampSeconds, _scrollPinned } from './composer-controls.js';
+import { setStatus } from './composer.js';
+import { _copyText } from './dialogs-and-reconnect.js';
+import { _mountMermaidViewer } from './media-and-quota.js';
+import { _deliberateSessionModelPick, _reArmRecoveryPick } from './model-state.js';
+import { _suppressBrowserOverflowAnchor } from './navigation.js';
+import { _assistantTurnBlocks, _createAssistantTurn, _decorateTransparentEventRow, _syncTransparentEventControls, _thinkingActivityNode, _worklogDetailsExpandedDefault, isFinalAnswerOnlyMode, isSimplifiedToolCalling, isTransparentStream, msgContent } from './presentation.js';
+import { renderMessages } from './renderer.js';
+import { $, S, esc } from './state.js';
+import { _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
+import { _resetMismatchedLiveAssistantTurnForSession, _updateLiveAnchorReasoningRowForFallback, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
+
 function editMessage(btn) {
   if(S.busy) return;
   const row = btn.closest('[data-msg-idx]');
@@ -1069,11 +1083,96 @@ function removeThinking(){
 }
 
 
-window.HermesUI.register('content', {
+
+export {
   editMessage,
-  regenerateResponse,
+  cancelEdit,
+  autoResizeTextarea,
+  _postProcessWithAnchorSuppression,
   postProcessRenderedMessages,
+  highlightCode,
+  _loadJsyamlThen,
+  _structuredCodeMode,
+  _structuredCodeThreshold,
+  _structuredCodeShowTree,
+  initTreeViews,
+  _buildTreeDOM,
+  addCopyButtons,
+  loadDiffInline,
+  _mediaSessionQuery,
+  _csvMediaUrl,
+  buildCsvTablePreview,
+  _csvPreviewErrorHtml,
+  loadCsvInline,
+  loadExcalidrawInline,
+  _renderExcalidrawCanvases,
+  loadPdfInline,
+  loadHtmlInline,
+  renderMermaidBlocks,
+  _isStreamingEquationPending,
+  renderKatexBlocks,
+  _thinkingMarkup,
+  _renderThinkingInto,
+  finalizeThinkingCard,
   appendThinking,
   updateThinking,
   removeThinking,
+  submitEdit,
+  regenerateResponse,
+  CSV_MAX_SIZE,
+  _jsyamlLoading,
+  _mermaidLoading,
+  _mermaidReady,
+  _excalidrawScriptLoaded,
+  _pdfjsReady,
+  _katexLoading,
+  _katexReady,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  editMessage: { enumerable: true, get: () => editMessage, set: (value) => { editMessage = value; } },
+  cancelEdit: { enumerable: true, get: () => cancelEdit, set: (value) => { cancelEdit = value; } },
+  autoResizeTextarea: { enumerable: true, get: () => autoResizeTextarea, set: (value) => { autoResizeTextarea = value; } },
+  _postProcessWithAnchorSuppression: { enumerable: true, get: () => _postProcessWithAnchorSuppression, set: (value) => { _postProcessWithAnchorSuppression = value; } },
+  postProcessRenderedMessages: { enumerable: true, get: () => postProcessRenderedMessages, set: (value) => { postProcessRenderedMessages = value; } },
+  highlightCode: { enumerable: true, get: () => highlightCode, set: (value) => { highlightCode = value; } },
+  _loadJsyamlThen: { enumerable: true, get: () => _loadJsyamlThen, set: (value) => { _loadJsyamlThen = value; } },
+  _structuredCodeMode: { enumerable: true, get: () => _structuredCodeMode, set: (value) => { _structuredCodeMode = value; } },
+  _structuredCodeThreshold: { enumerable: true, get: () => _structuredCodeThreshold, set: (value) => { _structuredCodeThreshold = value; } },
+  _structuredCodeShowTree: { enumerable: true, get: () => _structuredCodeShowTree, set: (value) => { _structuredCodeShowTree = value; } },
+  initTreeViews: { enumerable: true, get: () => initTreeViews, set: (value) => { initTreeViews = value; } },
+  _buildTreeDOM: { enumerable: true, get: () => _buildTreeDOM, set: (value) => { _buildTreeDOM = value; } },
+  addCopyButtons: { enumerable: true, get: () => addCopyButtons, set: (value) => { addCopyButtons = value; } },
+  loadDiffInline: { enumerable: true, get: () => loadDiffInline, set: (value) => { loadDiffInline = value; } },
+  _mediaSessionQuery: { enumerable: true, get: () => _mediaSessionQuery, set: (value) => { _mediaSessionQuery = value; } },
+  _csvMediaUrl: { enumerable: true, get: () => _csvMediaUrl, set: (value) => { _csvMediaUrl = value; } },
+  buildCsvTablePreview: { enumerable: true, get: () => buildCsvTablePreview, set: (value) => { buildCsvTablePreview = value; } },
+  _csvPreviewErrorHtml: { enumerable: true, get: () => _csvPreviewErrorHtml, set: (value) => { _csvPreviewErrorHtml = value; } },
+  loadCsvInline: { enumerable: true, get: () => loadCsvInline, set: (value) => { loadCsvInline = value; } },
+  loadExcalidrawInline: { enumerable: true, get: () => loadExcalidrawInline, set: (value) => { loadExcalidrawInline = value; } },
+  _renderExcalidrawCanvases: { enumerable: true, get: () => _renderExcalidrawCanvases, set: (value) => { _renderExcalidrawCanvases = value; } },
+  loadPdfInline: { enumerable: true, get: () => loadPdfInline, set: (value) => { loadPdfInline = value; } },
+  loadHtmlInline: { enumerable: true, get: () => loadHtmlInline, set: (value) => { loadHtmlInline = value; } },
+  renderMermaidBlocks: { enumerable: true, get: () => renderMermaidBlocks, set: (value) => { renderMermaidBlocks = value; } },
+  _isStreamingEquationPending: { enumerable: true, get: () => _isStreamingEquationPending, set: (value) => { _isStreamingEquationPending = value; } },
+  renderKatexBlocks: { enumerable: true, get: () => renderKatexBlocks, set: (value) => { renderKatexBlocks = value; } },
+  _thinkingMarkup: { enumerable: true, get: () => _thinkingMarkup, set: (value) => { _thinkingMarkup = value; } },
+  _renderThinkingInto: { enumerable: true, get: () => _renderThinkingInto, set: (value) => { _renderThinkingInto = value; } },
+  finalizeThinkingCard: { enumerable: true, get: () => finalizeThinkingCard, set: (value) => { finalizeThinkingCard = value; } },
+  appendThinking: { enumerable: true, get: () => appendThinking, set: (value) => { appendThinking = value; } },
+  updateThinking: { enumerable: true, get: () => updateThinking, set: (value) => { updateThinking = value; } },
+  removeThinking: { enumerable: true, get: () => removeThinking, set: (value) => { removeThinking = value; } },
+  submitEdit: { enumerable: true, get: () => submitEdit, set: (value) => { submitEdit = value; } },
+  regenerateResponse: { enumerable: true, get: () => regenerateResponse, set: (value) => { regenerateResponse = value; } },
+  CSV_MAX_SIZE: { enumerable: true, get: () => CSV_MAX_SIZE },
+  _jsyamlLoading: { enumerable: true, get: () => _jsyamlLoading, set: (value) => { _jsyamlLoading = value; } },
+  _mermaidLoading: { enumerable: true, get: () => _mermaidLoading, set: (value) => { _mermaidLoading = value; } },
+  _mermaidReady: { enumerable: true, get: () => _mermaidReady, set: (value) => { _mermaidReady = value; } },
+  _excalidrawScriptLoaded: { enumerable: true, get: () => _excalidrawScriptLoaded, set: (value) => { _excalidrawScriptLoaded = value; } },
+  _pdfjsReady: { enumerable: true, get: () => _pdfjsReady, set: (value) => { _pdfjsReady = value; } },
+  _katexLoading: { enumerable: true, get: () => _katexLoading, set: (value) => { _katexLoading = value; } },
+  _katexReady: { enumerable: true, get: () => _katexReady, set: (value) => { _katexReady = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

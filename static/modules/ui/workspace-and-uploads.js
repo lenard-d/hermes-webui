@@ -1,3 +1,10 @@
+import { setStatus, showToast, updateSendBtn } from './composer.js';
+import { showConfirmDialog, showPromptDialog } from './dialogs-and-reconnect.js';
+import { _ARCHIVE_EXTS, _IMAGE_EXTS, _SVG_EXTS, _mediaKindForName } from './media-and-quota.js';
+import { syncTopbar } from './presentation.js';
+import { renderMessages } from './renderer.js';
+import { $, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, S, _redirectIfUnauth, esc } from './state.js';
+
 function fileIcon(name, type){
   if(type==='dir') return li('folder',14);
   const e=fileExt(name);
@@ -329,12 +336,15 @@ function _showWorkspaceRootContextMenu(e){
   setTimeout(()=>document.addEventListener('click',dismiss),0);
 }
 
-// Track expanded directories for tree view
-if(!S._expandedDirs) S._expandedDirs=new Set();
-// Cache of fetched directory contents: path -> entries[]
-if(!S._dirCache) S._dirCache={};
+function _ensureWorkspaceTreeState(){
+  // These collections belong to the shared session state, but must be created
+  // lazily: native-module cycles are linked before state.js initializes S.
+  if(!S._expandedDirs) S._expandedDirs=new Set();
+  if(!S._dirCache) S._dirCache={};
+}
 
 function renderFileTree(){
+  _ensureWorkspaceTreeState();
   const box=$('fileTree');
   // #5657: capture the scroll position before wiping the container. box.innerHTML=''
   // detaches every row, collapsing scrollHeight so the browser clamps scrollTop to 0;
@@ -1190,9 +1200,118 @@ async function uploadPendingFiles(options={}){
   return names;
 }
 
-window.HermesUI.register('workspace', {
-  renderFileTree,
+
+export {
+  fileIcon,
   renderBreadcrumb,
+  _workspaceShouldHideEntry,
+  _visibleWorkspaceEntries,
+  _syncWorkspaceHiddenToggle,
+  toggleWorkspaceHiddenFiles,
+  _closeWorkspacePrefsMenu,
+  _positionWorkspacePrefsMenu,
+  _buildWorkspacePrefsMenu,
+  toggleWorkspacePrefsMenu,
+  bindWorkspaceHeadingActions,
+  _syncWorkspaceHeadingState,
+  _workspaceContextMenuItem,
+  _copyTextWithFallback,
+  _workspaceCreateTargetLabel,
+  _workspaceJoinTargetPath,
+  _showWorkspaceRootContextMenu,
+  renderFileTree,
+  _setWsDragData,
+  _clearWsDragData,
+  _isWorkspaceTreeMoveDrag,
+  _wsDragSrcPath,
+  _wsDragSrcType,
+  _workspaceParentDir,
+  _clearWorkspaceMoveDragOver,
+  _remapWorkspaceCachesAfterMove,
+  _bindWorkspaceMoveDropTarget,
+  elideMiddle,
+  _renderTreeItems,
+  _showFileContextMenu,
+  renderTray,
+  _uploadTooLargeMessage,
+  _showUploadTooLarge,
   addFiles,
+  _uploadPendingFilesCurrentSession,
+  _uploadPendingFilesHideProgressBar,
+  _uploadPendingFilesShowProgressBar,
+  _uploadPendingFilesSyncProgressForSession,
+  _uploadPendingFilesUpdateProgress,
+  _performWorkspaceMove,
+  deleteWorkspaceDir,
+  _inlineRenameFileItem,
+  deleteWorkspaceFile,
+  promptNewFile,
+  promptNewFolder,
   uploadPendingFiles,
+  WORKSPACE_HIDDEN_FILE_NAMES,
+  WORKSPACE_HIDDEN_FILE_PREFIXES,
+  _uploadPendingFilesProgressBySession,
+  _workspacePrefsMenu,
+  _workspacePrefsAnchor,
+  _wsActiveDragPath,
+  _wsActiveDragType,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  fileIcon: { enumerable: true, get: () => fileIcon, set: (value) => { fileIcon = value; } },
+  renderBreadcrumb: { enumerable: true, get: () => renderBreadcrumb, set: (value) => { renderBreadcrumb = value; } },
+  _workspaceShouldHideEntry: { enumerable: true, get: () => _workspaceShouldHideEntry, set: (value) => { _workspaceShouldHideEntry = value; } },
+  _visibleWorkspaceEntries: { enumerable: true, get: () => _visibleWorkspaceEntries, set: (value) => { _visibleWorkspaceEntries = value; } },
+  _syncWorkspaceHiddenToggle: { enumerable: true, get: () => _syncWorkspaceHiddenToggle, set: (value) => { _syncWorkspaceHiddenToggle = value; } },
+  toggleWorkspaceHiddenFiles: { enumerable: true, get: () => toggleWorkspaceHiddenFiles, set: (value) => { toggleWorkspaceHiddenFiles = value; } },
+  _closeWorkspacePrefsMenu: { enumerable: true, get: () => _closeWorkspacePrefsMenu, set: (value) => { _closeWorkspacePrefsMenu = value; } },
+  _positionWorkspacePrefsMenu: { enumerable: true, get: () => _positionWorkspacePrefsMenu, set: (value) => { _positionWorkspacePrefsMenu = value; } },
+  _buildWorkspacePrefsMenu: { enumerable: true, get: () => _buildWorkspacePrefsMenu, set: (value) => { _buildWorkspacePrefsMenu = value; } },
+  toggleWorkspacePrefsMenu: { enumerable: true, get: () => toggleWorkspacePrefsMenu, set: (value) => { toggleWorkspacePrefsMenu = value; } },
+  bindWorkspaceHeadingActions: { enumerable: true, get: () => bindWorkspaceHeadingActions, set: (value) => { bindWorkspaceHeadingActions = value; } },
+  _syncWorkspaceHeadingState: { enumerable: true, get: () => _syncWorkspaceHeadingState, set: (value) => { _syncWorkspaceHeadingState = value; } },
+  _workspaceContextMenuItem: { enumerable: true, get: () => _workspaceContextMenuItem, set: (value) => { _workspaceContextMenuItem = value; } },
+  _copyTextWithFallback: { enumerable: true, get: () => _copyTextWithFallback, set: (value) => { _copyTextWithFallback = value; } },
+  _workspaceCreateTargetLabel: { enumerable: true, get: () => _workspaceCreateTargetLabel, set: (value) => { _workspaceCreateTargetLabel = value; } },
+  _workspaceJoinTargetPath: { enumerable: true, get: () => _workspaceJoinTargetPath, set: (value) => { _workspaceJoinTargetPath = value; } },
+  _showWorkspaceRootContextMenu: { enumerable: true, get: () => _showWorkspaceRootContextMenu, set: (value) => { _showWorkspaceRootContextMenu = value; } },
+  renderFileTree: { enumerable: true, get: () => renderFileTree, set: (value) => { renderFileTree = value; } },
+  _setWsDragData: { enumerable: true, get: () => _setWsDragData, set: (value) => { _setWsDragData = value; } },
+  _clearWsDragData: { enumerable: true, get: () => _clearWsDragData, set: (value) => { _clearWsDragData = value; } },
+  _isWorkspaceTreeMoveDrag: { enumerable: true, get: () => _isWorkspaceTreeMoveDrag, set: (value) => { _isWorkspaceTreeMoveDrag = value; } },
+  _wsDragSrcPath: { enumerable: true, get: () => _wsDragSrcPath, set: (value) => { _wsDragSrcPath = value; } },
+  _wsDragSrcType: { enumerable: true, get: () => _wsDragSrcType, set: (value) => { _wsDragSrcType = value; } },
+  _workspaceParentDir: { enumerable: true, get: () => _workspaceParentDir, set: (value) => { _workspaceParentDir = value; } },
+  _clearWorkspaceMoveDragOver: { enumerable: true, get: () => _clearWorkspaceMoveDragOver, set: (value) => { _clearWorkspaceMoveDragOver = value; } },
+  _remapWorkspaceCachesAfterMove: { enumerable: true, get: () => _remapWorkspaceCachesAfterMove, set: (value) => { _remapWorkspaceCachesAfterMove = value; } },
+  _bindWorkspaceMoveDropTarget: { enumerable: true, get: () => _bindWorkspaceMoveDropTarget, set: (value) => { _bindWorkspaceMoveDropTarget = value; } },
+  elideMiddle: { enumerable: true, get: () => elideMiddle, set: (value) => { elideMiddle = value; } },
+  _renderTreeItems: { enumerable: true, get: () => _renderTreeItems, set: (value) => { _renderTreeItems = value; } },
+  _showFileContextMenu: { enumerable: true, get: () => _showFileContextMenu, set: (value) => { _showFileContextMenu = value; } },
+  renderTray: { enumerable: true, get: () => renderTray, set: (value) => { renderTray = value; } },
+  _uploadTooLargeMessage: { enumerable: true, get: () => _uploadTooLargeMessage, set: (value) => { _uploadTooLargeMessage = value; } },
+  _showUploadTooLarge: { enumerable: true, get: () => _showUploadTooLarge, set: (value) => { _showUploadTooLarge = value; } },
+  addFiles: { enumerable: true, get: () => addFiles, set: (value) => { addFiles = value; } },
+  _uploadPendingFilesCurrentSession: { enumerable: true, get: () => _uploadPendingFilesCurrentSession, set: (value) => { _uploadPendingFilesCurrentSession = value; } },
+  _uploadPendingFilesHideProgressBar: { enumerable: true, get: () => _uploadPendingFilesHideProgressBar, set: (value) => { _uploadPendingFilesHideProgressBar = value; } },
+  _uploadPendingFilesShowProgressBar: { enumerable: true, get: () => _uploadPendingFilesShowProgressBar, set: (value) => { _uploadPendingFilesShowProgressBar = value; } },
+  _uploadPendingFilesSyncProgressForSession: { enumerable: true, get: () => _uploadPendingFilesSyncProgressForSession, set: (value) => { _uploadPendingFilesSyncProgressForSession = value; } },
+  _uploadPendingFilesUpdateProgress: { enumerable: true, get: () => _uploadPendingFilesUpdateProgress, set: (value) => { _uploadPendingFilesUpdateProgress = value; } },
+  _performWorkspaceMove: { enumerable: true, get: () => _performWorkspaceMove, set: (value) => { _performWorkspaceMove = value; } },
+  deleteWorkspaceDir: { enumerable: true, get: () => deleteWorkspaceDir, set: (value) => { deleteWorkspaceDir = value; } },
+  _inlineRenameFileItem: { enumerable: true, get: () => _inlineRenameFileItem, set: (value) => { _inlineRenameFileItem = value; } },
+  deleteWorkspaceFile: { enumerable: true, get: () => deleteWorkspaceFile, set: (value) => { deleteWorkspaceFile = value; } },
+  promptNewFile: { enumerable: true, get: () => promptNewFile, set: (value) => { promptNewFile = value; } },
+  promptNewFolder: { enumerable: true, get: () => promptNewFolder, set: (value) => { promptNewFolder = value; } },
+  uploadPendingFiles: { enumerable: true, get: () => uploadPendingFiles, set: (value) => { uploadPendingFiles = value; } },
+  WORKSPACE_HIDDEN_FILE_NAMES: { enumerable: true, get: () => WORKSPACE_HIDDEN_FILE_NAMES },
+  WORKSPACE_HIDDEN_FILE_PREFIXES: { enumerable: true, get: () => WORKSPACE_HIDDEN_FILE_PREFIXES },
+  _uploadPendingFilesProgressBySession: { enumerable: true, get: () => _uploadPendingFilesProgressBySession },
+  _workspacePrefsMenu: { enumerable: true, get: () => _workspacePrefsMenu, set: (value) => { _workspacePrefsMenu = value; } },
+  _workspacePrefsAnchor: { enumerable: true, get: () => _workspacePrefsAnchor, set: (value) => { _workspacePrefsAnchor = value; } },
+  _wsActiveDragPath: { enumerable: true, get: () => _wsActiveDragPath, set: (value) => { _wsActiveDragPath = value; } },
+  _wsActiveDragType: { enumerable: true, get: () => _wsActiveDragType, set: (value) => { _wsActiveDragType = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

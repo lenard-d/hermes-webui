@@ -1,3 +1,12 @@
+import { _formatGatewayModelLabel, _gatewayRoutingLabel, _latestGatewayRoutingForSession, getModelLabel } from './activity-and-scroll.js';
+import { _dynamicModelLabels } from './media-and-quota.js';
+import { renderModelDropdown } from './model-selection.js';
+import { _applyModelToDropdown, _captureModelDropdownSelection, _deduplicateModelPickerOptions, _getOptionProviderId, _modelPickerOptionIdentity, _modelStateForSelect, _providerSkipsModelMismatchWarning, _reconcileModelDropdownSelection } from './model-state.js';
+import { $, S, _redirectIfUnauth, esc } from './state.js';
+
+let _modelDropdownRequestSeq=0;
+let _modelCatalogFallbackRetried=false;
+
 async function populateModelDropdown(opts={}){
   const sel=$('modelSelect');
   if(!sel) return;
@@ -76,7 +85,7 @@ async function populateModelDropdown(opts={}){
     const previousSelection=_captureModelDropdownSelection(sel);
     // Clear existing options
     sel.innerHTML='';
-    _dynamicModelLabels={};
+    for(const key of Object.keys(_dynamicModelLabels)) delete _dynamicModelLabels[key];
     for(const g of groups){
       const og=document.createElement('optgroup');
       og.label=g.provider;
@@ -702,7 +711,52 @@ function _mountSearchableModelSelect(opts={}){
 }
 
 
-window.HermesUI.register('modelCatalog', {
-  populateModelDropdown,
+
+export {
+  _modelDropdownRequestSeq,
+  _modelCatalogFallbackRetried,
+  _addLiveModelsToSelect,
+  _checkProviderMismatch,
+  _selectedModelOption,
+  _normalizeConfiguredModelKey,
+  _isEquivalentConfiguredModelEntry,
+  _getConfiguredModelBadge,
+  _compactComposerModelChipLabel,
   syncModelChip,
+  _restoreModelDropdownHome,
+  _positionModelDropdown,
+  _readModelOverflowData,
+  _appendOverflowOptionsToGroup,
+  _mountSearchableModelSelect,
+  populateModelDropdown,
+  _fetchLiveModels,
+  _liveModelCache,
+  _liveModelFetchPending,
+  _modelDropdownHome,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _modelDropdownRequestSeq: { enumerable: true, get: () => _modelDropdownRequestSeq, set: (value) => { _modelDropdownRequestSeq = value; } },
+  _modelCatalogFallbackRetried: { enumerable: true, get: () => _modelCatalogFallbackRetried, set: (value) => { _modelCatalogFallbackRetried = value; } },
+  _addLiveModelsToSelect: { enumerable: true, get: () => _addLiveModelsToSelect, set: (value) => { _addLiveModelsToSelect = value; } },
+  _checkProviderMismatch: { enumerable: true, get: () => _checkProviderMismatch, set: (value) => { _checkProviderMismatch = value; } },
+  _selectedModelOption: { enumerable: true, get: () => _selectedModelOption, set: (value) => { _selectedModelOption = value; } },
+  _normalizeConfiguredModelKey: { enumerable: true, get: () => _normalizeConfiguredModelKey, set: (value) => { _normalizeConfiguredModelKey = value; } },
+  _isEquivalentConfiguredModelEntry: { enumerable: true, get: () => _isEquivalentConfiguredModelEntry, set: (value) => { _isEquivalentConfiguredModelEntry = value; } },
+  _getConfiguredModelBadge: { enumerable: true, get: () => _getConfiguredModelBadge, set: (value) => { _getConfiguredModelBadge = value; } },
+  _compactComposerModelChipLabel: { enumerable: true, get: () => _compactComposerModelChipLabel, set: (value) => { _compactComposerModelChipLabel = value; } },
+  syncModelChip: { enumerable: true, get: () => syncModelChip, set: (value) => { syncModelChip = value; } },
+  _restoreModelDropdownHome: { enumerable: true, get: () => _restoreModelDropdownHome, set: (value) => { _restoreModelDropdownHome = value; } },
+  _positionModelDropdown: { enumerable: true, get: () => _positionModelDropdown, set: (value) => { _positionModelDropdown = value; } },
+  _readModelOverflowData: { enumerable: true, get: () => _readModelOverflowData, set: (value) => { _readModelOverflowData = value; } },
+  _appendOverflowOptionsToGroup: { enumerable: true, get: () => _appendOverflowOptionsToGroup, set: (value) => { _appendOverflowOptionsToGroup = value; } },
+  _mountSearchableModelSelect: { enumerable: true, get: () => _mountSearchableModelSelect, set: (value) => { _mountSearchableModelSelect = value; } },
+  populateModelDropdown: { enumerable: true, get: () => populateModelDropdown, set: (value) => { populateModelDropdown = value; } },
+  _fetchLiveModels: { enumerable: true, get: () => _fetchLiveModels, set: (value) => { _fetchLiveModels = value; } },
+  _liveModelCache: { enumerable: true, get: () => _liveModelCache },
+  _liveModelFetchPending: { enumerable: true, get: () => _liveModelFetchPending },
+  _modelDropdownHome: { enumerable: true, get: () => _modelDropdownHome, set: (value) => { _modelDropdownHome = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

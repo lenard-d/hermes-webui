@@ -1,3 +1,16 @@
+import { _shouldFollowMessagesOnDomReplace, scrollIfPinned } from './activity-and-scroll.js';
+import { _renderLiveAnchorActivitySceneForStream } from './anchor-scenes.js';
+import { _clearCompressionElapsedTimer, _compressionElapsedStartedAt, _deferClearProgrammaticScroll, _fmtTokens, _lastMessageClientHeight, _lastScrollTop, _messageUserUnpinned, _nearBottomCount, _programmaticScroll, _programmaticScrollSetAt, _recentMessageScrollIntent, _scrollPinned, _startCompressionElapsedTimer } from './composer-controls.js';
+import { _compressionPlaceholderSaved, renderMd } from './composer.js';
+import { _browserOverflowAnchorActive, _captureMessageViewportAnchor, _clearRenderCache, _remountMessageViewportAnchor, _restoreMessageViewportAnchor } from './navigation.js';
+import { _assistantMessageHasVisibleContent, _assistantReasoningPayloadText, _assistantTurnBlocks, _createAssistantTurn, _messageHasReasoningPayload, isCompactWorklogMode, msgContent } from './presentation.js';
+import { _renderMessagesWithScrollSnapshot, _restoreMessageScrollSnapshotSameFrame } from './render-support.js';
+import { $, S, _clearMessageVirtualHeightCache, _compressionSessionLock, _setCompressionSessionLock, clearVisibleMessageRowCache, esc } from './state.js';
+import { _redactToolTargetLabel, _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
+import { _activityKeyForLiveTurn, _finalizeLiveActivityDisclosureGroup, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
+import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
+import { compatibilityBindings as composerBindings } from './composer.js';
+
 // ── LiveFooter timer (module-level singleton) ──────────────────────────────
 const _liveRunStatusTimers={};  // keyed by sessionId, max 1 active
 let _liveRunStatusTokens=null;
@@ -150,7 +163,7 @@ function _restoreCompressionPlaceholder(){
   if(_input&&typeof _compressionPlaceholderSaved==='string'){
     _input.placeholder=_compressionPlaceholderSaved;
   }
-  _compressionPlaceholderSaved=null;
+  composerBindings._compressionPlaceholderSaved=null;
 }
 function clearCompressionUi(){
   window._compressionUi=null;
@@ -174,7 +187,7 @@ function setCompressionUi(state){
     _startCompressionElapsedTimer();
     const _input=$('msg');
     if(_input&&_compressionPlaceholderSaved===null){
-      _compressionPlaceholderSaved=_input.placeholder;
+      composerBindings._compressionPlaceholderSaved=_input.placeholder;
       _input.placeholder=typeof t==='function'?t('composer_compression_will_queue')||'Type a message — it will queue and send after compression':'Type a message — it will queue and send after compression';
     }
   } else {
@@ -920,15 +933,15 @@ function _restorePinnedMessageScrollSnapshot(snapshot){
   const maxTop=Math.max(0,el.scrollHeight-el.clientHeight);
   const bottom=Number(snapshot.bottom);
   const target=Number.isFinite(bottom)?maxTop-Math.max(0,bottom):maxTop;
-  _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+  composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
   el.scrollTop=Math.max(0,Math.min(target,maxTop));
   // Sync _lastScrollTop after programmatic restore so sticky-unpin does not false-trigger (#1731).
-  _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
-  _messageUserUnpinned=false;
-  _scrollPinned=true;
-  _nearBottomCount=2;
+  composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
+  composerControlsBindings._messageUserUnpinned=false;
+  composerControlsBindings._scrollPinned=true;
+  composerControlsBindings._nearBottomCount=2;
   if(typeof _deferClearProgrammaticScroll==='function') _deferClearProgrammaticScroll();
-  else requestAnimationFrame(()=>{ setTimeout(()=>{ _programmaticScroll=false; },0); });
+  else requestAnimationFrame(()=>{ setTimeout(()=>{ composerControlsBindings._programmaticScroll=false; },0); });
   return true;
 }
 function _restoreMessageScrollSnapshot(snapshot){
@@ -950,34 +963,34 @@ function _restoreMessageScrollSnapshot(snapshot){
       : false;
   }
   if(!restoredViaAnchor){
-    _programmaticScroll=true;_programmaticScrollSetAt=performance.now();
+    composerControlsBindings._programmaticScroll=true;composerControlsBindings._programmaticScrollSetAt=performance.now();
     el.scrollTop=Math.max(0,Math.min(Number(snapshot.top)||0,maxTop));
   }
   // Sync _lastScrollTop after programmatic restore so sticky-unpin does not false-trigger (#1731).
-  _lastScrollTop=el.scrollTop;_lastMessageClientHeight=el.clientHeight;
+  composerControlsBindings._lastScrollTop=el.scrollTop;composerControlsBindings._lastMessageClientHeight=el.clientHeight;
   if(snapshot.userUnpinned===true){
-    _messageUserUnpinned=true;
-    _scrollPinned=false;
-    _nearBottomCount=0;
+    composerControlsBindings._messageUserUnpinned=true;
+    composerControlsBindings._scrollPinned=false;
+    composerControlsBindings._nearBottomCount=0;
   }else if(snapshot.pinned===true){
-    _messageUserUnpinned=false;
-    _scrollPinned=true;
-    _nearBottomCount=2;
+    composerControlsBindings._messageUserUnpinned=false;
+    composerControlsBindings._scrollPinned=true;
+    composerControlsBindings._nearBottomCount=2;
   }else{
     const bottomDistance=el.scrollHeight-el.scrollTop-el.clientHeight;
     if(bottomDistance>250){
-      _messageUserUnpinned=true;
-      _scrollPinned=false;
-      _nearBottomCount=0;
+      composerControlsBindings._messageUserUnpinned=true;
+      composerControlsBindings._scrollPinned=false;
+      composerControlsBindings._nearBottomCount=0;
     }else if(bottomDistance<=120){
-      _messageUserUnpinned=false;
-      _scrollPinned=true;
-      _nearBottomCount=2;
+      composerControlsBindings._messageUserUnpinned=false;
+      composerControlsBindings._scrollPinned=true;
+      composerControlsBindings._nearBottomCount=2;
     }
   }
   if(!restoredViaAnchor){
     if(typeof _deferClearProgrammaticScroll==='function') _deferClearProgrammaticScroll();
-    else requestAnimationFrame(()=>{ setTimeout(()=>{ _programmaticScroll=false; },0); });
+    else requestAnimationFrame(()=>{ setTimeout(()=>{ composerControlsBindings._programmaticScroll=false; },0); });
   }
 }
 /**
@@ -1153,9 +1166,198 @@ function _desktopAnchorRealignDelta(container, anchor){
   return currentOffset-capturedOffset;
 }
 
-window.HermesUI.register('liveActivity', {
+
+export {
+  _formatRunElapsed,
+  _moveLiveRunStatusToTurnEnd,
+  placeLiveRunStatusHost,
   showLiveRunStatus,
+  _renderLiveRunStatusContent,
   updateLiveRunStatus,
+  _syncLiveRunStatusAfterRender,
+  hideLiveRunStatus,
+  _startLiveRunStatusTimer,
+  _clearLiveRunStatusTimer,
+  ensureRunActivityForCurrentTurn,
+  closeCurrentLiveActivityGroup,
+  _compressionStateForCurrentSession,
+  isCompressionUiRunning,
+  _restoreCompressionPlaceholder,
+  clearCompressionUi,
+  setCompressionUi,
+  _compressionCardsHtml,
+  _autoCompressionBaseDetail,
+  _autoCompressionPreviewText,
+  _autoCompressionDetailText,
+  _autoCompressionCardsHtml,
+  _autoCompressionWorklogNode,
+  _compressionCardsNode,
+  appendLiveCompressionCard,
+  _isHandoffSummaryToolPayload,
+  _parseHandoffSummaryPayload,
+  _handoffSummaryStateFromMessage,
+  _collectHandoffSummaryStates,
+  _isContextCompactionMessage,
+  _isContextCompactionText,
+  _isPreservedCompressionTaskListMarkerText,
+  _isPreservedCompressionTaskListMarkerOnlyText,
+  _isPreservedCompressionTaskListMessage,
+  _isMarkerOnlyAssistantCompressionMessage,
+  _preservedCompressionTaskListPreview,
+  _compressionMessageAnchorKey,
+  _compressionAnchorIndex,
+  _latestCompressionReferenceMessage,
+  _shouldShowSettledCompressionReference,
+  _compressionReferenceCardHtml,
+  _preservedCompressionTaskListCardHtml,
+  _preservedCompressionTaskListCardsHtml,
+  _latestTodoToolItems,
+  _hasActiveTodoItems,
+  _latestPreservedCompressionTaskListMessages,
+  _isSameLocalDay,
+  _formatMessageFooterTimestamp,
+  _compressionEngineForSession,
+  _compressionModeForSession,
+  _engineAwareCompressionCopy,
+  _compressionStatusCardHtml,
+  _handoffStateForCurrentSession,
+  clearHandoffUi,
+  setHandoffUi,
+  _handoffCardsHtml,
+  _handoffCardsNode,
+  _contextCompactionMessageHtml,
   renderCompressionUi,
+  _transparentRevealKey,
   clearMessageRenderCache,
+  _messageRenderCacheSignature,
+  _clipCliToolSnippet,
+  _cliToolResultText,
+  _cliLooksLikePatchDiff,
+  _cliToolResultSnippet,
+  _prefixedCliDiffLines,
+  _firstOwnedValue,
+  _cliPatchSnippetFromArgs,
+  _cliToolCardSnippet,
+  _cliToolCardHasDiffSnippet,
+  _assistantToolAnchorIdxForMessage,
+  _toolArgsSnapshot,
+  _captureMessageScrollSnapshot,
+  _restorePinnedMessageScrollSnapshot,
+  _restoreMessageScrollSnapshot,
+  _liftMobileAnchorSuppression,
+  _bindMobileAnchorTransitionExtender,
+  _desktopAnchorRealignDelta,
+  _liveRunStatusTimers,
+  _sessionHtmlCache,
+  _transparentRevealedTurns,
+  _MOBILE_ANCHOR_BASE_SETTLE_MS,
+  _MOBILE_ANCHOR_POST_TRANSITION_MS,
+  _MOBILE_ANCHOR_MAX_HOLD_MS,
+  _liveRunStatusTokens,
+  _liveRunStatusSessionId,
+  _sessionHtmlCacheSid,
+  _mobileAnchorSuppressReleaseTimer,
+  _mobileAnchorSuppressRafId,
+  _mobileAnchorTransitionListenerBound,
+  _mobileAnchorSuppressArmedAt,
+  _mobileAnchorMaxHoldTimer,
+};
+
+const compatibilityBindings = {};
+Object.defineProperties(compatibilityBindings, {
+  _formatRunElapsed: { enumerable: true, get: () => _formatRunElapsed, set: (value) => { _formatRunElapsed = value; } },
+  _moveLiveRunStatusToTurnEnd: { enumerable: true, get: () => _moveLiveRunStatusToTurnEnd, set: (value) => { _moveLiveRunStatusToTurnEnd = value; } },
+  placeLiveRunStatusHost: { enumerable: true, get: () => placeLiveRunStatusHost, set: (value) => { placeLiveRunStatusHost = value; } },
+  showLiveRunStatus: { enumerable: true, get: () => showLiveRunStatus, set: (value) => { showLiveRunStatus = value; } },
+  _renderLiveRunStatusContent: { enumerable: true, get: () => _renderLiveRunStatusContent, set: (value) => { _renderLiveRunStatusContent = value; } },
+  updateLiveRunStatus: { enumerable: true, get: () => updateLiveRunStatus, set: (value) => { updateLiveRunStatus = value; } },
+  _syncLiveRunStatusAfterRender: { enumerable: true, get: () => _syncLiveRunStatusAfterRender, set: (value) => { _syncLiveRunStatusAfterRender = value; } },
+  hideLiveRunStatus: { enumerable: true, get: () => hideLiveRunStatus, set: (value) => { hideLiveRunStatus = value; } },
+  _startLiveRunStatusTimer: { enumerable: true, get: () => _startLiveRunStatusTimer, set: (value) => { _startLiveRunStatusTimer = value; } },
+  _clearLiveRunStatusTimer: { enumerable: true, get: () => _clearLiveRunStatusTimer, set: (value) => { _clearLiveRunStatusTimer = value; } },
+  ensureRunActivityForCurrentTurn: { enumerable: true, get: () => ensureRunActivityForCurrentTurn, set: (value) => { ensureRunActivityForCurrentTurn = value; } },
+  closeCurrentLiveActivityGroup: { enumerable: true, get: () => closeCurrentLiveActivityGroup, set: (value) => { closeCurrentLiveActivityGroup = value; } },
+  _compressionStateForCurrentSession: { enumerable: true, get: () => _compressionStateForCurrentSession, set: (value) => { _compressionStateForCurrentSession = value; } },
+  isCompressionUiRunning: { enumerable: true, get: () => isCompressionUiRunning, set: (value) => { isCompressionUiRunning = value; } },
+  _restoreCompressionPlaceholder: { enumerable: true, get: () => _restoreCompressionPlaceholder, set: (value) => { _restoreCompressionPlaceholder = value; } },
+  clearCompressionUi: { enumerable: true, get: () => clearCompressionUi, set: (value) => { clearCompressionUi = value; } },
+  setCompressionUi: { enumerable: true, get: () => setCompressionUi, set: (value) => { setCompressionUi = value; } },
+  _compressionCardsHtml: { enumerable: true, get: () => _compressionCardsHtml, set: (value) => { _compressionCardsHtml = value; } },
+  _autoCompressionBaseDetail: { enumerable: true, get: () => _autoCompressionBaseDetail, set: (value) => { _autoCompressionBaseDetail = value; } },
+  _autoCompressionPreviewText: { enumerable: true, get: () => _autoCompressionPreviewText, set: (value) => { _autoCompressionPreviewText = value; } },
+  _autoCompressionDetailText: { enumerable: true, get: () => _autoCompressionDetailText, set: (value) => { _autoCompressionDetailText = value; } },
+  _autoCompressionCardsHtml: { enumerable: true, get: () => _autoCompressionCardsHtml, set: (value) => { _autoCompressionCardsHtml = value; } },
+  _autoCompressionWorklogNode: { enumerable: true, get: () => _autoCompressionWorklogNode, set: (value) => { _autoCompressionWorklogNode = value; } },
+  _compressionCardsNode: { enumerable: true, get: () => _compressionCardsNode, set: (value) => { _compressionCardsNode = value; } },
+  appendLiveCompressionCard: { enumerable: true, get: () => appendLiveCompressionCard, set: (value) => { appendLiveCompressionCard = value; } },
+  _isHandoffSummaryToolPayload: { enumerable: true, get: () => _isHandoffSummaryToolPayload, set: (value) => { _isHandoffSummaryToolPayload = value; } },
+  _parseHandoffSummaryPayload: { enumerable: true, get: () => _parseHandoffSummaryPayload, set: (value) => { _parseHandoffSummaryPayload = value; } },
+  _handoffSummaryStateFromMessage: { enumerable: true, get: () => _handoffSummaryStateFromMessage, set: (value) => { _handoffSummaryStateFromMessage = value; } },
+  _collectHandoffSummaryStates: { enumerable: true, get: () => _collectHandoffSummaryStates, set: (value) => { _collectHandoffSummaryStates = value; } },
+  _isContextCompactionMessage: { enumerable: true, get: () => _isContextCompactionMessage, set: (value) => { _isContextCompactionMessage = value; } },
+  _isContextCompactionText: { enumerable: true, get: () => _isContextCompactionText, set: (value) => { _isContextCompactionText = value; } },
+  _isPreservedCompressionTaskListMarkerText: { enumerable: true, get: () => _isPreservedCompressionTaskListMarkerText, set: (value) => { _isPreservedCompressionTaskListMarkerText = value; } },
+  _isPreservedCompressionTaskListMarkerOnlyText: { enumerable: true, get: () => _isPreservedCompressionTaskListMarkerOnlyText, set: (value) => { _isPreservedCompressionTaskListMarkerOnlyText = value; } },
+  _isPreservedCompressionTaskListMessage: { enumerable: true, get: () => _isPreservedCompressionTaskListMessage, set: (value) => { _isPreservedCompressionTaskListMessage = value; } },
+  _isMarkerOnlyAssistantCompressionMessage: { enumerable: true, get: () => _isMarkerOnlyAssistantCompressionMessage, set: (value) => { _isMarkerOnlyAssistantCompressionMessage = value; } },
+  _preservedCompressionTaskListPreview: { enumerable: true, get: () => _preservedCompressionTaskListPreview, set: (value) => { _preservedCompressionTaskListPreview = value; } },
+  _compressionMessageAnchorKey: { enumerable: true, get: () => _compressionMessageAnchorKey, set: (value) => { _compressionMessageAnchorKey = value; } },
+  _compressionAnchorIndex: { enumerable: true, get: () => _compressionAnchorIndex, set: (value) => { _compressionAnchorIndex = value; } },
+  _latestCompressionReferenceMessage: { enumerable: true, get: () => _latestCompressionReferenceMessage, set: (value) => { _latestCompressionReferenceMessage = value; } },
+  _shouldShowSettledCompressionReference: { enumerable: true, get: () => _shouldShowSettledCompressionReference, set: (value) => { _shouldShowSettledCompressionReference = value; } },
+  _compressionReferenceCardHtml: { enumerable: true, get: () => _compressionReferenceCardHtml, set: (value) => { _compressionReferenceCardHtml = value; } },
+  _preservedCompressionTaskListCardHtml: { enumerable: true, get: () => _preservedCompressionTaskListCardHtml, set: (value) => { _preservedCompressionTaskListCardHtml = value; } },
+  _preservedCompressionTaskListCardsHtml: { enumerable: true, get: () => _preservedCompressionTaskListCardsHtml, set: (value) => { _preservedCompressionTaskListCardsHtml = value; } },
+  _latestTodoToolItems: { enumerable: true, get: () => _latestTodoToolItems, set: (value) => { _latestTodoToolItems = value; } },
+  _hasActiveTodoItems: { enumerable: true, get: () => _hasActiveTodoItems, set: (value) => { _hasActiveTodoItems = value; } },
+  _latestPreservedCompressionTaskListMessages: { enumerable: true, get: () => _latestPreservedCompressionTaskListMessages, set: (value) => { _latestPreservedCompressionTaskListMessages = value; } },
+  _isSameLocalDay: { enumerable: true, get: () => _isSameLocalDay, set: (value) => { _isSameLocalDay = value; } },
+  _formatMessageFooterTimestamp: { enumerable: true, get: () => _formatMessageFooterTimestamp, set: (value) => { _formatMessageFooterTimestamp = value; } },
+  _compressionEngineForSession: { enumerable: true, get: () => _compressionEngineForSession, set: (value) => { _compressionEngineForSession = value; } },
+  _compressionModeForSession: { enumerable: true, get: () => _compressionModeForSession, set: (value) => { _compressionModeForSession = value; } },
+  _engineAwareCompressionCopy: { enumerable: true, get: () => _engineAwareCompressionCopy, set: (value) => { _engineAwareCompressionCopy = value; } },
+  _compressionStatusCardHtml: { enumerable: true, get: () => _compressionStatusCardHtml, set: (value) => { _compressionStatusCardHtml = value; } },
+  _handoffStateForCurrentSession: { enumerable: true, get: () => _handoffStateForCurrentSession, set: (value) => { _handoffStateForCurrentSession = value; } },
+  clearHandoffUi: { enumerable: true, get: () => clearHandoffUi, set: (value) => { clearHandoffUi = value; } },
+  setHandoffUi: { enumerable: true, get: () => setHandoffUi, set: (value) => { setHandoffUi = value; } },
+  _handoffCardsHtml: { enumerable: true, get: () => _handoffCardsHtml, set: (value) => { _handoffCardsHtml = value; } },
+  _handoffCardsNode: { enumerable: true, get: () => _handoffCardsNode, set: (value) => { _handoffCardsNode = value; } },
+  _contextCompactionMessageHtml: { enumerable: true, get: () => _contextCompactionMessageHtml, set: (value) => { _contextCompactionMessageHtml = value; } },
+  renderCompressionUi: { enumerable: true, get: () => renderCompressionUi, set: (value) => { renderCompressionUi = value; } },
+  _transparentRevealKey: { enumerable: true, get: () => _transparentRevealKey, set: (value) => { _transparentRevealKey = value; } },
+  clearMessageRenderCache: { enumerable: true, get: () => clearMessageRenderCache, set: (value) => { clearMessageRenderCache = value; } },
+  _messageRenderCacheSignature: { enumerable: true, get: () => _messageRenderCacheSignature, set: (value) => { _messageRenderCacheSignature = value; } },
+  _clipCliToolSnippet: { enumerable: true, get: () => _clipCliToolSnippet, set: (value) => { _clipCliToolSnippet = value; } },
+  _cliToolResultText: { enumerable: true, get: () => _cliToolResultText, set: (value) => { _cliToolResultText = value; } },
+  _cliLooksLikePatchDiff: { enumerable: true, get: () => _cliLooksLikePatchDiff, set: (value) => { _cliLooksLikePatchDiff = value; } },
+  _cliToolResultSnippet: { enumerable: true, get: () => _cliToolResultSnippet, set: (value) => { _cliToolResultSnippet = value; } },
+  _prefixedCliDiffLines: { enumerable: true, get: () => _prefixedCliDiffLines, set: (value) => { _prefixedCliDiffLines = value; } },
+  _firstOwnedValue: { enumerable: true, get: () => _firstOwnedValue, set: (value) => { _firstOwnedValue = value; } },
+  _cliPatchSnippetFromArgs: { enumerable: true, get: () => _cliPatchSnippetFromArgs, set: (value) => { _cliPatchSnippetFromArgs = value; } },
+  _cliToolCardSnippet: { enumerable: true, get: () => _cliToolCardSnippet, set: (value) => { _cliToolCardSnippet = value; } },
+  _cliToolCardHasDiffSnippet: { enumerable: true, get: () => _cliToolCardHasDiffSnippet, set: (value) => { _cliToolCardHasDiffSnippet = value; } },
+  _assistantToolAnchorIdxForMessage: { enumerable: true, get: () => _assistantToolAnchorIdxForMessage, set: (value) => { _assistantToolAnchorIdxForMessage = value; } },
+  _toolArgsSnapshot: { enumerable: true, get: () => _toolArgsSnapshot, set: (value) => { _toolArgsSnapshot = value; } },
+  _captureMessageScrollSnapshot: { enumerable: true, get: () => _captureMessageScrollSnapshot, set: (value) => { _captureMessageScrollSnapshot = value; } },
+  _restorePinnedMessageScrollSnapshot: { enumerable: true, get: () => _restorePinnedMessageScrollSnapshot, set: (value) => { _restorePinnedMessageScrollSnapshot = value; } },
+  _restoreMessageScrollSnapshot: { enumerable: true, get: () => _restoreMessageScrollSnapshot, set: (value) => { _restoreMessageScrollSnapshot = value; } },
+  _liftMobileAnchorSuppression: { enumerable: true, get: () => _liftMobileAnchorSuppression, set: (value) => { _liftMobileAnchorSuppression = value; } },
+  _bindMobileAnchorTransitionExtender: { enumerable: true, get: () => _bindMobileAnchorTransitionExtender, set: (value) => { _bindMobileAnchorTransitionExtender = value; } },
+  _desktopAnchorRealignDelta: { enumerable: true, get: () => _desktopAnchorRealignDelta, set: (value) => { _desktopAnchorRealignDelta = value; } },
+  _liveRunStatusTimers: { enumerable: true, get: () => _liveRunStatusTimers },
+  _sessionHtmlCache: { enumerable: true, get: () => _sessionHtmlCache },
+  _transparentRevealedTurns: { enumerable: true, get: () => _transparentRevealedTurns },
+  _MOBILE_ANCHOR_BASE_SETTLE_MS: { enumerable: true, get: () => _MOBILE_ANCHOR_BASE_SETTLE_MS },
+  _MOBILE_ANCHOR_POST_TRANSITION_MS: { enumerable: true, get: () => _MOBILE_ANCHOR_POST_TRANSITION_MS },
+  _MOBILE_ANCHOR_MAX_HOLD_MS: { enumerable: true, get: () => _MOBILE_ANCHOR_MAX_HOLD_MS },
+  _liveRunStatusTokens: { enumerable: true, get: () => _liveRunStatusTokens, set: (value) => { _liveRunStatusTokens = value; } },
+  _liveRunStatusSessionId: { enumerable: true, get: () => _liveRunStatusSessionId, set: (value) => { _liveRunStatusSessionId = value; } },
+  _sessionHtmlCacheSid: { enumerable: true, get: () => _sessionHtmlCacheSid, set: (value) => { _sessionHtmlCacheSid = value; } },
+  _mobileAnchorSuppressReleaseTimer: { enumerable: true, get: () => _mobileAnchorSuppressReleaseTimer, set: (value) => { _mobileAnchorSuppressReleaseTimer = value; } },
+  _mobileAnchorSuppressRafId: { enumerable: true, get: () => _mobileAnchorSuppressRafId, set: (value) => { _mobileAnchorSuppressRafId = value; } },
+  _mobileAnchorTransitionListenerBound: { enumerable: true, get: () => _mobileAnchorTransitionListenerBound, set: (value) => { _mobileAnchorTransitionListenerBound = value; } },
+  _mobileAnchorSuppressArmedAt: { enumerable: true, get: () => _mobileAnchorSuppressArmedAt, set: (value) => { _mobileAnchorSuppressArmedAt = value; } },
+  _mobileAnchorMaxHoldTimer: { enumerable: true, get: () => _mobileAnchorMaxHoldTimer, set: (value) => { _mobileAnchorMaxHoldTimer = value; } },
 });
+Object.freeze(compatibilityBindings);
+export { compatibilityBindings };

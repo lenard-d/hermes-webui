@@ -17,11 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS_PATH = ROOT / "static" / "ui.js"
+UI_JS_PATH = ROOT / "static" / "modules" / "ui" / "index.js"
 PHASE0_DOC_PATH = (
     ROOT / "docs" / "architecture" / "stable-assistant-turn-anchor-phase0.md"
 )
@@ -33,7 +33,7 @@ def _read_required_text(path: Path, label: str) -> str:
 
 
 def _ui_js() -> str:
-    assert UI_JS_PATH.exists(), f"static/ui.js not found at {UI_JS_PATH}"
+    assert UI_JS_PATH.exists(), f"native UI entrypoint not found at {UI_JS_PATH}"
     return family_source("ui")
 
 
@@ -421,6 +421,7 @@ def test_render_messages_keeps_anchor_owned_turn_out_of_legacy_activity_rebuilds
     )
     script = textwrap.dedent(
         f"""
+        {UI_TEST_BINDING_PROXIES}
         class FakeClassList {{
           constructor(el) {{ this.el = el; }}
           _set() {{ return new Set(String(this.el.className || '').split(/\\s+/).filter(Boolean)); }}

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_TEST_BINDING_PROXIES, family_source
 
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
@@ -57,7 +57,7 @@ function extractBody(startMarker, endMarker, startFrom = 0) {{
   if (end < 0) throw new Error(endMarker + ' not found');
   return src.slice(start + startMarker.length, end);
 }}
-"""
+""" + UI_TEST_BINDING_PROXIES
 
 
 def test_recycled_assistant_turn_reuse_clears_live_anchor_attrs():
