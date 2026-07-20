@@ -21,9 +21,10 @@ model picker rebuilds immediately.
 
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_source
-
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from tests.frontend_asset_contract import family_source
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -54,42 +55,83 @@ def _extract_function_body(src: str, signature: str) -> str:
 
 
 class TestRefreshRouteExists:
-    """The POST /api/models/refresh route must exist in routes.py and follow
-    the same input validation pattern as /api/providers/delete."""
+    """The refresh route owner validates and invalidates provider caches."""
+
+    @staticmethod
+    def _context(*, clear_live_models_cache=lambda: None):
+        return {
+            "_clear_live_models_cache": clear_live_models_cache,
+            "_handle_sessions_cleanup": lambda *_args, **_kwargs: None,
+            "bad": lambda _handler, error, status=400: {
+                "status": status,
+                "error": error,
+            },
+            "j": lambda _handler, payload, **_kwargs: payload,
+            "remove_provider_key": lambda *_args, **_kwargs: None,
+            "set_hermes_default_model": lambda *_args, **_kwargs: None,
+            "set_provider_key": lambda *_args, **_kwargs: None,
+            "set_reasoning_display": lambda *_args, **_kwargs: None,
+            "set_reasoning_effort": lambda *_args, **_kwargs: None,
+        }
 
     def test_route_branch_present(self):
-        src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-        assert '"/api/models/refresh"' in src, (
-            "POST /api/models/refresh route missing from api/routes.py. "
-            "Without it, the Refresh Models button 404s (#3546)."
+        from api.http.context import UNHANDLED
+        from api.http.routes import provider_mutations
+
+        result = provider_mutations.handle_post(
+            object(),
+            urlsplit("/api/models/refresh"),
+            {"provider": "openai"},
+            None,
+            self._context(),
         )
+        assert result is not UNHANDLED
 
     def test_route_validates_provider_param(self):
-        src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-        idx = src.find('"/api/models/refresh"')
-        block = src[idx : idx + 500]
-        assert "provider" in block and "bad(handler" in block, (
-            "/api/models/refresh must validate that 'provider' is present "
-            "and return 400 via bad() when missing."
+        from api.http.routes import provider_mutations
+
+        result = provider_mutations.handle_post(
+            object(),
+            urlsplit("/api/models/refresh"),
+            {},
+            None,
+            self._context(),
+        )
+        assert result == {"status": 400, "error": "provider is required"}
+
+    def test_route_calls_invalidate_provider_models_cache(self, monkeypatch):
+        import api.config as config
+        from api.http.routes import provider_mutations
+
+        invalidated = []
+        live_cache_clears = []
+        monkeypatch.setattr(
+            config, "invalidate_provider_models_cache", invalidated.append
         )
 
-    def test_route_calls_invalidate_provider_models_cache(self):
-        src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-        idx = src.find('"/api/models/refresh"')
-        block = src[idx : idx + 500]
-        assert "invalidate_provider_models_cache" in block, (
-            "/api/models/refresh must call invalidate_provider_models_cache "
-            "to bust the per-provider TTL cache."
+        provider_mutations.handle_post(
+            object(),
+            urlsplit("/api/models/refresh"),
+            {"provider": "  OpenAI  "},
+            None,
+            self._context(
+                clear_live_models_cache=lambda: live_cache_clears.append(True)
+            ),
         )
+        assert invalidated == ["openai"]
+        assert live_cache_clears == [True]
 
     def test_route_returns_ok_with_provider(self):
-        src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-        idx = src.find('"/api/models/refresh"')
-        block = src[idx : idx + 500]
-        assert '"ok"' in block and '"provider"' in block, (
-            "/api/models/refresh must return {ok: true, provider: provider_id} "
-            "so the frontend can confirm the operation succeeded."
+        from api.http.routes import provider_mutations
+
+        result = provider_mutations.handle_post(
+            object(),
+            urlsplit("/api/models/refresh"),
+            {"provider": "Anthropic"},
+            None,
+            self._context(),
         )
+        assert result == {"ok": True, "provider": "anthropic"}
 
 
 class TestFrontendRefreshPath:

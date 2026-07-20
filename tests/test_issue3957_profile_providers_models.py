@@ -26,7 +26,9 @@ The fix:
 import os
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import api.config as config
 import api.profiles as profiles
@@ -363,36 +365,92 @@ def test_active_request_readonly_scope_blocks_pool_env_seed(monkeypatch, tmp_pat
     assert (work_home / "auth.json").exists() is False
 
 
-def test_providers_and_models_routes_wrap_in_profile_env():
-    """The two read routes are profile-scoped for non-default profiles (#3957).
+def test_provider_read_routes_execute_inside_the_required_profile_env(monkeypatch):
+    """Provider reads run inside their required profile scopes (#3957).
 
-    Structural guard: a future refactor that drops the wiring would silently
-    reintroduce the bug, so pin it at the source level.
-      - /api/providers and /api/provider/quota wrap the synchronous read in
-        profile_env_for_active_request_readonly.
-      - /api/models/live stays on the mirrored profile_env_for_active_request
-        path because provider_model_ids() still delegates into agent helpers
-        that read process env / HERMES_HOME directly.
-      - /api/models relies on get_available_models() using the mirrored request
-        scope for the budget<=0 sync rebuild plus profile_scope_for_detached_worker
-        for the detached rebuild worker (the request-thread wrapper cannot reach
-        the worker thread — Codex CORE finding).
+    ``/api/providers`` and quota reads use the readonly scope, while live model
+    discovery keeps the mirrored scope required by agent helpers. The model
+    catalog's synchronous and detached rebuild scopes are covered by the
+    behavior tests below rather than by inspecting implementation strings.
     """
-    routes_src = Path(profiles.__file__).resolve().parent.parent.joinpath("routes.py").read_text(
-        encoding="utf-8"
+    import api.routes as routes
+
+    active_scope = []
+    entered_scopes = []
+
+    @contextmanager
+    def _scope(kind, reason, *, logger_override=None):
+        entered_scopes.append((kind, reason, logger_override))
+        active_scope.append((kind, reason))
+        try:
+            yield
+        finally:
+            active_scope.pop()
+
+    @contextmanager
+    def _readonly(reason, *, logger_override=None):
+        with _scope("readonly", reason, logger_override=logger_override):
+            yield
+
+    @contextmanager
+    def _mirrored(reason, *, logger_override=None):
+        with _scope("mirrored", reason, logger_override=logger_override):
+            yield
+
+    monkeypatch.setattr(profiles, "profile_env_for_active_request_readonly", _readonly)
+    monkeypatch.setattr(profiles, "profile_env_for_active_request", _mirrored)
+    monkeypatch.setattr(
+        routes, "_handle_extension_sidecar_proxy", lambda *_args, **_kwargs: False
     )
-    assert 'with profile_env_for_active_request("/api/models/live"' in routes_src
-    assert "profile_env_for_active_request_readonly" in routes_src
-    catalog_src = (
-        Path(config.__file__).resolve().parent / "model_catalog.py"
-    ).read_text(encoding="utf-8")
-    assert "active_profile_scope" in catalog_src
-    assert "detached_profile_scope" in catalog_src
-    cache_src = (
-        Path(config.__file__).resolve().parent
-        / "model_cache.py"
-    ).read_text(encoding="utf-8")
-    assert "_get_models_cache_path" in cache_src
+    monkeypatch.setattr(
+        routes, "_guard_request_session_visibility", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+
+    logger = object()
+    monkeypatch.setattr(routes, "logger", logger)
+
+    def _assert_scope(kind, reason, payload):
+        assert active_scope == [(kind, reason)]
+        return payload
+
+    monkeypatch.setattr(
+        routes,
+        "_handle_live_models",
+        lambda _handler, _parsed: _assert_scope(
+            "mirrored", "/api/models/live", {"models": []}
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "get_provider_quota",
+        lambda provider, *, refresh=False: _assert_scope(
+            "readonly",
+            "/api/provider/quota",
+            {"provider": provider, "refresh": refresh},
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "get_providers",
+        lambda: _assert_scope(
+            "readonly", "/api/providers", {"providers": []}
+        ),
+    )
+
+    assert routes.handle_get(object(), urlsplit("/api/providers")) == {"providers": []}
+    assert routes.handle_get(
+        object(),
+        urlsplit("/api/provider/quota?provider=openai&refresh=1"),
+    ) == {"provider": "openai", "refresh": True}
+    assert routes.handle_get(
+        object(), urlsplit("/api/models/live?provider=openai")
+    ) == {"models": []}
+    assert entered_scopes == [
+        ("readonly", "/api/providers", logger),
+        ("readonly", "/api/provider/quota", logger),
+        ("mirrored", "/api/models/live", logger),
+    ]
 
 
 def test_models_sync_rebuild_uses_legacy_mirrored_env(monkeypatch, tmp_path):
