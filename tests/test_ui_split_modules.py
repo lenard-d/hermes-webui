@@ -111,7 +111,7 @@ def test_primary_ui_interfaces_have_one_authoritative_owner():
         "showWhatsNewSummary": "update-summary.js",
         "renderMd": "markdown-renderer.js",
         "renderMessages": "renderer.js",
-        "buildToolCard": "tool-worklog.js",
+        "buildToolCard": "tool-card-presentation.js",
         "renderFileTree": "workspace-tree.js",
         "uploadPendingFiles": "upload-transport.js",
     }

@@ -3,7 +3,8 @@ import { _fmtTokens, _formatFirstToken, _formatTurnDuration } from './composer-c
 import { isCompactWorklogMode, isTransparentStream } from './activity-presentation.js';
 import { _assistantTurnBlocks } from './assistant-turn-presentation.js';
 import { S } from './state.js';
-import { _applyTransparentRowFading, _materializeDeferredWorklogRows, _renderTransparentTurnFooter, _transparentTurnCollapsedStates, _wireTransparentTurnToggle } from './transparent-worklog.js';
+import { _materializeDeferredWorklogRows } from './worklog-disclosure.js';
+import { _applyTransparentRowFading, _renderTransparentTurnFooter, _transparentTurnCollapsedStates, _wireTransparentTurnToggle } from './transparent-turn-presentation.js';
 
 // Applies metadata and safety invariants after message and Activity nodes exist.
 // Callers provide the render-owned maps; this module owns all settled-turn

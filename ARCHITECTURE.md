@@ -180,6 +180,20 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         mobile-composer-config.js Narrow-layout composer configuration panel owner
         message-scroll-follow.js Transcript scroll intent, pinning, cue, and PWA gesture owner
         activity-timing.js Worklog duration, compression timer, and event timestamp owner
+        tool-identity.js Stable tool-call and disclosure identities shared by renderers
+        worklog-disclosure-identity.js Dependency-light disclosure-key hashing leaf
+        tool-call-presentation.js Tool classification, redaction, labels, and compact summary copy
+        tool-card-presentation.js Tool-card markup, safe previews, result detail, and diff expansion
+        worklog-tool-groups.js Compact Worklog tool grouping, summaries, and running-state projection
+        live-tool-worklog.js Session/stream-guarded live tool ingress, replacement, cleanup, and shell lifecycle
+        transparent-turn-presentation.js Transparent-turn collapse, live fading, and settled footer owner
+        worklog-disclosure.js Persisted disclosure intent plus deferred Worklog materialization
+        worklog-reasoning.js Reasoning projection and live Worklog prose-shell ownership
+        worklog-step-presentation.js Ordered reasoning/tool-step insertion with stable tool dedupe
+        anchor-scene-presentation.js Shared activity_scene_v1 row normalization and Compact/Transparent DOM projection
+        live-anchor-reconciliation.js Live Anchor ownership, duplicate-rail cleanup, scroll guards, and reasoning fallback
+        tool-worklog.js Stable compatibility interface for the extracted tool owners
+        transparent-worklog.js Stable compatibility interface for Worklog and Transparent Stream owners
         system-health-monitor.js Host resource rendering, visibility-aware polling, and timer cleanup
         agent-health-monitor.js Gateway heartbeat alert, restart action, dismissal, and polling lifecycle
         update-banner.js Available-update status and banner presentation
@@ -815,6 +829,15 @@ The main directly loaded families are:
    cache identity, `cli-tool-presentation.js` owns CLI result projection, and
    `message-scroll-snapshot.js` owns scroll capture and restoration.
    `live-activity.js` remains only as the stable compatibility seam.
+   Worklog rendering follows the same ownership rule. Tool safety/labels and
+   card markup are leaf presentation modules; Compact grouping and live ingress
+   have separate lifecycle owners. Transparent turn chrome, disclosure state,
+   reasoning projection, ordered Worklog steps, Anchor-scene projection, and
+   live Anchor reconciliation are independently importable modules.
+   `tool-worklog.js` and `transparent-worklog.js` remain stable re-export
+   interfaces only. Both display modes still project the same
+   `activity_scene_v1`; DOM and disclosure state remain renderer concerns rather
+   than competing semantic owners.
    Workspace UI behavior follows the same native-module pattern: preferences,
    drag/move state, file actions, tree rendering, pending-upload presentation,
    session-scoped progress, and upload transport have separate owners;

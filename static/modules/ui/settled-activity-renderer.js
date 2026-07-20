@@ -5,8 +5,10 @@ import { _assistantTurnBlocks } from './assistant-turn-presentation.js';
 import { _assistantToolAnchorIdxForMessage, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
 import { _legacySettledFallbackHasToolMetadata } from './render-support.js';
 import { S } from './state.js';
-import { _syncToolCallGroupSummary, _toolWorklogListEl, buildToolCard } from './tool-worklog.js';
-import { _appendWorklogStep, _worklogReasonHtmlFromAnchor } from './transparent-worklog.js';
+import { buildToolCard } from './tool-card-presentation.js';
+import { _syncToolCallGroupSummary, _toolWorklogListEl } from './worklog-tool-groups.js';
+import { _appendWorklogStep } from './worklog-step-presentation.js';
+import { _worklogReasonHtmlFromAnchor } from './worklog-reasoning.js';
 
 // Rebuilds durable Activity/Worklog history from persisted messages and tool
 // metadata after the transcript rows have been recreated. This module owns the

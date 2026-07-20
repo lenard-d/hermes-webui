@@ -4,7 +4,7 @@ import { normalizeLiveActivityGroupPlacement } from './anchor-scenes.js';
 import { _assistantTurnBlocks } from './assistant-turn-presentation.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
 import { $, INFLIGHT, S } from './state.js';
-import { _dedupeLiveProcessedWorklogAnchors } from './transparent-worklog.js';
+import { _dedupeLiveProcessedWorklogAnchors } from './live-anchor-reconciliation.js';
 
 function snapshotLiveTurnHtmlForSession(sid){
   // Keep the DOM snapshot memory-only. Persisted INFLIGHT state intentionally

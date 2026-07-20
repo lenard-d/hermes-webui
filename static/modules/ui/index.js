@@ -53,8 +53,20 @@ import * as renderSupport from './render-support.js';
 import * as settledActivityRenderer from './settled-activity-renderer.js';
 import * as settledTurnFinalization from './settled-turn-finalization.js';
 import * as state from './state.js';
+import * as toolIdentity from './tool-identity.js';
+import * as toolCallPresentation from './tool-call-presentation.js';
+import * as toolCardPresentation from './tool-card-presentation.js';
+import * as worklogDisclosureIdentity from './worklog-disclosure-identity.js';
+import * as worklogToolGroups from './worklog-tool-groups.js';
+import * as liveToolWorklog from './live-tool-worklog.js';
 import * as toolWorklog from './tool-worklog.js';
 import * as thinkingLifecycle from './thinking-lifecycle.js';
+import * as transparentTurnPresentation from './transparent-turn-presentation.js';
+import * as worklogDisclosure from './worklog-disclosure.js';
+import * as worklogReasoning from './worklog-reasoning.js';
+import * as worklogStepPresentation from './worklog-step-presentation.js';
+import * as anchorScenePresentation from './anchor-scene-presentation.js';
+import * as liveAnchorReconciliation from './live-anchor-reconciliation.js';
 import * as transparentWorklog from './transparent-worklog.js';
 import * as topbarPresentation from './topbar-presentation.js';
 import * as toastNotifications from './toast-notifications.js';
@@ -127,7 +139,19 @@ const modules = Object.assign(Object.create(null), {
   renderer,
   settledActivityRenderer,
   settledTurnFinalization,
+  toolIdentity,
+  toolCallPresentation,
+  toolCardPresentation,
+  worklogDisclosureIdentity,
+  worklogToolGroups,
+  liveToolWorklog,
   toolWorklog,
+  transparentTurnPresentation,
+  worklogDisclosure,
+  worklogReasoning,
+  worklogStepPresentation,
+  anchorScenePresentation,
+  liveAnchorReconciliation,
   contentPostprocessing,
   workspacePreferences,
   workspaceDragDrop,

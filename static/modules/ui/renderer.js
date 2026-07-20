@@ -14,8 +14,8 @@ import { _captureWorklogDetailDisclosureState, _decorateTransparentEventRow, _re
 import { _ERR_MSG_RE, _assistantMessageBelongsInWorklog, _assistantReasoningPayloadText, _assistantRoleHtml, _assistantThinkingBelongsInWorklog, _assistantTurnBlocks, _assistantTurnFinalVisibleContentMap, _assistantTurnVisibleContentMap, _createAssistantTurn, _fmtDateSep, _formatTurnTps, _isAssistantEmptyPlaceholderContent, _setLatestAssistantTurnLandmark, _worklogReasoningTextFromMessage, isTpsDisplayEnabled, msgContent } from './assistant-turn-presentation.js';
 import { _assistantTurnAnchorSettledFinalAnswer, _collectToolResultSnippetsByTid, _maybeRecoverVirtualizedBlankViewport, _reanchorPinnedTailAfterRender, _scrollAfterMessageRender, _stripAttachedFilesMarkerForDisplay, _transparentOrderedDisplayText, _transparentOrderedToolCall, _transparentStreamOrderedParts } from './render-support.js';
 import { $, INFLIGHT, S, _activeCompressionRecoveryPayload, _compressionRecoveryHtml, _currentMessageVirtualWindow, _getVisibleMessagesWithIdx, _messageRenderWindowSid, _messageSessionIndexForRawIdx, _messageViewportAnchorKeyForMessage, _messageVirtualKeepTailCount, _messageVirtualSpacer, _messageVirtualWindowKey, _messageVirtualWindowKeyFor, _msgNodeRecycleEnabled, _recycleResetAttrs, _recycleStash, _resetMessageRenderWindow, _setCompressionSessionLock, _statusCardHtml, _stripWorkspaceDisplayPrefix, esc } from './state.js';
-import { buildToolCard } from './tool-worklog.js';
-import { _rehydrateDeferredWorklogsFromCache } from './transparent-worklog.js';
+import { buildToolCard } from './tool-card-presentation.js';
+import { _rehydrateDeferredWorklogsFromCache } from './worklog-disclosure.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
 import { compatibilityBindings as messageRenderCacheBindings } from './message-render-cache.js';
 import { compatibilityBindings as stateBindings } from './state.js';

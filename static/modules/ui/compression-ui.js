@@ -7,8 +7,10 @@ import { closeCurrentLiveActivityGroup, _moveLiveRunStatusToTurnEnd } from './li
 import { _captureMessageScrollSnapshot } from './message-scroll-snapshot.js';
 import { _restoreMessageScrollSnapshotSameFrame } from './render-support.js';
 import { $, S, _compressionSessionLock, _setCompressionSessionLock, esc } from './state.js';
-import { _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
-import { _activityKeyForLiveTurn, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
+import { _syncToolCallGroupSummary, _toolWorklogListEl } from './worklog-tool-groups.js';
+import { _activityKeyForLiveTurn } from './worklog-disclosure.js';
+import { ensureLiveWorklogContainer } from './worklog-reasoning.js';
+import { isLiveAnchorActivitySceneOwner } from './live-anchor-reconciliation.js';
 
 function _compressionStateForCurrentSession(){
   const state=window._compressionUi;

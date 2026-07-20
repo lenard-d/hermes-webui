@@ -5,8 +5,11 @@ import { showToast } from './toast-notifications.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
 import { _renderThinkingInto } from './thinking-lifecycle.js';
 import { S, esc } from './state.js';
-import { _redactToolTargetLabel, _shortToolLabel, _toolActionKind, _toolCardAllowsDetail, _toolVisibleTargetLabel, buildToolCard } from './tool-worklog.js';
-import { _anchorSceneRowsForRendering, _anchorSceneToolCallFromRow, _applyTransparentRowFading, _wireTransparentTurnToggle } from './transparent-worklog.js';
+import { _redactToolTargetLabel, _shortToolLabel, _toolActionKind, _toolVisibleTargetLabel } from './tool-call-presentation.js';
+import { _toolCardAllowsDetail, buildToolCard } from './tool-card-presentation.js';
+import { _anchorSceneRowsForRendering, _anchorSceneToolCallFromRow } from './anchor-scene-presentation.js';
+import { _applyTransparentRowFading, _wireTransparentTurnToggle } from './transparent-turn-presentation.js';
+import { hashWorklogDetailKey } from './worklog-disclosure-identity.js';
 
 function _worklogDetailsExpandedDefault(){
   return window._worklogDetailsExpandedByDefault===true;
@@ -29,13 +32,7 @@ function _worklogDetailTextKey(text, maxLen){
   return String(text||'').replace(/\s+/g,' ').trim().slice(0,maxLen||160);
 }
 function _worklogDetailHashKey(value){
-  const s=String(value||'');
-  let hash=2166136261;
-  for(let i=0;i<s.length;i++){
-    hash^=s.charCodeAt(i);
-    hash=Math.imul(hash,16777619)>>>0;
-  }
-  return hash.toString(36);
+  return hashWorklogDetailKey(value);
 }
 function _worklogDetailBaseKey(el){
   if(!el||!el.classList) return '';

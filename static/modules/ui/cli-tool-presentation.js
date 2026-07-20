@@ -1,5 +1,5 @@
 import { _assistantMessageHasVisibleContent, _assistantReasoningPayloadText } from './assistant-turn-presentation.js';
-import { _redactToolTargetLabel } from './tool-worklog.js';
+import { _redactToolTargetLabel } from './tool-call-presentation.js';
 
 function _clipCliToolSnippet(text, maxLen=20000){
   const s=String(text||'');

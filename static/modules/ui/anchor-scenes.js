@@ -7,9 +7,12 @@ import { _attachCopyButton, _captureWorklogDetailDisclosureState, _decorateTrans
 import { _assistantAnchorSceneFinalAnswerText, _assistantTurnBlocks, _createAssistantTurn, msgContent } from './assistant-turn-presentation.js';
 import { _restoreMessageScrollSnapshotSameFrame } from './render-support.js';
 import { $, S, esc } from './state.js';
-import { _findLatestVisibleLiveAssistant, _findLatestVisibleLiveAssistantByBurst, _findLiveAssistantAnchorForSegment, _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
-import { _activityKeyForLiveTurn, _anchorSceneLastNonTerminalWorkRowIndex, _anchorSceneRowTimestampSeconds, _anchorSceneRowsForRendering, _anchorSceneTransparentNodeForRow, _anchorSceneWorklogGroup, _copyActivityDisclosureState, _dedupeLiveProcessedWorklogAnchors, _liveActivityUserExpanded, _prepareLiveAnchorScrollRebuildGuard, _projectLiveAnchorActivitySceneForStream, _readActivityDisclosureState, _renderAnchorSceneRowsIntoWorklog, _resetMismatchedLiveAssistantTurnForSession, _syncWorklogReasonFromAnchor, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
-import { compatibilityBindings as transparentWorklogBindings } from './transparent-worklog.js';
+import { _findLatestVisibleLiveAssistant, _findLatestVisibleLiveAssistantByBurst, _findLiveAssistantAnchorForSegment } from './live-tool-worklog.js';
+import { _syncToolCallGroupSummary, _toolWorklogListEl } from './worklog-tool-groups.js';
+import { _anchorSceneLastNonTerminalWorkRowIndex, _anchorSceneRowTimestampSeconds, _anchorSceneRowsForRendering, _anchorSceneTransparentNodeForRow, _anchorSceneWorklogGroup, _renderAnchorSceneRowsIntoWorklog } from './anchor-scene-presentation.js';
+import { _activityKeyForLiveTurn, _copyActivityDisclosureState, _liveActivityUserExpanded, _readActivityDisclosureState, compatibilityBindings as disclosureBindings } from './worklog-disclosure.js';
+import { _dedupeLiveProcessedWorklogAnchors, _prepareLiveAnchorScrollRebuildGuard, _projectLiveAnchorActivitySceneForStream, _resetMismatchedLiveAssistantTurnForSession, isLiveAnchorActivitySceneOwner } from './live-anchor-reconciliation.js';
+import { _syncWorklogReasonFromAnchor, ensureLiveWorklogContainer } from './worklog-reasoning.js';
 
 function renderLiveAnchorActivityScene(streamId, scene, opts){
   opts=opts||{};
@@ -861,7 +864,7 @@ function _syncLiveWorklogReasonsForAnchor(anchor, displayTextOverride){
   if(group) _syncWorklogReasonFromAnchor(group, anchor, displayTextOverride);
 }
 function _clearLiveActivityUserIntent(){
-  transparentWorklogBindings._liveActivityUserExpanded = undefined;
+  disclosureBindings._liveActivityUserExpanded = undefined;
 }
 function ensureActivityGroup(inner, opts){
   opts=opts||{};

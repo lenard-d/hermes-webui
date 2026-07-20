@@ -4,8 +4,9 @@ import { _firstValidTimestampSeconds, _scrollPinned } from './composer-controls.
 import { _decorateTransparentEventRow, _syncTransparentEventControls, _thinkingActivityNode, _worklogDetailsExpandedDefault, isFinalAnswerOnlyMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
 import { _assistantTurnBlocks, _createAssistantTurn } from './assistant-turn-presentation.js';
 import { $, S, esc } from './state.js';
-import { _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
-import { _resetMismatchedLiveAssistantTurnForSession, _updateLiveAnchorReasoningRowForFallback, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
+import { _syncToolCallGroupSummary, _toolWorklogListEl } from './worklog-tool-groups.js';
+import { _resetMismatchedLiveAssistantTurnForSession, _updateLiveAnchorReasoningRowForFallback, isLiveAnchorActivitySceneOwner } from './live-anchor-reconciliation.js';
+import { ensureLiveWorklogContainer } from './worklog-reasoning.js';
 
 function _thinkingMarkup(text=''){
   const clean=_sanitizeThinkingDisplayText(text);

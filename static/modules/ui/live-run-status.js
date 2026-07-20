@@ -2,7 +2,7 @@ import { isCompactWorklogMode } from './activity-presentation.js';
 import { _assistantTurnBlocks, _createAssistantTurn } from './assistant-turn-presentation.js';
 import { _fmtTokens } from './composer-controls.js';
 import { $, S } from './state.js';
-import { _finalizeLiveActivityDisclosureGroup } from './transparent-worklog.js';
+import { _finalizeLiveActivityDisclosureGroup } from './worklog-disclosure.js';
 
 
 // ── LiveFooter timer (module-level singleton) ──────────────────────────────
