@@ -21,14 +21,7 @@ Covers:
 """
 from tests.frontend_asset_contract import family_source
 
-import pathlib
 import re
-
-REPO = pathlib.Path(__file__).parent.parent
-
-
-def read(path):
-    return (REPO / path).read_text(encoding="utf-8")
 
 
 def _locale_count(src: str) -> int:
@@ -225,19 +218,23 @@ def test_cancel_marker_flagged_as_error_to_skip_in_api_history():
     cancelled...") — a behavioral regression introduced when this PR started
     persisting the marker to the session.
     """
-    src = read("api/streaming_parts/terminal_outcomes.py")
-    idx = src.find("'content': api._cancelled_turn_content(message")
-    assert idx != -1, (
-        "cancel marker content writer not found in the streaming terminal-outcome owner"
+    from types import SimpleNamespace
+
+    from api.streaming import _persist_cancelled_turn
+
+    session = SimpleNamespace(
+        active_stream_id="stream-1",
+        messages=[],
+        pending_attachments=[],
+        pending_started_at=None,
+        pending_user_message=None,
+        pending_user_source=None,
+        profile="test",
     )
 
-    # Walk back to the start of the dict literal (opening brace)
-    brace_open = src.rfind("{", 0, idx)
-    brace_close = src.find("}", idx)
-    assert brace_open != -1 and brace_close != -1, "couldn't locate cancel marker dict"
+    _persist_cancelled_turn(session)
 
-    marker_dict = src[brace_open:brace_close + 1]
-    assert "_error" in marker_dict and "True" in marker_dict, (
+    assert session.messages[-1]["_error"] is True, (
         "cancel marker is missing _error: True — it will leak into the agent's "
         "conversation_history via _sanitize_messages_for_api() on the next turn. "
         "The API-message sanitizer must keep filtering persisted error markers."
