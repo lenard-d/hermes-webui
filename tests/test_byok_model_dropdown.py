@@ -331,7 +331,8 @@ class TestLiveModelsCustomProviderFallback:
     def test_named_custom_live_fetch_uses_matching_entry_endpoint(self, monkeypatch):
         """custom:<slug> live fetch must use that entry, not the active model config."""
         import json
-        import urllib.request
+        import socket
+        import api.routes as routes
 
         requests = []
 
@@ -345,7 +346,7 @@ class TestLiveModelsCustomProviderFallback:
             def read(self):
                 return json.dumps({"data": [{"id": "right-live-model"}]}).encode("utf-8")
 
-        def fake_urlopen(req, timeout=None):
+        def fake_open(req, *, pinned_addresses, timeout):
             requests.append(
                 {
                     "url": req.full_url,
@@ -374,7 +375,14 @@ class TestLiveModelsCustomProviderFallback:
                 },
             ],
         }
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(
+            socket,
+            "getaddrinfo",
+            lambda *_args, **_kwargs: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 443))
+            ],
+        )
+        monkeypatch.setattr(routes, "_open_live_models_request", fake_open)
 
         resp = self._call_live_models(monkeypatch, cfg, "custom:rightcode-codex")
 
@@ -421,7 +429,8 @@ class TestLiveModelsCustomProviderFallback:
     def test_standard_provider_live_fetch_can_use_matching_top_level_key(self, monkeypatch):
         """The active provider's top-level key remains valid for that same provider."""
         import json
-        import urllib.request
+        import socket
+        import api.routes as routes
 
         requests = []
 
@@ -435,7 +444,7 @@ class TestLiveModelsCustomProviderFallback:
             def read(self):
                 return json.dumps({"data": [{"id": "mistral-live-model"}]}).encode("utf-8")
 
-        def fake_urlopen(req, timeout=None):
+        def fake_open(req, *, pinned_addresses, timeout):
             requests.append(
                 {
                     "url": req.full_url,
@@ -452,7 +461,14 @@ class TestLiveModelsCustomProviderFallback:
             },
             "providers": {"mistralai": {}},
         }
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(
+            socket,
+            "getaddrinfo",
+            lambda *_args, **_kwargs: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 443))
+            ],
+        )
+        monkeypatch.setattr(routes, "_open_live_models_request", fake_open)
 
         resp = self._call_live_models(monkeypatch, cfg, "mistralai")
 
@@ -468,7 +484,7 @@ class TestLiveModelsCustomProviderFallback:
     def test_standard_provider_live_fetch_allows_matching_active_provider_alias(self, monkeypatch):
         """Alias-equivalent active providers should still count as the same provider."""
         import json
-        import urllib.request
+        import socket
 
         requests = []
 
@@ -482,7 +498,7 @@ class TestLiveModelsCustomProviderFallback:
             def read(self):
                 return json.dumps({"data": [{"id": "zai-live-model"}]}).encode("utf-8")
 
-        def fake_urlopen(req, timeout=None):
+        def fake_open(req, *, pinned_addresses, timeout):
             requests.append(
                 {
                     "url": req.full_url,
@@ -502,7 +518,14 @@ class TestLiveModelsCustomProviderFallback:
         import api.config as c
         import api.routes as r
 
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(
+            socket,
+            "getaddrinfo",
+            lambda *_args, **_kwargs: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 443))
+            ],
+        )
+        monkeypatch.setattr(r, "_open_live_models_request", fake_open)
         monkeypatch.setattr(c, "get_config", lambda: cfg)
         monkeypatch.setattr(r, "j", lambda _handler, payload, **_kw: payload)
         self._install_provider_model_ids(monkeypatch, lambda _p: [])

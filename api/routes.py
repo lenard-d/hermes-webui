@@ -33,7 +33,7 @@ from pathlib import Path
 from contextlib import closing
 from urllib.parse import parse_qs, quote, unquote, urljoin, urlsplit
 from urllib.error import HTTPError, URLError
-from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
+from urllib.request import HTTPHandler, HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 from api.agent_runtime import (
     AgentRuntimeChangedError,
     ensure_agent_runtime_current,
@@ -684,6 +684,246 @@ _OPENAI_COMPAT_ENDPOINTS = {
 _LIVE_MODELS_CACHE_TTL = 60.0
 _LIVE_MODELS_CACHE: dict[tuple[str, str], tuple[float, dict]] = {}
 _LIVE_MODELS_CACHE_LOCK = threading.RLock()
+_LIVE_MODELS_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _live_models_address_is_global(address: str) -> bool:
+    import ipaddress
+
+    try:
+        candidate = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    candidate = getattr(candidate, "ipv4_mapped", None) or candidate
+    return bool(candidate.is_global)
+
+
+def _live_models_address_is_loopback(address: str) -> bool:
+    import ipaddress
+
+    try:
+        candidate = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    candidate = getattr(candidate, "ipv4_mapped", None) or candidate
+    return bool(candidate.is_loopback)
+
+
+def _resolve_live_models_addresses(
+    hostname: str,
+    port: int,
+    *,
+    allow_configured_private: bool,
+    require_loopback: bool = False,
+) -> list[str]:
+    """Resolve once and return only addresses authorized for the eventual dial."""
+    try:
+        infos = _socket.getaddrinfo(hostname, port, type=_socket.SOCK_STREAM)
+    except Exception as exc:
+        raise ValueError("could not resolve live-model endpoint") from exc
+
+    addresses = []
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        address = str(sockaddr[0])
+        if require_loopback:
+            if not _live_models_address_is_loopback(address):
+                raise ValueError("live-model endpoint did not resolve to loopback")
+        elif not allow_configured_private and not _live_models_address_is_global(address):
+            raise ValueError("live-model endpoint resolved to a non-global address")
+        if address not in addresses:
+            addresses.append(address)
+    if not addresses:
+        raise ValueError("could not resolve live-model endpoint")
+    return addresses
+
+
+def _prepare_live_models_target(
+    base_url: object,
+    *,
+    append_v1: bool,
+    allow_configured_private: bool,
+) -> tuple[str, list[str]]:
+    """Validate a models base URL and bind it to one vetted DNS result.
+
+    Public endpoints are HTTPS-only and must resolve entirely to globally
+    routable addresses. Explicit ``custom_providers[]`` entries retain the
+    existing local/LAN/Docker contract, including HTTP, but are still pinned
+    to the address set resolved here. The legacy ``model.base_url`` path only
+    gets the documented localhost-over-HTTP exception.
+    """
+    raw = str(base_url or "").strip()
+    parsed = urlsplit(raw)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("live-model endpoint must use http or https")
+    if parsed.username or parsed.password:
+        raise ValueError("live-model endpoint must not contain credentials")
+    if not parsed.netloc or parsed.query or parsed.fragment:
+        raise ValueError("invalid live-model endpoint URL")
+    hostname = str(parsed.hostname or "").strip().lower()
+    if not hostname:
+        raise ValueError("live-model endpoint URL was missing a hostname")
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as exc:
+        raise ValueError("invalid live-model endpoint port") from exc
+
+    require_loopback = False
+    if parsed.scheme == "http":
+        if allow_configured_private:
+            # An explicitly configured custom provider may be a LAN, Docker,
+            # Ollama, or LM Studio endpoint. Never send a bearer over cleartext
+            # to a public address, even when the URL is configuration-owned.
+            require_loopback = False
+        elif hostname in _LIVE_MODELS_LOOPBACK_HOSTS:
+            require_loopback = True
+        else:
+            raise ValueError("public live-model endpoints must use https")
+
+    addresses = _resolve_live_models_addresses(
+        hostname,
+        port,
+        allow_configured_private=allow_configured_private,
+        require_loopback=require_loopback,
+    )
+    if parsed.scheme == "http" and allow_configured_private:
+        if any(_live_models_address_is_global(address) for address in addresses):
+            raise ValueError("public live-model endpoints must use https")
+
+    path = parsed.path.rstrip("/")
+    if append_v1 and not path.endswith("/v1"):
+        path += "/v1"
+    path += "/models"
+    return parsed._replace(path=path, query="", fragment="").geturl(), addresses
+
+
+class _NoRedirectLiveModelsHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("live-model endpoint attempted a redirect")
+
+
+class _PinnedLiveModelsHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, host, *, pinned_addresses, **kwargs):
+        self._pinned_addresses = tuple(pinned_addresses)
+        super().__init__(host, **kwargs)
+
+    def connect(self):
+        sys.audit("http.client.connect", self, self.host, self.port)
+        last_error = None
+        for address in self._pinned_addresses:
+            try:
+                self.sock = _socket.create_connection(
+                    (address, self.port), self.timeout, self.source_address
+                )
+                break
+            except OSError as exc:
+                last_error = exc
+        else:
+            if last_error is not None:
+                raise last_error
+            raise OSError("no vetted live-model endpoint address")
+        if self._tunnel_host:
+            self._tunnel()
+
+
+class _PinnedLiveModelsHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, host, *, pinned_addresses, **kwargs):
+        self._pinned_addresses = tuple(pinned_addresses)
+        super().__init__(host, **kwargs)
+
+    def connect(self):
+        sys.audit("http.client.connect", self, self.host, self.port)
+        last_error = None
+        for address in self._pinned_addresses:
+            try:
+                self.sock = _socket.create_connection(
+                    (address, self.port), self.timeout, self.source_address
+                )
+                break
+            except OSError as exc:
+                last_error = exc
+        else:
+            if last_error is not None:
+                raise last_error
+            raise OSError("no vetted live-model endpoint address")
+        try:
+            self.sock.setsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY, 1)
+        except OSError as exc:
+            if exc.errno != errno.ENOPROTOOPT:
+                raise
+        if self._tunnel_host:
+            self._tunnel()
+        server_hostname = self._tunnel_host or self.host
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=server_hostname)
+
+
+class _PinnedLiveModelsHTTPHandler(HTTPHandler):
+    def __init__(self, pinned_addresses):
+        super().__init__()
+        self._pinned_addresses = tuple(pinned_addresses)
+
+    def http_open(self, req):
+        def connection(host, **kwargs):
+            return _PinnedLiveModelsHTTPConnection(
+                host, pinned_addresses=self._pinned_addresses, **kwargs
+            )
+
+        return self.do_open(connection, req)
+
+
+class _PinnedLiveModelsHTTPSHandler(HTTPSHandler):
+    def __init__(self, pinned_addresses):
+        super().__init__()
+        self._pinned_addresses = tuple(pinned_addresses)
+
+    def https_open(self, req):
+        def connection(host, **kwargs):
+            return _PinnedLiveModelsHTTPSConnection(
+                host, pinned_addresses=self._pinned_addresses, **kwargs
+            )
+
+        return self.do_open(connection, req, context=self._context)
+
+
+def _open_live_models_request(req, *, pinned_addresses, timeout):
+    parsed = urlsplit(req.full_url)
+    pinned_handler = (
+        _PinnedLiveModelsHTTPSHandler(pinned_addresses)
+        if parsed.scheme == "https"
+        else _PinnedLiveModelsHTTPHandler(pinned_addresses)
+    )
+    opener = build_opener(
+        ProxyHandler({}),
+        _NoRedirectLiveModelsHandler(),
+        pinned_handler,
+    )
+    return opener.open(req, timeout=timeout)
+
+
+def _fetch_live_models_payload(
+    base_url: object,
+    api_key: object,
+    *,
+    timeout: float,
+    append_v1: bool,
+    allow_configured_private: bool,
+):
+    models_url, pinned_addresses = _prepare_live_models_target(
+        base_url,
+        append_v1=append_v1,
+        allow_configured_private=allow_configured_private,
+    )
+    key = str(api_key or "").strip()
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    req = Request(models_url, headers=headers)
+    with _open_live_models_request(
+        req,
+        pinned_addresses=pinned_addresses,
+        timeout=timeout,
+    ) as resp:
+        return json.loads(resp.read())
 
 
 def _active_profile_for_live_models_cache() -> str:
@@ -16143,26 +16383,17 @@ def _handle_live_models(handler, parsed):
                         pass
                 if _base_url and _api_key:
                     try:
-                        import urllib.request
-                        import json
-                        
-                        # Build the models endpoint URL
-                        # AxonHub and similar OpenAI-compat endpoints serve /v1/models
-                        _ep = _base_url.rstrip("/")
-                        # If base_url already ends with /v1, use /models; otherwise add /v1/models
-                        if _ep.endswith("/v1"):
-                            _models_url = f"{_ep}/models"
-                        else:
-                            _models_url = f"{_ep}/v1/models"
-                        
-                        _req = urllib.request.Request(
-                            _models_url,
-                            headers={"Authorization": f"Bearer {_api_key}"},
+                        _body = _fetch_live_models_payload(
+                            _base_url,
+                            _api_key,
+                            timeout=CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS,
+                            append_v1=True,
+                            # Existing product contract: a matching named custom
+                            # provider is an explicit trust decision and may target
+                            # a LAN/Docker endpoint. Legacy model.base_url is not.
+                            allow_configured_private=custom_provider_entry is not None,
                         )
-                        
-                        with urllib.request.urlopen(_req, timeout=CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS) as _resp:
-                            _body = json.loads(_resp.read())
-                        
+
                         # Parse response: {"data": [{"id": "model1", ...}, ...]}
                         if isinstance(_body, dict):
                             _data = _body.get("data", [])
@@ -16204,7 +16435,6 @@ def _handle_live_models(handler, parsed):
             _ep = _OPENAI_COMPAT_ENDPOINTS.get(provider)
             if _ep:
                 try:
-                    import urllib.request
                     _providers_cfg = cfg.get("providers") or {}
                     _prov = _providers_cfg.get(provider, {}) if isinstance(_providers_cfg, dict) else {}
                     # Only use a provider-scoped key.  A top-level model.api_key
@@ -16221,12 +16451,13 @@ def _handle_live_models(handler, parsed):
                             if _active_provider == provider:
                                 _key = _model_cfg.get("api_key")
                     if _key:
-                        _req = urllib.request.Request(
-                            f"{_ep}/models",
-                            headers={"Authorization": f"Bearer {_key}"},
+                        _body = _fetch_live_models_payload(
+                            _ep,
+                            _key,
+                            timeout=8,
+                            append_v1=False,
+                            allow_configured_private=False,
                         )
-                        with urllib.request.urlopen(_req, timeout=8) as _resp:
-                            _body = json.loads(_resp.read())
                         ids = [m.get("id", "") for m in _body.get("data", []) if m.get("id")]
                         logger.debug("Live-fetched %d models from %s /v1/models", len(ids), provider)
                 except Exception as _fetch_err:

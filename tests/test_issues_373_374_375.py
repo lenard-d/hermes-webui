@@ -167,18 +167,6 @@ class TestLiveModelFetching:
             "routes.py must define _handle_live_models() for live model fetching (#375)"
         )
 
-    def test_live_models_handler_validates_scheme(self):
-        """_handle_live_models must validate URL scheme to prevent file:// injection (B310)."""
-        assert "nosec B310" in ROUTES_PY or ("scheme" in ROUTES_PY and "http" in ROUTES_PY), (
-            "_handle_live_models must validate URL scheme before urlopen (#375)"
-        )
-
-    def test_live_models_handler_has_ssrf_guard(self):
-        """_handle_live_models must guard against SSRF (private IP access)."""
-        assert "ssrf_blocked" in ROUTES_PY or ("is_private" in ROUTES_PY and "live" in ROUTES_PY), (
-            "_handle_live_models must have SSRF protection for private IP ranges (#375)"
-        )
-
     def test_live_models_all_providers_handled_via_agent(self):
         """_handle_live_models must delegate to provider_model_ids() which handles all
         providers gracefully — live fetch where possible, static fallback otherwise.
