@@ -11,8 +11,8 @@ import queue
 import random
 import re
 import sqlite3
-import shlex
-import subprocess
+import shlex  # noqa: F401 -- late-bound streaming facade seam
+import subprocess  # noqa: F401 -- late-bound streaming facade seam
 import threading
 import time
 import traceback
@@ -91,6 +91,7 @@ from api.streaming_parts import thinking_content as _streaming_thinking
 from api.streaming_parts import terminal_outcomes as _streaming_terminal_outcomes
 from api.streaming_parts import title_generation as _streaming_titles
 from api.streaming_parts import turn_context as _streaming_turn_context
+from api.streaming_parts import webui_prefill as _streaming_webui_prefill
 from api.streaming_parts.bindings import streaming_api as _streaming_api
 
 
@@ -753,204 +754,95 @@ def _webui_ephemeral_system_prompt(
     return "\n\n".join(part for part in parts if part)
 
 
-_SECRET_SHAPED_RE = re.compile(
-    r"(?i)(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s]+|"
-    r"\b(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b|"
-    r"[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"
-)
+_SECRET_SHAPED_RE = _streaming_webui_prefill.SECRET_SHAPED_RE
 
 def _redact_prefill_status_text(text: str) -> str:
     """Return a short, non-secret diagnostic string for prefill status."""
-    clean = _SECRET_SHAPED_RE.sub("[REDACTED]", str(text or ""))
-    return " ".join(clean.split())[:240]
+    return _streaming_webui_prefill.redact_prefill_status_text(_streaming_api(), text)
 
 
 def _valid_prefill_messages(value) -> list[dict]:
     """Normalize a prefill payload to role/content messages."""
-    if not isinstance(value, list):
-        return []
-    messages: list[dict] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        role = item.get("role")
-        content = item.get("content")
-        if role not in {"system", "user", "assistant"} or not isinstance(content, str) or not content.strip():
-            continue
-        messages.append({"role": role, "content": content})
-    return messages
+    return _streaming_webui_prefill.valid_prefill_messages(_streaming_api(), value)
 
 
 def _resolve_prefill_path(raw: str) -> Path:
-    path = Path(str(raw)).expanduser()
-    if not path.is_absolute():
-        try:
-            from api.config import _get_config_path
-            path = _get_config_path().parent / path
-        except Exception:
-            path = Path.cwd() / path
-    return path
+    return _streaming_webui_prefill.resolve_prefill_path(_streaming_api(), raw)
 
 
-_PREFILL_SCRIPT_OUTPUT_LIMIT = 262_144
-_PREFILL_CONTEXT_DEFAULT_MAX_CHARS = 12_000
+_PREFILL_SCRIPT_OUTPUT_LIMIT = _streaming_webui_prefill.PREFILL_SCRIPT_OUTPUT_LIMIT
+_PREFILL_CONTEXT_DEFAULT_MAX_CHARS = (
+    _streaming_webui_prefill.PREFILL_CONTEXT_DEFAULT_MAX_CHARS
+)
 
 
 def _prefill_context_max_chars(config_data: dict) -> int:
-    raw = os.getenv("HERMES_WEBUI_PREFILL_CONTEXT_MAX_CHARS", "") or str(
-        config_data.get("webui_prefill_context_max_chars") or ""
+    return _streaming_webui_prefill.prefill_context_max_chars(
+        _streaming_api(),
+        config_data,
     )
-    try:
-        value = int(raw or _PREFILL_CONTEXT_DEFAULT_MAX_CHARS)
-    except Exception:
-        value = _PREFILL_CONTEXT_DEFAULT_MAX_CHARS
-    return max(0, min(value, _PREFILL_SCRIPT_OUTPUT_LIMIT))
 
 
 def _prefill_context_char_count(messages: list[dict]) -> int:
-    return sum(len(str(message.get("content") or "")) for message in messages if isinstance(message, dict))
+    return _streaming_webui_prefill.prefill_context_char_count(
+        _streaming_api(),
+        messages,
+    )
 
 
 def _budget_compacted_prefill_context(context: dict, *, max_chars: int, char_count: int) -> dict:
-    label = str(context.get("label") or "prefill context")
-    message = (
-        "A configured WebUI startup prefill source was available, but it exceeded "
-        f"the WebUI prefill context budget ({char_count} chars > {max_chars} chars), "
-        "so the note/body payload was omitted from this new chat. If the user's "
-        "request depends on prior decisions, durable notes, runbooks, current "
-        "context, or open issues, use the available retrieval/search/note tools "
-        "to fetch only the relevant details before answering."
+    return _streaming_webui_prefill.budget_compacted_prefill_context(
+        _streaming_api(),
+        context,
+        max_chars=max_chars,
+        char_count=char_count,
     )
-    return {
-        "status": "loaded",
-        "source": "budget_compacted",
-        "label": label,
-        "messages": [{"role": "user", "content": message}],
-        "message_count": 1,
-        "compacted": True,
-        "original_source": context.get("source", ""),
-        "original_message_count": int(context.get("message_count") or 0),
-        "original_char_count": char_count,
-        "max_chars": max_chars,
-    }
 
 
 def _apply_prefill_context_budget(context: dict, config_data: dict) -> dict:
-    if context.get("status") != "loaded":
-        return context
-    max_chars = _prefill_context_max_chars(config_data)
-    if max_chars <= 0:
-        return context
-    messages = context.get("messages") or []
-    char_count = _prefill_context_char_count(messages if isinstance(messages, list) else [])
-    if char_count <= max_chars:
-        return context
-
-    file_raw = os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or str(config_data.get("prefill_messages_file") or "")
-    if context.get("source") == "script" and file_raw:
-        fallback = _load_prefill_messages_file(file_raw, source="file_budget_fallback")
-        fallback_messages = fallback.get("messages") if isinstance(fallback, dict) else []
-        fallback_chars = _prefill_context_char_count(fallback_messages if isinstance(fallback_messages, list) else [])
-        if fallback.get("status") == "loaded" and fallback_chars <= max_chars:
-            fallback["compacted"] = True
-            fallback["original_source"] = context.get("source", "")
-            fallback["original_label"] = context.get("label", "")
-            fallback["original_message_count"] = int(context.get("message_count") or 0)
-            fallback["original_char_count"] = char_count
-            fallback["max_chars"] = max_chars
-            return fallback
-
-    return _budget_compacted_prefill_context(context, max_chars=max_chars, char_count=char_count)
+    return _streaming_webui_prefill.apply_prefill_context_budget(
+        _streaming_api(),
+        context,
+        config_data,
+    )
 
 
 def _prefill_not_configured() -> dict:
-    return {"status": "not_configured", "source": "none", "label": "", "messages": [], "message_count": 0}
+    return _streaming_webui_prefill.prefill_not_configured(_streaming_api())
 
 
 def _load_prefill_messages_file(file_raw: str, *, source: str = "file", status: str = "loaded") -> dict:
-    path = _resolve_prefill_path(file_raw)
-    label = path.name or "prefill file"
-    if not path.exists():
-        return {"status": "error", "source": source, "label": label, "messages": [], "message_count": 0, "error": "prefill file not found"}
-    try:
-        messages = _valid_prefill_messages(json.loads(path.read_text(encoding="utf-8")))
-        return {"status": status, "source": source, "label": label, "messages": messages, "message_count": len(messages)}
-    except Exception as exc:
-        return {"status": "error", "source": source, "label": label, "messages": [], "message_count": 0, "error": _redact_prefill_status_text(str(exc))}
+    return _streaming_webui_prefill.load_prefill_messages_file(
+        _streaming_api(),
+        file_raw,
+        source=source,
+        status=status,
+    )
 
 
 def _prefill_script_timeout(config_data: dict) -> float:
-    raw = os.getenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT_TIMEOUT", "") or str(config_data.get("webui_prefill_messages_script_timeout") or "")
-    try:
-        return max(0.1, min(float(raw or 5), 30.0))
-    except Exception:
-        return 5.0
+    return _streaming_webui_prefill.prefill_script_timeout(
+        _streaming_api(),
+        config_data,
+    )
 
 
 def _prefill_script_command(raw) -> list[str]:
-    if isinstance(raw, (list, tuple)):
-        return [str(part) for part in raw if str(part)]
-    parts = shlex.split(str(raw or ""))
-    if not parts:
-        return []
-    # A single script path mirrors prefill_messages_file path resolution.  More
-    # complex commands keep their argv untouched so admins can pass arguments.
-    if len(parts) == 1:
-        parts[0] = str(_resolve_prefill_path(parts[0]))
-    return parts
+    return _streaming_webui_prefill.prefill_script_command(_streaming_api(), raw)
 
 
 def _messages_from_prefill_script_output(text: str) -> list[dict]:
-    stripped = str(text or "").strip()
-    if not stripped:
-        return []
-    try:
-        payload = json.loads(stripped)
-    except Exception:
-        payload = None
-    if isinstance(payload, dict):
-        payload = payload.get("messages")
-    messages = _valid_prefill_messages(payload)
-    if messages:
-        return messages
-    return [{"role": "user", "content": stripped}]
+    return _streaming_webui_prefill.messages_from_prefill_script_output(
+        _streaming_api(),
+        text,
+    )
 
 
 def _load_prefill_messages_script(config_data: dict) -> dict:
-    script_raw = os.getenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT", "") or config_data.get("webui_prefill_messages_script")
-    if not script_raw:
-        return _prefill_not_configured()
-    command = _prefill_script_command(script_raw)
-    label = Path(command[0]).name if command else "prefill script"
-    if not command:
-        return {"status": "error", "source": "script", "label": label, "messages": [], "message_count": 0, "error": "prefill script is empty"}
-    try:
-        proc = subprocess.run(
-            command,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=_prefill_script_timeout(config_data),
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "source": "script", "label": label, "messages": [], "message_count": 0, "error": "prefill script timed out"}
-    except Exception as exc:
-        return {"status": "error", "source": "script", "label": label, "messages": [], "message_count": 0, "error": _redact_prefill_status_text(str(exc))}
-    if proc.returncode != 0:
-        err = _redact_prefill_status_text(proc.stderr or proc.stdout or f"prefill script exited {proc.returncode}")
-        return {"status": "error", "source": "script", "label": label, "messages": [], "message_count": 0, "error": err}
-    if len(proc.stdout.encode("utf-8")) > _PREFILL_SCRIPT_OUTPUT_LIMIT:
-        return {
-            "status": "error",
-            "source": "script",
-            "label": label,
-            "messages": [],
-            "message_count": 0,
-            "error": f"prefill script output exceeded {_PREFILL_SCRIPT_OUTPUT_LIMIT} bytes",
-        }
-    messages = _messages_from_prefill_script_output(proc.stdout)
-    return {"status": "loaded", "source": "script", "label": label, "messages": messages, "message_count": len(messages)}
+    return _streaming_webui_prefill.load_prefill_messages_script(
+        _streaming_api(),
+        config_data,
+    )
 
 
 def _load_webui_prefill_context(
@@ -963,35 +855,18 @@ def _load_webui_prefill_context(
     Obsidian, Notion, llm-wiki, or another local notes source into ephemeral
     turn context without baking any one note provider into the WebUI.
     """
-    cfg = config_data if isinstance(config_data, dict) else get_config()
-    script_context = _load_prefill_messages_script(cfg)
-    file_raw = os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or str(cfg.get("prefill_messages_file") or "")
-    if script_context.get("status") == "not_configured":
-        if file_raw:
-            return _apply_prefill_context_budget(_load_prefill_messages_file(file_raw), cfg)
-        return _prefill_not_configured()
-    if script_context.get("status") == "error" and file_raw:
-        file_context = _load_prefill_messages_file(file_raw, source="file_fallback")
-        if file_context.get("status") == "loaded":
-            file_context["script_error"] = script_context.get("error", "")
-            return _apply_prefill_context_budget(file_context, cfg)
-    return _apply_prefill_context_budget(script_context, cfg)
+    return _streaming_webui_prefill.load_webui_prefill_context(
+        _streaming_api(),
+        config_data,
+    )
 
 
 def _public_prefill_context_status(prefill_context: dict) -> dict:
     """Strip message bodies before sending context status to the browser."""
-    return {
-        "status": prefill_context.get("status", "not_configured"),
-        "source": prefill_context.get("source", "none"),
-        "label": prefill_context.get("label", ""),
-        "message_count": int(prefill_context.get("message_count") or 0),
-        **({"error": prefill_context.get("error", "")} if prefill_context.get("error") else {}),
-        **({"compacted": True} if prefill_context.get("compacted") else {}),
-        **({"original_source": prefill_context.get("original_source", "")} if prefill_context.get("original_source") else {}),
-        **({"original_message_count": int(prefill_context.get("original_message_count") or 0)} if prefill_context.get("original_message_count") else {}),
-        **({"original_char_count": int(prefill_context.get("original_char_count") or 0)} if prefill_context.get("original_char_count") else {}),
-        **({"max_chars": int(prefill_context.get("max_chars") or 0)} if prefill_context.get("max_chars") else {}),
-    }
+    return _streaming_webui_prefill.public_prefill_context_status(
+        _streaming_api(),
+        prefill_context,
+    )
 
 
 def _webui_delivery_context_prompt(config_data: Optional[dict] = None) -> str:
@@ -1009,67 +884,10 @@ def _webui_delivery_context_prompt(config_data: Optional[dict] = None) -> str:
     refactor this area, keep that surface call in place — the two helpers
     together produce the full session context block.
     """
-    cfg = config_data if isinstance(config_data, dict) else get_config()
-    lines: list[str] = []
-
-    display_hermes_home = None
-    try:
-        from hermes_constants import get_hermes_home, display_hermes_home as _dh
-        display_hermes_home = _dh
-    except Exception:
-        get_hermes_home = None  # type: ignore[assignment]
-
-    connected = ["local (files on this machine)"]
-    try:
-        if get_hermes_home is not None:
-            state_path = get_hermes_home() / "gateway_state.json"
-            if state_path.exists():
-                raw_state = json.loads(state_path.read_text(encoding="utf-8"))
-                platforms = raw_state.get("platforms") if isinstance(raw_state, dict) else {}
-                if isinstance(platforms, dict):
-                    for name in sorted(platforms):
-                        pdata = platforms.get(name) or {}
-                        if isinstance(pdata, dict) and pdata.get("state") == "connected" and name != "local":
-                            connected.append(f"{name}: Connected ✓")
-    except Exception:
-        pass
-    lines.append(f"**Connected Platforms:** {', '.join(connected)}")
-
-    home_channels = {}
-    try:
-        platforms_cfg = cfg.get("platforms", {}) if isinstance(cfg, dict) else {}
-        if isinstance(platforms_cfg, dict):
-            for name, pdata in platforms_cfg.items():
-                if not isinstance(pdata, dict):
-                    continue
-                if pdata.get("enabled") is False:
-                    continue
-                home = pdata.get("home_channel")
-                if isinstance(home, dict):
-                    home_channels[str(name)] = str(home.get("name") or name)
-    except Exception:
-        home_channels = {}
-
-    if home_channels:
-        lines.append("")
-        lines.append("**Home Channels (default destinations):**")
-        for platform, label in sorted(home_channels.items()):
-            lines.append(f"  - {platform}: {label}")
-
-    lines.append("")
-    lines.append("**Delivery options for scheduled tasks:**")
-    lines.append("- `\"origin\"` → Back to this WebUI/browser session when the WebUI runtime supports origin delivery; otherwise prefer an explicit platform target.")
-    try:
-        home_display = display_hermes_home() if display_hermes_home else "~/.hermes"
-    except Exception:
-        home_display = "~/.hermes"
-    lines.append(f"- `\"local\"` → Save to local files only ({home_display}/cron/output/)")
-    for platform, label in sorted(home_channels.items()):
-        lines.append(f"- `\"{platform}\"` → Home channel ({label})")
-    lines.append("")
-    lines.append("*For explicit targeting, use `\"platform:chat_id\"` format if the user provides a specific chat ID. Do not invent private IDs.*")
-
-    return "\n".join(lines)
+    return _streaming_webui_prefill.webui_delivery_context_prompt(
+        _streaming_api(),
+        config_data,
+    )
 
 
 def _prefill_messages_with_webui_context(prefill_context: dict, config_data: Optional[dict] = None) -> list[dict]:
@@ -1081,7 +899,11 @@ def _prefill_messages_with_webui_context(prefill_context: dict, config_data: Opt
     creates two consecutive user turns (prefill + actual) which strict chat
     templates (Mistral, Gemma) reject with a Jinja 500.
     """
-    return list(prefill_context.get("messages") or [])
+    return _streaming_webui_prefill.prefill_messages_with_webui_context(
+        _streaming_api(),
+        prefill_context,
+        config_data,
+    )
 
 
 def _normalize_prefill_messages_before_user_turn(prefill_messages: list[dict]) -> list[dict]:
@@ -1096,19 +918,10 @@ def _normalize_prefill_messages_before_user_turn(prefill_messages: list[dict]) -
     To keep behavior scoped, only consecutive terminal user messages are removed
     just before that boundary; earlier roles remain untouched.
     """
-    sanitized = list(prefill_messages or [])
-    n_dropped = 0
-    while sanitized:
-        last_message = sanitized[-1]
-        if not isinstance(last_message, dict):
-            break
-        if str(last_message.get("role") or "").strip().lower() != "user":
-            break
-        sanitized.pop()
-        n_dropped += 1
-    if n_dropped:
-        logger.debug("Dropped %d trailing user message(s) from prefill", n_dropped)
-    return sanitized
+    return _streaming_webui_prefill.normalize_prefill_messages_before_user_turn(
+        _streaming_api(),
+        prefill_messages,
+    )
 
 
 def _has_new_assistant_reply(all_messages: list, prev_count: int) -> bool:

@@ -470,3 +470,122 @@ def test_turn_context_public_helpers_keep_streaming_module_identity():
     )
 
     assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_prefill_redactor_observes_facade_pattern(monkeypatch):
+    seen = []
+
+    class Pattern:
+        def sub(self, replacement, value):
+            seen.append((replacement, value))
+            return "patched diagnostic"
+
+    monkeypatch.setattr(streaming, "_SECRET_SHAPED_RE", Pattern())
+
+    assert streaming._redact_prefill_status_text("secret=value") == "patched diagnostic"
+    assert seen == [("[REDACTED]", "secret=value")]
+
+
+def test_prefill_script_loader_observes_facade_runtime_helpers(monkeypatch):
+    calls = []
+
+    class Process:
+        returncode = 0
+        stdout = "raw output"
+        stderr = ""
+
+    class Subprocess:
+        PIPE = object()
+        TimeoutExpired = TimeoutError
+
+        @staticmethod
+        def run(command, **kwargs):
+            calls.append((command, kwargs))
+            return Process()
+
+    monkeypatch.setattr(streaming, "subprocess", Subprocess)
+    monkeypatch.setattr(streaming, "_prefill_script_command", lambda raw: ["prefill-tool"])
+    monkeypatch.setattr(streaming, "_prefill_script_timeout", lambda config: 7.5)
+    monkeypatch.setattr(
+        streaming,
+        "_messages_from_prefill_script_output",
+        lambda output: [{"role": "system", "content": f"parsed:{output}"}],
+    )
+
+    result = streaming._load_prefill_messages_script(
+        {"webui_prefill_messages_script": "ignored"},
+    )
+
+    assert result["messages"] == [{"role": "system", "content": "parsed:raw output"}]
+    assert calls == [
+        (
+            ["prefill-tool"],
+            {
+                "text": True,
+                "stdout": Subprocess.PIPE,
+                "stderr": Subprocess.PIPE,
+                "timeout": 7.5,
+                "check": False,
+            },
+        )
+    ]
+
+
+def test_prefill_context_loader_observes_facade_config(monkeypatch):
+    config = {"marker": "patched"}
+    sentinel = {
+        "status": "not_configured",
+        "source": "none",
+        "label": "",
+        "messages": [],
+        "message_count": 0,
+    }
+    monkeypatch.delenv("HERMES_PREFILL_MESSAGES_FILE", raising=False)
+    monkeypatch.setattr(streaming, "get_config", lambda: config)
+    monkeypatch.setattr(
+        streaming,
+        "_load_prefill_messages_script",
+        lambda value: sentinel if value is config else None,
+    )
+    monkeypatch.setattr(streaming, "_prefill_not_configured", lambda: sentinel)
+
+    assert streaming._load_webui_prefill_context() is sentinel
+
+
+def test_prefill_normalizer_observes_facade_logger(monkeypatch):
+    seen = []
+    logger = type("Logger", (), {"debug": lambda self, *args: seen.append(args)})()
+    monkeypatch.setattr(streaming, "logger", logger)
+
+    result = streaming._normalize_prefill_messages_before_user_turn([
+        {"role": "system", "content": "keep"},
+        {"role": "user", "content": "drop"},
+    ])
+
+    assert result == [{"role": "system", "content": "keep"}]
+    assert seen == [("Dropped %d trailing user message(s) from prefill", 1)]
+
+
+def test_webui_prefill_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._redact_prefill_status_text,
+        streaming._valid_prefill_messages,
+        streaming._resolve_prefill_path,
+        streaming._prefill_context_max_chars,
+        streaming._prefill_context_char_count,
+        streaming._budget_compacted_prefill_context,
+        streaming._apply_prefill_context_budget,
+        streaming._prefill_not_configured,
+        streaming._load_prefill_messages_file,
+        streaming._prefill_script_timeout,
+        streaming._prefill_script_command,
+        streaming._messages_from_prefill_script_output,
+        streaming._load_prefill_messages_script,
+        streaming._load_webui_prefill_context,
+        streaming._public_prefill_context_status,
+        streaming._webui_delivery_context_prompt,
+        streaming._prefill_messages_with_webui_context,
+        streaming._normalize_prefill_messages_before_user_turn,
+    )
+
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
