@@ -18,8 +18,6 @@ restart could wipe a 1000-message conversation in a single round-trip.
 This test reproduces the data loss path against the on-disk session file.
 """
 import json
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -187,11 +185,12 @@ def test_cancel_stream_does_not_resurrect_session_deleted_before_edit(
     import api.config as config
     import api.sessions.store as models
     import api.streaming as streaming
+    import api.streaming.live_controls as live_controls
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=4, with_active_stream=True)
     stream_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     stale_seed = models.Session.load(sid)
-    real_edit_session = streaming.edit_session
+    real_edit_session = live_controls.edit_session
 
     @contextmanager
     def delete_then_edit(*args, **kwargs):
@@ -201,14 +200,14 @@ def test_cancel_stream_does_not_resurrect_session_deleted_before_edit(
         with real_edit_session(*args, **kwargs) as session:
             yield session
 
-    monkeypatch.setattr(streaming, "edit_session", delete_then_edit)
+    monkeypatch.setattr(live_controls, "edit_session", delete_then_edit)
     agent = Mock()
     agent.session_id = sid
     agent.interrupt = Mock()
     config.STREAMS[stream_id] = queue.Queue()
     config.CANCEL_FLAGS[stream_id] = threading.Event()
     config.AGENT_INSTANCES[stream_id] = agent
-    monkeypatch.setattr(streaming, "get_session", lambda _sid: stale_seed)
+    monkeypatch.setattr(live_controls, "get_session", lambda _sid: stale_seed)
 
     assert streaming.cancel_stream(stream_id) is True
     assert not (temp_session_dir / f"{sid}.json").exists()

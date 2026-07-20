@@ -23,34 +23,34 @@ class RecordingLock:
 
 
 def test_session_index_fast_path_keeps_json_work_outside_global_lock(monkeypatch, tmp_path):
-    import api.sessions.store as models
+    import api.sessions.records as session_records
+    import api.sessions.session_index as session_index
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
-
-    old = models.Session(session_id="idx_old", title="Old", updated_at=1.0)
-    updated = models.Session(session_id="idx_updated", title="Updated", updated_at=20.0)
+    old = session_records.Session(session_id="idx_old", title="Old", updated_at=1.0)
+    updated = session_records.Session(session_id="idx_updated", title="Updated", updated_at=20.0)
     (session_dir / "idx_old.json").write_text("{}", encoding="utf-8")
     (session_dir / "idx_updated.json").write_text("{}", encoding="utf-8")
     index_file.write_text(
         json.dumps(
             [
                 old.compact(),
-                models.Session(session_id="idx_updated", title="Stale", updated_at=2.0).compact(),
+                session_records.Session(
+                    session_id="idx_updated", title="Stale", updated_at=2.0
+                ).compact(),
             ]
         ),
         encoding="utf-8",
     )
 
     lock = RecordingLock()
-    monkeypatch.setattr(models, "LOCK", lock)
-    monkeypatch.setattr(models, "SESSIONS", collections.OrderedDict())
+    monkeypatch.setattr(session_index, "LOCK", lock)
+    monkeypatch.setattr(session_index, "SESSIONS", collections.OrderedDict())
 
-    original_loads = models.json.loads
-    original_dumps = models.json.dumps
+    original_loads = session_index.json.loads
+    original_dumps = session_index.json.dumps
 
     def loads_outside_lock(*args, **kwargs):
         assert not lock.held
@@ -60,10 +60,14 @@ def test_session_index_fast_path_keeps_json_work_outside_global_lock(monkeypatch
         assert not lock.held
         return original_dumps(*args, **kwargs)
 
-    monkeypatch.setattr(models.json, "loads", loads_outside_lock)
-    monkeypatch.setattr(models.json, "dumps", dumps_outside_lock)
+    monkeypatch.setattr(session_index.json, "loads", loads_outside_lock)
+    monkeypatch.setattr(session_index.json, "dumps", dumps_outside_lock)
 
-    models._write_session_index(updates=[updated])
+    session_index.write_session_index(
+        updates=[updated],
+        session_dir=session_dir,
+        session_index_file=index_file,
+    )
 
     rows = json.loads(index_file.read_text(encoding="utf-8"))
     assert [row["session_id"] for row in rows] == ["idx_updated", "idx_old"]

@@ -3,18 +3,18 @@
 import json
 
 import api.config as config
-import api.sessions.store as models
-from api.sessions.store import Session
+import api.sessions.records as session_records
+from api.sessions.records import Session
 
 
 def test_empty_active_pending_save_cannot_overwrite_existing_messages(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", index_file, raising=False)
-    models.SESSIONS.clear()
+    config.SESSIONS.clear()
 
     sid = "pending_overwrite_guard"
     existing = Session(

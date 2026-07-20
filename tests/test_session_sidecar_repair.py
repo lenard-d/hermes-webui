@@ -19,6 +19,8 @@ from api.sessions.store import (
     _active_stream_ids,
 )
 import api.config as config
+import api.sessions.records as session_records
+import api.streaming.agent_cache as streaming_agent_cache
 import api.streaming as streaming
 import api.profiles as profiles
 from api.run_journal import append_run_event
@@ -35,6 +37,8 @@ def _isolate_session_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
 
     models.SESSIONS.clear()
     yield session_dir, index_file
@@ -1025,15 +1029,15 @@ class TestLastResortSyncDelegation:
 
         # Patch _get_profile_home to verify it's called
         called = []
-        original_get_profile_home = models._get_profile_home
+        original_get_profile_home = streaming_agent_cache.get_profile_home
 
         def tracking_get_profile_home(profile):
             called.append(profile)
             return original_get_profile_home(profile)
 
-        with patch.object(models, "_get_profile_home", tracking_get_profile_home):
+        with patch.object(streaming_agent_cache, "get_profile_home", tracking_get_profile_home):
             _register_active_stream("stream_1")
-            streaming._last_resort_sync_from_core(s, "stream_1", agent_lock)
+            streaming_agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
 
         assert len(called) == 1, "_get_profile_home should have been called once"
         assert called[0] == s.profile
@@ -1048,15 +1052,19 @@ class TestLastResortSyncDelegation:
 
         # Patch _apply_core_sync_or_error_marker to verify it's called
         called = []
-        original_fn = models._apply_core_sync_or_error_marker
+        original_fn = streaming_agent_cache.apply_core_sync_or_error_marker
 
         def tracking_fn(session, core_path, stream_id_for_recheck=None, **kwargs):
             called.append((session.session_id, stream_id_for_recheck, kwargs))
             return original_fn(session, core_path, stream_id_for_recheck, **kwargs)
 
-        with patch.object(models, "_apply_core_sync_or_error_marker", tracking_fn):
+        with patch.object(
+            streaming_agent_cache,
+            "apply_core_sync_or_error_marker",
+            tracking_fn,
+        ):
             _register_active_stream("stream_1")
-            streaming._last_resort_sync_from_core(s, "stream_1", agent_lock)
+            streaming_agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
 
         assert len(called) == 1, "_apply_core_sync_or_error_marker should have been called"
         assert called[0][0] == s.session_id

@@ -15,8 +15,8 @@ decoded-string path.
 import json
 from pathlib import Path
 
-import api.sessions.store as models
-import api.routes as routes
+import api.sessions.session_index as session_index
+import api.sessions.sidebar as sidebar
 
 
 def test_bytes_and_text_parse_identically(tmp_path: Path):
@@ -44,13 +44,13 @@ def test_all_sessions_reads_unicode_index_via_bytes(tmp_path, monkeypatch):
     ]
     idx.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
 
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", idx)
+    monkeypatch.setattr(sidebar, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(sidebar, "SESSION_INDEX_FILE", idx)
     # Treat the indexed id as persisted so the prune step keeps it.
-    monkeypatch.setattr(models, "_persisted_session_ids_snapshot", lambda: frozenset({"unic-1"}))
-    monkeypatch.setattr(models, "_active_stream_ids", lambda: set())
+    monkeypatch.setattr(sidebar, "_persisted_session_ids_snapshot", lambda: frozenset({"unic-1"}))
+    monkeypatch.setattr(sidebar, "_active_stream_ids", lambda: set())
 
-    result = models.all_sessions(include_lineage_metadata=False)
+    result = sidebar.all_sessions(include_lineage_metadata=False)
 
     titles = {s.get("session_id"): s.get("title") for s in result}
     assert titles.get("unic-1") == "Café ☕"
@@ -59,7 +59,7 @@ def test_all_sessions_reads_unicode_index_via_bytes(tmp_path, monkeypatch):
 def test_no_index_reader_uses_decoded_str(tmp_path):
     """Guard against a refactor reintroducing the slower read_text path on the
     session index."""
-    for module in (models, routes):
+    for module in (sidebar, session_index):
         src = Path(module.__file__).read_text(encoding="utf-8")
         assert "SESSION_INDEX_FILE.read_text" not in src, (
             f"{module.__name__} reads the session index via read_text; "
