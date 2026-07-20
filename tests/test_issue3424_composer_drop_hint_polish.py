@@ -13,11 +13,13 @@ and collided with the hint text, looking garbled. The fix:
 Source-contract assertions (the project has no JS DOM-test runtime).
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
 

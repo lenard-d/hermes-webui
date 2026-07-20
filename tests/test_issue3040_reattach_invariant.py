@@ -7,12 +7,11 @@ remove a persistence call or add a new INFLIGHT write without pairing it with on
 """
 from __future__ import annotations
 
-import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-MESSAGES_JS = (Path(__file__).resolve().parent.parent / "static" / "messages.js").read_text(
-    encoding="utf-8"
-)
+import re
+
+MESSAGES_JS = family_source("messages")
 _LINES = MESSAGES_JS.splitlines()
 
 

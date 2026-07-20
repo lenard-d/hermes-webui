@@ -1,9 +1,10 @@
 """Regression coverage for #2998: gold panel save buttons need visible icons."""
 
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-CSS = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
+
+CSS = family_source("style")
 
 
 def test_panel_primary_buttons_use_foreground_token_for_icon_contrast():

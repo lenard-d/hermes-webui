@@ -5,13 +5,15 @@ jump came from discrete transcript rebuilds and card replacement paths, so these
 tests pin those call sites rather than the per-token renderer.
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 
 
 def _function_body(src: str, name: str) -> str:

@@ -1,7 +1,9 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _body_from_brace(src: str, brace: int, label: str) -> str:

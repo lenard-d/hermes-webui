@@ -12,12 +12,17 @@ assert the produced structure (group labels + single-line rows, tree rows with
 glyph/name/size), so a regression in the skeleton shape is caught. Pairs with
 the static-assertion tests in test_issue4662_profile_switch_skeleton_static.py.
 """
+from tests.frontend_asset_contract import family_asset_paths
+
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 SESSIONS_JS = REPO_ROOT / "static" / "sessions.js"
@@ -109,7 +114,7 @@ function extractConst(src, name) {
   return 'global.' + name + ' = ' + literal + ';';
 }
 
-const sessSrc = fs.readFileSync(process.argv[2], 'utf8');
+const sessSrc = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 const wsSrc = fs.readFileSync(process.argv[3], 'utf8');
 
 // Module-scope state the session builder references.
@@ -165,7 +170,7 @@ def outcome(tmp_path_factory):
     driver = tmp_path_factory.mktemp("skel") / "driver.js"
     driver.write_text(_DRIVER_SRC, encoding="utf-8")
     res = subprocess.run(
-        [NODE, str(driver), str(SESSIONS_JS), str(WORKSPACE_JS)],
+        [NODE, str(driver), _family_path_arg("sessions"), str(WORKSPACE_JS)],
         capture_output=True, text=True, timeout=30,
     )
     if res.returncode != 0:

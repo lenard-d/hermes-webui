@@ -5,17 +5,19 @@ problem is that the page was opened over insecure HTTP from a non-local origin.
 The UI must explain the HTTPS/localhost requirement instead of only saying the
 browser permission was denied.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 
 
 def _locale_count() -> int:
-    return len(re.findall(r"^  ['\"]?[\w-]+['\"]?: \{", I18N_JS, re.MULTILINE))
+    return len(re.findall(r"api\.registerLocale\('[^']+', \{", I18N_JS))
 
 
 def _slice_between(src: str, start_marker: str, end_marker: str) -> str:

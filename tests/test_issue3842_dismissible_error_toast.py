@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -9,7 +11,7 @@ def read(rel: str) -> str:
 
 
 def test_error_toast_renders_explicit_dismiss_button():
-    ui = read("static/ui.js")
+    ui = family_source("ui")
 
     assert 'class="toast-dismiss"' in ui, (
         "Error toasts must render an explicit dismiss button so users can clear "
@@ -24,7 +26,7 @@ def test_error_toast_renders_explicit_dismiss_button():
 
 
 def test_error_toast_dismiss_helper_clears_show_state_and_timer():
-    ui = read("static/ui.js")
+    ui = family_source("ui")
 
     assert "function dismissToast(btnOrEl)" in ui, "Dismiss helper missing from static/ui.js"
     assert "clearToastDismissTimer(el);" in ui, (
@@ -36,7 +38,7 @@ def test_error_toast_dismiss_helper_clears_show_state_and_timer():
 
 
 def test_toast_styles_define_dismiss_button_layout():
-    style = read("static/style.css")
+    style = family_source("style")
 
     assert ".toast-dismiss" in style, (
         "Toast stylesheet must define the dismiss button so it matches the existing "

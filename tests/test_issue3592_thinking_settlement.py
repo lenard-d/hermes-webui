@@ -6,10 +6,11 @@ folded Worklog above the final answer.
 """
 from __future__ import annotations
 
-import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-UI_JS = (Path(__file__).resolve().parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+import re
+
+UI_JS = family_source("ui")
 
 
 def test_thinking_card_html_function_exists():

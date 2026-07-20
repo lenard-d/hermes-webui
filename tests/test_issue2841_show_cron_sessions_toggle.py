@@ -1,4 +1,6 @@
 """Tests for #2841: background session toggles surface hidden sessions in the sidebar."""
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 from api.models import _hide_from_default_sidebar
@@ -120,7 +122,7 @@ def test_settings_show_webhook_sessions_in_html():
 # --- static/panels.js string-scans ---
 
 def test_panels_save_wiring():
-    src = _read("static/panels.js")
+    src = family_source("panels")
     # Both save paths (autosave _preferencesPayloadFromUi + explicit saveSettings)
     # must gate background sessions on the CLI-sessions checkbox so neither can
     # persist true while show_cli_sessions=false (#3514).
@@ -139,7 +141,7 @@ def test_panels_save_wiring():
 
 
 def test_panels_load_wiring():
-    src = _read("static/panels.js")
+    src = family_source("panels")
     assert "show_cron_sessions" in src, (
         "load wiring for show_cron_sessions must appear in static/panels.js"
     )

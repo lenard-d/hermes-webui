@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -57,7 +59,7 @@ def test_use_entry_has_subArgs_skills():
 
 def test_directive_consumed_at_injection_site():
     """_forcedSkillDirectivePending is cleared at the consume site, not in finally."""
-    src = read("static/messages.js")
+    src = family_source("messages")
     finally_part = src.split("finally")[1] if "finally" in src else ""
     assert "_forcedSkillDirectivePending = null;" not in finally_part, \
         "_forcedSkillDirectivePending must NOT be cleared in the finally block"
@@ -68,7 +70,7 @@ def test_directive_consumed_at_injection_site():
 
 
 def test_directive_injection_before_empty_guard():
-    src = read("static/messages.js")
+    src = family_source("messages")
     inject_pos = src.index("_forcedSkillDirectivePending")
     guard_pos = src.index("if(!msgText){setComposerStatus('Nothing to send');return;}")
     assert inject_pos < guard_pos, "directive injection must appear before the if(!msgText) guard"
@@ -102,7 +104,7 @@ def test_pending_promise_set_synchronously():
 
 def test_directive_survives_local_slash_commands():
     """The consume block must appear after the slash-command early-return, not before."""
-    src = read("static/messages.js")
+    src = family_source("messages")
     early_return = src.index("autoResize();hideCmdDropdown();return;")
     consume = src.index("_forcedSkillDirectivePending")
     assert early_return < consume, \
@@ -118,7 +120,7 @@ def test_directive_pending_captures_session_id():
 
 
 def test_directive_only_consumed_by_matching_session():
-    src = read("static/messages.js")
+    src = family_source("messages")
     assert "const _pending=_forcedSkillDirectivePending;" in src, \
         "send() must snapshot the pending directive before awaiting it"
     assert "if(!_pending.sessionId||_pending.sessionId===activeSid){" in src, \

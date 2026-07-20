@@ -26,10 +26,12 @@ invariant cannot silently regress.
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _function_body(src: str, name: str) -> str:

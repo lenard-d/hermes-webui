@@ -13,6 +13,8 @@ expanding still worked. Caused by the interaction of two changes:
     target-carrying label nor a preview.
 
 Fix: _decorateTransparentEventRow now populates the `.tool-card-preview` span
+from tests.frontend_asset_contract import family_source
+
 from a quiet, TARGET-based summary (_transparentToolSummary) — path/command/
 query/skill, never the raw result JSON — so collapsed rows are self-describing
 again while honoring the "keep collapsed previews quiet" intent
@@ -22,6 +24,8 @@ This drives the ACTUAL functions from static/ui.js via node + jsdom-free DOM
 shims, and runs the same render path live streaming and persisted reload share
 (both go through _decorateTransparentEventRow(buildToolCard(tc))).
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import shutil
@@ -212,7 +216,7 @@ CASES = {
 
 @pytest.fixture(scope="module")
 def results(tmp_path_factory):
-    ui_src = UI_JS_PATH.read_text(encoding="utf-8")
+    ui_src = family_source("ui")
     extracted = "\n".join(
         _function_source(ui_src, name) for name in _FN_NAMES
         if _function_source(ui_src, name)

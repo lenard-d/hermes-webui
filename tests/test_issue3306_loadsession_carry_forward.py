@@ -17,10 +17,12 @@ then consume it in `_ensureMessagesLoaded()` ahead of the live S.messages
 This file is the targeted source-text pin in the same style as
 tests/test_issue3162_ensure_messages_loaded.py.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(start_marker: str, end_marker: str) -> str:

@@ -1,10 +1,12 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS  = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-I18N_JS    = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-STYLE_CSS  = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+PANELS_JS  = family_source("panels")
+I18N_JS    = family_source("i18n")
+STYLE_CSS  = family_source("style")
 
 LOCALE_COUNT = 15  # en, it, ja, ru, es, de, zh, zh-Hant, pt, ko, fr, tr, pl, vi, cs
 

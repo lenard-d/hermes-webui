@@ -4,6 +4,8 @@ the FULL terminal output with a working expand control, and patch/edit cards
 must still render their diff body.
 
 This drives the ACTUAL ``buildToolCard`` and ``_anchorSceneToolCallFromRow``
+from tests.frontend_asset_contract import family_source
+
 from ``static/ui.js`` via node (not a regex over the source). The reload path
 rebuilds a tool card from a persisted ``activity_scene_v1`` row through
 ``_anchorSceneToolCallFromRow`` and then ``buildToolCard``; this pins that the
@@ -19,12 +21,17 @@ reconstructed card:
 negative; this test is the permanent guard so the restore path cannot silently
 lose full output / expand / diff again.
 """
+from tests.frontend_asset_contract import family_asset_paths
+
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
@@ -35,7 +42,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function extractFunc(name) {
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
@@ -121,7 +128,7 @@ def driver_path(tmp_path_factory):
 
 def _run(driver_path, mode, payload):
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), mode, json.dumps(payload)],
+        [NODE, driver_path, _family_path_arg("ui"), mode, json.dumps(payload)],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:

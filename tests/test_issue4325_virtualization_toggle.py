@@ -11,6 +11,8 @@ toggle and its #4343 contract change:
   to off unless an explicit post-flip opt-in marker (virtualize_transcript_optin)
   is present.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 from pathlib import Path
 
@@ -18,10 +20,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
-PANELS = REPO_ROOT / "static" / "panels.js"
 BOOT = REPO_ROOT / "static" / "boot.js"
-UI = REPO_ROOT / "static" / "ui.js"
-I18N = REPO_ROOT / "static" / "i18n.js"
 CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 
 
@@ -54,7 +53,7 @@ def test_boot_applies_saved_virtualize_preference_default_off():
 
 
 def test_ui_gate_forces_full_render_when_disabled():
-    js = UI.read_text(encoding="utf-8")
+    js = family_source("ui")
     start = js.index("function _currentMessageVirtualWindow(")
     body = js[start:start + 900]
     assert "_virtualizeTranscript===false" in body
@@ -62,7 +61,7 @@ def test_ui_gate_forces_full_render_when_disabled():
 
 
 def test_panels_round_trip_and_hot_apply_virtualize_toggle():
-    js = PANELS.read_text(encoding="utf-8")
+    js = family_source("panels")
     assert "const virtualizeTranscriptCb=$('settingsVirtualizeTranscript');" in js
     assert "payload.virtualize_transcript=virtualizeTranscriptCb.checked;" in js
     # #4343: enabling records the explicit post-flip opt-in marker.
@@ -75,7 +74,7 @@ def test_panels_round_trip_and_hot_apply_virtualize_toggle():
 
 
 def test_virtualize_toggle_i18n_all_locales():
-    js = I18N.read_text(encoding="utf-8")
+    js = family_source("i18n")
     assert js.count("settings_label_virtualize_transcript:") == 15
     assert js.count("settings_desc_virtualize_transcript:") == 15
 

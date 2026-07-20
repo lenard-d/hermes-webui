@@ -1,5 +1,7 @@
 """Static regression coverage for Mermaid diagram lightbox wiring."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 import re
 
@@ -10,11 +12,11 @@ STYLE = ROOT / "static" / "style.css"
 
 
 def _ui_js() -> str:
-    return UI.read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 def _style_css() -> str:
-    return STYLE.read_text(encoding="utf-8")
+    return family_source("style")
 
 
 class TestMermaidLightboxHelper:

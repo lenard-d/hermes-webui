@@ -8,9 +8,10 @@ next Settings save. The dropdown must keep enumerating every LOCALES entry;
 partially-translated locales fall back per-key to English at render time, which
 is the established behavior — far better than dropping the user's choice.
 """
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-PANELS_JS = (Path(__file__).resolve().parents[1] / "static" / "panels.js").read_text(encoding="utf-8")
+
+PANELS_JS = family_source("panels")
 
 
 def _language_dropdown_block() -> str:

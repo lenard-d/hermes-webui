@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import json
 import shutil
 import subprocess
@@ -10,14 +12,17 @@ from pathlib import Path
 
 import pytest
 
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS_PATH = ROOT / "static" / "ui.js"
-UI_JS = UI_JS_PATH.read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 const transparent = process.argv[3] === '1';
 const message = JSON.parse(process.argv[4]);
 
@@ -49,7 +54,7 @@ def _run_helper(message: dict, transparent: bool) -> object:
         script_path = Path(handle.name)
     try:
         result = subprocess.run(
-            [NODE, str(script_path), str(UI_JS_PATH), "1" if transparent else "0", json.dumps(message)],
+            [NODE, str(script_path), _family_path_arg("ui"), "1" if transparent else "0", json.dumps(message)],
             capture_output=True,
             text=True,
             timeout=30,
@@ -137,7 +142,7 @@ def test_ordered_tool_card_falls_back_to_persisted_snippet_on_cold_load():
         pytest.skip("node not on PATH")
     driver = r"""
 const fs=require('fs');
-const src=fs.readFileSync(process.argv[2],'utf8');
+const src=JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p,'utf8')).join('');
 function grab(n){const re=new RegExp('function '+n+'\\([^]*?\\n}','m');const m=src.match(re);if(!m)throw new Error('not found '+n);return m[0];}
 global._cliPatchSnippetFromArgs=()=> '';
 global._cliToolCardSnippet=(a,b)=> a||b||'';
@@ -154,7 +159,7 @@ process.stdout.write(JSON.stringify({snippet: out.snippet}));
         fh.write(driver)
         path = fh.name
     try:
-        result = subprocess.run([NODE, path, str(UI_JS_PATH)], capture_output=True, text=True, timeout=30)
+        result = subprocess.run([NODE, path, _family_path_arg("ui")], capture_output=True, text=True, timeout=30)
     finally:
         os.unlink(path)
     assert result.returncode == 0, result.stderr

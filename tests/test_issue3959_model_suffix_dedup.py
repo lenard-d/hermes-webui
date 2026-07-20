@@ -5,6 +5,8 @@ The normalizer was using parts[-1] (last colon segment) which collapsed all
 :free models to the same key 'free'.  Fix: strip only the @provider: prefix
 (first colon after @), preserving the rest including colon-suffixed suffixes.
 """
+from tests.frontend_asset_contract import family_source
+
 import shutil
 from pathlib import Path
 
@@ -12,7 +14,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 NODE = shutil.which("node")
 

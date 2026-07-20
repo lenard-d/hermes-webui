@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 import re
 
@@ -53,7 +55,7 @@ def test_set_reasoning_effort_returns_status_for_explicit_model(tmp_path, monkey
 
 
 def test_ui_posts_reasoning_context_with_effort():
-    src = read("static/ui.js")
+    src = family_source("ui")
     assert "function _reasoningEffortContext()" in src
     assert "new URLSearchParams(_reasoningEffortContext())" in src
     assert "Object.assign({effort:effort},_reasoningEffortContext())" in src

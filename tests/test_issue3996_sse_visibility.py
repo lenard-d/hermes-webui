@@ -17,11 +17,13 @@ dedicated _sessionStreamHiddenSid before closing).
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+SESSIONS_JS = family_source("sessions")
 
 
 def test_gateway_sse_has_visibility_hook():

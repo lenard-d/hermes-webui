@@ -10,6 +10,8 @@ Structural tests — no server required. Verify:
 - SAFE_TAGS updated to allow <span> (for inline math)
 - renderKatexBlocks() is wired into the requestAnimationFrame call
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -17,9 +19,9 @@ import subprocess
 import textwrap
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS   = (REPO / 'static' / 'ui.js').read_text(encoding='utf-8')
+UI_JS   = family_source("ui")
 INDEX   = (REPO / 'static' / 'index.html').read_text(encoding='utf-8')
-CSS     = (REPO / 'static' / 'style.css').read_text(encoding='utf-8')
+CSS     = family_source("style")
 
 
 def _extract_function(src: str, name: str) -> str:

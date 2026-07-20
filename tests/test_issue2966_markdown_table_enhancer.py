@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -10,18 +12,18 @@ def _read_static(name):
 
 
 def _locale_blocks():
-    text = _read_static("i18n.js")
-    matches = list(re.finditer(r"^  '?([A-Za-z]{2}(?:-[A-Za-z]+)?)'?: \{", text, re.M))
+    text = family_source("i18n")
+    matches = list(re.finditer(r"api\.registerLocale\('([^']+)', \{", text))
     assert matches, "could not find locale blocks"
     blocks = {}
-    for idx, match in enumerate(matches):
-        end = matches[idx + 1].start() if idx + 1 < len(matches) else text.index("\n};", match.end())
+    for match in matches:
+        end = text.index("\n  });", match.end())
         blocks[match.group(1)] = text[match.end():end]
     return blocks
 
 
 def test_markdown_table_enhancer_is_registered_and_invoked_after_render_paths():
-    messages = _read_static("messages.js")
+    messages = family_source("messages")
 
     assert "function enhanceMarkdownTables(root)" in messages
     assert "window.enhanceMarkdownTables=enhanceMarkdownTables" in messages
@@ -34,7 +36,7 @@ def test_markdown_table_enhancer_is_registered_and_invoked_after_render_paths():
 
 
 def test_markdown_table_enhancement_is_idempotent_and_message_scoped():
-    messages = _read_static("messages.js")
+    messages = family_source("messages")
     helper = messages[messages.index("function enhanceMarkdownTables(root)"):messages.index("function _markdownTableText")]
 
     assert ".msg-body table:not([data-markdown-table-enhanced])" in helper
@@ -44,7 +46,7 @@ def test_markdown_table_enhancement_is_idempotent_and_message_scoped():
 
 
 def test_markdown_table_sorting_uses_accessible_buttons_and_stable_rows():
-    messages = _read_static("messages.js")
+    messages = family_source("messages")
     helper = messages[messages.index("function enhanceMarkdownTables(root)"):messages.index("function _markdownTableText")]
 
     assert "document.createElement('button')" in helper
@@ -62,7 +64,7 @@ def test_markdown_table_sorting_uses_accessible_buttons_and_stable_rows():
 
 
 def test_markdown_table_filter_is_gated_to_multi_row_tables_and_preserves_rows():
-    messages = _read_static("messages.js")
+    messages = family_source("messages")
     helper = messages[messages.index("function enhanceMarkdownTables(root)"):messages.index("function _markdownTableText")]
 
     assert "if(bodyRows.length>=4&&table.parentElement)" in helper
@@ -74,7 +76,7 @@ def test_markdown_table_filter_is_gated_to_multi_row_tables_and_preserves_rows()
 
 
 def test_markdown_table_styles_keep_controls_compact():
-    style = _read_static("style.css")
+    style = family_source("style")
 
     assert ".markdown-table-filter" in style
     assert "width:min(260px,100%)" in style

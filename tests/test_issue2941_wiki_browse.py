@@ -8,6 +8,8 @@ Verifies that:
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import os
 import re
@@ -61,13 +63,13 @@ def test_wiki_page_path_traversal_rejection():
 
 
 def test_render_llm_wiki_status_references_browse():
-    src = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    src = family_source("panels")
     assert "_renderLlmWikiStatus" in src, "_renderLlmWikiStatus not found in panels.js"
     assert "_openWikiBrowser" in src, "_openWikiBrowser reference not found in panels.js"
 
 
 def test_open_wiki_browser_function_exists():
-    src = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    src = family_source("panels")
     assert "async function _openWikiBrowser" in src, "_openWikiBrowser function not defined in panels.js"
     assert "/api/wiki/browse" in src, "/api/wiki/browse fetch not found in panels.js"
     assert "/api/wiki/page" in src, "/api/wiki/page fetch not found in panels.js"
@@ -551,7 +553,7 @@ def test_wiki_page_alias_spellings_are_rejected(monkeypatch, tmp_path):
 
 
 def test_i18n_wiki_keys_in_all_locales():
-    src = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+    src = family_source("i18n")
     required_keys = [
         "wiki_browse",
         "wiki_search_placeholder",

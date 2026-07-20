@@ -7,6 +7,8 @@ toggle is wired end-to-end (config boolean key -> boot.js definition + read-back
 key exists across all locale blocks, so a future refactor can't silently orphan
 a control or break locale parity.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -19,11 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
+STYLE_CSS = family_source("style")
 
 # The 15 composer-control visibility flags this feature ships.
 HIDE_KEYS = [

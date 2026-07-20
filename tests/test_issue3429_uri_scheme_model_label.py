@@ -13,11 +13,17 @@ while NOT touching the #3360 multi-slash behavior for non-URI ids.
 Runs the live getModelLabel() via Node so drift between the test and the real
 code is caught immediately.
 """
+from tests.frontend_asset_contract import family_asset_paths
+import json
+
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
@@ -27,7 +33,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[1], 'utf8');
+const ui = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 // Slice getModelLabel() by function boundaries (regex literals inside it defeat
 // a naive brace counter, so bound it by the next top-level function instead).
 const start = ui.indexOf('function getModelLabel(');
@@ -47,7 +53,7 @@ process.stdout.write(JSON.stringify(out));
 def _labels(model_ids):
     import json
     proc = subprocess.run(
-        [NODE, "-e", _DRIVER, str(UI_JS_PATH), json.dumps(model_ids)],
+        [NODE, "-e", _DRIVER, _family_path_arg("ui"), json.dumps(model_ids)],
         capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == 0, f"node driver failed: {proc.stderr}"

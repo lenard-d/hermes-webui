@@ -1,4 +1,6 @@
 """Tests for #3411 — OS file drop on workspace tree must not attach to composer."""
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -46,7 +48,7 @@ class TestIssue3411WorkspaceTreeOsDrop:
 
     def test_composer_os_drop_still_works_outside_tree(self):
         """Document-level addFiles path must remain for drops outside the tree."""
-        src = _src("panels.js")
+        src = family_source("panels")
         m = re.search(r"document\.addEventListener\('drop'", src)
         assert m, "Global drop listener must exist"
         after = src[m.start():m.start() + 2000]

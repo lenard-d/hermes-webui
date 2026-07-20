@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 from collections import OrderedDict
@@ -13,7 +15,7 @@ import api.routes as routes
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 class _FakeHandler:

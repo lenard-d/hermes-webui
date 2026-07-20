@@ -20,12 +20,17 @@ Two bugs:
 Tests run the live JS functions via Node and the live Python function via
 exec, so drift between the test and the real code is caught immediately.
 """
+from tests.frontend_asset_contract import family_asset_paths
+
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
@@ -39,7 +44,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _FIND_MODEL_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(name) {
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
   const start = ui.search(re);
@@ -79,7 +84,7 @@ process.stdout.write(JSON.stringify(got));
 
 _NORM_KEY_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(name) {
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
   const start = ui.search(re);
@@ -112,7 +117,7 @@ def norm_driver(tmp_path_factory):
 
 def _find(driver_path, model_id, options, preferred=None):
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH),
+        [NODE, driver_path, _family_path_arg("ui"),
          json.dumps({"modelId": model_id, "options": options, "preferredProvider": preferred})],
         capture_output=True, text=True, timeout=30,
     )
@@ -123,7 +128,7 @@ def _find(driver_path, model_id, options, preferred=None):
 
 def _norm_keys(driver_path, ids):
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), json.dumps(ids)],
+        [NODE, driver_path, _family_path_arg("ui"), json.dumps(ids)],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:

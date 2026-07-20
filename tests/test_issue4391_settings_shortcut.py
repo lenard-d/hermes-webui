@@ -8,10 +8,12 @@ The global keydown handler in boot.js must have a branch that:
 
 Issue: #4391 (Ctrl+, opens Settings)
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 BOOT_JS = (Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 class TestSettingsShortcutPresence:

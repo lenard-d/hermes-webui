@@ -1,5 +1,7 @@
 """Regression tests for issue #3820 chat activity display mode."""
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import json
 import shutil
 import subprocess
@@ -7,13 +9,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
+STYLE_CSS = family_source("style")
 NODE = shutil.which("node")
 
 _EXTRACT_FUNC_JS = """
@@ -50,9 +52,18 @@ def _transparentEventCountLabelBlock(ui_js):
     return ui_js[start:end]
 
 
-def _run_node_script(script):
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
+
+def _run_node_script(script, family="ui"):
     assert NODE, "node is required for chat activity display mode behavior tests"
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run(
+        [NODE, "-e", script, _family_path_arg(family)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -123,7 +134,7 @@ def test_chat_activity_display_mode_picker_uses_three_desktop_columns():
 def test_chat_activity_display_mode_resolver_and_live_early_out():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 global.window = {{
   _chatActivityDisplayMode: 'hide_all_activity',
@@ -179,7 +190,7 @@ process.stdout.write(JSON.stringify({{resolverResults}}));
 def test_chat_activity_display_mode_explicit_modes_are_preserved_by_render_helpers():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 let captured = [];
 function _projectLiveAnchorActivitySceneForStream(streamId, mode){{
@@ -223,7 +234,7 @@ process.stdout.write(JSON.stringify({{helperResult, snapshotResult, compactOverr
 def test_chat_activity_display_mode_live_renderer_early_outs_in_hide_all_mode():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 global.window = {{
   _chatActivityDisplayMode: 'hide_all_activity',
@@ -280,7 +291,7 @@ process.stdout.write(JSON.stringify({{emptyMode:empty.mode, sceneMode:scene.mode
 def test_chat_activity_display_mode_legacy_live_fallbacks_do_not_render_activity():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 global.S = {{ session: {{ session_id: 'sid-1' }}, activeStreamId: 'stream-1' }};
 global.isFinalAnswerOnlyMode = () => true;
@@ -299,7 +310,7 @@ process.stdout.write(JSON.stringify({{appendResult: appendResult === undefined, 
 def test_chat_activity_display_mode_legacy_thinking_fallback_does_not_render_activity():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 global.isFinalAnswerOnlyMode = () => true;
 global.$ = () => {{ throw new Error('unexpected DOM access'); }};
@@ -330,7 +341,7 @@ def test_chat_activity_display_mode_settled_hide_all_scene_persists_without_work
 def test_chat_activity_display_mode_switch_to_final_only_clears_existing_live_activity():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "panels.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 let cleanupCalls = 0;
 const select = {{value:''}};
@@ -353,7 +364,7 @@ _syncChatActivityDisplayModeControl('hide_all_activity');
 const afterHide = {{mode: window._chatActivityDisplayMode, transparent: window._transparentStream, cleanupCalls, selectValue: select.value}};
 process.stdout.write(JSON.stringify({{afterTransparent, afterHide}}));
 """
-    result = _run_node_script(script)
+    result = _run_node_script(script, "panels")
 
     assert result == {
         "afterTransparent": {"mode": "transparent_stream", "transparent": True, "cleanupCalls": 0},
@@ -475,7 +486,7 @@ def test_chat_activity_display_mode_plumbing_preserves_hide_all_activity():
 def test_chat_activity_display_mode_settled_worklog_suppression():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "messages.js"))}, 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 eval(extractFunc('_anchorSceneActiveMode'));
 eval(extractFunc('_anchorSceneRowDisplayHintForMode'));
@@ -496,7 +507,7 @@ window.isFinalAnswerOnlyMode = () => false;
 const compactScene = _anchorSceneHasWorklogWorthyRows({{mode:'compact_worklog', activity_rows:[{{role:'tool'}}]}});
 process.stdout.write(JSON.stringify({{activeMode, hiddenHint, compactHint, hiddenScene, activeFinalOnly, compactScene}}));
 """
-    result = _run_node_script(script)
+    result = _run_node_script(script, "messages")
 
     assert result == {
         "activeMode": "hide_all_activity",
@@ -763,7 +774,7 @@ def test_fade_text_effect_uses_dynamic_window_check():
     """The fade text effect must read window._fadeTextEffect dynamically
     on every call, and the Settings checkbox must update the live window flag
     immediately so the current session can start fading without a reload."""
-    MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+    MESSAGES_JS = family_source("messages")
     # Locate the helper and confirm it reads the live value.
     helper_start = MESSAGES_JS.index("function _shouldUseStreamFade(")
     helper_end = MESSAGES_JS.index("\n  function ", helper_start + 1)
@@ -777,9 +788,7 @@ def test_fade_text_effect_uses_dynamic_window_check():
     # the one immediately followed by the terminalAutoExpand field — rather than
     # a fragile byte offset (panels.js has two `fadeTextCb=` references: the
     # settings-body payload builder and this listener block).
-    fade_cb_start = PANELS_JS.index(
-        "const fadeTextCb=$('settingsFadeTextEffect');\n    if(fadeTextCb){"
-    )
+    fade_cb_start = PANELS_JS.index("const fadeTextCb=$('settingsFadeTextEffect');\n  if(fadeTextCb){")
     fade_cb_end = PANELS_JS.index("const terminalAutoExpandCb", fade_cb_start)
     fade_cb_block = PANELS_JS[fade_cb_start:fade_cb_end]
     assert "window._fadeTextEffect=fadeTextCb.checked" in fade_cb_block
@@ -1083,7 +1092,7 @@ def test_live_worklog_reason_mirror_is_gated_to_compact_mode():
     # Both live-render call sites still invoke the (now-gated) helper — the gate
     # lives in the helper, not at the call sites, so live rendering is unchanged
     # in compact mode.
-    MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+    MESSAGES_JS = family_source("messages")
     assert MESSAGES_JS.count("_syncLiveWorklogReasonsForAnchor(assistantRow") >= 2
 
     # The settled-render worklog-folding gate is also compact-only (regression

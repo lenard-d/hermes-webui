@@ -11,12 +11,17 @@ when nothing is cached yet OR the model/provider identity changed since the
 last fetch. This test drives the ACTUAL functions from static/ui.js via node
 and counts network calls, so the storm cannot silently come back.
 """
+from tests.frontend_asset_contract import family_asset_paths
+
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
@@ -27,7 +32,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function makeEl() {
   const attrs = {};
@@ -162,7 +167,7 @@ def driver_path(tmp_path_factory):
 @pytest.fixture(scope="module")
 def outcome(driver_path):
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH)],
+        [NODE, driver_path, _family_path_arg("ui")],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:

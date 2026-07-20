@@ -17,13 +17,14 @@ branches. #3331's legitimate project/session-operation scoping (which keys on
 the session's own profile) is unrelated to this line and stays in place.
 """
 
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
+
 
 import re
 
 
 def _ui_js() -> str:
-    return (Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 def _sync_topbar_body(src: str) -> str:
@@ -92,7 +93,7 @@ class TestIssue3635ProfileChipActive:
 
 
 def _panels_js() -> str:
-    return (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+    return family_source("panels")
 
 
 def _render_profile_dropdown_body(src: str) -> str:

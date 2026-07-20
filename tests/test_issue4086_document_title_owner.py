@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -34,7 +36,7 @@ def test_apply_bot_name_does_not_overwrite_active_session_document_title():
 
 
 def test_sync_topbar_remains_session_document_title_owner():
-    src = UI_JS.read_text()
+    src = family_source("ui")
     body = _extract_function(src, "function syncTopbar(){")
 
     assert "document.title=sessionTitle+' \\u2014 '+assistantDisplayName();" in body

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import tempfile
 from pathlib import Path
@@ -12,9 +14,9 @@ from api.models import new_session
 from api.routes import handle_post
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+SESSIONS_JS = family_source("sessions")
+PANELS_JS = family_source("panels")
 
 
 def _function_body(src: str, signature: str) -> str:

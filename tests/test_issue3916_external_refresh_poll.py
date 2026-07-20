@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -15,12 +17,12 @@ def _function_body(src: str, name: str) -> str:
 
 
 def test_refreshActiveSessionIfExternallyUpdated_exists():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     assert "async function refreshActiveSessionIfExternallyUpdated" in src
 
 
 def test_poll_path_skips_non_external_sessions():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     body = _function_body(src, "refreshActiveSessionIfExternallyUpdated")
     assert re.search(
         r"if\s*\(\s*\(\s*reason\s*\|\|\s*['\"]poll['\"]\s*\)\s*===\s*['\"]poll['\"]\s*&&\s*!\s*_isExternalSession\s*\(",
@@ -32,7 +34,7 @@ def test_poll_path_skips_non_external_sessions():
 
 
 def test_session_events_refresh_active_session():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     body = _function_body(src, "_scheduleSessionEventsRefresh")
     assert "void refreshSessionList(request.reason||'event', request.opts)" in body
     assert "_scheduleSessionEventsRefresh(eventTargetsActiveSession?'event-active-session':'event', {force:true, refreshActive:true})" in src

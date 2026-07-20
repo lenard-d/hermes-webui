@@ -1,5 +1,7 @@
 """Behavioral regression locks for #4295 scroll re-pin handling."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -13,7 +15,7 @@ NODE = shutil.which("node")
 
 
 def _ui_js() -> str:
-    return (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 def _balanced_block(src: str, brace_start: int) -> str:

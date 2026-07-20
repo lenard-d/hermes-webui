@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_asset_paths
+
 import io
 import json
 import shutil
@@ -44,10 +46,14 @@ def _payload(handler):
     return json.loads(handler.wfile.getvalue().decode("utf-8"))
 
 
-def _run_node(script: str) -> dict:
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
+
+def _run_node(script: str, family: str) -> dict:
     assert NODE is not None
     result = subprocess.run(
-        [NODE, "-e", script],
+        [NODE, "-e", script, _family_path_arg(family)],
         check=True,
         capture_output=True,
         text=True,
@@ -387,7 +393,8 @@ def test_cron_recent_does_not_cross_match_newer_long_prefix_session_when_only_sh
 def test_sessions_helper_marks_background_completion_with_existing_snapshot():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(SESSIONS_JS_PATH))}, 'utf8');
+// Ordered split family: {"sessions"}
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);
@@ -415,7 +422,7 @@ global.window = {{}};
     const result = _markSessionCompletionUnreadIfBackground('cron_1');
     console.log(JSON.stringify({{result, viewed, unread, renders}}));
 """
-    payload = _run_node(script)
+    payload = _run_node(script, "sessions")
 
     assert payload == {
         "result": True,
@@ -428,7 +435,8 @@ global.window = {{}};
 def test_sessions_helper_marks_actively_viewed_completion_as_read():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(SESSIONS_JS_PATH))}, 'utf8');
+// Ordered split family: {"sessions"}
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);
@@ -456,7 +464,7 @@ eval(extractFunc('_markSessionCompletionUnreadIfBackground'));
 const result = _markSessionCompletionUnreadIfBackground('cron_2');
 console.log(JSON.stringify({{result, viewed, unread, renders}}));
 """
-    payload = _run_node(script)
+    payload = _run_node(script, "sessions")
 
     assert payload == {
         "result": False,
@@ -469,7 +477,8 @@ console.log(JSON.stringify({{result, viewed, unread, renders}}));
 def test_cron_polling_marks_sidebar_unread_without_needing_toast():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(PANELS_JS_PATH))}, 'utf8');
+// Ordered split family: {"panels"}
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);
@@ -526,7 +535,7 @@ eval(extractFunc('startCronPolling'));
   process.exit(1);
 }});
 """
-    payload = _run_node(script)
+    payload = _run_node(script, "panels")
 
     assert payload == {
         "since": 25,

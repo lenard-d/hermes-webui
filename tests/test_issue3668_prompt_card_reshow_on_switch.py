@@ -38,17 +38,23 @@ These tests lock the behavioral invariant so it cannot silently regress:
 * The source-invariant tests assert the polling re-arm + SSE `initial` re-fetch
   wiring (the uncached / fresh-reload path) stays in place.
 """
+from tests.frontend_asset_contract import family_asset_paths, family_source
+import json
+
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 MESSAGES_JS_PATH = REPO_ROOT / "static" / "messages.js"
 SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
-MESSAGES_JS = MESSAGES_JS_PATH.read_text(encoding="utf-8")
-SESSIONS_JS = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+SESSIONS_JS = family_source("sessions")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -65,7 +71,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 _DRIVER = r"""
 const fs = require('fs');
 // node -e shifts argv: with `node -e SCRIPT FILE`, FILE is argv[1].
-const src = fs.readFileSync(process.argv[1], 'utf8');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function extractFunc(name){
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
@@ -153,7 +159,7 @@ console.log(JSON.stringify({
 
 def _run_driver():
     proc = subprocess.run(
-        [NODE, "-e", _DRIVER, str(MESSAGES_JS_PATH)],
+        [NODE, "-e", _DRIVER, _family_path_arg("messages")],
         capture_output=True,
         text=True,
         timeout=30,

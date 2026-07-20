@@ -21,6 +21,8 @@ model picker rebuilds immediately.
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -95,7 +97,7 @@ class TestFrontendRefreshPath:
     after a cache bust, not wait for the next /api/models poll."""
 
     def test_refresh_calls_dropdown_updater(self):
-        src = _read_static("panels.js")
+        src = family_source("panels")
         body = _extract_function_body(src, "async function _refreshProviderModels(")
         assert "_refreshModelDropdownsAfterProviderChange()" in body, (
             "_refreshProviderModels must call _refreshModelDropdownsAfterProviderChange() "
@@ -104,7 +106,7 @@ class TestFrontendRefreshPath:
         )
 
     def test_refresh_shows_friendly_404(self):
-        src = _read_static("panels.js")
+        src = family_source("panels")
         body = _extract_function_body(src, "async function _refreshProviderModels(")
         assert "e.status===404" in body or "e.status === 404" in body, (
             "_refreshProviderModels catch block must check e.status===404 to "

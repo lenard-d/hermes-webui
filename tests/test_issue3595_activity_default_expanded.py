@@ -1,4 +1,6 @@
 """Pin the full behavioral contract for the Worklog expanded-default setting."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -85,13 +87,13 @@ def test_boot_initializes_window_flag():
 
 
 def test_ensure_activity_group_checks_flag():
-    src = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    src = family_source("ui")
     assert "_worklogDetailsExpandedByDefault" in src, \
         "ensureActivityGroup must check window._worklogDetailsExpandedByDefault"
 
 
 def test_setting_controls_worklog_item_details_not_only_outer_group():
-    src = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    src = family_source("ui")
     assert "function _worklogDetailsExpandedDefault()" in src, \
         "Worklog detail cards should share a single expanded-default helper"
 
@@ -115,7 +117,7 @@ def test_setting_controls_worklog_item_details_not_only_outer_group():
 
 
 def test_setting_toggle_applies_to_existing_worklog_details():
-    ui_src = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_src = family_source("ui")
     helper = _function_body(ui_src, "_applyWorklogDetailsExpandedDefault")
     assert "scope.querySelectorAll('.thinking-card')" in helper, \
         "Toggling the setting should update existing Thinking cards"
@@ -124,7 +126,7 @@ def test_setting_toggle_applies_to_existing_worklog_details():
     assert "data-tool-worklog-tool-group" in helper and "aria-expanded" in helper, \
         "Toggling the setting should update existing multi-tool Worklog groups"
 
-    panels_src = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_src = family_source("panels")
     onchange_block = re.search(
         r"worklogDetailsExpandedCb\.onchange=function\(\)\{(?P<body>.*?)\n\s*\};",
         panels_src,
@@ -136,7 +138,7 @@ def test_setting_toggle_applies_to_existing_worklog_details():
 
 
 def test_appearance_autosave_does_not_reapply_worklog_details_over_manual_state():
-    panels_src = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_src = family_source("panels")
     autosave_fn = _function_body(panels_src, "_autosaveAppearanceSettings")
     assert "_worklogDetailsExpandedByDefault" in autosave_fn, \
         "Autosave should still reconcile the stored Worklog default flag"
@@ -145,13 +147,13 @@ def test_appearance_autosave_does_not_reapply_worklog_details_over_manual_state(
 
 
 def test_per_turn_override():
-    src = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    src = family_source("ui")
     assert re.search(r"savedState\s*===\s*['\"]closed['\"]", src), \
         "ensureActivityGroup must check savedState==='closed' so per-turn persistence overrides the global default"
 
 
 def test_collapse_class_applied():
-    src = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    src = family_source("ui")
     assert "tool-call-group-collapsed" in src, \
         "The collapsed class 'tool-call-group-collapsed' must be present in ui.js for the activity group"
 
@@ -167,7 +169,7 @@ def test_settings_checkbox_exists():
 
 
 def test_panels_wiring():
-    src = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    src = family_source("panels")
     assert "worklog_details_expanded_default" in src, \
         "panels.js must read/write the worklog_details_expanded_default setting"
     assert "activity_feed_expanded_default: worklogDetailsExpanded" in src, \
@@ -175,7 +177,7 @@ def test_panels_wiring():
 
 
 def test_i18n_keys():
-    src = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+    src = family_source("i18n")
     assert "settings_label_worklog_details_expanded_default" in src, \
         "i18n.js must have the label key for the setting"
     assert "settings_desc_worklog_details_expanded_default" in src, \

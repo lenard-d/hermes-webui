@@ -1,10 +1,12 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
+STYLE_CSS = family_source("style")
 
 
 def _function_body(src: str, signature: str) -> str:

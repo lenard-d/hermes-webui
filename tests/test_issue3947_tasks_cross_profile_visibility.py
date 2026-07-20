@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 import shutil
@@ -16,7 +18,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 NODE = shutil.which("node")
 
 

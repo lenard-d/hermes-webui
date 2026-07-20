@@ -1,8 +1,10 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 
 
 def test_tool_cards_use_legacy_compact_header_without_tool_output_badge():

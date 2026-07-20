@@ -4,15 +4,15 @@ Tests for GitHub issue #342: auto-link plain URLs in chat messages.
 These are structural tests that verify the fix is present in static/ui.js
 without requiring a running server or JavaScript engine.
 """
+from tests.frontend_asset_contract import family_source
+
 import os
-import re
 
 UI_JS = os.path.join(os.path.dirname(__file__), '..', 'static', 'ui.js')
 
 
 def read_ui_js():
-    with open(UI_JS, 'r') as f:
-        return f.read()
+    return family_source("ui")
 
 
 def test_autolink_comment_present():

@@ -21,6 +21,8 @@ Two correctness properties this pins:
 Combines + supersedes the approaches in #3997 (rodboev) and #4222 (Sanjays2402).
 """
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 
@@ -164,7 +166,7 @@ def test_boot_settings_load_failure_fallback_defaults_true():
 
 
 def test_settings_checkbox_renders_checked_by_default():
-    src = _read("static/panels.js")
+    src = family_source("panels")
     assert "showCliCb.checked=settings.show_cli_sessions!==false" in src, (
         "the show-CLI-sessions checkbox must default checked (!== false), matching "
         "the True config default"

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -17,7 +19,7 @@ from tests.test_provider_management import _install_fake_hermes_cli, _post
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 NODE = shutil.which("node")
 
 

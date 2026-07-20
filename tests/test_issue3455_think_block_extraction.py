@@ -12,6 +12,8 @@ the test exercises the shipped function, not a Python re-implementation.
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -20,7 +22,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _extract_block(src: str, marker: str) -> str:

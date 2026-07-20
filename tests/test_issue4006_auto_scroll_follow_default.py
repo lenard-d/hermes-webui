@@ -7,6 +7,8 @@ future edit can't silently flip it or, worse, default it ON in config.py while
 hydrating it OFF in the browser (the classic default-mismatch bug, where an
 existing user with no saved value sees the feature as disabled).
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
@@ -56,7 +58,7 @@ def test_boot_hydration_defaults_true_when_setting_absent():
 def test_settings_checkbox_renders_checked_by_default():
     """The Appearance checkbox must render checked when the setting is absent,
     matching the True default (panels.js settings-load)."""
-    src = _read("static/panels.js")
+    src = family_source("panels")
     assert "autoScrollFollowCb.checked=settings.auto_scroll_follow!==false" in src, (
         "the auto-follow checkbox must default checked (=== false), not "
         "!!settings.auto_scroll_follow which would render it unchecked by default"
@@ -67,7 +69,7 @@ def test_follow_gate_references_auto_scroll_follow_and_unpin():
     """The DOM-replace follow gate must consult both _autoScrollFollow (the
     setting) and _messageUserUnpinned (the user's scroll-up), so the opt-out and
     the read-while-streaming behaviors both hold."""
-    src = _read("static/ui.js")
+    src = family_source("ui")
     assert "_shouldFollowMessagesOnDomReplace" in src
     assert "_autoScrollFollow" in src and "_messageUserUnpinned" in src, (
         "the follow gate must reference both _autoScrollFollow and _messageUserUnpinned"

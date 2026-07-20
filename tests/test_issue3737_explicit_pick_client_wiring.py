@@ -17,12 +17,14 @@ exercised live); they keep the clear-timing from silently regressing.
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _model_onchange_region() -> str:

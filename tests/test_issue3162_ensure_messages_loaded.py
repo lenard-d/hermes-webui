@@ -7,10 +7,12 @@ mobile message (v0.51.161-166). Fix: `const` -> `let`.
 
 This is the targeted pin; tests/test_static_js_runtime_lint.py is the general guard.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _ensure_messages_loaded_body() -> str:

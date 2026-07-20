@@ -1,4 +1,6 @@
 """Tests for #3402 part A — move files/folders within the workspace tree."""
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -229,25 +231,25 @@ def test_file_move_rejects_symlinked_source_entry():
 
 class TestIssue3402WorkspaceTreeMoveUi:
     def test_render_tree_items_bind_move_drop_on_dirs(self):
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "_bindWorkspaceMoveDropTarget(el,item.path)" in src
 
     def test_move_drop_stops_propagation(self):
-        src = _src("ui.js")
+        src = family_source("ui")
         block = src[src.index("function _bindWorkspaceMoveDropTarget"):src.index("function _renderTreeItems")]
         assert block.count("e.stopPropagation()") >= 3
 
     def test_move_calls_file_move_api(self):
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "await api('/api/file/move'" in src
 
     def test_composer_ws_path_drag_still_copy(self):
-        src = _src("ui.js")
+        src = family_source("ui")
         m = re.search(r"el\.ondragstart=\(e\)=>\{[^}]+\}", src)
         assert m
         assert "effectAllowed='copy'" in m.group(0)
 
     def test_move_drop_css_classes_exist(self):
-        css = open("static/style.css", encoding="utf-8").read()
+        css = family_source("style")
         assert ".file-item.dragging" in css
         assert ".file-item.drag-over" in css

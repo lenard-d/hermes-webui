@@ -27,12 +27,17 @@ settled rebuild.
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_asset_paths
+
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 MESSAGES_JS = REPO_ROOT / "static" / "messages.js"
@@ -48,8 +53,8 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 _DRIVER_SRC = r"""
 'use strict';
 const fs = require('fs');
-const mSrc = fs.readFileSync(process.argv[2], 'utf8');
-const uSrc = fs.readFileSync(process.argv[3], 'utf8');
+const mSrc = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
+const uSrc = JSON.parse(process.argv[3]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(src, name) {
   const re = new RegExp('function\\s+' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\(');
   const start = src.search(re);
@@ -132,7 +137,7 @@ def driver_path(tmp_path_factory):
     gen = tmp_path_factory.mktemp("gen") / "gen.js"
     gen.write_text(_DRIVER_SRC, encoding="utf-8")
     result = subprocess.run(
-        [NODE, str(gen), str(MESSAGES_JS), str(UI_JS)],
+        [NODE, str(gen), _family_path_arg("messages"), _family_path_arg("ui")],
         capture_output=True, text=True, timeout=15,
     )
     if result.returncode != 0:

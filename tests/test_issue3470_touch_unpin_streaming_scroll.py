@@ -16,10 +16,12 @@ These are source-structure assertions (the project has no JS test runtime),
 matching the sibling sticky-unpin regressions (test_issue1731 / test_issue3250).
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _record_intent_fn() -> str:

@@ -25,12 +25,17 @@ Crucially they also assert the #1188 legitimate-fuzzy behaviour still holds
 (`gpt-5` → `gpt-5.4-mini`, `claude` → `claude-opus-4.6`), since the fix touches
 the same step-3 path.
 """
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
@@ -49,7 +54,7 @@ def commands_src() -> str:
 
 _FIND_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(src, name){
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
   const start = src.search(re);
@@ -178,7 +183,7 @@ def _resolve(driver, query, groups, sel_options):
 
 def _find(driver, model_id, options, preferred=None):
     r = subprocess.run(
-        [NODE, driver, str(UI_JS_PATH),
+        [NODE, driver, _family_path_arg("ui"),
          json.dumps({"modelId": model_id, "options": options, "preferredProvider": preferred})],
         capture_output=True, text=True, timeout=30,
     )
@@ -326,9 +331,7 @@ class TestDidYouMeanToastAssembly:
         assert "t('no_model_match')+`\"${args}\"`" not in commands_src
 
     def test_model_did_you_mean_is_arg_template_in_en_locale(self):
-        import pathlib
-        root = pathlib.Path(__file__).resolve().parents[1]
-        i18n = (root / "static" / "i18n.js").read_text(encoding="utf-8")
+        i18n = family_source("i18n")
         # The en template must accept and interpolate an argument.
         assert "model_did_you_mean: (m) =>" in i18n
         assert "${m}" in i18n[i18n.index("model_did_you_mean: (m) =>"):i18n.index("model_did_you_mean: (m) =>") + 120]

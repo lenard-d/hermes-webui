@@ -1,4 +1,6 @@
 """Tests for #3402 part B — OS file/folder import into workspace tree targets."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -10,7 +12,7 @@ def _src(name: str) -> str:
 
 
 WORKSPACE_JS = _src("workspace.js")
-UI_JS = _src("ui.js")
+UI_JS = family_source("ui")
 
 
 class TestIssue3402WorkspaceOsImportUi:
@@ -40,7 +42,7 @@ class TestIssue3402WorkspaceOsImportUi:
         assert "el.dataset.wsType=item.type" in UI_JS
 
     def test_os_upload_highlight_css(self):
-        css = open("static/style.css", encoding="utf-8").read()
+        css = family_source("style")
         assert ".file-item.drag-over-upload" in css
         assert ".breadcrumb-seg.drag-over-upload" in css
 

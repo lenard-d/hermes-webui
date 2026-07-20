@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import json
 import shutil
 import subprocess
@@ -14,11 +16,14 @@ import pytest
 
 import api.config as config
 
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
+PANELS_JS = family_source("panels")
 NODE = shutil.which("node")
 
 
@@ -178,7 +183,7 @@ def test_openrouter_free_tier_selection_stays_visible_when_selected_id_is_bare()
 
 _DROPDOWN_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function extractFunc(name) {
   const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(');
@@ -418,7 +423,7 @@ process.stdout.write(JSON.stringify({
 
 _INPLACE_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function extractFunc(name) {
   const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(');
@@ -785,7 +790,7 @@ process.stdout.write(JSON.stringify({
 
 _INPLACE_ENDPOINT_ERROR_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function extractFunc(name) {
   const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(');
@@ -981,7 +986,7 @@ process.stdout.write(JSON.stringify({
 
 _INPLACE_PREEXISTING_DRIVER = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 function extractFunc(name) {
   const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(');
@@ -1395,7 +1400,7 @@ def _run_dropdown_driver(driver_path: str, payload: dict | None = None) -> dict:
             "searchTerm": "overflow-two",
         }
     result = subprocess.run(
-        [NODE, driver_path, str(REPO / "static" / "ui.js"), json.dumps(payload)],
+        [NODE, driver_path, _family_path_arg("ui"), json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -1563,7 +1568,7 @@ def test_runtime_inplace_expand_then_search_clear_preserves_expanded_group(_driv
         "searchTerm": "overflow",
     }
     result = subprocess.run(
-        [NODE, _driver_paths["inplace"], str(REPO / "static" / "ui.js"), json.dumps(payload)],
+        [NODE, _driver_paths["inplace"], _family_path_arg("ui"), json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -1622,7 +1627,7 @@ def test_runtime_inplace_endpoint_error_group_renders_open(_driver_paths):
         "searchTerm": "",
     }
     result = subprocess.run(
-        [NODE, _driver_paths["endpoint_error"], str(REPO / "static" / "ui.js"), json.dumps(payload)],
+        [NODE, _driver_paths["endpoint_error"], _family_path_arg("ui"), json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -1664,7 +1669,7 @@ def test_runtime_inplace_expand_with_preexisting_options_reveals_them(_driver_pa
         "searchTerm": "",
     }
     result = subprocess.run(
-        [NODE, _driver_paths["preexisting"], str(REPO / "static" / "ui.js"), json.dumps(payload)],
+        [NODE, _driver_paths["preexisting"], _family_path_arg("ui"), json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,

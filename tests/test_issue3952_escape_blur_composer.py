@@ -1,11 +1,13 @@
 """Regression tests for #3952 composer Escape keyboard navigation."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _block_from_opening_brace(src: str, brace: int, label: str) -> str:

@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+import json
+
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 global.window = {};
 global.document = { createElement: () => ({ innerHTML: '', textContent: '' }) };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
@@ -59,7 +65,7 @@ def driver_path(tmp_path_factory):
 
 def _render(driver_path: str, markdown: str) -> str:
     result = subprocess.run(
-        [NODE, driver_path, str(REPO_ROOT / "static" / "ui.js")],
+        [NODE, driver_path, _family_path_arg("ui")],
         input=markdown,
         capture_output=True,
         text=True,

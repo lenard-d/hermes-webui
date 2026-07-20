@@ -10,6 +10,8 @@ Tests are organized in three tiers:
 Every behavioral test is designed to FAIL on the known-buggy versions that the
 maintainer's review caught, and PASS only on the fixed version.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -20,8 +22,8 @@ import tempfile
 import pytest
 
 ROOT = pathlib.Path(__file__).parent.parent
-CSS = (ROOT / 'static' / 'style.css').read_text(encoding='utf-8')
-JS = (ROOT / 'static' / 'ui.js').read_text(encoding='utf-8')
+CSS = family_source("style")
+JS = family_source("ui")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

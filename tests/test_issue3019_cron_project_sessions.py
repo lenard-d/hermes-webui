@@ -1,5 +1,7 @@
 """Regression tests for #3019 cron sessions under the Cron Jobs project."""
 
+from tests.frontend_asset_contract import family_source
+
 
 def test_project_assigned_cron_rows_are_returned_but_default_hidden():
     from api.models import _include_project_hidden_background_sidebar_sessions
@@ -89,7 +91,7 @@ def test_agent_side_cron_rows_keep_project_chip_visibility():
 
 
 def test_session_list_project_filter_can_reveal_default_hidden_cron_rows():
-    src = ( __import__("pathlib").Path(__file__).parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     assert "function _partitionSidebarSessionRows(allMatched, activeSidForSidebar)" in src
     assert "if(s.default_hidden&&!(_activeProject&&_activeProject!==NO_PROJECT_FILTER&&s.project_id===_activeProject)) continue;" in src

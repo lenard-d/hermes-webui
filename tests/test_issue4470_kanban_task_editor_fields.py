@@ -1,5 +1,7 @@
 """Source-inspection and behavioral tests for Kanban modal fields added in #4470."""
 from __future__ import annotations
+
+from tests.frontend_asset_contract import family_source
 import json
 import re
 import shutil
@@ -9,8 +11,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+I18N_JS = family_source("i18n")
 KANBAN_BRIDGE = (ROOT / "api" / "kanban_bridge.py").read_text(encoding="utf-8")
 
 NODE = shutil.which("node")

@@ -11,12 +11,13 @@ This test pins:
 - Main, lineage-segment, and child-session opens route through that helper
 """
 
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
 def _read_js():
-    with open('static/sessions.js', encoding='utf-8') as f:
-        return f.read()
+    return family_source("sessions")
 
 
 def test_is_external_session_function_exists():

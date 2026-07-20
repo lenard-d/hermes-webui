@@ -1,5 +1,7 @@
 """Regression coverage for the Settings-side max_tokens bridge."""
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 import re
@@ -392,11 +394,11 @@ def test_post_settings_does_not_write_max_tokens_when_save_settings_fails(monkey
 def test_settings_panel_wires_max_tokens_for_dirty_state_and_manual_save():
     import pathlib
 
-    panels_js = (pathlib.Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     index_html = (pathlib.Path(__file__).parent.parent / "static" / "index.html").read_text(encoding="utf-8")
-    i18n_js = (pathlib.Path(__file__).parent.parent / "static" / "i18n.js").read_text(encoding="utf-8")
+    i18n_js = family_source("i18n")
 
-    load_block = _function_block(panels_js, "loadSettingsPanel")
+    load_block = _function_block(panels_js, "_loadSettingsPreferences")
     load_idx = load_block.find("$('settingsMaxTokens')")
     assert load_idx != -1
     load_window = load_block[load_idx:load_idx + 420]

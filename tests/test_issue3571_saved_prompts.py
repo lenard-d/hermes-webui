@@ -5,6 +5,8 @@ The saved-prompts composer affordance is a desktop-only feature: per Nathan
 These tests pin the mobile-hide rule and the core wiring so a future refactor
 can't silently regress either.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -19,7 +21,7 @@ def test_saved_prompts_button_hidden_on_mobile():
     """#btnSavedPrompts (and its popup) must be display:none inside a mobile
     max-width:640px @media block — desktop-only affordance. Verified by walking
     each media block and confirming the hide rule lives inside a 640px-max one."""
-    css = read("static/style.css")
+    css = family_source("style")
     found = False
     for m in re.finditer(r"@media([^{]*)\{", css):
         cond = m.group(1)
@@ -61,7 +63,7 @@ def test_saved_prompts_backend_caps_present():
 def test_saved_prompts_core_wiring_present():
     """The composer must expose the saved-prompts toggle + popup and the
     load/save/delete API calls."""
-    js = read("static/messages.js")
+    js = family_source("messages")
     assert "toggleSavedPromptsPopup" in js
     assert "insertSavedPromptIntoComposer" in js
     assert re.search(r"api\('/api/prompts',\s*\{method:'POST'", js), "save wiring (POST) missing"

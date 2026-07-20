@@ -1,12 +1,9 @@
 """Tests for GitHub issue #341: .msg-body table CSS styles."""
-import os
-
-CSS_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "style.css")
+from tests.frontend_asset_contract import family_source
 
 
 def _read_css():
-    with open(CSS_PATH, "r") as f:
-        return f.read()
+    return family_source("style")
 
 
 def test_msg_body_table_css_present():

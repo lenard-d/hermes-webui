@@ -1,8 +1,10 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 

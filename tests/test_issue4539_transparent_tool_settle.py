@@ -1,11 +1,13 @@
 """Regression tests for issue #4539: transparent-stream tool-call rows
 vanish on turn settle, reappear only after tab/session switch."""
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _settled_cleanup_selector():

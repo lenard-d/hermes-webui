@@ -14,10 +14,11 @@ These static assertions keep the #3709 invariant in the #3401 model:
 """
 from __future__ import annotations
 
-import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-UI_JS = (Path(__file__).resolve().parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+import re
+
+UI_JS = family_source("ui")
 
 
 def _render_messages_body() -> str:

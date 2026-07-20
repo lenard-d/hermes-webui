@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 from api.streaming import (
@@ -7,8 +9,8 @@ from api.streaming import (
 
 
 REPO = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
 
 

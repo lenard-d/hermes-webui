@@ -1,5 +1,7 @@
 """Regression coverage for #4496 plugin provider badge state."""
 
+from tests.frontend_asset_contract import family_asset_paths
+
 import json
 import subprocess
 import textwrap
@@ -9,6 +11,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _family_path_arg(family: str) -> str:
+    return json.dumps([str(path) for path in family_asset_paths(family)])
+
+
 def test_provider_badge_uses_active_provider_payload_state(tmp_path):
     script = tmp_path / "check_plugin_badge.js"
     script.write_text(
@@ -16,7 +22,8 @@ def test_provider_badge_uses_active_provider_payload_state(tmp_path):
             f"""
             const fs = require('fs');
             const assert = require('assert');
-            const src = fs.readFileSync({json.dumps(str(REPO_ROOT / "static" / "panels.js"))}, 'utf8');
+            // Ordered split family: {"panels"}
+            const src = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
             function extractFunction(name) {{
               const marker = 'function ' + name;
@@ -101,4 +108,8 @@ def test_provider_badge_uses_active_provider_payload_state(tmp_path):
         encoding="utf-8",
     )
 
-    subprocess.run(["node", str(script)], check=True, cwd=REPO_ROOT)
+    subprocess.run(
+        ["node", str(script), _family_path_arg("panels")],
+        check=True,
+        cwd=REPO_ROOT,
+    )

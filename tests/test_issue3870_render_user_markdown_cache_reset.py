@@ -1,9 +1,11 @@
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+PANELS_JS = family_source("panels")
 
 
 def _extract_block(src: str, anchor: str) -> str:

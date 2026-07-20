@@ -1,5 +1,7 @@
 """Regression tests for #3433: chat composer path completion for ~/ tokens."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -12,7 +14,7 @@ import pytest
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 NODE = shutil.which("node")
 
 

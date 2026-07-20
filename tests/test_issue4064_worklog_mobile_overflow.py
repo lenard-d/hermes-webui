@@ -1,10 +1,12 @@
 """Regression guard for worklog summary overflow on narrow mobile viewports."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 def _rule(selector: str) -> str:

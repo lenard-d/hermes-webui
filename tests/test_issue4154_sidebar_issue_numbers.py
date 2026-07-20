@@ -5,6 +5,8 @@ tags.  Only known attention/session-control tags like #approval, #clarify,
 #attention should be extracted.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -13,7 +15,7 @@ SESSIONS_JS = ROOT / "static" / "sessions.js"
 
 
 def _read_sessions_js():
-    return SESSIONS_JS.read_text(encoding="utf-8")
+    return family_source("sessions")
 
 
 def test_sessionTitleTags_function_exists():

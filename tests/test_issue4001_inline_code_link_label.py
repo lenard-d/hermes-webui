@@ -1,6 +1,26 @@
 pytest_plugins = ("tests.test_renderer_js_behaviour",)
 
+import pytest
+
+from tests.frontend_asset_contract import family_source
+from tests import test_renderer_js_behaviour as renderer_behaviour
 from tests.test_renderer_js_behaviour import _render
+
+
+@pytest.fixture(scope="module")
+def driver_path(tmp_path_factory):
+    """Run the shared renderer harness against the complete split UI family."""
+    tmp_dir = tmp_path_factory.mktemp("inline_code_renderer")
+    driver = tmp_dir / "driver.js"
+    ui_source = tmp_dir / "ui-family.js"
+    driver.write_text(renderer_behaviour._DRIVER_SRC, encoding="utf-8")
+    ui_source.write_text(family_source("ui"), encoding="utf-8")
+    original = renderer_behaviour.UI_JS_PATH
+    renderer_behaviour.UI_JS_PATH = ui_source
+    try:
+        yield str(driver)
+    finally:
+        renderer_behaviour.UI_JS_PATH = original
 
 
 def test_inline_code_inside_link_label_renders_as_code(driver_path):

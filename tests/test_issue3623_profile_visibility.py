@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import sys
 import types
 from pathlib import Path
@@ -86,7 +88,7 @@ def test_default_profile_fallback_stays_visible(monkeypatch):
 
 
 def _panels_js() -> str:
-    return (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    return family_source("panels")
 
 
 def _function_body(src: str, signature: str) -> str:

@@ -15,6 +15,8 @@ delta captured before the re-render.
 Every behavioral test below is designed to FAIL on the known-buggy version
 (bare `if(!row) return`) and PASS only on the fixed version.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -108,7 +110,7 @@ def test_compensate_recovers_via_session_idx_when_rawidx_row_recycled():
     SAME row is still locatable by its stable data-session-msg-idx, the
     compensation must recover via the sessionIdx lookup and shift scrollTop by
     the measured delta -- NOT bail out (the buggy `if(!row) return`)."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let scrollTopValue = 20000;
 let scrollHistory = [];
@@ -160,7 +162,7 @@ def test_compensate_uses_toppad_delta_when_anchor_row_fully_recycled():
     top-spacer (topPad) height delta so the huge estimated->measured scrollHeight
     lurch does not throw the viewport to the top. Buggy code abandoned entirely
     and left scrollTop uncompensated."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let scrollTopValue = 20500;
 let scrollHistory = [];
@@ -208,7 +210,7 @@ console.log(JSON.stringify({scrollHistory}));
 def test_compensate_still_bails_cleanly_when_no_toppad_before_captured():
     """Defensive: if the captured anchor has no topPadBefore (older shape) AND
     the row is gone, the fallback must NOT throw and must NOT mutate scrollTop."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let scrollTopValue = 500;
 let scrollTopMutated = false;

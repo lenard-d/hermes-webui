@@ -11,6 +11,8 @@ which clears the stale id ONLY when no session is currently on screen
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -27,7 +29,7 @@ def _read(p: Path) -> str:
 
 def test_clear_stuck_session_helper_exists_and_is_wired():
     """The non-404 failure branch must delegate to _clearStuckSessionOnBoot."""
-    js = _read(SESSIONS_JS)
+    js = family_source("sessions")
     marker = "function _clearStuckSessionOnBoot(sid, currentSid){"
     assert marker in js
     # Wired into the non-404 error branch.
@@ -43,7 +45,7 @@ def _run_helper(current_sid_js: str) -> dict:
     """Run _clearStuckSessionOnBoot in node with a fake localStorage/history and
     report whether each was cleared."""
     assert NODE, "node is required"
-    js = _read(SESSIONS_JS)
+    js = family_source("sessions")
     start = js.index("function _clearStuckSessionOnBoot(sid, currentSid){")
     end = js.index("\n}", start) + 2
     helper_src = js[start:end]
@@ -82,7 +84,7 @@ def test_stale_load_guard_present_before_self_heal():
     must bail BEFORE any self-heal/DOM mutation, so a failed boot restore can't
     wipe localStorage/URL for the session the user navigated to mid-flight (Codex
     race finding). The guard re-arms the active stream and returns."""
-    js = _read(SESSIONS_JS)
+    js = family_source("sessions")
     # Anchor on the self-heal CALL (unique; the bare name also appears in the
     # helper's docstring), then look at the preceding window of the same
     # loadSession catch block for the stale-load guard.

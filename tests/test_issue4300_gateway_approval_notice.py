@@ -1,11 +1,13 @@
 """Regression coverage for #4300 legacy gateway approval unsupported notice."""
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 GATEWAY_CHAT = (REPO / "api" / "gateway_chat.py").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+I18N_JS = family_source("i18n")
 
 
 def test_gateway_chat_has_approval_notice_emitted_attribute_check():
@@ -55,13 +57,13 @@ def test_messages_js_references_i18n_key_for_approval_gateway_unsupported():
 def test_i18n_js_has_approval_gateway_unsupported_key():
     """Verify the i18n key exists in at least the English locale (first occurrence)."""
     assert "approval_gateway_unsupported: 'Approvals require a newer gateway" in I18N_JS
-    lines = I18N_JS.split("\n")
-    en_end = next(i for i, l in enumerate(lines) if l.strip().startswith("zh:"))
-    found_in_english = any(
-        "approval_gateway_unsupported:" in l
-        for l in lines[:en_end]
+    english_path = next(
+        path for path in family_asset_paths("i18n") if path.name == "locale-en.js"
     )
-    assert found_in_english, "approval_gateway_unsupported key not found in English i18n locale"
+    english = english_path.read_text(encoding="utf-8")
+    assert "approval_gateway_unsupported:" in english, (
+        "approval_gateway_unsupported key not found in English i18n locale"
+    )
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -399,13 +401,13 @@ const apiFns = runner(S, showConfirmDialog, api, showToast, t, URLSearchParams);
         assert result["toasts"][0][0] == "external_link_read_only"
 
     def test_external_rows_authorize_then_open(self):
-        src = UI_JS.read_text(encoding="utf-8")
+        src = family_source("ui")
         assert "authorizeWorkspaceEscapeNavigation(item)" in src
         assert "if(grant.isDir) await loadDir(item.path);" in src
         assert "else await openFile(item.path);" in src
 
     def test_read_only_affordances_stay_suppressed(self):
-        ui_src = UI_JS.read_text(encoding="utf-8")
+        ui_src = family_source("ui")
         ws_src = _read_workspace_js()
         assert "if(!isReadOnlyEscape){" in ui_src
         assert "_workspacePathIsReadOnly(_previewCurrentPath)" in ws_src

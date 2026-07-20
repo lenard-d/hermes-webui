@@ -17,10 +17,11 @@ behavioral scope-analysis guard lives in tests/test_static_js_scope_undef.py +
 scripts/scope_undef_gate.py, which catch the whole class. This test pins the
 specific #3696 invariant cheaply.
 """
-import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-SESSIONS_JS = (Path(__file__).resolve().parents[1] / "static" / "sessions.js").read_text(encoding="utf-8")
+import re
+
+SESSIONS_JS = family_source("sessions")
 
 
 def _brace_body(src: str, open_brace_idx: int) -> tuple[int, int]:

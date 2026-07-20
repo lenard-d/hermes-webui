@@ -1,11 +1,11 @@
+from tests.frontend_asset_contract import family_source
+
 import re
-from pathlib import Path
 
 
 def test_messages_rule_has_overflow_x_hidden():
     """Verify .messages rule includes overflow-x:hidden property."""
-    css_file = Path(__file__).resolve().parent.parent / "static" / "style.css"
-    content = css_file.read_text()
+    content = family_source("style")
 
     # Find the .messages{ rule
     messages_rule_match = re.search(r'\.messages\{[^}]*overflow-y:auto[^}]*\}', content)
@@ -19,8 +19,7 @@ def test_messages_rule_has_overflow_x_hidden():
 
 def test_messages_inner_mobile_has_containment():
     """Verify .messages-inner in mobile breakpoint includes containment properties."""
-    css_file = Path(__file__).resolve().parent.parent / "static" / "style.css"
-    content = css_file.read_text()
+    content = family_source("style")
 
     # Find the @media(max-width:640px) block and then .messages-inner within a reasonable window
     media_match = re.search(r'@media\(max-width:640px\)\{', content)

@@ -1,8 +1,10 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 
 

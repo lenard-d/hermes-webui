@@ -1,8 +1,10 @@
 """Regression coverage for #3319: pinned chat should recover after DOM rebuilds."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _extract_fn(src: str, name: str) -> str:
