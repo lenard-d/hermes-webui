@@ -7,7 +7,12 @@ from pathlib import Path
 import re
 import urllib.error
 
-from api.runs import attachments, gateway as gateway_chat, webui_prefill
+from api.runs import (
+    attachments,
+    gateway as gateway_chat,
+    gateway_transport,
+    webui_prefill,
+)
 import api.sessions.store as models
 from api.config import PENDING_GOAL_CONTINUATION, STREAMS, create_stream_channel
 from api.sessions.store import new_session
@@ -226,7 +231,7 @@ def test_gateway_http_401_with_key_suggests_key_mismatch():
 def test_frontend_renders_gateway_auth_error_with_specific_label():
     src = family_source("messages")
     start = src.find("source.addEventListener('apperror'")
-    end = src.find("source.addEventListener('warning'", start)
+    end = src.find("source.addEventListener('cancel'", start)
     assert start != -1 and end != -1, "apperror handler not found"
     block = src[start:end]
 
@@ -303,7 +308,11 @@ def test_gateway_chat_worker_translates_sse_and_persists_session(tmp_path, monke
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_API_KEY", "secret-token")
-    monkeypatch.setattr(gateway_chat, "_gateway_reasoning_effort_for_request", lambda *args, **kwargs: "high")
+    monkeypatch.setattr(
+        gateway_chat,
+        "gateway_reasoning_effort_for_request",
+        lambda *args, **kwargs: "high",
+    )
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {
         "status": "loaded",
         "source": "test",
@@ -315,7 +324,7 @@ def test_gateway_chat_worker_translates_sse_and_persists_session(tmp_path, monke
         ],
     })
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: list(ctx["messages"]) + [{"role": "user", "content": "webui session context"}])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", fake_urlopen)
 
     s = new_session()
     stream_id = "stream-gateway-test"
@@ -428,7 +437,7 @@ def test_gateway_chat_worker_classifies_terminal_provider_error_without_text(tmp
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     events = []
     channel = MagicMock()
@@ -587,7 +596,7 @@ def test_gateway_chat_worker_suppresses_empty_error_from_stale_generation(
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda req, timeout=0: FakeResponse(),
     )
@@ -652,7 +661,7 @@ def test_gateway_chat_worker_persists_reasoning_and_tool_state_on_terminal_error
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     events = []
     channel = MagicMock()
@@ -719,7 +728,7 @@ def test_gateway_chat_worker_preserves_reasoning_delta_whitespace_and_persists_r
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
     stream_id = "stream-gateway-reasoning-persist-test"
@@ -773,7 +782,7 @@ def test_gateway_chat_worker_reads_reasoning_content_deltas_from_chat_completion
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
     stream_id = "stream-gateway-reasoning-content-test"
@@ -826,7 +835,7 @@ def test_gateway_chat_worker_emits_goal_continue_for_goal_related_turn(tmp_path,
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     from api import goals as webui_goals
 
@@ -906,7 +915,7 @@ def test_gateway_chat_worker_skips_goal_judge_for_non_goal_turn(tmp_path, monkey
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     from api import goals as webui_goals
 
@@ -1006,7 +1015,7 @@ def test_gateway_chat_worker_normalizes_prefill_slice_before_system_prefix(tmp_p
     })
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: list(ctx["messages"]))
     monkeypatch.setattr(gateway_chat, "_normalize_prefill_messages_before_user_turn", recording_normalizer)
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", fake_urlopen)
 
     s = new_session()
     stream_id = "stream-gateway-prefill-slice-test"
@@ -1052,7 +1061,7 @@ def test_gateway_chat_worker_backfills_context_only_turns_into_display(tmp_path,
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
     s.context_messages = [
@@ -1115,7 +1124,7 @@ def test_gateway_chat_worker_preserves_old_visible_turns_when_context_is_compact
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
     old_visible_turns = [
@@ -1193,7 +1202,7 @@ def test_gateway_chat_worker_keeps_repeated_identical_visible_turns(tmp_path, mo
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
     # Two identical visible "same" user turns surround a context-only gap that
@@ -1271,7 +1280,7 @@ def test_gateway_chat_worker_forwards_image_attachments_as_multimodal_parts(tmp_
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
     monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [{"role": "user", "content": "webui session context"}])
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", fake_urlopen)
 
     s = new_session()
     stream_id = "stream-gateway-image-test"

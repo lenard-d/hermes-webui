@@ -6,26 +6,11 @@ PR #4495 fixed the runs API path but left the legacy path without approval handl
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from api.gateway_chat import _gateway_runs_approval_event
-
-REPO_ROOT = Path(__file__).parent.parent
-GATEWAY_CHAT_SRC = (REPO_ROOT / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
-
-_LEGACY_MARKER = 'url = f"{base_url}/v1/chat/completions"'
-_NEXT_FUNC_RE = "\ndef "
-
-
-def _extract_legacy_sse_loop():
-    """Extract the legacy /v1/chat/completions SSE relay function body."""
-    start = GATEWAY_CHAT_SRC.find(_LEGACY_MARKER)
-    assert start >= 0, "Legacy chat/completions path not found in api/runs/gateway.py"
-    end = GATEWAY_CHAT_SRC.find(_NEXT_FUNC_RE, start)
-    if end < 0:
-        end = len(GATEWAY_CHAT_SRC)
-    return GATEWAY_CHAT_SRC[start:end]
+from api.runs.gateway_events import (
+    gateway_runs_approval_event as _gateway_runs_approval_event,
+)
 
 
 def _drain_queue(q):
@@ -61,67 +46,6 @@ def _make_legacy_gateway_urlopen(approval_payload: str, after_approval=None):
         return resp
 
     return fake_urlopen
-
-
-def test_legacy_loop_checks_approval_request_event():
-    """Legacy SSE loop must handle `approval.request` events."""
-    loop = _extract_legacy_sse_loop()
-    assert '"approval.request"' in loop, (
-        "Legacy SSE loop must check for approval.request event name"
-    )
-
-
-def test_legacy_loop_checks_hermes_approval_request_event():
-    """Legacy SSE loop must handle `hermes.approval.request` events."""
-    loop = _extract_legacy_sse_loop()
-    assert '"hermes.approval.request"' in loop, (
-        "Legacy SSE loop must check for hermes.approval.request event name"
-    )
-
-
-def test_legacy_loop_derives_event_from_payload():
-    """Legacy SSE loop must derive event type from JSON payload fields."""
-    loop = _extract_legacy_sse_loop()
-    assert 'payload.get("event")' in loop or "payload.get('event')" in loop, (
-        "Legacy SSE loop must check payload JSON 'event' field"
-    )
-
-
-def test_legacy_loop_calls_put_gateway_event_approval():
-    """Legacy SSE loop must relay approval via put_gateway_event('approval', ...)."""
-    loop = _extract_legacy_sse_loop()
-    assert 'put_gateway_event("approval"' in loop, (
-        "Legacy SSE loop must call put_gateway_event with 'approval' event type"
-    )
-
-
-def test_legacy_loop_calls_submit_gateway_pending_mirror():
-    """Legacy SSE loop must mirror approval to polling state."""
-    loop = _extract_legacy_sse_loop()
-    assert "submit_gateway_pending_mirror" in loop, (
-        "Legacy SSE loop must call submit_gateway_pending_mirror for polling fallback"
-    )
-
-
-def test_legacy_loop_reuses_gateway_runs_approval_event():
-    """Legacy SSE loop must reuse _gateway_runs_approval_event, not duplicate the mapping."""
-    loop = _extract_legacy_sse_loop()
-    assert "_gateway_runs_approval_event" in loop, (
-        "Legacy SSE loop must call _gateway_runs_approval_event to map the payload"
-    )
-
-
-def test_legacy_loop_resets_sse_event_after_approval():
-    """Legacy SSE loop must reset sse_event to 'message' after handling approval."""
-    loop = _extract_legacy_sse_loop()
-    approval_idx = loop.find('"hermes.approval.request"')
-    assert approval_idx >= 0
-    # Window sized to cover the approval handling block including the run_id
-    # recording added in the #4549 follow-up (reset lands ~1360 chars in).
-    block_after = loop[approval_idx:approval_idx + 1500]
-    assert 'sse_event = "message"' in block_after, (
-        "Must reset sse_event to 'message' after approval handling to prevent bleed"
-    )
 
 
 def test_approval_event_mapping_complete_payload():
@@ -210,7 +134,7 @@ def test_legacy_sse_loop_relays_approval_event():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-legacy-approval",
                     msg_text="do something risky",
@@ -247,7 +171,8 @@ def test_legacy_approval_records_run_id_for_response_relay():
     """
     import io
     from api.config import STREAMS, STREAMS_LOCK
-    from api.gateway_chat import _STREAM_RUN_IDS, _run_gateway_chat_streaming
+    from api.runs.gateway import _run_gateway_chat_streaming
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
 
     events = []
     # Capture _STREAM_RUN_IDS at the instant the approval event is emitted.
@@ -310,7 +235,7 @@ def test_legacy_approval_records_run_id_for_response_relay():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-legacy-runid",
                     msg_text="do something risky",
@@ -350,8 +275,8 @@ def test_legacy_approval_records_run_id_for_response_relay():
 
         with patch("api.routes.get_session", return_value=relay_session), \
              patch("api.runner_client.HttpRunnerClient._request_json", new=fake_request_json), \
-             patch("api.runs.gateway._gateway_base_url", return_value="http://gw:8642"), \
-             patch("api.runs.gateway._gateway_api_key", return_value=""):
+             patch("api.runs.gateway_base_url", return_value="http://gw:8642"), \
+             patch("api.runs.gateway_api_key", return_value=""):
             from api.routes import _handle_approval_respond
             _handle_approval_respond(handler, body)
 
@@ -420,7 +345,7 @@ def test_legacy_teardown_clears_stale_gateway_mirror_and_notifies_empty_state():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=_make_legacy_gateway_urlopen(approval_payload, clear_gateway_queue)), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
                     msg_text="do something risky",
@@ -494,7 +419,7 @@ def test_legacy_teardown_preserves_live_gateway_head_mirror():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=_make_legacy_gateway_urlopen(approval_payload)), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
                     msg_text="do something risky",
@@ -576,7 +501,7 @@ def test_legacy_teardown_preserves_local_pending_entry():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=_make_legacy_gateway_urlopen(approval_payload)), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
                     msg_text="do something risky",
@@ -673,8 +598,8 @@ def test_mirrored_run_id_survives_active_stream_loss():
     try:
         with patch("api.routes.get_session", return_value=relay_session), \
              patch("api.runs.gateway.webui_gateway_chat_enabled", return_value=True), \
-             patch("api.runs.gateway._gateway_base_url", return_value="http://gw:8642"), \
-             patch("api.runs.gateway._gateway_api_key", return_value=""), \
+             patch("api.runs.gateway_base_url", return_value="http://gw:8642"), \
+             patch("api.runs.gateway_api_key", return_value=""), \
              patch("api.config.get_config", return_value={}), \
              patch("api.routes.resolve_gateway_approval", new=fake_resolve_gateway_approval), \
              patch("api.runner_client.HttpRunnerClient._request_json", new=fake_request_json):
@@ -755,7 +680,8 @@ def test_legacy_approval_without_run_id_stays_actionable():
     from api import routes as r
     from api import route_approvals as ra
     from api.config import STREAMS, STREAMS_LOCK
-    from api.gateway_chat import _STREAM_RUN_IDS, _run_gateway_chat_streaming
+    from api.runs.gateway import _run_gateway_chat_streaming
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
 
     stream_id = "sid-legacy-no-run"
     session_id = "sess-legacy-no-run"
@@ -812,7 +738,7 @@ def test_legacy_approval_without_run_id_stays_actionable():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id=session_id,
                     msg_text="do something risky",

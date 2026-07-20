@@ -134,7 +134,7 @@ def _end_stream_drop_entry(sid: str):
 
 def _respond(sid: str, approval_id: str, choice: str = "once"):
     h = _FakeHandler()
-    with patch("api.runs.gateway.webui_gateway_chat_enabled", return_value=False):
+    with patch("api.runs.webui_gateway_chat_enabled", return_value=False):
         routes._handle_approval_respond(
             h, {"session_id": sid, "choice": choice, "approval_id": approval_id}
         )

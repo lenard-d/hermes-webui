@@ -8,6 +8,8 @@ import threading
 import urllib.error
 from unittest.mock import MagicMock, patch
 
+from api.runs.gateway_transport import GatewayStreamResult
+
 
 # ---------------------------------------------------------------------------
 # 1. Capability detection
@@ -235,7 +237,10 @@ def test_gateway_runs_api_submission():
     ):
         runs_called["called"] = True
         captured["body_extras"] = body_extras
-        return (original_text, {"input_tokens": 10, "output_tokens": 5})
+        return GatewayStreamResult(
+            final_text=original_text,
+            usage={"input_tokens": 10, "output_tokens": 5},
+        )
 
     mock_session = MagicMock()
     mock_session.active_stream_id = stream_id
@@ -252,10 +257,10 @@ def test_gateway_runs_api_submission():
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway", "HERMES_WEBUI_GATEWAY_USE_RUNS_API": "1"}):
             with patch("api.runs.gateway.gateway_supports_approval", lambda *_args, **_kwargs: True), \
-                 patch("api.runs.gateway._run_gateway_runs_api_streaming", fake_runs_streaming), \
-                 patch("api.runs.gateway._gateway_reasoning_effort_for_request", return_value="high"), \
+                 patch("api.runs.gateway.stream_gateway_runs_api", fake_runs_streaming), \
+                 patch("api.runs.gateway.gateway_reasoning_effort_for_request", return_value="high"), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess1",
                     msg_text="hi",
@@ -320,7 +325,8 @@ def test_gateway_approval_event_translation():
 def test_gateway_runs_api_streaming_parses_real_run_events():
     """The runs-API bridge must parse the real gateway event payloads."""
     from api.config import STREAM_PARTIAL_TEXT, STREAM_REASONING_TEXT
-    from api.gateway_chat import _STREAM_RUN_IDS, _run_gateway_runs_api_streaming
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
+    from api.runs.gateway_transport import stream_gateway_runs_api
 
     events = []
     requests = []
@@ -371,7 +377,7 @@ def test_gateway_runs_api_streaming_parses_real_run_events():
 
     try:
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            final_text, usage = _run_gateway_runs_api_streaming(
+            result = stream_gateway_runs_api(
                 session_id="sess1",
                 msg_text="hi",
                 model="test-model",
@@ -384,7 +390,7 @@ def test_gateway_runs_api_streaming_parses_real_run_events():
                     {"role": "assistant", "content": "earlier reply"},
                 ],
                 body_extras={"provider": "anthropic"},
-                put_gateway_event=lambda event, data: events.append((event, data)),
+                publish=lambda event, data: events.append((event, data)),
                 cancel_event=threading.Event(),
             )
     finally:
@@ -403,9 +409,9 @@ def test_gateway_runs_api_streaming_parses_real_run_events():
     assert run_body["session_id"] == "sess1"
     assert "messages" not in run_body
 
-    assert final_text == "Hello"
-    assert usage["input_tokens"] == 3
-    assert usage["output_tokens"] == 1
+    assert result.final_text == "Hello"
+    assert result.usage["input_tokens"] == 3
+    assert result.usage["output_tokens"] == 1
     assert events[0][0] == "approval"
     assert events[0][1]["description"] == "Dangerous command approval"
     assert events[0][1]["approval_id"] == "appr-1"
@@ -415,7 +421,8 @@ def test_gateway_runs_api_streaming_parses_real_run_events():
 
 def test_gateway_runs_api_streaming_preserves_multimodal_input():
     """Attachment-backed runs requests must keep multimodal content lists."""
-    from api.gateway_chat import _STREAM_RUN_IDS, _run_gateway_runs_api_streaming
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
+    from api.runs.gateway_transport import stream_gateway_runs_api
 
     requests = []
     multimodal_content = [
@@ -457,8 +464,8 @@ def test_gateway_runs_api_streaming_preserves_multimodal_input():
 
     try:
         with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-             patch("api.runs.gateway._build_native_multimodal_message", return_value=multimodal_content):
-            _run_gateway_runs_api_streaming(
+             patch("api.runs.gateway_transport._build_native_multimodal_message", return_value=multimodal_content):
+            stream_gateway_runs_api(
                 session_id="sess-mm",
                 msg_text="describe this",
                 model="test-model",
@@ -468,7 +475,7 @@ def test_gateway_runs_api_streaming_preserves_multimodal_input():
                 api_key="secret",
                 prefill_messages=[],
                 body_extras={},
-                put_gateway_event=lambda *_args, **_kwargs: None,
+                publish=lambda *_args, **_kwargs: None,
                 cancel_event=threading.Event(),
                 attachments=[{"name": "demo.png"}],
                 cfg={},
@@ -512,13 +519,15 @@ def test_gateway_runs_api_cancel_does_not_emit_empty_response():
     mock_session.pending_started_at = None
 
     def fake_runs_streaming(*args, **kwargs):
-        kwargs["put_gateway_event"]("cancel", {"message": "Cancelled by gateway"})
-        return None, {}
+        return GatewayStreamResult(
+            cancelled=True,
+            cancel_message="Cancelled by gateway",
+        )
 
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway", "HERMES_WEBUI_GATEWAY_USE_RUNS_API": "1"}):
             with patch("api.runs.gateway.gateway_supports_approval", return_value=True), \
-                 patch("api.runs.gateway._run_gateway_runs_api_streaming", side_effect=fake_runs_streaming), \
+                 patch("api.runs.gateway.stream_gateway_runs_api", side_effect=fake_runs_streaming), \
                  patch("api.runs.gateway.get_session", return_value=mock_session):
                 _run_gateway_chat_streaming(
                     session_id="sess-cancel",
@@ -544,7 +553,7 @@ def test_gateway_runs_api_cancel_does_not_emit_empty_response():
 
 def test_gateway_approval_response_relay():
     """_handle_approval_respond relays the real gateway approval body."""
-    from api.gateway_chat import _STREAM_RUN_IDS
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
 
     # Seed the mapping.
     _STREAM_RUN_IDS["sid-relay"] = "run abc/1"
@@ -566,8 +575,8 @@ def test_gateway_approval_response_relay():
 
     with patch("api.routes.get_session", return_value=mock_session), \
          patch("api.runner_client.HttpRunnerClient._request_json", new=fake_request_json), \
-         patch("api.runs.gateway._gateway_base_url", return_value="http://gw:8642"), \
-         patch("api.runs.gateway._gateway_api_key", return_value=""):
+         patch("api.runs.gateway_base_url", return_value="http://gw:8642"), \
+         patch("api.runs.gateway_api_key", return_value=""):
         from api.routes import _handle_approval_respond
         _handle_approval_respond(handler, body)
 
@@ -581,7 +590,7 @@ def test_gateway_approval_response_relay():
 
 def test_gateway_approval_response_relay_failure_returns_502():
     """Gateway relay failures must surface as HTTP errors to the frontend."""
-    from api.gateway_chat import _STREAM_RUN_IDS
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
     from api.runner_client import RunnerClientError
 
     _STREAM_RUN_IDS["sid-relay-fail"] = "run-abc"
@@ -596,8 +605,8 @@ def test_gateway_approval_response_relay_failure_returns_502():
 
     with patch("api.routes.get_session", return_value=mock_session), \
          patch("api.runner_client.HttpRunnerClient.respond_approval", side_effect=RunnerClientError("relay failed")), \
-         patch("api.runs.gateway._gateway_base_url", return_value="http://gw:8642"), \
-         patch("api.runs.gateway._gateway_api_key", return_value=""):
+         patch("api.runs.gateway_base_url", return_value="http://gw:8642"), \
+         patch("api.runs.gateway_api_key", return_value=""):
         from api.routes import _handle_approval_respond
         _handle_approval_respond(handler, body)
 
@@ -612,7 +621,7 @@ def test_gateway_approval_response_relay_failure_returns_502():
 
 def test_gateway_approval_response_invalid_gateway_base_returns_502():
     """Misconfigured gateway bases must not fall through to the local approval path."""
-    from api.gateway_chat import _STREAM_RUN_IDS
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
 
     _STREAM_RUN_IDS["sid-relay-invalid-base"] = "run-abc"
 
@@ -625,8 +634,8 @@ def test_gateway_approval_response_invalid_gateway_base_returns_502():
     body = {"session_id": "sess-relay", "choice": "once", "approval_id": "appr-x"}
 
     with patch("api.routes.get_session", return_value=mock_session), \
-         patch("api.runs.gateway._gateway_base_url", return_value="file:///tmp/not-http"), \
-         patch("api.runs.gateway._gateway_api_key", return_value=""):
+         patch("api.runs.gateway_base_url", return_value="file:///tmp/not-http"), \
+         patch("api.runs.gateway_api_key", return_value=""):
         from api.routes import _handle_approval_respond
         _handle_approval_respond(handler, body)
 
@@ -766,7 +775,7 @@ def test_gateway_chat_completions_path_unchanged():
             with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=mock_session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-ok",
                     msg_text="hello",

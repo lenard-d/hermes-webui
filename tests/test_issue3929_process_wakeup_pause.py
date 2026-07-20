@@ -14,7 +14,7 @@ from unittest import mock
 import pytest
 
 import api.config as config
-from api.runs import gateway as gateway_chat
+from api.runs import gateway as gateway_chat, gateway_transport
 from api.runs import local_entrypoint
 import api.sessions.store as models
 import api.sessions.records as session_records
@@ -1909,7 +1909,7 @@ def test_gateway_cancel_during_completion_save_restores_process_wakeup_pause(tmp
             ])
 
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda *_args, **_kwargs: _GatewayResponse(),
     )
@@ -2002,7 +2002,7 @@ def test_gateway_late_cancel_preserves_completed_webui_turn(tmp_path, monkeypatc
             ])
 
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda *_args, **_kwargs: _GatewayResponse(),
     )
@@ -2096,7 +2096,7 @@ def test_gateway_late_cancel_preserves_existing_pause_for_webui_recovery(tmp_pat
             ])
 
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda *_args, **_kwargs: _GatewayResponse(),
     )
@@ -2201,7 +2201,7 @@ def test_gateway_post_save_cancel_after_success_commit_emits_done(tmp_path, monk
             ])
 
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda *_args, **_kwargs: _GatewayResponse(),
     )

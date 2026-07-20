@@ -93,9 +93,9 @@ def test_gateway_done_payload_uses_full_message_count_helper():
     must also report a message_count matching the embedded transcript (sibling
     of the two streaming.py sites)."""
     gateway_source = Path("api/runs/gateway.py").read_text(encoding="utf-8")
-    done_idx = gateway_source.index('put_gateway_event("done"')
-    block_start = gateway_source.rfind("gateway_session_payload =", 0, done_idx)
+    done_idx = gateway_source.index('publish(\n            "done"')
+    block_start = gateway_source.rfind("session_payload =", 0, done_idx)
     block = gateway_source[block_start:done_idx]
 
-    assert "_session_payload_with_full_messages(s, tool_calls=[])" in block
-    assert 's.compact() | {"messages": s.messages' not in block
+    assert "_session_payload_with_full_messages(\n            session," in block
+    assert 'session.compact() | {"messages": session.messages' not in block

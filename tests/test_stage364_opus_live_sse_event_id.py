@@ -42,12 +42,12 @@ def test_local_producer_delegates_journal_and_cursor_publication_to_sink():
 
 def test_gateway_producer_delegates_journal_and_cursor_publication_to_sink():
     """Gateway policy must use the same publication owner as local runs."""
-    put_def_idx = GATEWAY_CHAT_PY.find("def put_gateway_event(event, data):")
-    assert put_def_idx != -1, "put_gateway_event(event, data) not found"
+    put_def_idx = GATEWAY_CHAT_PY.find("def publish(event, data):")
+    assert put_def_idx != -1, "publish(event, data) not found"
     put_body = GATEWAY_CHAT_PY[put_def_idx:put_def_idx + 700]
-    sink_idx = GATEWAY_CHAT_PY.find("event_sink = execution.event_sink")
-    assert 0 <= sink_idx < put_def_idx
-    assert "event_sink.publish(event, data)" in put_body
+    execution_idx = GATEWAY_CHAT_PY.find("execution = TurnExecution.start(")
+    assert 0 <= execution_idx < put_def_idx
+    assert "execution.event_sink.publish(event, data)" in put_body
 
 
 def test_sse_handler_emits_runtime_cursor_for_legacy_queue(monkeypatch):

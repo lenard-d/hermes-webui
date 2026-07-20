@@ -4,7 +4,7 @@ import json
 import pytest
 
 import api.config as config
-from api.runs import gateway as gateway_chat
+from api.runs import gateway as gateway_chat, gateway_runtime, gateway_transport
 import api.sessions.store as models
 
 
@@ -29,7 +29,7 @@ def _clear_runtime_maps():
     with config.ACTIVE_RUNS_LOCK:
         config.ACTIVE_RUNS.clear()
     config.PENDING_GOAL_CONTINUATION.clear()
-    gateway_chat._STREAM_RUN_IDS.clear()
+    gateway_runtime.clear_gateway_run_correlations()
 
 
 @pytest.fixture(autouse=True)
@@ -109,7 +109,7 @@ def test_first_terminal_write_failure_reports_persistence_error_without_snapshot
             yield b"data: [DONE]\n\n"
 
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda _request, timeout=0: ProviderErrorResponse(),
     )
@@ -193,7 +193,7 @@ def test_provider_cancel_persists_pending_user_turn_and_cancellation_marker(
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_USE_RUNS_API", "1")
     monkeypatch.setattr(gateway_chat, "gateway_supports_approval", lambda *_args: True)
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda _request, timeout=0: next(responses),
     )
@@ -235,7 +235,7 @@ def test_stale_worker_transport_failure_does_not_publish_application_error(
     def fail_request(_request, timeout=0):
         raise OSError("old worker lost its gateway connection")
 
-    monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fail_request)
+    monkeypatch.setattr(gateway_transport.urllib.request, "urlopen", fail_request)
     old_stream_id = "gateway-stale-worker"
     current_stream_id = "gateway-current-worker"
     current_prompt = "newer pending request"
@@ -263,10 +263,10 @@ def test_gateway_run_id_is_released_when_runtime_cleanup_fails(tmp_path, monkeyp
     stream_id = "gateway-finish-cleanup-failure"
     session = _pending_session(stream_id, "trigger gateway teardown")
     _registered_events(stream_id, session.session_id)
-    gateway_chat._STREAM_RUN_IDS[stream_id] = "run-awaiting-approval"
+    gateway_runtime.bind_gateway_run(stream_id, "run-awaiting-approval")
 
     monkeypatch.setattr(
-        gateway_chat.urllib.request,
+        gateway_transport.urllib.request,
         "urlopen",
         lambda _request, timeout=0: (_ for _ in ()).throw(
             OSError("gateway connection failed")
@@ -291,4 +291,4 @@ def test_gateway_run_id_is_released_when_runtime_cleanup_fails(tmp_path, monkeyp
         )
 
     assert exc_info.value is cleanup_error
-    assert stream_id not in gateway_chat._STREAM_RUN_IDS
+    assert gateway_runtime.gateway_run_for_stream(stream_id) is None

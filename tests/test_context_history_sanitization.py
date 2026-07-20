@@ -141,7 +141,8 @@ def test_sanitize_messages_drops_empty_tool_calls_array():
 
 def test_gateway_conversation_history_no_oob():
     from api.config import STREAM_PARTIAL_TEXT, STREAM_REASONING_TEXT
-    from api.gateway_chat import _STREAM_RUN_IDS, _run_gateway_runs_api_streaming
+    from api.runs.gateway_runtime import _STREAM_RUN_IDS
+    from api.runs.gateway_transport import stream_gateway_runs_api
 
     requests = []
     stream_id = "stream-oob-sanitization"
@@ -189,7 +190,7 @@ def test_gateway_conversation_history_no_oob():
 
     try:
         with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            final_text, usage = _run_gateway_runs_api_streaming(
+            result = stream_gateway_runs_api(
                 session_id="sess-oob",
                 msg_text="current user",
                 model="test-model",
@@ -199,7 +200,7 @@ def test_gateway_conversation_history_no_oob():
                 api_key="secret",
                 prefill_messages=[],
                 body_extras={},
-                put_gateway_event=lambda *_args, **_kwargs: None,
+                publish=lambda *_args, **_kwargs: None,
                 cancel_event=threading.Event(),
                 session=session,
             )
@@ -209,9 +210,9 @@ def test_gateway_conversation_history_no_oob():
         _STREAM_RUN_IDS.pop(stream_id, None)
 
     run_body = json.loads(requests[0].data.decode("utf-8"))
-    assert final_text == "done"
-    assert usage["input_tokens"] == 1
-    assert usage["output_tokens"] == 1
+    assert result.final_text == "done"
+    assert result.usage["input_tokens"] == 1
+    assert result.usage["output_tokens"] == 1
     assert not _contains_oob(run_body["conversation_history"])
     assert run_body["conversation_history"] == [
         {"role": "user", "content": "history request\n\nvisible request"},

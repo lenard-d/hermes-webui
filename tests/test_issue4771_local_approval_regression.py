@@ -145,7 +145,7 @@ def test_local_mirrored_approval_resolves_not_409():
     try:
         entry, approval_id = _seed_local_pending_approval(sid)
         handler = _FakeHandler()
-        with patch("api.runs.gateway.webui_gateway_chat_enabled", return_value=False):
+        with patch("api.runs.webui_gateway_chat_enabled", return_value=False):
             routes._handle_approval_respond(
                 handler,
                 {"session_id": sid, "choice": "once", "approval_id": approval_id},
@@ -168,7 +168,7 @@ def test_local_mirrored_approval_deny_resolves():
     try:
         entry, approval_id = _seed_local_pending_approval(sid)
         handler = _FakeHandler()
-        with patch("api.runs.gateway.webui_gateway_chat_enabled", return_value=False):
+        with patch("api.runs.webui_gateway_chat_enabled", return_value=False):
             routes._handle_approval_respond(
                 handler,
                 {"session_id": sid, "choice": "deny", "approval_id": approval_id},
@@ -191,7 +191,7 @@ def test_gateway_mirrored_approval_without_run_still_409s():
     try:
         entry, approval_id = _seed_local_pending_approval(sid)
         handler = _FakeHandler()
-        with patch("api.runs.gateway.webui_gateway_chat_enabled", return_value=True):
+        with patch("api.runs.webui_gateway_chat_enabled", return_value=True):
             routes._handle_approval_respond(
                 handler,
                 {"session_id": sid, "choice": "once", "approval_id": approval_id},

@@ -17,7 +17,6 @@ from api.config import STREAMS, STREAMS_LOCK, invalidate_gateway_caps
 from api.gateway_chat import _run_gateway_chat_streaming
 
 REPO = Path(__file__).resolve().parents[1]
-GATEWAY_CHAT = (REPO / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
 MESSAGES_STREAM_MODULE = REPO / "static" / "modules" / "messages" / "stream.js"
 
 
@@ -83,7 +82,7 @@ def _run_gateway_warning_case(unavailable_reason: str, tmp_path, monkeypatch) ->
                  patch("api.runs.gateway.gateway_approval_unavailable_reason", return_value=unavailable_reason), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-warning",
                     msg_text="hi",
@@ -162,7 +161,7 @@ def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe(tmp_p
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-404",
                     msg_text="hi",
@@ -224,7 +223,7 @@ def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe(t
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
                  patch("api.runs.gateway.get_session", return_value=session), \
-                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway_settlement.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-timeout",
                     msg_text="hi",
@@ -340,9 +339,3 @@ console.log(JSON.stringify({{
         "statuses": [],
         "translations": ["approval_gateway_unsupported_label"],
     }
-
-
-def test_gateway_chat_source_mentions_offline_warning_type():
-    assert "approval_type = \"approval_gateway_offline\"" in GATEWAY_CHAT
-    assert "approval_type = \"approval_gateway_unsupported\"" in GATEWAY_CHAT
-    assert "approval_message = \"Gateway connection failed. Check that the connected Hermes gateway is running and reachable.\"" in GATEWAY_CHAT
