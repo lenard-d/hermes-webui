@@ -65,9 +65,9 @@ def test_frontend_handles_state_saved_sse_and_reuses_dedupe():
     end = MESSAGES_JS.index("source.addEventListener('title'", start)
     block = MESSAGES_JS[start:end]
 
-    assert "_showPersistentStateToast(d.kind, d.name||''" in block
-    assert "String(d.action||'').toLowerCase()==='created'" in block
-    assert "if((d.session_id||activeSid)!==activeSid) return;" in block
+    assert "showPersistentStateToast(payload.kind,payload.name||''" in block
+    assert "String(payload.action||'').toLowerCase()==='created'" in block
+    assert "if(!belongsToOwner(payload)) return;" in block
     assert "'state_saved'" in MESSAGES_JS
 
 

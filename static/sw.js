@@ -99,6 +99,7 @@ const SHELL_ASSETS = [
   './static/modules/messages/approvals.js',
   './static/modules/messages/clarify.js',
   './static/modules/messages/composer-context.js',
+  './static/modules/messages/control-events.js',
   './static/modules/messages/core.js',
   './static/modules/messages/live-tools.js',
   './static/modules/messages/markdown-tables.js',
@@ -108,6 +109,7 @@ const SHELL_ASSETS = [
   './static/modules/messages/send.js',
   './static/modules/messages/session-events.js',
   './static/modules/messages/stream-lifecycle.js',
+  './static/modules/messages/stream-progress.js',
   './static/modules/messages/stream.js',
   './static/modules/panels/index.js' + VQ,
   // Native module imports do not inherit the entrypoint query string.

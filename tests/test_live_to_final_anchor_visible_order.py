@@ -15,6 +15,9 @@ MESSAGES_JS = family_source("messages")
 STREAM_ANCHOR_SCENE_JS = (
     ROOT / "static" / "modules" / "messages" / "anchor-scene.js"
 ).read_text(encoding="utf-8")
+STREAM_PROGRESS_JS = (
+    ROOT / "static" / "modules" / "messages" / "stream-progress.js"
+).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
@@ -1643,7 +1646,7 @@ def test_session_reload_can_render_runtime_journal_anchor_scene_snapshot():
 
 
 def test_runtime_journal_anchor_scene_seeds_live_registry_before_new_events():
-    persist = _function_body(MESSAGES_JS, "persistInflightState")
+    persist = _function_body(STREAM_PROGRESS_JS, "persistProgressState")
     hydrate = _function_body(MESSAGES_JS, "_hydrateAnchorRegistryFromActivityScene")
 
     assert "anchorActivityScene:inflight.anchorActivityScene||null" in persist

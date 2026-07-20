@@ -346,6 +346,12 @@ larger migration remains incremental:
   is not duplicated in the Adapter. The owner also computes transcript render
   signatures from message, tool-call, and session inputs, so cache validity is
   behavior-tested without parsing `ui.js` source layout.
+- The native `static/modules/messages/` graph keeps live response orchestration
+  in `stream.js` while `stream-progress.js` exclusively owns its delayed
+  INFLIGHT persistence and DOM-snapshot jobs. `control-events.js` owns
+  non-content SSE application plus the consume-once goal continuation state;
+  token, tool, anchor, and terminal transcript projection remain with the live
+  turn owner instead of being split across callback fragments.
 
 These Interfaces are intentionally deep: route and rendering code state the
 operation they need while lock ordering, cache accounting, and multi-registry

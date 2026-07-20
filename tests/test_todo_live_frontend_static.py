@@ -10,6 +10,9 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).parent.parent
+STREAM_PROGRESS_JS = (
+    REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
+).read_text(encoding="utf-8")
 
 
 def _read_static(path: str) -> str:
@@ -29,8 +32,10 @@ def test_frontend_state_and_inflight_storage_include_todo_snapshot():
     assert "todos:[],todoStateMeta:null" in ui
     assert "const todos=Array.isArray(state.todos)?state.todos:null" in ui
     assert "todoStateMeta" in ui[ui.find("function _compactInflightState"):ui.find("function _writeInflightStateMap")]
-    assert "todos:Array.isArray(inflight.todos)?inflight.todos:S.todos" in messages
-    assert "todoStateMeta:inflight.todoStateMeta||S.todoStateMeta||null" in messages
+    assert "getTodos:()=>S.todos" in messages
+    assert "getTodoStateMeta:()=>S.todoStateMeta" in messages
+    assert "todos:Array.isArray(inflight.todos)?inflight.todos:getTodos()" in STREAM_PROGRESS_JS
+    assert "todoStateMeta:inflight.todoStateMeta||getTodoStateMeta()||null" in STREAM_PROGRESS_JS
 
 
 def test_frontend_todo_state_listener_is_registered_and_journaled():

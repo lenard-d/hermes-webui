@@ -16,6 +16,9 @@ LIVE_TOOLS_JS = REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
 RUN_JOURNAL_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
+STREAM_PROGRESS_JS = (
+    REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
+).read_text(encoding="utf-8")
 SESSIONS_JS = SESSIONS_SOURCE
 UI_JS = family_source("ui")
 NODE = shutil.which("node")
@@ -1136,7 +1139,8 @@ assert.strictEqual(inflight.lastRunJournalEventId, 'run-a:7');
     assert "stored.streamId||activeStreamId" not in load_body
     assert "lastRunJournalEventId:String(stored.lastRunJournalEventId||'')" in load_body
     assert "lastRunJournalEventId:state.lastRunJournalEventId||''" in compact_body
-    assert "inflight.lastRunJournalEventId||''" in attach_body
+    assert "getInflight:()=>INFLIGHT[activeSid]" in attach_body
+    assert "lastRunJournalEventId:inflight.lastRunJournalEventId||''" in STREAM_PROGRESS_JS
     assert "INFLIGHT[activeSid]&&INFLIGHT[activeSid].lastRunJournalEventId" in attach_body
     cursor_body = _function_body(RUN_JOURNAL_JS, "_rememberRunJournalCursor")
     assert "inflight.lastRunJournalEventId=raw" in cursor_body

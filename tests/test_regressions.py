@@ -17,6 +17,9 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 STREAM_RENDERER_SRC = (
     REPO_ROOT / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
+STREAM_PROGRESS_SRC = (
+    REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
+).read_text(encoding="utf-8")
 SESSION_LIFECYCLE_SRC = next(
     path for path in module_family_paths("sessions")
     if path.name == "lifecycle.js"
@@ -755,7 +758,7 @@ def test_live_stream_tokens_persist_partial_assistant_for_session_switch(cleanup
         "live stream must drop stale detached assistant DOM references after session switches"
     assert "data-live-assistant" in ui_src, \
         "renderMessages must preserve a live-assistant DOM anchor when rebuilding the thread"
-    assert "snapshotLiveTurnHtmlForSession(activeSid)" in messages_src, \
+    assert "snapshotLiveTurnHtmlForSession(sid)" in messages_src, \
         "live turn DOM snapshots should preserve the interleaved timeline across session switches"
     assert "restoreLiveTurnHtmlForSession(sid)" in family_source("sessions"), \
         "loadSession should restore the live turn snapshot before replaying flat tool cards"
@@ -1105,7 +1108,8 @@ def test_messages_js_stream_perf_cleanup_lifecycle(cleanup_test_sessions):
     """#5455 review: throttled snapshot timers and incremental anchor caches tear down at terminal events."""
     src = family_source("messages")
     assert "function _cancelThrottledSnapshotTimer()" in src
-    assert "clearTimeout(_snapshotLiveTurnTimer)" in src
+    assert "function cancelSnapshot()" in STREAM_PROGRESS_SRC
+    assert "cancel(snapshotTimer);" in STREAM_PROGRESS_SRC
     assert "function _clearAnchorProseIncrementalNode()" in STREAM_RENDERER_SRC
     assert "window.__anchorProseIncrementalNode===_anchorProseIncrementalNode" in STREAM_RENDERER_SRC
     assert "_anchorProseSmdCache.clear();" in STREAM_RENDERER_SRC

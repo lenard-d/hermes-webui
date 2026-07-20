@@ -10,6 +10,7 @@ MODULE_NAMES = {
     "approvals.js",
     "clarify.js",
     "composer-context.js",
+    "control-events.js",
     "core.js",
     "index.js",
     "live-tools.js",
@@ -20,6 +21,7 @@ MODULE_NAMES = {
     "send.js",
     "session-events.js",
     "stream-lifecycle.js",
+    "stream-progress.js",
     "stream.js",
 }
 
@@ -60,10 +62,12 @@ def test_internal_modules_use_imports_exports_not_classic_assembly():
 
     stream = (MODULE_DIR / "stream.js").read_text(encoding="utf-8")
     assert "from './stream-lifecycle.js'" in stream
+    assert "from './control-events.js'" in stream
     assert "from './anchor-scene.js'" in stream
     assert "from './live-tools.js'" in stream
     assert "from './rendering.js'" in stream
     assert "from './run-journal.js'" in stream
+    assert "from './stream-progress.js'" in stream
     assert "HermesMessages.createStream" not in stream
 
 

@@ -1,6 +1,4 @@
 import {
-  _bgTaskCompleteRingBufferAdd,
-  _chatPayloadModelState,
   _deferStreamErrorIfOffline,
   _desktopBackgroundedForNotifications,
   _extractInlineThinkingFromContent,
@@ -50,10 +48,12 @@ import {
   _resumeSessionStreamAfterLiveChat,
   _suspendSessionStreamForLiveChat,
 } from './session-events.js';
-import { applySessionTitleUpdate, send } from './send.js';
+import { applySessionTitleUpdate } from './send.js';
 import { createStreamAnchorSceneSettlement } from './anchor-scene.js';
+import { createStreamControlEventOwner } from './control-events.js';
 import { createStreamLiveToolTracker } from './live-tools.js';
 import { createStreamRenderer } from './rendering.js';
+import { createStreamProgressOwner } from './stream-progress.js';
 import { createStreamRunJournalCursor } from './run-journal.js';
 
 export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
@@ -66,7 +66,9 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   const _requiredStreamFactories={
     runJournal:createStreamRunJournalCursor,
     anchorScene:createStreamAnchorSceneSettlement,
+    controlEvents:createStreamControlEventOwner,
     liveTools:createStreamLiveToolTracker,
+    progress:createStreamProgressOwner,
     renderer:createStreamRenderer,
   };
   const _missingStreamFactories=Object.entries(_requiredStreamFactories)
@@ -77,7 +79,9 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   }
   const _createRunJournalCursor=_requiredStreamFactories.runJournal;
   const _createAnchorSceneSettlement=_requiredStreamFactories.anchorScene;
+  const _createControlEventOwner=_requiredStreamFactories.controlEvents;
   const _createLiveToolTracker=_requiredStreamFactories.liveTools;
+  const _createStreamProgressOwner=_requiredStreamFactories.progress;
   const _createStreamRenderer=_requiredStreamFactories.renderer;
   const reconnecting=!!options.reconnecting;
   // #4416: start (or, on reconnect for the SAME stream, keep) tracking whether
@@ -176,8 +180,6 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   reasoningText=_lastLiveReasoning ? _lastLiveReasoning : '';
   let liveReasoningText = reasoningText;
   let visibleInterimSnippets=[];
-  let _latestGoalStatus=null;
-  let _pendingGoalContinuation=null;
   let assistantRow=null;
   let assistantBody=null;
   // On reconnect with recorded burst anchors, the rendered DOM has multiple
@@ -304,29 +306,25 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       if(typeof setStatus==='function') setStatus('');
     }
   }
+  const _streamProgress=_createStreamProgressOwner({
+    sessionId:activeSid,
+    streamId,
+    getInflight:()=>INFLIGHT[activeSid],
+    getUploaded:()=>[...uploaded],
+    getTodos:()=>S.todos,
+    getTodoStateMeta:()=>S.todoStateMeta,
+    save:(sid,payload)=>{
+      if(typeof saveInflightState==='function') saveInflightState(sid,payload);
+    },
+    snapshot:(sid)=>{
+      if(typeof snapshotLiveTurnHtmlForSession==='function') snapshotLiveTurnHtmlForSession(sid);
+    },
+  });
   function persistInflightState(){
-    const inflight=INFLIGHT[activeSid];
-    if(!inflight||typeof saveInflightState!=='function') return;
-    saveInflightState(activeSid,{
-      streamId,
-      messages:inflight.messages||[],
-      uploaded:inflight.uploaded||[...uploaded],
-      toolCalls:inflight.toolCalls||[],
-      lastAssistantText:inflight.lastAssistantText||'',
-      lastReasoningText:inflight.lastReasoningText||'',
-      lastRunJournalSeq:inflight.lastRunJournalSeq||0,
-      lastRunJournalEventId:inflight.lastRunJournalEventId||'',
-      journalReplayFromStart:!!inflight.journalReplayFromStart,
-      anchorActivityScene:inflight.anchorActivityScene||null,
-      currentActivityBurstId:inflight.currentActivityBurstId||0,
-      currentLiveSegmentSeq:inflight.currentLiveSegmentSeq||0,
-      activityBurstAnchors:Array.isArray(inflight.activityBurstAnchors)?inflight.activityBurstAnchors:[],
-      todos:Array.isArray(inflight.todos)?inflight.todos:S.todos,
-      todoStateMeta:inflight.todoStateMeta||S.todoStateMeta||null,
-    });
+    _streamProgress.persistNow();
   }
   function snapshotLiveTurn(){
-    if(typeof snapshotLiveTurnHtmlForSession==='function') snapshotLiveTurnHtmlForSession(activeSid);
+    _streamProgress.snapshotNow();
   }
   // Throttled per-frame variant. snapshotLiveTurnHtmlForSession serializes the
   // whole (growing) live turn via turn.outerHTML — O(n)/frame -> O(n^2) over a
@@ -334,13 +332,11 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   // mid-stream session-switch restore, and the switch path (sessions.js) plus
   // the stream event boundaries (tool/done) already capture synchronously, so a
   // coarse trailing snapshot during streaming is sufficient. (#5455 WS2.2)
-  let _snapshotLiveTurnTimer=null;
   function _throttledSnapshotLiveTurn(){
-    if(_snapshotLiveTurnTimer) return;
-    _snapshotLiveTurnTimer=setTimeout(()=>{_snapshotLiveTurnTimer=null;snapshotLiveTurn();},700);
+    _streamProgress.snapshotSoon();
   }
   function _cancelThrottledSnapshotTimer(){
-    if(_snapshotLiveTurnTimer){clearTimeout(_snapshotLiveTurnTimer);_snapshotLiveTurnTimer=null;}
+    _streamProgress.cancelSnapshot();
   }
   // Throttled variant for token-by-token updates. persistInflightState()
   // calls saveInflightState() which does JSON.parse + JSON.stringify + write
@@ -349,10 +345,11 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   // GC pressure source that causes the renderer to crash under load.
   // State transitions (tool events, done, error) still call persistInflightState()
   // directly so no more than 2s of progress is lost on a crash.
-  let _persistTimer=null;
   function _throttledPersist(){
-    if(_persistTimer) return;
-    _persistTimer=setTimeout(()=>{_persistTimer=null;persistInflightState();},2000);
+    _streamProgress.persistSoon();
+  }
+  function _cancelThrottledPersistTimer(){
+    _streamProgress.cancelPersist();
   }
   function _closeSource(source){
     closeLiveStream(activeSid, streamId, source);
@@ -386,7 +383,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   }
   function _finalizeStreamEndFallback(source){
     _clearStreamEndRecovery();
-    if(_persistTimer){clearTimeout(_persistTimer);_persistTimer=null;}
+    _cancelThrottledPersistTimer();
     _cancelThrottledSnapshotTimer();
     _terminalStateReached=true;
     _streamFinalized=true;
@@ -1224,12 +1221,37 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
     return true;
   }
 
+  const _controlEvents=_createControlEventOwner({
+    sessionId:activeSid,
+    state:S,
+    applyToAnchor:_applyToAnchor,
+    showPersistentStateToast:_showPersistentStateToast,
+    applySessionTitle:applySessionTitleUpdate,
+    handleBackgroundTaskComplete:_handleBgTaskCompleteEvent,
+    ui:{
+      translate:(key,...args)=>typeof t==='function'?t(key,...args):String(key||''),
+      setComposerStatus:(value)=>{
+        if(typeof setComposerStatus==='function') setComposerStatus(value);
+      },
+      showToast:(...args)=>{
+        if(typeof showToast==='function') showToast(...args);
+      },
+      queueSessionMessage:typeof queueSessionMessage==='function'
+        ? (sid,payload)=>queueSessionMessage(sid,payload)
+        : null,
+      updateQueueBadge:(sid)=>{
+        if(typeof updateQueueBadge==='function') updateQueueBadge(sid);
+      },
+    },
+  });
+
   function _wireSSE(source){
     const existingLive=LIVE_STREAMS[activeSid];
     if(existingLive&&existingLive.source&&existingLive.source!==source){
       try{if(existingLive.source.readyState!==2)existingLive.source.close();}catch(_){ }
     }
     LIVE_STREAMS[activeSid]={streamId,source};
+    _controlEvents.attach(source);
 
     // Note on #631 Bug B: the original PR description stated the server
     // "replays buffered token events" on reconnect, and proposed resetting
@@ -1507,126 +1529,6 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       sendBrowserNotification('Clarification needed',d.question||'Tool clarification needed',{sid:activeSid});
     });
 
-    source.addEventListener('state_saved',e=>{
-      let d={};
-      try{ d=JSON.parse(e.data||'{}'); }catch(_){}
-      if((d.session_id||activeSid)!==activeSid) return;
-      if(!S.session||S.session.session_id!==activeSid) return;
-      _showPersistentStateToast(d.kind, d.name||'', {created:String(d.action||'').toLowerCase()==='created'});
-    });
-
-    source.addEventListener('title',e=>{
-      let d={};
-      try{ d=JSON.parse(e.data||'{}'); }catch(_){}
-      if((d.session_id||activeSid)!==activeSid) return;
-      applySessionTitleUpdate(activeSid, d.title);
-    });
-
-    source.addEventListener('title_status',e=>{
-      let d={};
-      try{ d=JSON.parse(e.data||'{}'); }catch(_){}
-      if((d.session_id||activeSid)!==activeSid) return;
-      try{
-        console.info('[title]', {
-          status:String(d.status||''),
-          reason:String(d.reason||''),
-          title:String(d.title||''),
-          raw_preview:String(d.raw_preview||''),
-          session_id:String(d.session_id||activeSid)
-        });
-      }catch(_){}
-    });
-
-    source.addEventListener('context_status',e=>{
-      let d={};
-      try{ d=JSON.parse(e.data||'{}'); }catch(_){}
-      if((d.session_id||activeSid)!==activeSid) return;
-      const prefill=d.prefill||{};
-      const status=String(prefill.status||'not_configured');
-      const label=String(prefill.label||'session recall');
-      if(status==='loaded'){
-        setComposerStatus(`Context loaded: ${label}`);
-      }else if(status==='error'){
-        setComposerStatus(`Context unavailable: ${label}`);
-        if(typeof showToast==='function') showToast(`Context unavailable: ${String(prefill.error||label)}`,3600,'warning');
-      }
-    });
-
-    function _resolveGoalMessage(d){
-      const key=String(d && d.message_key ? d.message_key : '').trim();
-      const args=Array.isArray(d && d.message_args) ? d.message_args : [];
-      const raw=String(d&&d.message||'').trim();
-      if(key && typeof t==='function'){
-        try{
-          const translated=String(t(key,...args));
-          if(translated && translated!==key)return translated;
-        }catch(_){}
-      }
-      return raw;
-    }
-
-    source.addEventListener('goal',e=>{
-      try{
-        const d=JSON.parse(e.data||'{}');
-        if((d.session_id||activeSid)!==activeSid) return;
-        const goalState=String(d.state||'').trim();
-        const goalEvaluatingMessage=t('goal_evaluating_progress');
-        if(goalState==='evaluating'){
-          setComposerStatus(goalEvaluatingMessage);
-          return;
-        }
-        const msg=_resolveGoalMessage(d);
-        if(!msg)return;
-        _latestGoalStatus={message:msg,decision:d.decision||null,state:goalState||null};
-        setComposerStatus(msg);
-        showToast(msg.split('\n')[0],2600);
-      }catch(_){}
-    });
-
-    source.addEventListener('goal_continue',e=>{
-      try{
-        const d=JSON.parse(e.data||'{}');
-        const sid=d.session_id||activeSid;
-        const continuation_prompt=String(d.continuation_prompt||d.text||'').trim();
-        if(!continuation_prompt||sid!==activeSid)return;
-        _applyToAnchor('goal_continue',d,e);
-        const _modelState=_chatPayloadModelState();
-        _pendingGoalContinuation={
-          sid,
-          text:continuation_prompt,
-          model:_modelState.model,
-          model_provider:_modelState.model_provider,
-          profile:S.activeProfile||'default',
-        };
-        const toast=t('goal_continuing_toast');
-        const cmsg=_resolveGoalMessage(d);
-        showToast((toast&&cmsg&&cmsg!==toast)?cmsg.split('\n')[0]:toast,2200);
-      }catch(_){}
-    });
-
-    // bg_task_complete: terminal(notify_on_complete=true) background process
-    // exited. Option Z PIVOT: the agent wakeup is started SERVER-SIDE by the
-    // drain thread (api/background_process._process_one →
-    // routes.start_session_turn) with NO browser round-trip — so the
-    // closed-tab case works (parity with CLI/Telegram). The browser does NOT
-    // re-POST /api/chat/start anymore. This SSE event is pure LIVE-VIEW: if
-    // a tab is open the server-initiated turn streams live via the normal
-    // /api/chat/stream EventSource; if the tab is closed the turn still runs
-    // server-side and persists to the session store.
-    //
-    // Idempotency: dedupe by (session_id, event_id) via a Map+TTL ring
-    // buffer (`_bgTaskCompleteRingBufferAdd`).
-    //
-    // Option X: this handler is the in-turn (STREAMS-bound) path. The server
-    // dual-emits to the persistent session-scoped channel too — the
-    // `_handleBgTaskCompleteEvent` function below is shared between both
-    // paths (dedupe only; the wakeup itself is server-side).
-    source.addEventListener('bg_task_complete',e=>{
-      if(typeof _handleBgTaskCompleteEvent==='function'){
-        _handleBgTaskCompleteEvent(e, activeSid, {source:'stream'});
-      }
-    });
-
     source.addEventListener('done',e=>{
       if(_streamFinalized) return;
       _clearStreamEndRecovery();
@@ -1637,7 +1539,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       // S.messages with stale server data (issue #3195).
       _streamFinalized=true;
       _terminalStateReached=true;
-      if(_persistTimer){clearTimeout(_persistTimer);_persistTimer=null;}
+      _cancelThrottledPersistTimer();
       _cancelThrottledSnapshotTimer();
       const _doneData=JSON.parse(e.data);
       const _doneEvent=e;
@@ -1818,6 +1720,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
             const lastUser=[...S.messages].reverse().find(m=>m.role==='user');
             if(lastUser)lastUser.attachments=uploaded;
           }
+          const _latestGoalStatus=_controlEvents.latestGoalStatus();
           if(_latestGoalStatus&&_latestGoalStatus.message){
             S.messages.push({
               role:'assistant',
@@ -1873,9 +1776,8 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
         if(!lastAsst&&d.session&&Array.isArray(d.session.messages)){
           lastAsst=[...d.session.messages].reverse().find(m=>m&&m.role==='assistant')||null;
         }
-        if(isActiveSession&&_pendingGoalContinuation&&typeof queueSessionMessage==='function'){
-          const _goalNext=_pendingGoalContinuation;
-          _pendingGoalContinuation=null;
+        const _goalNext=isActiveSession?_controlEvents.takeGoalContinuation():null;
+        if(_goalNext&&typeof queueSessionMessage==='function'){
           queueSessionMessage(_goalNext.sid,{
             text:_goalNext.text,
             files:[],
@@ -1938,31 +1840,6 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
         return;
       }
       _finalizeStreamEndFallback(source);
-    });
-
-    source.addEventListener('pending_steer_leftover',e=>{
-      // The agent finished its turn with steer text still stashed (no
-      // tool-result boundary fired). Match the CLI's leftover-delivery
-      // behaviour: queue the leftover text as a next-turn user message
-      // so the existing drain in setBusy(false) ships it.
-      try{
-        const d=JSON.parse(e.data||'{}');
-        const sid=d.session_id||activeSid;
-        const txt=String(d.text||'').trim();
-        if(!txt||sid!==activeSid) return;
-        _applyToAnchor('pending_steer_leftover',d,e);
-        if(typeof queueSessionMessage==='function'){
-          const _modelState=_chatPayloadModelState();
-          queueSessionMessage(sid,{
-            text:txt,files:[],
-            model:_modelState.model,
-            model_provider:_modelState.model_provider,
-            profile:S.activeProfile||'default',
-          });
-          if(typeof updateQueueBadge==='function') updateQueueBadge(sid);
-          showToast(t('steer_leftover_queued'),3000);
-        }
-      }catch(_){}
     });
 
     source.addEventListener('compressing',e=>{
@@ -2054,7 +1931,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       if(_bailOutOfTerminalEventsFromStaleStream(source)) return;
       _clearStreamEndRecovery();
       _terminalStateReached=true;
-      if(_persistTimer){clearTimeout(_persistTimer);_persistTimer=null;}
+      _cancelThrottledPersistTimer();
       _cancelThrottledSnapshotTimer();
       _clearAnchorProseIncrementalNode();
       _streamFinalized=true;
@@ -2151,26 +2028,6 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       }
       _setActivePaneIdleIfOwner();
       renderSessionList(); // clear streaming indicator immediately on apperror
-    });
-
-    source.addEventListener('warning',e=>{
-      // Non-fatal warning from server (e.g. fallback activated, retrying)
-      if(!S.session||S.session.session_id!==activeSid) return;
-      try{
-        const d=JSON.parse(e.data);
-        if(d.type==='approval_gateway_unsupported'){
-          if(typeof showToast==='function') showToast(typeof t==='function'?t('approval_gateway_unsupported_label'):'Approvals not supported',4000,'warning');
-          return;
-        }
-        if(d.type==='approval_gateway_offline'){
-          if(typeof showToast==='function') showToast(d.message||'Gateway offline',4000,'warning');
-          return;
-        }
-        // Show as a small inline notice, not a full error
-        setComposerStatus(`${d.message||'Warning'}`);
-        // If it's a fallback notice, show it briefly then clear
-        if(d.type==='fallback') setTimeout(()=>setComposerStatus(''),4000);
-      }catch(_){}
     });
 
     source.addEventListener('error',async e=>{
@@ -2294,7 +2151,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       if(_bailOutOfTerminalEventsFromStaleStream(source)) return;
       _clearStreamEndRecovery();
       _terminalStateReached=true;
-      if(_persistTimer){clearTimeout(_persistTimer);_persistTimer=null;}
+      _cancelThrottledPersistTimer();
       _cancelThrottledSnapshotTimer();
       _clearAnchorProseIncrementalNode();
       _streamFinalized=true;
@@ -2446,7 +2303,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       const session=data&&data.session;
       if(!session) return returnStatus?'missing':false;
       if(session.active_stream_id||session.pending_user_message) return returnStatus?'active':false;
-      if(_persistTimer){clearTimeout(_persistTimer);_persistTimer=null;}
+      _cancelThrottledPersistTimer();
       _cancelThrottledSnapshotTimer();
       _clearAnchorProseIncrementalNode();
       _streamFinalized=true;
@@ -2542,7 +2399,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
     _clearStreamEndRecovery();
     // Opus review Q1: mirror done/apperror/cancel finalization so any pending rAF
     // cannot fire after renderMessages() has settled the DOM with the error message.
-    if(_persistTimer){clearTimeout(_persistTimer);_persistTimer=null;}
+    _cancelThrottledPersistTimer();
     _cancelThrottledSnapshotTimer();
     _clearAnchorProseIncrementalNode();
     _streamFinalized=true;

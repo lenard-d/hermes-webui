@@ -11,6 +11,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
+CONTROL_EVENTS_JS = (
+    REPO_ROOT / "static" / "modules" / "messages" / "control-events.js"
+).read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 CHAT_RUNS_PY = (
     REPO_ROOT / "api" / "routes_parts" / "chat_runs.py"
@@ -579,8 +582,8 @@ def test_frontend_has_goal_slash_command_and_status_event_handler():
 
 
 def test_frontend_goal_evaluating_state_uses_calm_composer_indicator():
-    assert "const goalState=String(d.state||'').trim();" in MESSAGES_JS
-    assert "t('goal_evaluating_progress')" in MESSAGES_JS
+    assert "const goalState=String(payload.state||'').trim();" in CONTROL_EVENTS_JS
+    assert "translate('goal_evaluating_progress')" in CONTROL_EVENTS_JS
     assert "if(goalState==='evaluating')" in MESSAGES_JS
     assert "setComposerStatus(goalEvaluatingMessage);" in MESSAGES_JS
     assert "return;" in MESSAGES_JS

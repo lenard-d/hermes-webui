@@ -37,6 +37,9 @@ MESSAGES_JS = family_source("messages")
 RUN_JOURNAL_JS = (
     REPO / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
+STREAM_PROGRESS_JS = (
+    REPO / "static" / "modules" / "messages" / "stream-progress.js"
+).read_text(encoding="utf-8")
 CSS = family_source("style")
 BOOT_JS = family_source("boot")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
@@ -108,7 +111,7 @@ def test_run_journal_cursor_persisted_into_inflight():
 
 def test_persist_inflight_saves_run_journal_seq():
     """persistInflightState must still save lastRunJournalSeq (the value reload reads back)."""
-    body = _function_body(MESSAGES_JS, "persistInflightState")
+    body = _function_body(STREAM_PROGRESS_JS, "persistProgressState")
     assert "lastRunJournalSeq" in body
 
 
