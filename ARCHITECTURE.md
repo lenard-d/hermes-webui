@@ -79,6 +79,10 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         model_resolution.py Selected model/provider routing and connection resolution
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
         model_cache.py     Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
+        reasoning.py       Public reasoning config, capability resolution, and status projection
+        reasoning_identity.py Model-name normalization and family classification
+        reasoning_policy.py Provider ceilings, capability rules, and effort coercion
+        reasoning_probe.py Hermes metadata and credential-safe LM Studio capability probes
         session_limits.py  Bounded compact-session cache policy
         toolsets.py        CLI toolset normalization and platform resolution
       session_state.py     Process-local session coordination, lock, and wakeup state
@@ -508,6 +512,15 @@ larger migration remains incremental:
   package entrypoint re-exports these Interfaces and resolves mutable facade
   state at call time where profile switching or compatibility monkeypatches
   require it.
+- Reasoning capability resolution follows the same ownership direction.
+  `reasoning.py` is the public Interface that combines profile/provider context,
+  explicit overrides, ordered capability sources, and composer status.
+  `reasoning_identity.py` owns model-name normalization and family identity;
+  `reasoning_policy.py` owns provider ceilings, forced-thinking rules, and safe
+  effort coercion; `reasoning_probe.py` owns Hermes metadata lookup and the
+  credential-safe LM Studio network Adapter. Provider configuration remains
+  profile-scoped through `api.config`, and probe credentials are only attached
+  after the configured target identity matches.
 - `api/agent_cache.py` owns the reusable-agent cache, its lock and operator cap,
   and the complete eviction transaction. `api/session_state.py` owns the
   process-local compact-session cache, session mutation locks, goal/process

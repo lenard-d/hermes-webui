@@ -16,6 +16,10 @@ from api.config import (
     model_cache,
     model_catalog,
     model_resolution,
+    reasoning,
+    reasoning_identity,
+    reasoning_policy,
+    reasoning_probe,
     session_limits,
     snapshot,
     toolsets,
@@ -34,6 +38,22 @@ def test_config_reexports_real_owner_functions():
     assert config._get_models_cache_path is model_cache._get_models_cache_path
     assert config.get_available_models is model_catalog.get_available_models
     assert config.resolve_model_provider is model_resolution.resolve_model_provider
+    assert (
+        config.resolve_model_reasoning_efforts
+        is reasoning.resolve_model_reasoning_efforts
+    )
+    assert (
+        config.coerce_reasoning_effort_for_model
+        is reasoning_policy.coerce_reasoning_effort_for_model
+    )
+    assert (
+        config._candidate_supports_reasoning
+        is reasoning_identity.candidate_supports_reasoning
+    )
+    assert (
+        config._lmstudio_model_reasoning_options
+        is reasoning_probe.lmstudio_model_reasoning_options
+    )
     assert config.get_gateway_caps is gateway_capabilities.get_gateway_caps
     assert config.thread_env_scope is environment.thread_env_scope
     assert config.MAX_UPLOAD_BYTES is media_types.MAX_UPLOAD_BYTES
