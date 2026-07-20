@@ -288,8 +288,8 @@ def test_compression_exhausted_apperror_clears_reference_ui_and_labels_error():
     src = family_source("messages")
     start = src.find("source.addEventListener('apperror'")
     assert start != -1, "apperror listener not found"
-    end = src.find("source.addEventListener('warning'", start)
-    assert end != -1, "warning listener after apperror not found"
+    end = src.find("source.addEventListener('error'", start)
+    assert end != -1, "network error listener after apperror not found"
     block = src[start:end]
 
     assert "const isCompressionExhausted=d.type==='compression_exhausted';" in block
@@ -306,8 +306,8 @@ def test_apperror_matches_only_current_or_continuation_session_for_background_er
     src = family_source("messages")
     start = src.find("source.addEventListener('apperror'")
     assert start != -1, "apperror listener not found"
-    end = src.find("source.addEventListener('warning'", start)
-    assert end != -1, "warning listener after apperror not found"
+    end = src.find("source.addEventListener('error'", start)
+    assert end != -1, "network error listener after apperror not found"
     block = src[start:end]
 
     assert "const eventSid=d.old_session_id||d.session_id||'';" in block

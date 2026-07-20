@@ -49,6 +49,7 @@ _MESSAGE_MODULE_NAMES = (
     "core.js",
     "markdown-tables.js",
     "composer-context.js",
+    "compression-events.js",
     "control-events.js",
     "send.js",
     "stream-lifecycle.js",

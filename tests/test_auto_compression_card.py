@@ -18,6 +18,9 @@ from api.streaming import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+COMPRESSION_EVENTS_JS = (
+    ROOT / "static/modules/messages/compression-events.js"
+).read_text(encoding="utf-8")
 
 
 def _read(relpath: str) -> str:
@@ -25,16 +28,16 @@ def _read(relpath: str) -> str:
 
 
 def _compressed_listener_block() -> str:
-    src = family_source("messages")
+    src = COMPRESSION_EVENTS_JS
     start = src.find("source.addEventListener('compressed'")
     assert start != -1, "compressed SSE listener not found"
-    end = src.find("source.addEventListener('metering'", start)
-    assert end != -1, "metering listener after compressed SSE listener not found"
+    end = src.find("return source;", start)
+    assert end != -1, "compressed SSE listener end not found"
     return src[start:end]
 
 
 def _compressing_listener_block() -> str:
-    src = family_source("messages")
+    src = COMPRESSION_EVENTS_JS
     start = src.find("source.addEventListener('compressing'")
     assert start != -1, "compressing SSE listener not found"
     end = src.find("source.addEventListener('compressed'", start)
@@ -432,9 +435,9 @@ def test_post_compression_context_private_flag_restored_but_not_sent_to_provider
 def test_auto_compression_running_sse_uses_active_session_running_card():
     block = _compressing_listener_block()
 
-    assert "if(!S.session||S.session.session_id!==activeSid) return;" in block
-    assert "if(d.session_id&&d.session_id!==activeSid) return;" in block
-    assert "try{ d=JSON.parse(e.data||'{}')||{}; }catch(_){ d={}; }" in block
+    assert "if(!state.session||state.session.session_id!==sessionId) return;" in block
+    assert "if(payload.session_id&&payload.session_id!==sessionId) return;" in block
+    assert "const payload=parsePayload(event);" in block
     assert "setCompressionUi" in block
     assert "phase:'running'" in block
     assert "automatic:true" in block
@@ -576,7 +579,7 @@ def test_auto_compression_completion_transition_is_preserved_after_running_liste
     compressed_idx = src.find("source.addEventListener('compressed'")
     assert compressing_idx != -1 and compressed_idx != -1
     assert compressing_idx < compressed_idx
-    assert "appendLiveCompressionCard({" in _compressed_listener_block()
+    assert "appendLiveCard({" in _compressed_listener_block()
     assert "phase:'done'" in _compressed_listener_block()
     assert "message:'Context auto-compressed'" in _compressed_listener_block()
     assert "clearCompressionUi()" in _compressed_listener_block()
@@ -593,8 +596,8 @@ def test_auto_compression_completion_ignores_legacy_payload_message():
 def test_auto_compression_running_sse_stamps_elapsed_timer_start():
     block = _compressing_listener_block()
 
-    assert "startedAt:Date.now()/1000" in block
-    assert block.index("startedAt:Date.now()/1000") < block.index("setCompressionUi(state)")
+    assert "startedAt:now()" in block
+    assert block.index("startedAt:now()") < block.index("setCompressionUi(compressionState)")
 
 
 def test_auto_compression_running_card_keeps_elapsed_timer_out_of_visible_copy():
@@ -777,10 +780,10 @@ def test_auto_compression_does_not_rerender_over_live_worklog():
     src = family_source("ui")
 
     assert "const liveAnswerStarted=" not in block
-    assert "appendLiveCompressionCard(state)" in block
+    assert "appendLiveCard(compressionState)" in block
     assert "renderMessages({preserveScroll:true})" not in block
     assert "restoreLiveTurnHtmlForSession(activeSid)" not in block
-    assert block.index("appendLiveCompressionCard(state)") < block.index("setCompressionUi(state)")
+    assert block.index("appendLiveCard(compressionState)") < block.index("setCompressionUi(compressionState)")
     assert "clearCompressionUi()" in block
     assert "function appendLiveCompressionCard(state)" in src
     assert 'data-live-compression-card' in src
@@ -803,18 +806,20 @@ def test_auto_compression_live_repeated_starts_keep_only_current_running_row():
 
 def test_auto_compression_running_card_completes_on_followup_live_events():
     src = family_source("messages")
+    compression = COMPRESSION_EVENTS_JS
 
-    assert "function _completeAutomaticCompressionOnLiveProgress" in src
-    helper = src.split("function _completeAutomaticCompressionOnLiveProgress", 1)[1].split("source.addEventListener('token'", 1)[0]
-    assert "data-live-compression-card=\"1\"][data-compression-started-at]" in helper
-    assert "window._compressionUi&&window._compressionUi.automatic&&window._compressionUi.phase==='running'" in helper
+    assert "function completeOnLiveProgress" in compression
+    helper = compression.split("function completeOnLiveProgress", 1)[1].split("function attach", 1)[0]
+    assert "hasRunningCard()" in helper
+    assert "compressionState.automatic" in helper
+    assert "compressionState.phase==='running'" in helper
     assert "function _ensureAnchorCompressionCompletedOnLiveProgress" in src
-    assert "_ensureAnchorCompressionCompletedOnLiveProgress(sid);" in helper
+    assert "completeAnchorOnLiveProgress(sid);" in helper
     assert "const eventId=`synthetic:${localId}`;" in src
     assert "_findAnchorActivityEventByLocalId(localId,'compressed')" in src
     assert "phase:'done'" in helper
     assert "message:'Context auto-compressed'" in helper
-    assert "appendLiveCompressionCard({" in helper
+    assert "appendLiveCard({" in helper
 
     for event_name in ("token", "interim_assistant", "reasoning", "tool", "tool_complete"):
         start = src.find(f"source.addEventListener('{event_name}'")
@@ -822,9 +827,11 @@ def test_auto_compression_running_card_completes_on_followup_live_events():
         end = src.find("source.addEventListener(", start + 1)
         assert end != -1, f"{event_name} listener end not found"
         block = src[start:end]
-        assert "_completeAutomaticCompressionOnLiveProgress(activeSid)" in block
+        assert (
+            "_completeAutomaticCompressionOnLiveProgress(activeSid)" in block
+            or "completeAutomaticCompression(activeSid)" in block
+        )
         assert "settleLiveCompressionCards" not in block
-        assert "clearCompressionUi()" not in block
 
 
 def test_auto_compression_elapsed_update_is_not_visible_detail_churn():
@@ -847,23 +854,23 @@ def test_auto_compression_sse_uses_transient_card_not_fake_message():
     block = _compressed_listener_block()
 
     assert "*[Context was auto-compressed to continue the conversation]*" not in src
-    assert "S.messages.push" not in block
+    assert "state.messages.push" not in block
     assert "setCompressionUi" not in block
     assert "phase:'done'" in block
     assert "automatic:true" in block
-    assert "appendLiveCompressionCard" in block
-    assert "_setCompressionSessionLock" in block
+    assert "appendLiveCard" in block
+    assert "setCompressionSessionLock" in block
     assert "clearCompressionUi()" in block
 
 
 def test_auto_compression_sse_keeps_inactive_and_malformed_paths_safe():
     block = _compressed_listener_block()
 
-    guard = "if(!S.session) return;"
+    guard = "if(!state.session) return;"
     assert guard in block
-    assert block.index(guard) < block.index("appendLiveCompressionCard")
-    assert "try{ d=JSON.parse(e.data||'{}')||{}; }catch(_){ d={}; }" in block
-    assert "const eventSid=d.old_session_id||d.session_id||activeSid;" in block
+    assert block.index(guard) < block.index("appendLiveCard")
+    assert "const payload=parsePayload(event);" in block
+    assert "const eventSid=String(payload.old_session_id||payload.session_id||sessionId);" in block
     assert "const eventMatchesCurrent=" in block
     event_guard = "if(!eventMatchesCurrent) return;"
     assert event_guard in block
@@ -877,8 +884,8 @@ def test_auto_compression_done_accepts_rotated_continuation_session_event():
     # event is emitted. The browser stream still belongs to the pre-compression
     # activeSid, so the listener must correlate on old_session_id and keep the
     # continuation id as display metadata instead of dropping the event.
-    assert "const eventSid=d.old_session_id||d.session_id||activeSid;" in block
-    assert "const continuationSid=d.new_session_id||d.continuation_session_id||'';" in block
+    assert "const eventSid=String(payload.old_session_id||payload.session_id||sessionId);" in block
+    assert "const continuationSid=String(payload.new_session_id||payload.continuation_session_id||'');" in block
     event_guard = "if(!eventMatchesCurrent) return;"
     assert event_guard in block
     assert block.index("const eventSid=") < block.index("const eventMatchesCurrent=")
@@ -891,23 +898,22 @@ def test_auto_compression_done_accepts_event_after_current_session_rotates():
     # The final compressed event can arrive/replay after another event has already
     # updated S.session to the continuation session id. Do not drop it just
     # because the active browser session no longer equals the original activeSid.
-    strict_active_guard = "if(!S.session||S.session.session_id!==activeSid) return;"
+    strict_active_guard = "if(!state.session||state.session.session_id!==sessionId) return;"
     assert strict_active_guard not in block
-    assert "if(!S.session) return;" in block
-    assert "const currentSid=S.session.session_id;" in block
+    assert "if(!state.session) return;" in block
+    assert "const currentSid=String(state.session.session_id||'');" in block
     assert "const eventMatchesCurrent=" in block
-    assert "const displaySid=currentSid;" in block
     assert block.index("const eventSid=") < block.index("const eventMatchesCurrent=")
-    assert block.index("const displaySid=") < block.index("appendLiveCompressionCard")
+    assert block.index("const eventMatchesCurrent=") < block.index("appendLiveCard")
 
 
 def test_auto_compression_done_sse_refreshes_context_indicator_usage():
     block = _compressed_listener_block()
 
-    assert "if(d.usage&&typeof _syncCtxIndicator==='function')" in block
-    assert "_mergeUsageForCtxIndicator(d.usage,S.lastUsage||{})" in block
-    assert "_syncCtxIndicator(S.lastUsage);" in block
-    assert block.index("_syncCtxIndicator(S.lastUsage);") < block.index("appendLiveCompressionCard")
+    assert "if(payload.usage)" in block
+    assert "state.lastUsage=mergeUsage(payload.usage,state.lastUsage||{});" in block
+    assert "syncUsage(state.lastUsage);" in block
+    assert block.index("syncUsage(state.lastUsage);") < block.index("appendLiveCard")
 
 
 def test_auto_compression_done_payload_includes_live_usage_snapshot():

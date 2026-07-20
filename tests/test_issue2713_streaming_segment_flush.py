@@ -139,7 +139,7 @@ class TestToolHandlerFlush:
     def test_tool_handler_calls_flush(self):
         src = family_source("messages")
         fn = _extract_handler(src, "tool")
-        assert "_flushPendingSegmentRender({force:true})" in fn, (
+        assert "flushPendingSegment({force:true})" in fn, (
             "tool handler must force _flushPendingSegmentRender() before "
             "_resetAssistantSegment()"
         )
@@ -147,8 +147,8 @@ class TestToolHandlerFlush:
     def test_tool_handler_flush_before_reset(self):
         src = family_source("messages")
         fn = _extract_handler(src, "tool")
-        flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
-        reset_pos = fn.index("_resetAssistantSegment()")
+        flush_pos = fn.index("flushPendingSegment({force:true})")
+        reset_pos = fn.index("resetAssistantSegment()")
         assert flush_pos < reset_pos, (
             "_flushPendingSegmentRender must be called BEFORE "
             "_resetAssistantSegment in the tool handler"

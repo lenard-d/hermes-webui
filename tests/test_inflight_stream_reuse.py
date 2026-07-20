@@ -12,7 +12,8 @@ from api.sessions import anchor_scene as anchor_scene_owner
 
 REPO_ROOT = Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
-LIVE_TOOLS_JS = REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
+LIVE_TOOLS_PATH = REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
+LIVE_TOOLS_JS = LIVE_TOOLS_PATH.read_text(encoding="utf-8")
 RUN_JOURNAL_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
@@ -67,7 +68,7 @@ def _live_tool_tracker_bootstrap(
 ) -> str:
     """Load the real live-tool owner and expose its one-operation Interface."""
     return f"""
-const {{createStreamLiveToolTracker}}=await import({json.dumps(LIVE_TOOLS_JS.as_uri())});
+const {{createStreamLiveToolTracker}}=await import({json.dumps(LIVE_TOOLS_PATH.as_uri())});
 const uploaded=[];
 const activeSid='sid';
 const INFLIGHT={inflight_js};
@@ -258,13 +259,11 @@ def test_load_session_preserves_existing_worklog_content_without_destructive_fal
 
 def test_tool_events_are_guarded_against_stale_session_and_stream():
     """Delayed tool events from an old EventSource must not mutate the current session DOM."""
-    tool_handler = MESSAGES_JS.split("source.addEventListener('tool',e=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
-    complete_handler = MESSAGES_JS.split("source.addEventListener('tool_complete',e=>{", 1)[1].split("source.addEventListener('approval'", 1)[0]
+    tool_handler = LIVE_TOOLS_JS.split("source.addEventListener('tool',event=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
+    complete_handler = LIVE_TOOLS_JS.split("source.addEventListener('tool_complete',event=>{", 1)[1].split("return source;", 1)[0]
     for handler in (tool_handler, complete_handler):
-        assert "_terminalStateReached||_streamFinalized" in handler
-        assert "S.session.session_id!==activeSid" in handler
-        assert "S.activeStreamId!==streamId" in handler
-        assert "appendLiveToolCard(tc,{sessionId:activeSid,streamId})" in handler
+        assert "isTerminal()||!ownsVisibleStream()" in handler
+        assert "appendToolCard(toolCall,{sessionId:activeSid,streamId})" in handler
 
 
 def test_close_live_stream_marks_inflight_for_reattach_on_return():
@@ -765,20 +764,20 @@ def test_upsert_flags_orphan_complete_but_not_normal_start_complete():
 def test_tool_complete_handler_gates_segment_reset_on_orphan_flag():
     """The tool_complete SSE handler must only force a fresh segment for orphan
     completions (`_createdByComplete`), updating the card in place otherwise."""
-    handler_start = MESSAGES_JS.find("source.addEventListener('tool_complete'")
+    handler_start = LIVE_TOOLS_JS.find("source.addEventListener('tool_complete'")
     assert handler_start != -1
-    handler_end = MESSAGES_JS.find("source.addEventListener('approval'", handler_start)
+    handler_end = LIVE_TOOLS_JS.find("return source;", handler_start)
     assert handler_end != -1
-    handler = MESSAGES_JS[handler_start:handler_end]
+    handler = LIVE_TOOLS_JS[handler_start:handler_end]
     # The reset trio must live behind the orphan-flag branch.
-    guard_pos = handler.find("if(tc._createdByComplete)")
-    reset_pos = handler.find("_resetAssistantSegment()")
+    guard_pos = handler.find("if(toolCall._createdByComplete)")
+    reset_pos = handler.find("resetAssistantSegment()")
     assert guard_pos != -1, "tool_complete must branch on tc._createdByComplete"
     assert reset_pos != -1 and guard_pos < reset_pos, (
         "segment reset must be gated behind the orphan-completion branch"
     )
     # The non-orphan branch must still place the card (in place).
-    assert handler.count("appendLiveToolCard(tc,{sessionId:activeSid,streamId})") >= 2, (
+    assert handler.count("appendToolCard(toolCall,{sessionId:activeSid,streamId})") >= 2, (
         "both orphan and in-place branches must append/update the tool card"
     )
 

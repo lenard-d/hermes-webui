@@ -39,9 +39,12 @@ def _run_reasoning_scene(
         json.dumps(
             [
                 str(ROOT / "static" / "modules" / "messages" / "anchor-scene.js"),
+                str(ROOT / "static" / "modules" / "messages" / "compression-events.js"),
+                str(ROOT / "static" / "modules" / "messages" / "control-events.js"),
                 str(ROOT / "static" / "modules" / "messages" / "run-journal.js"),
                 str(ROOT / "static" / "modules" / "messages" / "live-tools.js"),
                 str(ROOT / "static" / "modules" / "messages" / "rendering.js"),
+                str(ROOT / "static" / "modules" / "messages" / "stream-progress.js"),
             ]
         ),
     )

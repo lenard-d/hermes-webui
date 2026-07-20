@@ -50,6 +50,7 @@ import {
 } from './session-events.js';
 import { applySessionTitleUpdate } from './send.js';
 import { createStreamAnchorSceneSettlement } from './anchor-scene.js';
+import { createStreamCompressionEventOwner } from './compression-events.js';
 import { createStreamControlEventOwner } from './control-events.js';
 import { createStreamLiveToolTracker } from './live-tools.js';
 import { createStreamRenderer } from './rendering.js';
@@ -66,6 +67,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   const _requiredStreamFactories={
     runJournal:createStreamRunJournalCursor,
     anchorScene:createStreamAnchorSceneSettlement,
+    compressionEvents:createStreamCompressionEventOwner,
     controlEvents:createStreamControlEventOwner,
     liveTools:createStreamLiveToolTracker,
     progress:createStreamProgressOwner,
@@ -79,6 +81,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   }
   const _createRunJournalCursor=_requiredStreamFactories.runJournal;
   const _createAnchorSceneSettlement=_requiredStreamFactories.anchorScene;
+  const _createCompressionEventOwner=_requiredStreamFactories.compressionEvents;
   const _createControlEventOwner=_requiredStreamFactories.controlEvents;
   const _createLiveToolTracker=_requiredStreamFactories.liveTools;
   const _createStreamProgressOwner=_requiredStreamFactories.progress;
@@ -1153,6 +1156,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
 
   const _liveToolTracker=_createLiveToolTracker({
     sessionId:activeSid,
+    streamId,
     state:S,
     inflightStore:INFLIGHT,
     uploaded,
@@ -1161,8 +1165,40 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
     getAssistantSegmentSeq:()=>_assistantSegmentSeq,
     getCurrentLiveSegmentSeq:()=>_currentLiveSegmentSeq,
     getCurrentActivityBurstId:()=>_currentActivityBurstId,
+    eventScene:{
+      isTerminal:()=>_terminalStateReached||_streamFinalized,
+      completeAutomaticCompression:(sid)=>_completeAutomaticCompressionOnLiveProgress(sid),
+      pendingDisplayText:()=>segmentStart===0
+        ? (_parseStreamState().displayText||'')
+        : _stripXmlToolCalls(assistantText.slice(segmentStart)),
+      sealPendingProse:(text,options)=>_upsertAnchorProcessProse(text,options),
+      applyToAnchor:_applyToAnchor,
+      scheduleArtifacts:()=>{
+        if(S.session&&S.session.session_id===activeSid&&typeof scheduleRenderSessionArtifacts==='function') scheduleRenderSessionArtifacts();
+      },
+      finalizeThinking:()=>{
+        if(typeof finalizeThinkingCard==='function') finalizeThinkingCard();
+      },
+      clearReasoning:()=>{ liveReasoningText=''; },
+      removeRunningRow:()=>{ const row=$('toolRunningRow');if(row)row.remove(); },
+      hasAssistantOutput:()=>!!(assistantRow&&assistantBody),
+      ensureAssistantRow,
+      flushPendingSegment:(options)=>_flushPendingSegmentRender(options),
+      appendToolCard:(toolCall,identity)=>appendLiveToolCard(toolCall,identity),
+      snapshot:snapshotLiveTurn,
+      startFreshSegment:()=>{ _freshSegment=true; },
+      endParser:()=>_smdEndParser(),
+      resetAssistantSegment:()=>_resetAssistantSegment(),
+      scrollPinned:()=>scrollIfPinned(),
+      noteWorkspaceMutation:(toolCall)=>{
+        if(typeof noteWorkspaceMutationsFromToolCall==='function') noteWorkspaceMutationsFromToolCall(toolCall);
+      },
+      notifyPersistentStateSaved:(toolCall)=>_maybeNotifyPersistentStateSaved(toolCall),
+      refreshOpenPreview:()=>{
+        if(typeof refreshOpenPreviewIfMutated==='function') refreshOpenPreviewIfMutated();
+      },
+    },
   });
-  const upsertLiveToolCall=_liveToolTracker.upsert;
 
   const _streamRenderer=_createStreamRenderer({
     reconnecting,
@@ -1204,30 +1240,48 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   const _scheduleRender=_streamRenderer.scheduleRender;
   const _clearAnchorProseIncrementalNode=_streamRenderer.clearAnchorProseIncrementalNode;
 
-  function _completeAutomaticCompressionOnLiveProgress(sessionId){
-    const sid=String(sessionId||'');
-    const hasRunningLiveCard=!!document.querySelector('[data-live-compression-card="1"][data-compression-started-at]');
-    const hasRunningState=!!(window._compressionUi&&window._compressionUi.automatic&&window._compressionUi.phase==='running'&&(!sid||!window._compressionUi.sessionId||String(window._compressionUi.sessionId)===sid));
-    if(!hasRunningLiveCard&&!hasRunningState) return false;
-    _ensureAnchorCompressionCompletedOnLiveProgress(sid);
-    if(typeof appendLiveCompressionCard==='function'){
-      appendLiveCompressionCard({
-        sessionId:sid,
-        phase:'done',
-        automatic:true,
-        message:'Context auto-compressed',
-      });
-    }
-    return true;
-  }
+  const _compressionEvents=_createCompressionEventOwner({
+    sessionId:activeSid,
+    state:S,
+    applyToAnchor:_applyToAnchor,
+    completeAnchorOnLiveProgress:_ensureAnchorCompressionCompletedOnLiveProgress,
+    snapshot:snapshotLiveTurn,
+    mergeUsage:(usage,fallback)=>typeof _mergeUsageForCtxIndicator==='function'
+      ? _mergeUsageForCtxIndicator(usage,fallback)
+      : {...fallback,...usage},
+    syncUsage:(usage)=>{
+      if(typeof _syncCtxIndicator==='function') _syncCtxIndicator(usage);
+    },
+    view:{
+      hasRunningCard:()=>!!document.querySelector('[data-live-compression-card="1"][data-compression-started-at]'),
+      getCompressionState:()=>window._compressionUi||null,
+      appendLiveCard:(compressionState)=>typeof appendLiveCompressionCard==='function'
+        ? appendLiveCompressionCard(compressionState)
+        : false,
+      clearCompressionUi:()=>{
+        if(typeof clearCompressionUi==='function') clearCompressionUi();
+        else window._compressionUi=null;
+      },
+      setCompressionUi:(compressionState)=>{
+        if(typeof setCompressionUi==='function') setCompressionUi(compressionState);
+      },
+      setCompressionSessionLock:(value)=>{
+        if(typeof _setCompressionSessionLock==='function') _setCompressionSessionLock(value);
+      },
+      renderMessages:()=>{
+        if(typeof renderMessages==='function') renderMessages();
+      },
+    },
+  });
+  const _completeAutomaticCompressionOnLiveProgress=_compressionEvents.completeOnLiveProgress;
 
   const _controlEvents=_createControlEventOwner({
     sessionId:activeSid,
     state:S,
     applyToAnchor:_applyToAnchor,
-    showPersistentStateToast:_showPersistentStateToast,
-    applySessionTitle:applySessionTitleUpdate,
-    handleBackgroundTaskComplete:_handleBgTaskCompleteEvent,
+    showPersistentStateToast:(...args)=>_showPersistentStateToast(...args),
+    applySessionTitle:(...args)=>applySessionTitleUpdate(...args),
+    handleBackgroundTaskComplete:(...args)=>_handleBgTaskCompleteEvent(...args),
     ui:{
       translate:(key,...args)=>typeof t==='function'?t(key,...args):String(key||''),
       setComposerStatus:(value)=>{
@@ -1398,79 +1452,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       }
     });
 
-    source.addEventListener('tool',e=>{
-      if(_terminalStateReached||_streamFinalized) return;
-      if(!S.session||S.session.session_id!==activeSid||S.activeStreamId!==streamId) return;
-      const d=JSON.parse(e.data);
-      if(d.name==='clarify') return;
-      _completeAutomaticCompressionOnLiveProgress(activeSid);
-      const tc=upsertLiveToolCall(d,'start');
-      if(!tc) return;
-      const pendingDisplayTextBeforeTool=segmentStart===0
-        ? (_parseStreamState().displayText||'')
-        : _stripXmlToolCalls(assistantText.slice(segmentStart));
-      if(String(pendingDisplayTextBeforeTool||'').trim()) _upsertAnchorProcessProse(pendingDisplayTextBeforeTool,{sealed:true});
-      _applyToAnchor('tool',{...d,...tc},e);
-
-      if(S.session&&S.session.session_id===activeSid&&typeof scheduleRenderSessionArtifacts==='function') scheduleRenderSessionArtifacts();
-      if(!S.session||S.session.session_id!==activeSid) return;
-      // Provider reasoning/thinking is a Worklog Thinking Card, separate from
-      // tool cards. Close the current live card before appending a tool row.
-      if(typeof finalizeThinkingCard==='function') finalizeThinkingCard();
-      liveReasoningText='';
-      const oldRow=$('toolRunningRow');if(oldRow)oldRow.remove();
-      const pendingDisplayText=segmentStart===0
-        ? (_parseStreamState().displayText||'')
-        : _stripXmlToolCalls(assistantText.slice(segmentStart));
-      if((assistantRow&&assistantBody)||String(pendingDisplayText||'').trim()){
-        ensureAssistantRow(true);
-      }
-      _flushPendingSegmentRender({force:true});
-      appendLiveToolCard(tc,{sessionId:activeSid,streamId});
-      snapshotLiveTurn();
-      _freshSegment=true;
-      _smdEndParser();
-      _resetAssistantSegment();
-      scrollIfPinned();
-    });
-
-    source.addEventListener('tool_complete',e=>{
-      if(_terminalStateReached||_streamFinalized) return;
-      if(!S.session||S.session.session_id!==activeSid||S.activeStreamId!==streamId) return;
-      const d=JSON.parse(e.data);
-      if(d.name==='clarify') return;
-      _completeAutomaticCompressionOnLiveProgress(activeSid);
-      const tc=upsertLiveToolCall(d,'complete');
-      if(!tc) return;
-      tc.is_error=!!d.is_error;
-      const pendingDisplayTextBeforeComplete=segmentStart===0
-        ? (_parseStreamState().displayText||'')
-        : _stripXmlToolCalls(assistantText.slice(segmentStart));
-      if(String(pendingDisplayTextBeforeComplete||'').trim()) _upsertAnchorProcessProse(pendingDisplayTextBeforeComplete,{sealed:true});
-      _applyToAnchor('tool_complete',{...d,...tc,is_error:!!d.is_error},e);
-      if(typeof noteWorkspaceMutationsFromToolCall==='function') noteWorkspaceMutationsFromToolCall(tc);
-      if(S.session&&S.session.session_id===activeSid&&typeof scheduleRenderSessionArtifacts==='function') scheduleRenderSessionArtifacts();
-      if(!S.session||S.session.session_id!==activeSid) return;
-      _maybeNotifyPersistentStateSaved(tc);
-      if(typeof refreshOpenPreviewIfMutated==='function') refreshOpenPreviewIfMutated();
-      if(tc._createdByComplete){
-        const pendingDisplayText=segmentStart===0
-          ? (_parseStreamState().displayText||'')
-          : _stripXmlToolCalls(assistantText.slice(segmentStart));
-        if((assistantRow&&assistantBody)||String(pendingDisplayText||'').trim()){
-          ensureAssistantRow(true);
-          _flushPendingSegmentRender({force:true});
-        }
-        appendLiveToolCard(tc,{sessionId:activeSid,streamId});
-        _freshSegment=true;
-        _smdEndParser();
-        _resetAssistantSegment();
-      } else {
-        appendLiveToolCard(tc,{sessionId:activeSid,streamId});
-      }
-      snapshotLiveTurn();
-      scrollIfPinned();
-    });
+    _liveToolTracker.attach(source);
 
     // Phase 2: dedicated `todo_state` event carries a full snapshot of
     // the upstream TodoStore.  We treat it as the single source of truth
@@ -1842,70 +1824,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       _finalizeStreamEndFallback(source);
     });
 
-    source.addEventListener('compressing',e=>{
-      // Context auto-compression is starting. Surface the same calm running
-      // compression card as manual /compress while the summarizer LLM call runs.
-      if(!S.session||S.session.session_id!==activeSid) return;
-      let d={};
-      try{ d=JSON.parse(e.data||'{}')||{}; }catch(_){ d={}; }
-      if(d.session_id&&d.session_id!==activeSid) return;
-      _applyToAnchor('compressing',d,e);
-      const state={
-        sessionId:activeSid,
-        phase:'running',
-        automatic:true,
-        message:'Compressing context',
-        startedAt:Date.now()/1000,
-      };
-      if(typeof appendLiveCompressionCard==='function'&&appendLiveCompressionCard(state)){
-        // Keep automatic compression inside the active Worklog. Calling
-        // renderMessages() here rebuilds from the still-empty persisted
-        // transcript during active streams and can erase already replayed tools.
-        if(typeof clearCompressionUi==='function') clearCompressionUi();
-        else window._compressionUi=null;
-        snapshotLiveTurn();
-        return;
-      }
-      if(typeof setCompressionUi==='function'){
-        setCompressionUi(state);
-      }
-      snapshotLiveTurn();
-    });
-
-    source.addEventListener('compressed',e=>{
-      // Context was auto-compressed during this turn. Keep the live timeline
-      // honest by transitioning the running divider into a completed divider;
-      // final settlement removes live-only compression rows from the Worklog.
-      if(!S.session) return;
-      const currentSid=S.session.session_id;
-      let d={};
-      try{ d=JSON.parse(e.data||'{}')||{}; }catch(_){ d={}; }
-      const eventSid=d.old_session_id||d.session_id||activeSid;
-      const continuationSid=d.new_session_id||d.continuation_session_id||'';
-      const eventMatchesCurrent=!!(currentSid&&(eventSid===currentSid||d.new_session_id===currentSid||d.continuation_session_id===currentSid));
-      if(!eventMatchesCurrent) return;
-      _applyToAnchor('compressed',d,e);
-      const displaySid=currentSid;
-      if(d.usage&&typeof _syncCtxIndicator==='function'){
-        S.lastUsage=typeof _mergeUsageForCtxIndicator==='function'
-          ? _mergeUsageForCtxIndicator(d.usage,S.lastUsage||{})
-          : {...(S.lastUsage||{}),...d.usage};
-        _syncCtxIndicator(S.lastUsage);
-      }
-      if(typeof appendLiveCompressionCard==='function'){
-        appendLiveCompressionCard({
-          sessionId:displaySid,
-          phase:'done',
-          automatic:true,
-          message:'Context auto-compressed',
-          continuationSessionId:continuationSid,
-        });
-      }
-      if(typeof clearCompressionUi==='function') clearCompressionUi();
-      else window._compressionUi=null;
-      if(typeof _setCompressionSessionLock==='function') _setCompressionSessionLock(null);
-      if(!S.busy&&typeof renderMessages==='function') renderMessages();
-    });
+    _compressionEvents.attach(source);
 
     source.addEventListener('metering',e=>{
       try{

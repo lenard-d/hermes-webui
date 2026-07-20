@@ -3,6 +3,7 @@
 
 export function createStreamLiveToolTracker(options={}){
   const activeSid=String(options.sessionId||'');
+  const streamId=String(options.streamId||'');
   const S=options.state&&typeof options.state==='object'?options.state:{};
   const INFLIGHT=options.inflightStore&&typeof options.inflightStore==='object'?options.inflightStore:{};
   const uploaded=Array.isArray(options.uploaded)?options.uploaded:[];
@@ -11,6 +12,29 @@ export function createStreamLiveToolTracker(options={}){
   const getAssistantSegmentSeq=typeof options.getAssistantSegmentSeq==='function'?options.getAssistantSegmentSeq:()=>0;
   const getCurrentLiveSegmentSeq=typeof options.getCurrentLiveSegmentSeq==='function'?options.getCurrentLiveSegmentSeq:()=>0;
   const getCurrentActivityBurstId=typeof options.getCurrentActivityBurstId==='function'?options.getCurrentActivityBurstId:()=>0;
+  const eventScene=options.eventScene&&typeof options.eventScene==='object'?options.eventScene:{};
+  const sceneCall=(name,fallback=()=>{})=>typeof eventScene[name]==='function'?eventScene[name]:fallback;
+  const isTerminal=sceneCall('isTerminal',()=>false);
+  const completeAutomaticCompression=sceneCall('completeAutomaticCompression');
+  const pendingDisplayText=sceneCall('pendingDisplayText',()=>'');
+  const sealPendingProse=sceneCall('sealPendingProse');
+  const applyToAnchor=sceneCall('applyToAnchor');
+  const scheduleArtifacts=sceneCall('scheduleArtifacts');
+  const finalizeThinking=sceneCall('finalizeThinking');
+  const clearReasoning=sceneCall('clearReasoning');
+  const removeRunningRow=sceneCall('removeRunningRow');
+  const hasAssistantOutput=sceneCall('hasAssistantOutput',()=>false);
+  const ensureAssistantRow=sceneCall('ensureAssistantRow');
+  const flushPendingSegment=sceneCall('flushPendingSegment');
+  const appendToolCard=sceneCall('appendToolCard');
+  const snapshot=sceneCall('snapshot');
+  const startFreshSegment=sceneCall('startFreshSegment');
+  const endParser=sceneCall('endParser');
+  const resetAssistantSegment=sceneCall('resetAssistantSegment');
+  const scrollPinned=sceneCall('scrollPinned');
+  const noteWorkspaceMutation=sceneCall('noteWorkspaceMutation');
+  const notifyPersistentStateSaved=sceneCall('notifyPersistentStateSaved');
+  const refreshOpenPreview=sceneCall('refreshOpenPreview');
 
   function _stableStringify(value){
     const normalize=(v)=>{
@@ -256,7 +280,94 @@ export function createStreamLiveToolTracker(options={}){
     return tc;
   }
 
+  function parsePayload(event){
+    try{
+      const payload=JSON.parse(event&&event.data||'{}');
+      return payload&&typeof payload==='object'?payload:null;
+    }catch(_){
+      return null;
+    }
+  }
+
+  function ownsVisibleStream(){
+    return !!(
+      S.session&&
+      S.session.session_id===activeSid&&
+      (!streamId||S.activeStreamId===streamId)
+    );
+  }
+
+  function sealCurrentProse(){
+    const displayText=String(pendingDisplayText()||'');
+    if(displayText.trim()) sealPendingProse(displayText,{sealed:true});
+    return displayText;
+  }
+
+  function attach(source){
+    if(!source||typeof source.addEventListener!=='function'){
+      throw new TypeError('live tool events require an EventSource-like listener interface');
+    }
+
+    source.addEventListener('tool',event=>{
+      if(isTerminal()||!ownsVisibleStream()) return;
+      const payload=parsePayload(event);
+      if(!payload||payload.name==='clarify') return;
+      completeAutomaticCompression(activeSid);
+      const toolCall=upsertLiveToolCall(payload,'start');
+      if(!toolCall) return;
+      const displayText=sealCurrentProse();
+      applyToAnchor('tool',{...payload,...toolCall},event);
+      scheduleArtifacts();
+      if(!ownsVisibleStream()) return;
+      finalizeThinking();
+      clearReasoning();
+      removeRunningRow();
+      if(hasAssistantOutput()||displayText.trim()) ensureAssistantRow(true);
+      flushPendingSegment({force:true});
+      appendToolCard(toolCall,{sessionId:activeSid,streamId});
+      snapshot();
+      startFreshSegment();
+      endParser();
+      resetAssistantSegment();
+      scrollPinned();
+    });
+
+    source.addEventListener('tool_complete',event=>{
+      if(isTerminal()||!ownsVisibleStream()) return;
+      const payload=parsePayload(event);
+      if(!payload||payload.name==='clarify') return;
+      completeAutomaticCompression(activeSid);
+      const toolCall=upsertLiveToolCall(payload,'complete');
+      if(!toolCall) return;
+      toolCall.is_error=!!payload.is_error;
+      const displayText=sealCurrentProse();
+      applyToAnchor('tool_complete',{...payload,...toolCall,is_error:!!payload.is_error},event);
+      noteWorkspaceMutation(toolCall);
+      scheduleArtifacts();
+      if(!ownsVisibleStream()) return;
+      notifyPersistentStateSaved(toolCall);
+      refreshOpenPreview();
+      if(toolCall._createdByComplete){
+        if(hasAssistantOutput()||displayText.trim()){
+          ensureAssistantRow(true);
+          flushPendingSegment({force:true});
+        }
+        appendToolCard(toolCall,{sessionId:activeSid,streamId});
+        startFreshSegment();
+        endParser();
+        resetAssistantSegment();
+      }else{
+        appendToolCard(toolCall,{sessionId:activeSid,streamId});
+      }
+      snapshot();
+      scrollPinned();
+    });
+
+    return source;
+  }
+
   return Object.freeze({
+    attach,
     upsert: upsertLiveToolCall,
   });
 }

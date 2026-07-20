@@ -64,6 +64,9 @@ def _event_listener_body(src, event_name):
     marker = f"source.addEventListener('{event_name}',e=>{{"
     start = src.find(marker)
     if start == -1:
+        marker = f"source.addEventListener('{event_name}',event=>{{"
+        start = src.find(marker)
+    if start == -1:
         marker = f"es.addEventListener('{event_name}', e => {{"
         start = src.find(marker)
     assert start != -1, f"{event_name} listener not found"
@@ -343,11 +346,11 @@ def test_tool_boundaries_seal_prose_before_tool_rows_enter_anchor_scene():
     tool = _event_listener_body(MESSAGES_JS, "tool")
     complete = _event_listener_body(MESSAGES_JS, "tool_complete")
 
-    assert tool.index("_upsertAnchorProcessProse(pendingDisplayTextBeforeTool") < tool.index(
-        "_applyToAnchor('tool'"
+    assert tool.index("const displayText=sealCurrentProse()") < tool.index(
+        "applyToAnchor('tool'"
     )
-    assert complete.index("_upsertAnchorProcessProse(pendingDisplayTextBeforeComplete") < complete.index(
-        "_applyToAnchor('tool_complete'"
+    assert complete.index("const displayText=sealCurrentProse()") < complete.index(
+        "applyToAnchor('tool_complete'"
     )
 
 

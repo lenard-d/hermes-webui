@@ -152,3 +152,134 @@ if(owner.takeGoalContinuation()!==null||queued.length!==1) throw new Error('cros
 """
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_live_tool_owner_applies_complete_tool_lifecycle_once():
+    result = _run_node(
+        r"""
+import {createStreamLiveToolTracker} from './static/modules/messages/live-tools.js';
+
+class FakeSource {
+  constructor(){this.listeners=new Map();}
+  addEventListener(name,handler){this.listeners.set(name,handler);}
+  emit(name,payload){this.listeners.get(name)({data:JSON.stringify(payload)});}
+}
+
+const source=new FakeSource();
+const state={
+  session:{session_id:'sid-1'},
+  activeStreamId:'stream-1',
+  messages:[],
+  toolCalls:[],
+};
+const inflight={};
+const events=[];
+let snapshots=0;
+let pending='draft before tool';
+const owner=createStreamLiveToolTracker({
+  sessionId:'sid-1',
+  streamId:'stream-1',
+  state,
+  inflightStore:inflight,
+  persist:()=>{},
+  getAssistantRow:()=>null,
+  getAssistantSegmentSeq:()=>2,
+  getCurrentLiveSegmentSeq:()=>2,
+  getCurrentActivityBurstId:()=>4,
+  eventScene:{
+    isTerminal:()=>false,
+    completeAutomaticCompression:()=>events.push('compression'),
+    pendingDisplayText:()=>pending,
+    sealPendingProse:text=>events.push(['prose',text]),
+    applyToAnchor:(type,payload)=>events.push(['anchor',type,payload.tid]),
+    scheduleArtifacts:()=>events.push('artifacts'),
+    finalizeThinking:()=>events.push('thinking'),
+    clearReasoning:()=>events.push('reasoning-cleared'),
+    removeRunningRow:()=>events.push('running-row-cleared'),
+    hasAssistantOutput:()=>true,
+    ensureAssistantRow:()=>events.push('assistant-row'),
+    flushPendingSegment:()=>events.push('flushed'),
+    appendToolCard:tc=>events.push(['card',tc.tid,tc.done]),
+    snapshot:()=>{snapshots+=1;},
+    startFreshSegment:()=>events.push('fresh'),
+    endParser:()=>events.push('parser-ended'),
+    resetAssistantSegment:()=>events.push('segment-reset'),
+    scrollPinned:()=>events.push('scroll'),
+    noteWorkspaceMutation:()=>events.push('mutation'),
+    notifyPersistentStateSaved:()=>events.push('persistent'),
+    refreshOpenPreview:()=>events.push('preview'),
+  },
+});
+if(!Object.isFrozen(owner)) throw new Error('owner interface must be frozen');
+owner.attach(source);
+source.emit('tool',{name:'terminal',tid:'tool-1',args:{command:'pwd'}});
+pending='';
+source.emit('tool_complete',{name:'terminal',tid:'tool-1',is_error:false,duration:0.5});
+
+if(inflight['sid-1'].toolCalls.length!==1) throw new Error('tool lifecycle duplicated storage');
+const tool=inflight['sid-1'].toolCalls[0];
+if(tool.tid!=='tool-1'||tool.done!==true||tool.duration!==0.5) throw new Error('tool completion not projected');
+if(snapshots!==2) throw new Error('each tool phase must snapshot once');
+if(events.filter(item=>Array.isArray(item)&&item[0]==='card').length!==2) throw new Error('tool card lifecycle incomplete');
+if(!events.some(item=>Array.isArray(item)&&item[0]==='anchor'&&item[1]==='tool')) throw new Error('tool start anchor missing');
+if(!events.some(item=>Array.isArray(item)&&item[0]==='anchor'&&item[1]==='tool_complete')) throw new Error('tool completion anchor missing');
+if(!events.includes('mutation')||!events.includes('persistent')||!events.includes('preview')) throw new Error('completion effects missing');
+"""
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_compression_event_owner_applies_running_and_completed_lifecycle():
+    result = _run_node(
+        r"""
+import {createStreamCompressionEventOwner} from './static/modules/messages/compression-events.js';
+
+class FakeSource {
+  constructor(){this.listeners=new Map();}
+  addEventListener(name,handler){this.listeners.set(name,handler);}
+  emit(name,payload){this.listeners.get(name)({data:JSON.stringify(payload)});}
+}
+
+const source=new FakeSource();
+const state={session:{session_id:'sid-1'},lastUsage:{input_tokens:2},busy:true};
+const cards=[];
+const anchors=[];
+let compressionState=null;
+let snapshots=0;
+let clears=0;
+let locks=0;
+let synced=null;
+const owner=createStreamCompressionEventOwner({
+  sessionId:'sid-1',
+  state,
+  applyToAnchor:(type,payload)=>anchors.push([type,payload]),
+  snapshot:()=>{snapshots+=1;},
+  mergeUsage:(next,prev)=>({...prev,...next}),
+  syncUsage:usage=>{synced=usage;},
+  view:{
+    hasRunningCard:()=>false,
+    getCompressionState:()=>compressionState,
+    appendLiveCard:card=>{cards.push(card);return true;},
+    clearCompressionUi:()=>{clears+=1;compressionState=null;},
+    setCompressionUi:value=>{compressionState=value;},
+    setCompressionSessionLock:()=>{locks+=1;},
+    renderMessages:()=>{},
+  },
+});
+if(!Object.isFrozen(owner)) throw new Error('owner interface must be frozen');
+owner.attach(source);
+source.emit('compressing',{session_id:'sid-1'});
+source.emit('compressed',{old_session_id:'sid-1',new_session_id:'sid-2',usage:{input_tokens:5}});
+
+if(anchors.map(([type])=>type).join(',')!=='compressing,compressed') throw new Error('compression anchors missing');
+if(cards.length!==2||cards[0].phase!=='running'||cards[1].phase!=='done') throw new Error('compression card lifecycle incomplete');
+if(cards[1].continuationSessionId!=='sid-2') throw new Error('continuation identity lost');
+if(snapshots!==1||clears!==2||locks!==1) throw new Error('compression cleanup mismatch');
+if(!synced||synced.input_tokens!==5||state.lastUsage.input_tokens!==5) throw new Error('usage not projected');
+
+compressionState={automatic:true,phase:'running',sessionId:'sid-1'};
+if(owner.completeOnLiveProgress('sid-1')!==true) throw new Error('live progress did not settle running compression');
+if(cards.at(-1).phase!=='done') throw new Error('live progress completion card missing');
+"""
+    )
+    assert result.returncode == 0, result.stderr

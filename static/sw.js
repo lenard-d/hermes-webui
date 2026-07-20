@@ -102,6 +102,7 @@ const SHELL_ASSETS = [
   './static/modules/messages/approvals.js',
   './static/modules/messages/clarify.js',
   './static/modules/messages/composer-context.js',
+  './static/modules/messages/compression-events.js',
   './static/modules/messages/control-events.js',
   './static/modules/messages/core.js',
   './static/modules/messages/live-tools.js',

@@ -1263,7 +1263,11 @@ def test_slice6_live_shadow_feed_wires_anchor_scene_for_visible_order_handoff():
         "apperror",
         "cancel",
     ]:
-        assert f"_applyToAnchor('{event_name}'" in _event_listener_body(src, event_name)
+        event_body = _event_listener_body(src, event_name)
+        assert (
+            f"_applyToAnchor('{event_name}'" in event_body
+            or f"applyToAnchor('{event_name}'" in event_body
+        )
 
     token_body = _event_listener_body(src, "token")
     assert "_scheduleRender(" in token_body
@@ -1290,11 +1294,11 @@ def test_slice6_live_shadow_feed_wires_anchor_scene_for_visible_order_handoff():
     assert "projectAssistantTurnAnchorActivityScene" in src
 
     tool_body = _event_listener_body(src, "tool")
-    assert tool_body.index("upsertLiveToolCall(d,'start')") < tool_body.index(
-        "_applyToAnchor('tool'"
+    assert tool_body.index("upsertLiveToolCall(payload,'start')") < tool_body.index(
+        "applyToAnchor('tool'"
     )
-    assert tool_body.index("_upsertAnchorProcessProse(pendingDisplayTextBeforeTool") < tool_body.index(
-        "_applyToAnchor('tool'"
+    assert tool_body.index("const displayText=sealCurrentProse()") < tool_body.index(
+        "applyToAnchor('tool'"
     )
     done_body = _event_listener_body(src, "done")
     assert "_applyToAnchor('done',{" in done_body
