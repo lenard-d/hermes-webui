@@ -6,20 +6,29 @@ import json
 import queue
 
 import api.config as config
+from api.sessions import anchor_scene as anchor_scene_owner
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-ANCHOR_SCENE_SRC = (ROOT / "api" / "routes_parts" / "anchor_scene.py").read_text(
+ANCHOR_SCENE_SRC = (ROOT / "api" / "sessions" / "anchor_scene.py").read_text(
     encoding="utf-8"
 )
+SESSION_QUERIES_SRC = (
+    ROOT / "api" / "http" / "routes" / "session_queries.py"
+).read_text(encoding="utf-8")
+WORKSPACE_QUERIES_SRC = (
+    ROOT / "api" / "http" / "routes" / "workspace_queries.py"
+).read_text(encoding="utf-8")
 STREAM_TRANSPORT_SRC = (
     ROOT / "api" / "routes_parts" / "stream_transport.py"
 ).read_text(encoding="utf-8")
 
 
 def test_stream_status_exposes_replay_summary():
-    status_pos = ROUTES_SRC.index('parsed.path == "/api/chat/stream/status"')
-    block = ROUTES_SRC[status_pos : status_pos + 900]
+    status_pos = WORKSPACE_QUERIES_SRC.index(
+        'parsed.path == "/api/chat/stream/status"'
+    )
+    block = WORKSPACE_QUERIES_SRC[status_pos : status_pos + 900]
 
     assert "find_run_summary(stream_id)" in block
     assert '"replay_available"' in block
@@ -262,20 +271,21 @@ def test_replay_emits_event_ids_and_stale_restart_diagnostic():
 
 
 def test_session_payload_exposes_runtime_journal_for_stale_streams():
-    assert "original_stream_id = getattr(s, \"active_stream_id\", None)" in ROUTES_SRC
-    assert '"runtime_journal"' in ROUTES_SRC
-    assert '"runtime_journal_snapshot"' in ROUTES_SRC
-    assert "_run_journal_live_snapshot(original_stream_id, handler=handler)" in ROUTES_SRC
+    import api.routes as routes
+
+    assert routes._run_journal_live_snapshot is anchor_scene_owner._run_journal_live_snapshot
+    assert "original_stream_id = getattr(s, \"active_stream_id\", None)" in SESSION_QUERIES_SRC
+    assert '"runtime_journal"' in SESSION_QUERIES_SRC
+    assert '"runtime_journal_snapshot"' in SESSION_QUERIES_SRC
+    assert "snapshot = _run_journal_live_snapshot(original_stream_id)" in SESSION_QUERIES_SRC
     assert 'terminal_state = "lost-worker-bookkeeping"' in ANCHOR_SCENE_SRC
-    assert "active=journal_active" in ROUTES_SRC
-    assert "journal_active = bool(original_stream_id in active_stream_ids)" in ROUTES_SRC
+    assert "active=journal_active" in SESSION_QUERIES_SRC
+    assert "journal_active = bool(original_stream_id in active_stream_ids)" in SESSION_QUERIES_SRC
 
 
 def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(monkeypatch):
-    import api.routes as routes
-
     monkeypatch.setattr(
-        routes,
+        anchor_scene_owner,
         "find_run_summary",
         lambda stream_id: {
             "session_id": "session_1",
@@ -285,7 +295,7 @@ def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(mo
         },
     )
     monkeypatch.setattr(
-        routes,
+        anchor_scene_owner,
         "read_run_events",
         lambda session_id, run_id: {
             "events": [
@@ -335,7 +345,7 @@ def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(mo
         },
     )
 
-    snapshot = routes._run_journal_live_snapshot("run_1")
+    snapshot = anchor_scene_owner._run_journal_live_snapshot("run_1")
 
     assert snapshot["last_seq"] == 5
     assert snapshot["last_event_id"] == "run_1:5"
@@ -367,15 +377,13 @@ def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(mo
 
 
 def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
-    import api.routes as routes
-
     long_command = "python -c " + repr("print('x')\n" * 24)
     huge_args = {
         "command": long_command,
         "items": [{"index": i, "payload": "x" * 100} for i in range(50_000)],
     }
     monkeypatch.setattr(
-        routes,
+        anchor_scene_owner,
         "find_run_summary",
         lambda stream_id: {
             "session_id": "session_1",
@@ -385,7 +393,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        routes,
+        anchor_scene_owner,
         "read_run_events",
         lambda session_id, run_id: {
             "events": [
@@ -403,7 +411,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
         },
     )
 
-    snapshot = routes._run_journal_live_snapshot("run_1")
+    snapshot = anchor_scene_owner._run_journal_live_snapshot("run_1")
     tool = snapshot["tool_calls"][0]
     assert tool["args"]["command"] == long_command
     assert len(tool["args"]["items"]) <= 64
@@ -411,9 +419,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
 
 
 def test_status_payload_marks_non_terminal_dead_journal_as_stale():
-    import api.routes as routes
-
-    payload = routes._run_journal_status_payload(
+    payload = anchor_scene_owner._run_journal_status_payload(
         {
             "session_id": "session_1",
             "run_id": "run_1",
@@ -432,9 +438,7 @@ def test_status_payload_marks_non_terminal_dead_journal_as_stale():
 
 
 def test_status_payload_preserves_terminal_error_state():
-    import api.routes as routes
-
-    payload = routes._run_journal_status_payload(
+    payload = anchor_scene_owner._run_journal_status_payload(
         {
             "session_id": "session_1",
             "run_id": "run_1",

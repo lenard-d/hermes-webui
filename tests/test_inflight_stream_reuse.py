@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from tests.test_sessions_split_support import SESSIONS_SOURCE
 
+from api.sessions import anchor_scene as anchor_scene_owner
+
 REPO_ROOT = Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
 LIVE_TOOLS_JS = REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
@@ -1147,7 +1149,6 @@ assert.strictEqual(inflight.lastRunJournalEventId, 'run-a:7');
 def test_equal_seq_recovery_preserves_full_durable_tool_args(monkeypatch):
     """Durable-wins recovery must not downgrade browser-visible tool details."""
     assert NODE, "node not on PATH"
-    from api import routes
 
     stream_id = "stream-long-tool-args"
     long_command = "python -c " + repr("print('x')\n" * 24)
@@ -1214,7 +1215,7 @@ def test_equal_seq_recovery_preserves_full_durable_tool_args(monkeypatch):
     ]
 
     monkeypatch.setattr(
-        routes,
+        anchor_scene_owner,
         "find_run_summary",
         lambda sid: {
             "session_id": "session-1",
@@ -1226,14 +1227,14 @@ def test_equal_seq_recovery_preserves_full_durable_tool_args(monkeypatch):
         else None,
     )
     monkeypatch.setattr(
-        routes,
+        anchor_scene_owner,
         "read_run_events",
         lambda session_id, run_id: {"events": events}
         if session_id == "session-1" and run_id == stream_id
         else {"events": []},
     )
 
-    snapshot = routes._run_journal_live_snapshot(stream_id)
+    snapshot = anchor_scene_owner._run_journal_live_snapshot(stream_id)
     assert snapshot is not None
     assert snapshot["tool_calls"][0]["args"]["command"] == long_command
     assert snapshot["tool_calls"][1]["args"]["command"] == complete_only_command

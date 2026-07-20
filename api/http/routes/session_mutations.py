@@ -37,6 +37,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     ]
     _sanitize_error = ctx["_sanitize_error"]
     _session_is_subagent_view_only = ctx["_session_is_subagent_view_only"]
+    _session_visible_to_active_profile = ctx["_session_visible_to_active_profile"]
     _session_model_state_from_request = ctx["_session_model_state_from_request"]
     _session_requires_cli_metadata_lookup = ctx["_session_requires_cli_metadata_lookup"]
     _sync_session_title_to_insights = ctx["_sync_session_title_to_insights"]
@@ -65,7 +66,15 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     uuid = ctx["uuid"]
 
     if parsed.path == "/api/session/anchor-scene":
-        return _handle_session_anchor_scene(handler, body)
+        return _handle_session_anchor_scene(
+            handler,
+            body,
+            get_or_materialize_session=_get_or_materialize_session,
+            session_visible_to_active_profile=_session_visible_to_active_profile,
+            require_fields=require,
+            bad_response=bad,
+            json_response=j,
+        )
 
     if parsed.path == "/api/session/rename":
         try:

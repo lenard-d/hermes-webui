@@ -69,6 +69,9 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _session_requires_cli_metadata_lookup = ctx["_session_requires_cli_metadata_lookup"]
     _session_source_is_webui = ctx["_session_source_is_webui"]
     _session_visible_to_active_profile = ctx["_session_visible_to_active_profile"]
+    _stream_id_visible_to_request_profile = ctx[
+        "_stream_id_visible_to_request_profile"
+    ]
     _should_accept_session_context_length_refresh = ctx[
         "_should_accept_session_context_length_refresh"
     ]
@@ -494,11 +497,13 @@ def handle_get(handler, parsed, ctx: RouteContext):
                         journal,
                         active=journal_active,
                     )
-                    if journal_active:
+                    if journal_active and _stream_id_visible_to_request_profile(
+                        handler,
+                        original_stream_id,
+                        emit_error=False,
+                    ):
                         try:
-                            snapshot = _run_journal_live_snapshot(
-                                original_stream_id, handler=handler
-                            )
+                            snapshot = _run_journal_live_snapshot(original_stream_id)
                         except Exception:
                             logger.debug(
                                 "Failed to build runtime journal snapshot for %s",

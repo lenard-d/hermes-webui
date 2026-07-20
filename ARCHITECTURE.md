@@ -227,7 +227,7 @@ See Architecture Phase B for the fix.
 
 ### 4.0 Implemented ownership seams
 
-Four ownership seams now replace repeated state manipulation while the
+These ownership seams now replace repeated state manipulation while the
 larger migration remains incremental:
 
 - `api/runtime_state.py` owns publication, execution-buffer initialization,
@@ -302,6 +302,14 @@ larger migration remains incremental:
   origin metadata with their initial write. JSON sidecars remain authoritative;
   the repository is the migration seam, not a claim that unified SQLite storage
   is shipped.
+- `api/sessions/anchor_scene.py` owns the assistant-turn activity-scene
+  contract end to end: bounded input validation, journal-to-live-scene
+  projection, settled transcript hydration, assistant-message identity, and
+  atomic record replacement plus retention through the session repository.
+  `api/routes_parts/anchor_scene.py` is only the HTTP adapter and explicit
+  compatibility import surface. Authorization remains transport-owned, while
+  sidecar layout, cache freshness, sidebar projection, and recovery continue
+  to belong to their existing session owners.
 - `api/session_sources.py` owns which foreign source-identity fields may enter
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining

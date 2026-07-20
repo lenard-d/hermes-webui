@@ -18,7 +18,7 @@ STREAM_ANCHOR_SCENE_JS = (
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-ANCHOR_SCENE_PY = (ROOT / "api" / "routes_parts" / "anchor_scene.py").read_text(
+ANCHOR_SCENE_PY = (ROOT / "api" / "sessions" / "anchor_scene.py").read_text(
     encoding="utf-8"
 )
 CHAT_RUNS_PY = (ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
