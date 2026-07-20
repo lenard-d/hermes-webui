@@ -38,7 +38,7 @@ TtsProvider = EdgeTtsProvider | ElevenLabsTtsProvider | OpenAITtsProvider
 def _active_profile_snapshot() -> tuple[dict, dict[str, str]]:
     """Resolve config and dotenv against one active profile home."""
     from api import config as config_module
-    from api import onboarding as onboarding_module
+    from api.onboarding import load_env_file
     from api import profiles as profiles_module
 
     home = profiles_module.get_active_hermes_home()
@@ -49,7 +49,7 @@ def _active_profile_snapshot() -> tuple[dict, dict[str, str]]:
     if not isinstance(config, dict):
         config = {}
     try:
-        env = onboarding_module._load_env_file(home / ".env")
+        env = load_env_file(home / ".env")
     except Exception:
         env = {}
     return config, env if isinstance(env, dict) else {}

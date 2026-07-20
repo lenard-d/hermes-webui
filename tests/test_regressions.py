@@ -1322,11 +1322,11 @@ def test_status_from_runtime_marks_openai_codex_ready_from_credential_pool(
     )
 
     from api.onboarding import _status_from_runtime
-    import api.onboarding as _ob
+    import api.onboarding.status as _ob
 
-    orig_home = _ob._get_active_hermes_home
+    orig_home = _ob.get_active_hermes_home
     orig_found = _ob._HERMES_FOUND
-    _ob._get_active_hermes_home = lambda: tmp_path
+    _ob.get_active_hermes_home = lambda: tmp_path
     _ob._HERMES_FOUND = True
     try:
         result = _status_from_runtime(
@@ -1334,7 +1334,7 @@ def test_status_from_runtime_marks_openai_codex_ready_from_credential_pool(
             True,
         )
     finally:
-        _ob._get_active_hermes_home = orig_home
+        _ob.get_active_hermes_home = orig_home
         _ob._HERMES_FOUND = orig_found
 
     assert result["provider_configured"] is True

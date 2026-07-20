@@ -236,9 +236,8 @@ def test_frontend_uses_onboarding_oauth_endpoints_and_no_secret_poll_url():
 
 
 def test_unsupported_note_mentions_codex_and_claude_as_in_app():
-    src = (REPO / "api" / "onboarding.py").read_text(encoding="utf-8")
-    start = src.find("_UNSUPPORTED_PROVIDER_NOTE")
-    body = src[start:start + 500]
+    from api.onboarding.catalog import UNSUPPORTED_PROVIDER_NOTE as body
+
     assert "OpenAI Codex, and GitHub" not in body
     assert "OpenAI Codex" in body and "authenticated in this onboarding flow" in body
     assert "Claude" in body or "Anthropic" in body
@@ -559,7 +558,7 @@ def test_runtime_provider_reads_use_anthropic_env_lock():
 
 
 def test_anthropic_onboarding_setup_allows_linked_oauth_without_api_key(monkeypatch, tmp_path):
-    import api.onboarding as onboarding
+    import api.onboarding.setup as onboarding
 
     # apply_onboarding_setup() short-circuits when HERMES_WEBUI_SKIP_ONBOARDING
     # is set in the environment (hosting providers like Agent37 use it to ship
@@ -575,7 +574,7 @@ def test_anthropic_onboarding_setup_allows_linked_oauth_without_api_key(monkeypa
         "credential_pool": {"anthropic": [{"auth_type": "oauth", "source": "claude_code_linked"}]}
     }), encoding="utf-8")
     monkeypatch.setattr(onboarding, "_get_config_path", lambda: cfg_path)
-    monkeypatch.setattr(onboarding, "_get_active_hermes_home", lambda: home)
+    monkeypatch.setattr(onboarding, "get_active_hermes_home", lambda: home)
     monkeypatch.setattr(onboarding, "get_onboarding_status", lambda: {"ok": True})
     monkeypatch.setattr(onboarding, "reload_config", lambda: None)
 

@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 import api.config as config
-import api.onboarding as onboarding
+import api.onboarding.setup as onboarding
 import api.profiles as profiles
 import pytest
 
@@ -152,7 +152,7 @@ def isolated_self_hosted_env(monkeypatch, tmp_path):
     config.cfg["providers"] = {}
     config._cfg_mtime = 0.0
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
-    monkeypatch.setattr(onboarding, "_get_active_hermes_home", lambda: tmp_path)
+    monkeypatch.setattr(onboarding, "get_active_hermes_home", lambda: tmp_path)
     monkeypatch.setattr(onboarding, "_get_config_path", lambda: fake_config_path)
     monkeypatch.setattr(config, "_get_config_path", lambda: fake_config_path)
     yield tmp_path, fake_config_path
@@ -196,11 +196,11 @@ def test_apply_self_hosted_provider_setup_persists_ollama_base_url_and_active_mo
     })
     assert body["ok"] is True
     assert body["provider"] == "ollama"
-    cfg = onboarding._load_yaml_config(fake_config_path)
+    cfg = onboarding.load_yaml_config(fake_config_path)
     assert cfg["providers"]["ollama"]["base_url"] == "http://127.0.0.1:11434/v1"
     assert cfg["model"]["provider"] == "ollama"
     assert cfg["model"]["base_url"] == "http://127.0.0.1:11434/v1"
-    assert cfg["model"]["default"] == onboarding._normalize_model_for_provider("ollama", "qwen3:8b")
+    assert cfg["model"]["default"] == onboarding.normalize_model_for_provider("ollama", "qwen3:8b")
     assert calls == ["invalidate"]
 
 
@@ -215,11 +215,11 @@ def test_apply_self_hosted_provider_setup_persists_lmstudio_base_url_and_active_
     })
     assert body["ok"] is True
     assert body["provider"] == "lmstudio"
-    cfg = onboarding._load_yaml_config(fake_config_path)
+    cfg = onboarding.load_yaml_config(fake_config_path)
     assert cfg["providers"]["lmstudio"]["base_url"] == "http://127.0.0.1:1234/v1"
     assert cfg["model"]["provider"] == "lmstudio"
     assert cfg["model"]["base_url"] == "http://127.0.0.1:1234/v1"
-    assert cfg["model"]["default"] == onboarding._normalize_model_for_provider("lmstudio", "local-model")
+    assert cfg["model"]["default"] == onboarding.normalize_model_for_provider("lmstudio", "local-model")
     assert calls == ["invalidate"]
 
 
@@ -233,7 +233,7 @@ def test_apply_self_hosted_provider_setup_persists_base_url_without_switching_ac
         "default": "claude-sonnet-4-5",
         "base_url": "",
     }
-    onboarding._save_yaml_config(fake_config_path, {
+    onboarding.save_yaml_config(fake_config_path, {
         "model": {
             **original_model_cfg,
             "custom_flag": "preserve-me",
@@ -251,7 +251,7 @@ def test_apply_self_hosted_provider_setup_persists_base_url_without_switching_ac
     assert body["ok"] is True
     assert body["provider"] == "ollama"
     assert "model" not in body
-    cfg = onboarding._load_yaml_config(fake_config_path)
+    cfg = onboarding.load_yaml_config(fake_config_path)
     assert cfg["providers"]["ollama"]["base_url"] == "http://127.0.0.1:11434/v1"
     assert cfg["model"] == {**original_model_cfg, "custom_flag": "preserve-me"}
     assert calls == ["invalidate"]

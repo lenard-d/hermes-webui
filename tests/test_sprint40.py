@@ -10,11 +10,11 @@ Covers:
 """
 from tests.frontend_asset_contract import family_source
 import pathlib
-import re
 import unittest
 from unittest.mock import patch
 
 import api.onboarding as mod
+import api.onboarding.setup as setup
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 I18N_JS = family_source("i18n")
@@ -30,8 +30,7 @@ class TestBuildSetupCatalog(unittest.TestCase):
         cfg = {}
         if provider:
             cfg = {"model": {"provider": provider, "default": model, "base_url": base_url}}
-        with patch.object(mod, "get_config", return_value=cfg):
-            return mod._build_setup_catalog(cfg)
+        return mod._build_setup_catalog(cfg)
 
     def test_oauth_provider_sets_current_is_oauth_true(self):
         """openai-codex is not in _SUPPORTED_PROVIDER_SETUPS → current_is_oauth=True."""
@@ -79,9 +78,9 @@ class TestApplyOnboardingOAuthPath(unittest.TestCase):
 
         mock_status = {"completed": True, "system": {"chat_ready": True}}
 
-        with patch.object(mod, "save_settings", side_effect=_save), \
-             patch.object(mod, "get_onboarding_status", return_value=mock_status):
-            result = mod.apply_onboarding_setup({"provider": "openai-codex", "model": "gpt-5.4"})
+        with patch.object(setup, "save_settings", side_effect=_save), \
+             patch.object(setup, "get_onboarding_status", return_value=mock_status):
+            result = setup.apply_onboarding_setup({"provider": "openai-codex", "model": "gpt-5.4"})
 
         self.assertTrue(saved.get("onboarding_completed"),
                         "save_settings must set onboarding_completed=True for OAuth provider")
@@ -89,10 +88,10 @@ class TestApplyOnboardingOAuthPath(unittest.TestCase):
 
     def test_unsupported_provider_does_not_write_config_yaml(self):
         """OAuth path must not call _save_yaml_config — no config mutation."""
-        with patch.object(mod, "save_settings"), \
-             patch.object(mod, "get_onboarding_status", return_value={}), \
-             patch.object(mod, "_save_yaml_config") as mock_save_yaml:
-            mod.apply_onboarding_setup({"provider": "copilot", "model": "gpt-4o"})
+        with patch.object(setup, "save_settings"), \
+             patch.object(setup, "get_onboarding_status", return_value={}), \
+             patch.object(setup, "save_yaml_config") as mock_save_yaml:
+            setup.apply_onboarding_setup({"provider": "copilot", "model": "gpt-4o"})
 
         mock_save_yaml.assert_not_called()
 

@@ -52,7 +52,7 @@ def test_onboarding_uses_i18n_helpers():
 
 def test_onboarding_provider_notice_uses_i18n_key():
     js = read("static/onboarding.js")
-    py = read("api/onboarding.py")
+    py = read("api/onboarding/status.py")
     assert '"provider_note_key": note_key' in py
     assert '"provider_note_args": note_args' in py
     assert "function _localizedOnboardingProviderNote(system)" in js

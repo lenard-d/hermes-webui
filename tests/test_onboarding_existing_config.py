@@ -23,7 +23,7 @@ import pytest
 # Skip tests that call apply_onboarding_setup → _save_yaml_config when PyYAML is missing
 try:
     import yaml as _yaml
-    _HAS_YAML = True
+    _HAS_YAML = _yaml is not None
 except ImportError:
     _HAS_YAML = False
 _needs_yaml = pytest.mark.skipif(not _HAS_YAML, reason="PyYAML not installed — onboarding setup tests require it")
@@ -37,10 +37,9 @@ def _make_status(
     *, tmp_path: pathlib.Path, config_exists: bool, chat_ready: bool, onboarding_done: bool = False
 ):
     """Call get_onboarding_status() with a controlled filesystem + settings."""
-    import importlib
 
     # Import fresh copies each call so module-level state doesn't bleed across
-    import api.onboarding as mod
+    import api.onboarding.status as mod
 
     fake_config_path = tmp_path / "_test_config.yaml"
 
@@ -68,7 +67,7 @@ def _make_status(
             "verify_hermes_imports",
             return_value=(chat_ready, [], {}),
         ),
-        mock.patch.object(mod, "_status_from_runtime", return_value=runtime),
+        mock.patch.object(mod, "status_from_runtime", return_value=runtime),
         mock.patch.object(mod, "load_workspaces", return_value=[]),
         mock.patch.object(mod, "get_last_workspace", return_value=None),
         mock.patch.object(mod, "get_available_models", return_value=[]),
@@ -129,7 +128,7 @@ class TestOnboardingGate:
         degrades but `completed` still reflects the live `config_auto_completed`
         signal so the user isn't blocked from using the UI.
         """
-        import api.onboarding as mod
+        import api.onboarding.status as mod
         settings = {"onboarding_completed": False}
         runtime = {
             "chat_ready": True,
@@ -148,7 +147,7 @@ class TestOnboardingGate:
             mock.patch.object(mod, "load_settings", return_value=settings),
             mock.patch.object(mod, "get_config", return_value={}),
             mock.patch.object(mod, "verify_hermes_imports", return_value=(True, [], {})),
-            mock.patch.object(mod, "_status_from_runtime", return_value=runtime),
+            mock.patch.object(mod, "status_from_runtime", return_value=runtime),
             mock.patch.object(mod, "load_workspaces", return_value=[]),
             mock.patch.object(mod, "get_last_workspace", return_value=None),
             mock.patch.object(mod, "get_available_models", return_value=[]),
@@ -172,7 +171,7 @@ class TestApplyOnboardingSetupGuard:
     """Fix #2: apply_onboarding_setup must not silently overwrite config.yaml."""
 
     def _call_setup(self, tmp_path: pathlib.Path, body: dict, config_yaml_exists: bool):
-        import api.onboarding as mod
+        import api.onboarding.setup as mod
 
         fake_config_path = tmp_path / "_test_config.yaml"
 
@@ -202,7 +201,7 @@ class TestApplyOnboardingSetupGuard:
     @_needs_yaml
     def test_setup_allowed_with_confirm_overwrite(self, tmp_path):
         """With confirm_overwrite=True, setup may proceed (will hit real logic)."""
-        import api.onboarding as mod
+        import api.onboarding.setup as mod
         import tempfile
 
         fake_config_path = tmp_path / "_test_config_confirm.yaml"
@@ -213,7 +212,7 @@ class TestApplyOnboardingSetupGuard:
                 # Without patching Path.exists, use a non-existent path so it won't block.
                 # Also redirect _get_active_hermes_home so .env writes go to the temp dir,
                 # never to the real ~/.hermes/.env.
-                with mock.patch.object(mod, "_get_active_hermes_home", return_value=tmp_home_path):
+                with mock.patch.object(mod, "get_active_hermes_home", return_value=tmp_home_path):
                     result = mod.apply_onboarding_setup(
                         {
                             "provider": "openrouter",
@@ -233,7 +232,7 @@ class TestApplyOnboardingSetupGuard:
     @_needs_yaml
     def test_setup_allowed_when_no_config_exists(self, tmp_path):
         """Fresh install: no config.yaml → setup proceeds normally (no blocking error)."""
-        import api.onboarding as mod
+        import api.onboarding.setup as mod
         import tempfile
 
         fake_config_path = tmp_path / "_test_config_fresh.yaml"
@@ -245,7 +244,7 @@ class TestApplyOnboardingSetupGuard:
                 # test never touches the real ~/.hermes/.env.
                 with (
                     mock.patch.object(mod, "_get_config_path", return_value=fake_config_path),
-                    mock.patch.object(mod, "_get_active_hermes_home", return_value=tmp_home_path),
+                    mock.patch.object(mod, "get_active_hermes_home", return_value=tmp_home_path),
                 ):
                     result = mod.apply_onboarding_setup(
                         {

@@ -20,7 +20,6 @@ import pathlib
 import tempfile
 import unittest.mock
 
-import pytest
 
 REPO = pathlib.Path(__file__).parent.parent
 from tests._pytest_port import BASE
@@ -130,10 +129,10 @@ class TestStatusFromRuntimeOAuth:
 
     def _call(self, provider: str, model: str, hermes_home: pathlib.Path) -> dict:
         from api.onboarding import _status_from_runtime
-        import api.onboarding as _ob
-        orig_home = _ob._get_active_hermes_home
+        import api.onboarding.status as _ob
+        orig_home = _ob.get_active_hermes_home
         orig_found = _ob._HERMES_FOUND
-        _ob._get_active_hermes_home = lambda: hermes_home
+        _ob.get_active_hermes_home = lambda: hermes_home
         # Simulate hermes-agent being available so we reach the provider logic
         # (without this, _status_from_runtime short-circuits to agent_unavailable)
         _ob._HERMES_FOUND = True
@@ -141,7 +140,7 @@ class TestStatusFromRuntimeOAuth:
             cfg = {"model": {"provider": provider, "default": model}}
             return _status_from_runtime(cfg, True)
         finally:
-            _ob._get_active_hermes_home = orig_home
+            _ob.get_active_hermes_home = orig_home
             _ob._HERMES_FOUND = orig_found
 
     def test_copilot_ready_when_api_key_in_auth_json(self, tmp_path):
@@ -170,11 +169,10 @@ class TestStatusFromRuntimeOAuth:
         We mock hermes_cli.auth to be unavailable so the function falls through
         to the auth.json path.  With no auth.json the result must be False.
         """
-        import unittest.mock
 
         # Prevent the hermes_cli fast path from finding real credentials
         with unittest.mock.patch(
-            "api.onboarding._provider_oauth_authenticated",
+            "api.onboarding.status.provider_oauth_authenticated",
             return_value=False,
         ):
             result = self._call("copilot", "gpt-5.4", tmp_path)
@@ -281,7 +279,7 @@ class TestApplyOnboardingSetupUnsupportedProvider:
     """
 
     def _call(self, provider: str) -> dict:
-        import sys, pathlib, unittest.mock, tempfile, os
+        import sys, pathlib
         repo = pathlib.Path(__file__).parent.parent
         if str(repo) not in sys.path:
             sys.path.insert(0, str(repo))
@@ -289,12 +287,12 @@ class TestApplyOnboardingSetupUnsupportedProvider:
         from api.onboarding import apply_onboarding_setup
 
         with tempfile.TemporaryDirectory() as tmp:
-            with unittest.mock.patch("api.onboarding._get_active_hermes_home",
+            with unittest.mock.patch("api.onboarding.setup.get_active_hermes_home",
                                      return_value=pathlib.Path(tmp)), \
-                 unittest.mock.patch("api.onboarding._get_config_path",
+                 unittest.mock.patch("api.onboarding.setup._get_config_path",
                                      return_value=pathlib.Path(tmp) / "config.yaml"), \
-                 unittest.mock.patch("api.onboarding.save_settings") as mock_save, \
-                 unittest.mock.patch("api.onboarding.get_onboarding_status",
+                 unittest.mock.patch("api.onboarding.setup.save_settings") as mock_save, \
+                 unittest.mock.patch("api.onboarding.setup.get_onboarding_status",
                                      return_value={"completed": True, "system": {}}):
                 result = apply_onboarding_setup({"provider": provider, "model": "", "api_key": ""})
                 return result, mock_save

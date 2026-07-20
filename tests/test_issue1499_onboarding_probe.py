@@ -179,7 +179,7 @@ class TestIssue1499OnboardingProbe:
 
     def test_dns_failure_wrapped_by_urlerror(self, monkeypatch):
         """Proxy/network stacks can wrap DNS failures as generic URLError."""
-        from api import onboarding
+        from api.onboarding import probe as onboarding
 
         class FakeOpener:
             def open(self, *_args, **_kwargs):
@@ -196,7 +196,7 @@ class TestIssue1499OnboardingProbe:
 
     def test_reserved_dns_tld_network_failure_classifies_as_dns(self, monkeypatch):
         """Reserved non-resolvable TLDs stay dns even if the stack says generic."""
-        from api import onboarding
+        from api.onboarding import probe as onboarding
 
         class FakeOpener:
             def open(self, *_args, **_kwargs):
@@ -304,11 +304,9 @@ class TestIssue1499OnboardingProbe:
         """
         from api import onboarding as ob
 
-        # Redirect any potential write to tmp_path so we'd notice if the probe
-        # wrote anything by accident.
-        monkeypatch.setattr(ob, "_get_active_hermes_home", lambda: tmp_path)
+        # The probe has no persistence dependencies; sentinel paths prove it
+        # remains a read-only network operation.
         cfg_path = tmp_path / "config.yaml"
-        monkeypatch.setattr(ob, "_get_config_path", lambda: cfg_path)
 
         # Ensure neither file exists before the probe.
         env_path = tmp_path / ".env"

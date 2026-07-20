@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import sys
 import types
-from pathlib import Path
 
 import api.config as config
 import api.profiles as profiles
@@ -98,10 +97,14 @@ class TestIssue1500EnvVarAlignment:
 
         # Redirect every write target to the tmp_path so we don't touch the real
         # ~/.hermes — pattern from webui-onboarding-provider-readiness skill.
-        from api import onboarding as ob
-        monkeypatch.setattr(ob, "_get_active_hermes_home", lambda: tmp_path)
+        import api.onboarding.setup as ob
+        import api.onboarding.status as status
+
+        monkeypatch.setattr(ob, "get_active_hermes_home", lambda: tmp_path)
+        monkeypatch.setattr(status, "get_active_hermes_home", lambda: tmp_path)
         cfg_path = tmp_path / "config.yaml"
         monkeypatch.setattr(ob, "_get_config_path", lambda: cfg_path)
+        monkeypatch.setattr(status, "_get_config_path", lambda: cfg_path)
         monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
         monkeypatch.delenv("HERMES_WEBUI_SKIP_ONBOARDING", raising=False)
         monkeypatch.delenv("LM_API_KEY", raising=False)

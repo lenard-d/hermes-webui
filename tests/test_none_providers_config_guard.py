@@ -60,9 +60,14 @@ def _src(name: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "filename", ["onboarding.py", "providers.py", "routes_parts/session_models.py"]
+    ("filename", "hardened"),
+    [
+        ("onboarding/persistence.py", 'config.get("providers") or {}'),
+        ("providers.py", _HARDENED),
+        ("routes_parts/session_models.py", _HARDENED),
+    ],
 )
-def test_file_hardens_providers_key_read_against_none(filename):
+def test_file_hardens_providers_key_read_against_none(filename, hardened):
     """Each target file must read the providers key as ``... or {}``.
 
     Non-vacuous: on master the unguarded ``cfg.get("providers", {})`` form is
@@ -71,8 +76,8 @@ def test_file_hardens_providers_key_read_against_none(filename):
     """
     source = _src(filename)
     # The hardened form must appear at least once.
-    assert _HARDENED in source, (
-        f"api/{filename} should read the providers key as `{_HARDENED}` so an "
+    assert hardened in source, (
+        f"api/{filename} should read the providers key as `{hardened}` so an "
         f"explicit null `providers:` degrades to an empty mapping (salvage #3967)."
     )
     # The unguarded form must not appear as live code. It may legitimately appear
@@ -95,7 +100,17 @@ def test_file_hardens_providers_key_read_against_none(filename):
 
 
 @pytest.mark.parametrize(
-    "filename", ["onboarding.py", "providers.py", "routes_parts/session_models.py"]
+    "filename",
+    [
+        "onboarding/__init__.py",
+        "onboarding/catalog.py",
+        "onboarding/persistence.py",
+        "onboarding/probe.py",
+        "onboarding/setup.py",
+        "onboarding/status.py",
+        "providers.py",
+        "routes_parts/session_models.py",
+    ],
 )
 def test_target_files_parse(filename):
     """Sanity: the hardened files are valid Python (guards real edits)."""
