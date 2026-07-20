@@ -90,22 +90,26 @@ from .repository import (  # noqa: F401
     _windows_git_from_registry,
 )
 from .summary import summarize_update_payload as _summarize_update_payload
-from .transaction import (  # noqa: F401
+from .cleanup import purge_python_bytecode as _purge_agent_pycache  # noqa: F401
+from .restart import (  # noqa: F401
     _AGENT_GATEWAY_RESTART_RETRY_DELAY_S,
-    _active_stream_count,
-    _agent_gateway_restart_failure_message,
-    _apply_lock,
+    active_stream_count as _active_stream_count,
+    ensure_gateway_restart_for_agent_update as _ensure_gateway_restart_for_agent_update,
+    gateway_restart_failure_message as _agent_gateway_restart_failure_message,
+    restart_blocked_response as _restart_blocked_response,
+    restart_blocker_snapshot as _restart_blocker_snapshot,
+    schedule_restart as _schedule_restart,
+    wait_until_restart_safe as _wait_until_restart_safe,
+)
+from .transaction import (  # noqa: F401
     _apply_update_inner,
-    _ensure_gateway_restart_for_agent_update,
-    _purge_agent_pycache,
-    _restart_blocked_response,
-    _restart_blocker_snapshot,
-    _restore_stash_after_pull_failure,
-    _schedule_restart,
-    _wait_until_restart_safe,
     apply_clear_lock,
     apply_force_update,
     apply_update,
+)
+from .transaction_state import _apply_lock  # noqa: F401
+from .working_tree import (  # noqa: F401
+    restore_stash_after_pull_failure as _restore_stash_after_pull_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -121,7 +125,7 @@ AGENT_VERSION: str = _detect_agent_version()
 # The policy owner keeps process-stable version identity for no-git release
 # checks without consulting this public interface at operation time.
 from . import policy as _policy
-from . import transaction as _transaction
+from . import transaction_state as _transaction_state
 
 _policy._RUNNING_WEBUI_VERSION = WEBUI_VERSION
 
@@ -141,7 +145,7 @@ _update_cache = {
 _cache_lock = threading.Lock()
 _check_in_progress = False
 CACHE_TTL = 1800
-_transaction._configure_status_cache(cache=_update_cache, lock=_cache_lock)
+_transaction_state.configure_status_cache(cache=_update_cache, lock=_cache_lock)
 
 
 def _ignored_agent_update_info() -> dict:

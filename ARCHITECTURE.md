@@ -131,7 +131,14 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         repository.py      Git/source discovery and hardened repository operations
         policy.py          Version, channel, eligibility, and release selection
         summary.py         Human-readable update-summary formatting and bounded cache
-        transaction.py     Install, rollback, restart, and recovery transaction owner
+        transaction.py     Exclusive transaction orchestration and commit ordering
+        planning.py        Authoritative target/ref resolution and remote fetch plan
+        working_tree.py    Fast-forward apply, autostash persistence, and rollback
+        force_apply.py     Confirmed destructive reset with channel-rewind guard
+        lock_recovery.py   Fail-closed operator-driven Git lock recovery
+        restart.py         Restart admission, Gateway handoff, and process replacement
+        cleanup.py         Pre-restart stale-bytecode cleanup
+        transaction_state.py Process-local update lock, target identity, and cache invalidation
       upload.py            Multipart parser, file upload handler
       workspace/           Workspace identity, path safety, anchored access, navigation, and Git owners
         git.py             Bounded read-only status and header projection
@@ -1113,8 +1120,10 @@ Current backend structure (roles only; use `wc -l` for current sizes):
           {claude_code,external_sidebar,gateway_identity,state_db}.py
                               Claude JSONL, external sidebar, Gateway identity, and SQLite owners
         updates/              Stable update interface plus semantic implementation modules
-          {repository,policy,summary,transaction}.py
-                              Repository, selection policy, and atomic update transaction
+          {repository,policy,summary,transaction,planning,working_tree,
+           force_apply,lock_recovery,restart,cleanup,transaction_state}.py
+                              Repository/policy, authoritative plan, atomic checkout
+                              transaction, rollback, restart, cleanup, and state owners
         workspace/            Identity, path safety, anchored access, navigation, and Git owners
         workspace_git.py      Stateless high-level Git compatibility interface
         upload.py             Multipart parser and file upload handler
