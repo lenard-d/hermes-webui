@@ -629,7 +629,7 @@ class _ImportedSessionStub:
         self.messages = kwargs.get("messages") or []
         self.pinned = False
 
-    def save(self):
+    def save(self, **_kwargs):
         self.saved = True
 
     def compact(self):
@@ -664,10 +664,15 @@ def test_session_import_stamps_active_profile():
         return captured["json"]
 
     sessions = OrderedDict()
+    def cache_session(sid, session):
+        sessions[sid] = session
+
     with patch("api.routes.get_active_profile_name", return_value="poc"), \
          patch("api.routes.resolve_trusted_workspace", return_value=Path("/tmp/named-profile-workspace")), \
          patch("api.routes.Session", side_effect=lambda **kwargs: _ImportedSessionStub(**kwargs)), \
          patch.object(routes, "SESSIONS", sessions), \
+         patch("api.routes.cache_full_session", side_effect=cache_session), \
+         patch("api.routes._write_session_index"), \
          patch("api.routes.publish_session_list_changed"), \
          patch("api.routes.j", side_effect=fake_j):
         routes._handle_session_import(SimpleNamespace(headers={}), body)
@@ -692,10 +697,15 @@ def test_session_import_default_profile_remains_default_owned():
         return captured["json"]
 
     sessions = OrderedDict()
+    def cache_session(sid, session):
+        sessions[sid] = session
+
     with patch("api.routes.get_active_profile_name", return_value="default"), \
          patch("api.routes.resolve_trusted_workspace", return_value=Path("/tmp/default-workspace")), \
          patch("api.routes.Session", side_effect=lambda **kwargs: _ImportedSessionStub(**kwargs)), \
          patch.object(routes, "SESSIONS", sessions), \
+         patch("api.routes.cache_full_session", side_effect=cache_session), \
+         patch("api.routes._write_session_index"), \
          patch("api.routes.publish_session_list_changed"), \
          patch("api.routes.j", side_effect=fake_j):
         routes._handle_session_import(SimpleNamespace(headers={}), body)

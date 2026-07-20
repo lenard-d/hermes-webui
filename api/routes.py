@@ -9238,6 +9238,7 @@ def _keep_latest_messaging_session_per_source(
 
 from api.models import (
     Session,
+    cache_full_session,
     get_session,
     find_compression_recovery_session,
     get_session_for_file_ops,
@@ -9286,6 +9287,31 @@ from api.models import (
     process_wakeup_pause_credential_state_changed,
     suppress_process_wakeup_for_provider_pause,
 )
+
+
+def _publish_materialized_session(session, *, persist: bool = True):
+    """Persist a new session before making it reachable through the LRU cache.
+
+    Empty branches intentionally remain memory-only until their first turn;
+    callers preserve that contract with ``persist=False``. Every materialized
+    session that requires durability must complete its first save before cache
+    publication so a failed request cannot leave an in-memory ghost.
+    """
+    if persist:
+        session.save(skip_index=True)
+    cache_full_session(session.session_id, session)
+    if persist:
+        try:
+            _write_session_index(updates=[session])
+        except Exception:
+            # The canonical sidecar and in-process cache are already committed.
+            # The compact index is a repairable projection and must not turn a
+            # durable endpoint success into a reported failure.
+            logger.exception(
+                "Failed to refresh session index after materializing %s",
+                session.session_id,
+            )
+    return session
 
 
 # Initial transcript tails are expensive to rebuild for large, tool-heavy
@@ -14221,15 +14247,11 @@ def handle_post(handler, parsed) -> bool:
                 updated_at=time.time(),
             )
 
-            with LOCK:
-                SESSIONS[copied_session.session_id] = copied_session
-                SESSIONS.move_to_end(copied_session.session_id)
-                _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
             # Persist immediately. The pre-PR flow (/api/session/new + /api/session/rename)
             # accidentally avoided this because `/api/session/rename` calls `s.save()`.
             # Without this explicit save, the duplicate is in-memory only — if the user
             # refreshes before sending a turn, the duplicate vanishes.
-            copied_session.save()
+            _publish_materialized_session(copied_session, persist=True)
             publish_session_list_changed(
                 "session_duplicate",
                 profile=getattr(copied_session, "profile", None),
@@ -14919,14 +14941,10 @@ def handle_post(handler, parsed) -> bool:
             parent_session_id=source.session_id,
             session_source="fork",
         )
-        with LOCK:
-            SESSIONS[branch.session_id] = branch
-            SESSIONS.move_to_end(branch.session_id)
-            _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
-
-        # Persist only if there are messages (matches new_session pattern)
+        # Empty branches intentionally match new_session's memory-only contract;
+        # non-empty branches must persist before becoming cache-visible.
+        _publish_materialized_session(branch, persist=bool(forked_messages))
         if forked_messages:
-            branch.save()
             publish_session_list_changed(
                 "session_branch",
                 profile=getattr(branch, "profile", None),
@@ -25080,11 +25098,7 @@ def _handle_session_import(handler, body):
         profile=get_active_profile_name(),
     )
     s.pinned = body.get("pinned", False)
-    with LOCK:
-        SESSIONS[s.session_id] = s
-        SESSIONS.move_to_end(s.session_id)
-        _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
-    s.save()
+    _publish_materialized_session(s, persist=True)
     publish_session_list_changed("session_import")
     return j(handler, {"ok": True, "session": s.compact() | {"messages": s.messages}})
 
