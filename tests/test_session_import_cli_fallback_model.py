@@ -29,7 +29,7 @@ from api.sessions import (
 )
 
 REPO = Path(__file__).resolve().parents[1]
-ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+ROUTES_PY = (REPO / "api" / "http" / "session_imports.py").read_text(encoding="utf-8")
 
 
 class _FakeHandler:
@@ -52,7 +52,7 @@ class _FakeHandler:
 
 
 def _extract_handler(name: str) -> str:
-    """Return the source of the handler function `name` from api/routes.py."""
+    """Return the source of the handler function from its owning module."""
     marker = f"def {name}("
     idx = ROUTES_PY.find(marker)
     assert idx != -1, f"{name} not found in api/routes.py"

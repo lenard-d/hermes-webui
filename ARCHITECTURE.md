@@ -89,6 +89,13 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         observability.py   Logs, insights, runtime diagnostics, and health responses
         project_os.py      Read-only Project OS dashboard projection
         project_context.py Memory files and effective project-context projection
+        interactive_streams.py Approval, clarification, and session SSE channel lifecycles
+        session_export_search.py Session export and bounded transcript search responses
+        session_imports.py Profile-scoped CLI refresh and JSON import lifecycle
+        session_visibility.py Request-profile authorization for session and stream identifiers
+        share_sessions.py Share snapshot and metadata resolution across session stores
+        static_assets.py Cached raw/gzip static asset responses and cache policy
+        workspace_navigation.py Authorized workspace and escape-target navigation
         plugins.py         Sanitized plugin visibility and dashboard enablement
         shell.py           App shell, manifest, saved prompts, restart, and shutdown controls
       insights.py          Usage aggregation across WebUI index and Hermes state.db
@@ -107,7 +114,11 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         external_sidebar.py Profile-aware CLI/cron/webhook projection and single-flight cache
         gateway_identity.py Gateway registry identity projection and stat-keyed cache
         pending_recovery/  Interrupted-turn marker, journal replay/retry, sidecar, and state.db owners
+        materialization.py Foreign-session ownership policy and WebUI materialization
+        runtime_recovery.py Stale stream-state reconciliation and durable repair
+        sidebar_listing.py Sidebar collection, projection cache, and orphan pruning
         state_db.py        Read-only Agent state queries, transcript readers, and cache fingerprints
+        title_publication.py Generated-title persistence, insights sync, and publication
       providers/           Provider compatibility package plus credential, cost-history,
                            and account/quota owners
         account_usage.py   Stable quota interface and compatibility facade
@@ -1296,10 +1307,13 @@ Current backend structure (roles only; use `wc -l` for current sizes):
       server.py               Entry point + HTTP Handler dispatch
       api/
         __init__.py
-        routes.py             GET + POST dispatch and route compatibility facade
+        routes.py             GET + POST dispatch, dependency composition, and temporary compatibility facade
         http/                 Explicit router, route groups, and semantic HTTP owners
-          {observability,project_os,project_context,plugins,shell}.py
-                              Health/diagnostics, dashboard, context, plugin, and shell owners
+          {observability,project_os,project_context,plugins,shell,interactive_streams,
+           session_export_search,session_imports,session_visibility,share_sessions,static_assets,
+           workspace_navigation}.py
+                              Health/diagnostics, context, plugin, session transport,
+                              static asset, share, import, and workspace HTTP owners
         routes_parts/         Cohesive importable chat-run, projection, transport, media,
                               workspace, terminal, login, notes/wiki, TTS, and runtime domains
         config/               Config compatibility entrypoint and cohesive config/model domains
@@ -1317,8 +1331,10 @@ Current backend structure (roles only; use `wc -l` for current sizes):
                               safe-projection, profile-environment, and probe-runtime owners
         profiles/             Profile entrypoint, catalog, management, runtime, and cron scopes
         sessions/             Records, recovery, projection, and foreign-session store owners
-          {claude_code,external_sidebar,gateway_identity,state_db}.py
-                              Claude JSONL, external sidebar, Gateway identity, and SQLite owners
+          {claude_code,external_sidebar,gateway_identity,materialization,runtime_recovery,
+           sidebar_listing,state_db,title_publication}.py
+                              Claude JSONL, external sidebar, materialization, runtime repair,
+                              title publication, Gateway identity, and SQLite owners
         updates/              Stable update interface plus semantic implementation modules
           {repository,policy,summary,transaction,planning,working_tree,
            force_apply,lock_recovery,restart,cleanup,transaction_state}.py
@@ -1351,7 +1367,11 @@ Route extraction to `api/routes.py` completed in Sprint 11. `server.py` remains 
 thin shell relative to the rest of the app: Handler class with headers,
 structured logging, dispatch to routes, TLS wrapping, and `main()`. The later
 semantic splits keep the established `api.config`, `api.models`, and `api.routes`
-import surfaces. `api.streaming` intentionally no longer serves as a facade for
+import surfaces. `api.routes` now keeps dispatch, dependency composition, and a
+temporary monkeypatch-compatible export seam; sidebar construction, runtime
+repair, materialization, session imports, interactive SSE channels, visibility,
+shares, static assets, and workspace navigation have semantic owners outside the
+facade. `api.streaming` intentionally no longer serves as a facade for
 run execution. Its remaining private route Adapter is removable once
 `api.routes` is free to migrate its eight-symbol import block; that migration
 must not add replacement re-exports. Further extraction inside `api.runs`

@@ -320,9 +320,11 @@ def test_materialize_helper_refuses_persisted_writable_subagent_sidecar(
         is_cli_session = False
         messages = [{"role": "user", "content": "hi"}]
 
-    monkeypatch.setattr(routes_module, "get_session", lambda _sid: _FakeSession())
+    from api.sessions import materialization
+
+    monkeypatch.setattr(materialization, "get_session", lambda _sid: _FakeSession())
     monkeypatch.setattr(
-        routes_module, "get_full_session",
+        materialization, "get_full_session",
         lambda _sid, session=None: session,
     )
     with pytest.raises(PermissionError):

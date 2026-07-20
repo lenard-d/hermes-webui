@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 from pathlib import Path
 from urllib.parse import parse_qs
 
 from api import knowledge
-from api.helpers import j, redact_text
+from api.helpers import bad, j, redact_text, require
 from api.sessions import get_session
 from api.workspace import get_last_workspace, resolve_trusted_workspace
 
@@ -217,7 +218,59 @@ def handle_memory_read(handler, parsed=None):
     )
 
 
+def _handle_memory_write(handler, body):
+    try:
+        require(body, "section", "content")
+    except ValueError as e:
+        return bad(handler, str(e))
+    try:
+        from api.profiles import get_active_hermes_home
+
+        home = get_active_hermes_home()
+        mem_dir = home / "memories"
+    except ImportError:
+        home = Path.home() / ".hermes"
+        mem_dir = home / "memories"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    section = body["section"]
+    if section == "memory":
+        target = mem_dir / "MEMORY.md"
+    elif section == "user":
+        target = mem_dir / "USER.md"
+    elif section == "soul":
+        target = home / "SOUL.md"
+    else:
+        return bad(handler, 'section must be "memory", "user", or "soul"')
+    # Refuse to write through a symlinked target file: a symlink planted at the
+    # memory path (e.g. via a restored/imported workspace) would otherwise let a
+    # memory write clobber an arbitrary file outside the memories directory. This
+    # mirrors the symlink-rejection hardening already shipped for skills/plugins
+    # (#4217/#4234/#4240).
+    if target.is_symlink():
+        return bad(handler, "Cannot write to a symlinked memory file")
+    try:
+        target.write_text(body["content"], encoding="utf-8")
+    except OSError as exc:
+        if not isinstance(exc, PermissionError) and getattr(exc, "errno", None) != errno.EROFS:
+            raise
+        mode_hint = ""
+        try:
+            mode_hint = f" (mode {target.stat().st_mode & 0o777:o})"
+        except OSError:
+            pass
+        return bad(
+            handler,
+            (
+                f"{target.name} is not writable{mode_hint}: {target}. "
+                "Run chmod 644 on the file or fix ownership on the shared volume."
+            ),
+            403,
+        )
+    return j(handler, {"ok": True, "section": section, "path": str(target)})
+
+
 __all__ = (
+    "_handle_memory_write",
     "candidates",
     "git_root",
     "handle_memory_read",
@@ -225,3 +278,5 @@ __all__ = (
     "strip_frontmatter",
     "workspace_for_request",
 )
+
+__routes_exports__ = ("_handle_memory_write",)

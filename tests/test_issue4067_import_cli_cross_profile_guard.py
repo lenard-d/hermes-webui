@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 
 import api.routes as routes
+from api.sessions import foreign_session_access
 
 
 class _FakeHandler:
@@ -98,7 +99,11 @@ def test_import_cli_existing_same_profile_still_refreshes(monkeypatch):
     own.save = lambda touch_updated_at=False: None  # allow refresh
     monkeypatch.setattr(routes.Session, "load", staticmethod(lambda sid: own))
     monkeypatch.setattr(routes, "_get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(routes, "_resolve_cli_import_metadata", lambda *a, **k: {})
+    monkeypatch.setattr(
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda *a, **k: {},
+    )
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda *a, **k: [])
     cap = _capture(monkeypatch)
 

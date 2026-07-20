@@ -9,12 +9,16 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from api.agent_ops import is_cli_session_row
 from api.profiles import _profiles_match
 from api.workspace import get_last_workspace
 from .cache import cache_full_session, get_session
 from .external_sidebar import get_cli_sessions
 from .gateway_identity import gateway_session_identity
+from .message_identity import _session_messages_have_prefix
 from .reconciliation import get_cli_session_messages
+from .repository import get_full_session
+from .projects import import_cli_session, title_from
 from .records import (
     DEFAULT_WORKSPACE,
     SESSION_INDEX_FILE,
@@ -23,7 +27,11 @@ from .records import (
     _write_session_index,
     is_safe_session_id,
 )
-from .sources import is_messaging_session_record as _is_messaging_session_record
+from .sources import (
+    apply_cli_source_metadata,
+    is_messaging_session_record,
+    is_messaging_session_record as _is_messaging_session_record,
+)
 from .state_db import _active_state_db_path
 
 logger = logging.getLogger(__name__)
@@ -565,3 +573,133 @@ def is_view_only(session_id: str) -> bool:
 def publish(session: Session, *, persist: bool = True) -> Session:
     """Persist and publish a newly materialized session atomically."""
     return _publish_materialized_session(session, persist=persist)
+
+
+class _ForeignSessionAccess:
+    """Local adapter matching the package-level lazy module interface."""
+
+    metadata = staticmethod(metadata)
+    is_subagent_child = staticmethod(is_subagent_child)
+
+
+foreign_session_access = _ForeignSessionAccess()
+
+
+def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False):
+    """Get a session, materializing from CLI/agent metadata if not in WebUI store.
+
+    Mirrors the fallback logic in /api/session/archive (routes.py:~8530).
+    Raises:
+        KeyError: session not found in any store
+        PermissionError: session is read-only (messaging/Claude Code)
+    """
+    try:
+        s = get_session(sid)
+        s = get_full_session(sid, session=s)
+        # Read-only guard on the happy path too: an already-stored read-only /
+        # imported session must not be mutated via rename/update/move
+        # (Session.save() does not enforce this). Scope this to the explicit
+        # read_only flag — a stored messaging session already owns its sidecar,
+        # so the messaging-fork concern only applies to the materialize fallback
+        # below (and the heuristic record-check would mis-trip on mock sessions).
+        if getattr(s, "read_only", False):
+            raise PermissionError("read-only imported session")
+        # A previously-persisted subagent sidecar (#5307) is view-only and
+        # owned by the delegate runner — even if it was stored with
+        # read_only=False (e.g. materialized before this fix), it must not be
+        # mutated / used as a writable chat session. This mirrors the
+        # missing-sidecar subagent guard below on the happy path.
+        if (
+            (getattr(s, "source_tag", "") or getattr(s, "raw_source", "") or "").strip().lower() == "subagent"
+            or foreign_session_access.is_subagent_child(sid)
+        ):
+            raise PermissionError("read-only subagent child session")
+        if refresh_cli_messages and getattr(s, "is_cli_session", False):
+            latest_messages = get_cli_session_messages(
+                sid,
+                profile=getattr(s, "profile", None),
+            )
+            current_messages = list(getattr(s, "messages", None) or [])
+            if (
+                latest_messages
+                and len(latest_messages) >= len(current_messages)
+                and _session_messages_have_prefix(latest_messages, current_messages)
+            ):
+                # Keep the stitched CLI transcript authoritative on the first
+                # WebUI continuation path without clobbering later divergent
+                # WebUI-owned turns.
+                s.messages = list(latest_messages)
+        return s
+    except KeyError:
+        pass
+
+    # Fallback: try to materialize from CLI/agent session metadata
+    cli_meta = foreign_session_access.metadata(sid)
+
+    # Delegated subagent children (#5307) are view-only: their transcript lives
+    # in state.db and ownership belongs to the delegate runner, not WebUI. They
+    # must never be materialized as a writable sidecar here — this is the shared
+    # chokepoint reached by POST /api/chat/start (_get_or_materialize_session),
+    # so gating it closes the write path that bypasses the GET/import_cli guards.
+    # Checked via state.db source (independent of cli_meta, which is often empty
+    # for a server-side subagent child).
+    _mat_source_tag = (
+        (cli_meta or {}).get("source_tag") or (cli_meta or {}).get("raw_source") or ""
+    ).strip().lower()
+    if _mat_source_tag == "subagent" or foreign_session_access.is_subagent_child(sid):
+        raise PermissionError("read-only subagent child session")
+
+    if not cli_meta:
+        raise KeyError(sid)
+
+    # Read-only guard: messaging sessions and Claude Code imports cannot be
+    # mutated. Reject BOTH an explicit read_only flag AND any messaging-source
+    # record — agent rows normalize messaging sources without setting read_only,
+    # and state.db (not a WebUI sidecar) is the source of truth for them, so
+    # materializing a writable sidecar would fork the title/state.
+    if cli_meta.get("read_only") or is_messaging_session_record(cli_meta):
+        raise PermissionError("read-only imported session")
+
+    if is_messaging_session_record(cli_meta):
+        # Messaging sessions: lightweight Session with no messages (state.db is source of truth)
+        s = Session(
+            session_id=sid,
+            title=cli_meta.get("title") or title_from(get_cli_session_messages(sid), "CLI Session"),
+            workspace=get_last_workspace(),
+            model=cli_meta.get("model") or "unknown",
+            created_at=cli_meta.get("created_at"),
+            updated_at=cli_meta.get("updated_at"),
+        )
+        apply_cli_source_metadata(
+            s,
+            cli_meta,
+            is_cli_session=is_cli_session_row(cli_meta),
+        )
+        s.save(touch_updated_at=False)
+    else:
+        # Regular CLI/agent sessions: import full message history
+        msgs = get_cli_session_messages(sid)
+        if not msgs:
+            raise KeyError(sid)
+        s = import_cli_session(
+            sid,
+            cli_meta.get("title") or title_from(msgs, "CLI Session"),
+            msgs,
+            cli_meta.get("model") or "unknown",
+            profile=cli_meta.get("profile"),
+            created_at=cli_meta.get("created_at"),
+            updated_at=cli_meta.get("updated_at"),
+            source_metadata=cli_meta,
+        )
+        apply_cli_source_metadata(
+            s,
+            cli_meta,
+            is_cli_session=is_cli_session_row(cli_meta),
+        )
+
+    return s
+
+
+__routes_exports__ = (
+    "_get_or_materialize_session",
+)

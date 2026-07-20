@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import api.sessions.store as models
 import api.routes as routes
 from api.http.routes import session_mutations
+from api.sessions import foreign_session_access
 
 
 SESSIONS_JS = family_source("sessions")
@@ -58,13 +59,17 @@ def test_import_cli_handler_queues_default_titles_after_persisting_import(monkey
         "read_only": False,
     }
     monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, _sid: None))
-    monkeypatch.setattr(routes, "_resolve_cli_import_metadata", lambda *_args, **_kwargs: cli_meta)
+    monkeypatch.setattr(
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda *_args, **_kwargs: cli_meta,
+    )
     monkeypatch.setattr(
         routes,
         "get_cli_session_messages",
         lambda *_args, **_kwargs: [{"role": "user", "content": "name this"}],
     )
-    monkeypatch.setattr(routes, "_is_subagent_child_session_id", lambda _sid: False)
+    monkeypatch.setattr(foreign_session_access, "is_subagent_child", lambda _sid: False)
     monkeypatch.setattr(routes, "is_cron_session", lambda *_args: False)
     monkeypatch.setattr(
         routes,

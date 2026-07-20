@@ -426,7 +426,7 @@ def test_routes_registers_session_stream_endpoint():
 
 
 def test_routes_session_sse_uses_session_channel_subscribe():
-    src = (REPO_ROOT / "api" / "routes.py").read_text()
+    src = (REPO_ROOT / "api" / "http" / "interactive_streams.py").read_text()
     # The handler must use the atomic get-or-create+subscribe helper (closes
     # the PR #2971 reaper TOCTOU race) and release the slot on every exit path.
     assert "subscribe_to_session_channel" in src
@@ -1020,7 +1020,9 @@ def test_session_sse_stream_unsubscribes_on_header_write_failure():
     """
     from pathlib import Path
 
-    src = Path(__file__).resolve().parents[1].joinpath("api", "routes.py").read_text(encoding="utf-8")
+    src = Path(__file__).resolve().parents[1].joinpath(
+        "api", "http", "interactive_streams.py"
+    ).read_text(encoding="utf-8")
     i = src.find("def _handle_session_sse_stream(")
     assert i != -1, "handler not found"
     j = src.find("\ndef ", i + 1)

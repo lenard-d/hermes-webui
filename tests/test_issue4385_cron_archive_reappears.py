@@ -26,6 +26,7 @@ def test_cron_rows_are_not_cli_even_with_stale_cli_flag():
 def test_materializing_cron_session_preserves_non_cli_identity(monkeypatch):
     """Cron materialization must not stamp the sidecar as CLI-imported."""
     import api.routes as routes
+    from api.sessions import materialization
 
     sid = "cron_job123_20260618"
     cron_meta = {
@@ -61,17 +62,17 @@ def test_materializing_cron_session_preserves_non_cli_identity(monkeypatch):
         return FakeSession()
 
     with (
-        patch.object(routes, "get_session", side_effect=KeyError(sid)),
-        patch.object(routes, "_lookup_cli_session_metadata", return_value=cron_meta),
+        patch.object(materialization, "get_session", side_effect=KeyError(sid)),
+        patch.object(materialization, "_lookup_cli_session_metadata", return_value=cron_meta),
         patch.object(
-            routes,
+            materialization,
             "get_cli_session_messages",
             return_value=[
                 {"role": "user", "content": "run"},
                 {"role": "assistant", "content": "done"},
             ],
         ),
-        patch.object(routes, "import_cli_session", side_effect=fake_import_cli_session),
+        patch.object(materialization, "import_cli_session", side_effect=fake_import_cli_session),
     ):
         session = routes._get_or_materialize_session(sid)
 

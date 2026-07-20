@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote
 
-from api.config import get_config_for_profile_home
-from api.helpers import _redact_text, j
+from api.config import (
+    _get_config_path,
+    _save_yaml_config_file,
+    get_config,
+    get_config_for_profile_home,
+    reload_config,
+)
+from api.helpers import _redact_text, bad, j
 from api.profiles import get_active_hermes_home
+
+
+_MASKED_PLACEHOLDER = "••••••"
 
 
 def _mask_secrets(obj):
@@ -294,6 +304,121 @@ def _handle_mcp_tools_list(handler):
     })
 
 
+def _handle_mcp_servers_list(handler):
+    """List configured MCP servers with safe, read-only runtime visibility."""
+    cfg = get_config_for_profile_home(get_active_hermes_home())
+    servers = cfg.get("mcp_servers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+    runtime = _mcp_runtime_status_by_name()
+    result = [
+        _server_summary(name, scfg, runtime.get(str(name)))
+        for name, scfg in servers.items()
+    ]
+    return j(handler, {
+        "servers": result,
+        "toggle_supported": True,
+        "reload_required": True,
+    })
+
+
+def _handle_mcp_server_delete(handler, name):
+    """Delete an MCP server by name."""
+    from urllib.parse import unquote
+    name = unquote(name)
+    if not name:
+        return bad(handler, "name is required")
+    cfg = get_config()
+    servers = cfg.get("mcp_servers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+    if name not in servers:
+        return bad(handler, f"MCP server '{name}' not found", 404)
+    del servers[name]
+    cfg["mcp_servers"] = servers
+    _save_yaml_config_file(_get_config_path(), cfg)
+    reload_config()
+    return j(handler, {"ok": True, "deleted": name})
+
+
+def _handle_mcp_server_toggle(handler, name, body):
+    """Toggle enabled state for an MCP server (PATCH /api/mcp/servers/{name})."""
+    from urllib.parse import unquote
+    name = unquote(name)
+    if not name:
+        return bad(handler, "name is required")
+    if "enabled" not in body:
+        return bad(handler, "enabled field is required")
+    enabled = bool(body["enabled"])
+    cfg = get_config()
+    servers = cfg.get("mcp_servers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+    if name not in servers:
+        return bad(handler, f"MCP server '{name}' not found", 404)
+    if not isinstance(servers[name], dict):
+        return bad(handler, f"MCP server '{name}' has invalid config", 400)
+    servers[name]["enabled"] = enabled
+    cfg["mcp_servers"] = servers
+    _save_yaml_config_file(_get_config_path(), cfg)
+    reload_config()
+    return j(handler, {"ok": True, "name": name, "enabled": enabled})
+
+
+def _strip_masked_values(submitted, existing):
+    """Remove masked placeholder values from submitted dict, keeping originals."""
+    if not isinstance(submitted, dict) or not isinstance(existing, dict):
+        return submitted
+    cleaned = {}
+    for k, v in submitted.items():
+        if isinstance(v, str) and v == _MASKED_PLACEHOLDER:
+            if k in existing and isinstance(existing[k], str):
+                cleaned[k] = existing[k]  # preserve original real value
+                continue
+        elif isinstance(v, dict) and k in existing and isinstance(existing[k], dict):
+            cleaned[k] = _strip_masked_values(v, existing[k])
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
+def _handle_mcp_server_update(handler, name, body):
+    """Add or update an MCP server."""
+    from urllib.parse import unquote
+    name = unquote(name)
+    if not name:
+        return bad(handler, "name is required")
+    # Validate: must have url (http) or command (stdio)
+    server_cfg = {}
+    cfg = get_config()
+    servers = cfg.get("mcp_servers", {})
+    if not isinstance(servers, dict):
+        servers = {}
+    existing_cfg = servers.get(name, {})
+    if body.get("url"):
+        server_cfg["url"] = body["url"].strip()
+        if body.get("headers"):
+            server_cfg["headers"] = _strip_masked_values(body["headers"], existing_cfg.get("headers", {}))
+    elif body.get("command"):
+        server_cfg["command"] = body["command"].strip()
+        if body.get("args"):
+            server_cfg["args"] = body["args"] if isinstance(body["args"], list) else [body["args"]]
+        if body.get("env"):
+            server_cfg["env"] = _strip_masked_values(body["env"], existing_cfg.get("env", {}))
+    else:
+        return bad(handler, "url or command is required")
+    if body.get("timeout") is not None:
+        try:
+            server_cfg["timeout"] = int(body["timeout"])
+        except (ValueError, TypeError):
+            pass
+    servers[name] = server_cfg
+    cfg["mcp_servers"] = servers
+    _save_yaml_config_file(_get_config_path(), cfg)
+    reload_config()
+    return j(handler, {"ok": True, "server": _server_summary(name, server_cfg)})
+
+
 __routes_exports__ = (
     "_mask_secrets",
     "_parse_mcp_enabled",
@@ -307,4 +432,10 @@ __routes_exports__ = (
     "_mcp_tools_from_runtime_status",
     "_mcp_tools_from_registry",
     "_handle_mcp_tools_list",
+    "_handle_mcp_servers_list",
+    "_handle_mcp_server_delete",
+    "_handle_mcp_server_toggle",
+    "_MASKED_PLACEHOLDER",
+    "_strip_masked_values",
+    "_handle_mcp_server_update",
 )

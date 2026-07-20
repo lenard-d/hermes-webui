@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from api.config import (
-        get_config_path as _get_config_path,
-        load_yaml_config_file as _load_yaml_config_file,
-    )
-    from api.sessions.store import get_session
-    from api.routes import logger
+from api.config import (
+    _cfg_lock,
+    get_config_path as _get_config_path,
+    load_yaml_config_file as _load_yaml_config_file,
+    reload_config,
+    _save_yaml_config_file,
+)
+from api.helpers import bad, j, require
+from api.profiles import _SKILLS_STATS_CACHE
+from api.sessions.store import get_session
+
+
+logger = logging.getLogger(__name__)
 
 def _active_skills_dir() -> Path:
     """Return the skills directory for the request's active Hermes profile.
@@ -418,3 +425,137 @@ def _skill_view_from_active_dir(name: str) -> dict:
     return _skill_view_from_file(skill_dir, skill_md)
 
 __routes_exports__ = ('_active_skills_dir', '_skill_path_within', '_skill_category_from_path', '_active_skill_search_dirs', '_worktree_retained_payload', '_worktree_retained_payload_for_session_id', '_active_profile_config_path', '_get_disabled_skill_names_for_profile', '_normalize_disabled_set', '_skills_list_from_dir', '_find_skill_in_dirs', '_find_skill_in_dir', '_skill_not_found_payload', '_linked_files_for_skill', '_skill_view_from_file', '_skill_view_from_active_dir')
+
+def _handle_skill_save(handler, body):
+    try:
+        require(body, "name", "content")
+    except ValueError as e:
+        return bad(handler, str(e))
+    skill_name = body["name"].strip().lower().replace(" ", "-")
+    if not skill_name or "/" in skill_name or ".." in skill_name:
+        return bad(handler, "Invalid skill name")
+    category = body.get("category", "").strip()
+    if category and ("/" in category or ".." in category):
+        return bad(handler, "Invalid category")
+    skills_dir = _active_skills_dir()
+
+    if category:
+        skill_dir = skills_dir / category / skill_name
+    else:
+        skill_dir = skills_dir / skill_name
+    # Validate resolved path stays within the active profile skills dir.
+    try:
+        skill_dir.resolve().relative_to(skills_dir.resolve())
+    except ValueError:
+        return bad(handler, "Invalid skill path")
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_file = skill_dir / "SKILL.md"
+    if skill_file.is_symlink():
+        return bad(handler, "Cannot save to a symlinked skill file")
+    skill_file.write_text(body["content"], encoding="utf-8")
+    _SKILLS_STATS_CACHE.clear()
+    return j(handler, {"ok": True, "name": skill_name, "path": str(skill_file)})
+
+
+def _handle_skill_delete(handler, body):
+    try:
+        require(body, "name")
+    except ValueError as e:
+        return bad(handler, str(e))
+    import shutil
+
+    skill_name = str(body["name"]).strip().lower().replace(" ", "-")
+    if not skill_name or "/" in skill_name or ".." in skill_name:
+        return bad(handler, "Invalid skill name")
+    skills_dir = _active_skills_dir()
+    matches = [p for p in skills_dir.rglob("SKILL.md") if p.parent.name == skill_name]
+    if not matches:
+        return bad(handler, "Skill not found", 404)
+    skill_dir = matches[0].parent
+    shutil.rmtree(str(skill_dir))
+    _SKILLS_STATS_CACHE.clear()
+    return j(handler, {"ok": True, "name": body["name"]})
+
+
+def _normalize_names_list(names) -> list[str]:
+    """Normalize a config value (None/str/list) into a deduplicated str list."""
+    if names is None:
+        return []
+    if isinstance(names, str):
+        names = [names]
+    elif not isinstance(names, list):
+        names = list(names) if names else []
+    return list(dict.fromkeys(str(d).strip() for d in names if str(d).strip()))
+
+
+def _toggle_name_in_list(names, name: str, enabled: bool) -> list[str]:
+    """Add or remove *name* from *names*, returning a new list."""
+    names = _normalize_names_list(names)
+    if enabled:
+        return [d for d in names if d != name]
+    if name not in names:
+        names.append(name)
+    return names
+
+
+def _handle_skill_toggle(handler, body):
+    """Toggle a skill's enabled/disabled state in the active profile's config.yaml.
+
+    Writes through to ``skills.platform_disabled.webui`` when that key exists
+    so the toggle takes effect for WebUI sessions (the agent's
+    ``get_disabled_skill_names`` checks platform-specific lists first when
+    ``HERMES_SESSION_PLATFORM`` is set).
+    """
+    try:
+        require(body, "name", "enabled")
+    except ValueError as e:
+        return bad(handler, str(e))
+
+    name = body["name"].strip()
+    enabled = bool(body["enabled"])
+
+    # Validate the skill exists in the filesystem
+    skills_dir = _active_skills_dir()
+    search_dirs = _active_skill_search_dirs(skills_dir)
+    skill_dir, skill_md = _find_skill_in_dirs(name, search_dirs)
+    if not skill_md:
+        return bad(handler, f"Skill '{name}' not found", 404)
+
+    config_path = _active_profile_config_path()
+    with _cfg_lock:
+        cfg = _load_yaml_config_file(config_path)
+
+        # Ensure skills section exists as a dict
+        if "skills" not in cfg or not isinstance(cfg["skills"], dict):
+            cfg["skills"] = {}
+        skills_cfg = cfg["skills"]
+
+        # Always update the global disabled list
+        skills_cfg["disabled"] = _toggle_name_in_list(
+            skills_cfg.get("disabled"), name, enabled
+        )
+
+        # Write-through to platform_disabled.webui if it exists so that the
+        # toggle takes effect for WebUI sessions (the agent checks the
+        # platform-specific list first when HERMES_SESSION_PLATFORM=webui).
+        platform_disabled = skills_cfg.get("platform_disabled")
+        if isinstance(platform_disabled, dict) and "webui" in platform_disabled:
+            platform_disabled["webui"] = _toggle_name_in_list(
+                platform_disabled["webui"], name, enabled
+            )
+
+        cfg["skills"] = skills_cfg
+        _save_yaml_config_file(config_path, cfg)
+
+    reload_config()  # outside with block — reload_config() acquires the lock itself
+    _SKILLS_STATS_CACHE.clear()
+    return j(handler, {"ok": True, "name": name, "enabled": enabled})
+
+
+__routes_exports__ += (
+    "_handle_skill_save",
+    "_handle_skill_delete",
+    "_normalize_names_list",
+    "_toggle_name_in_list",
+    "_handle_skill_toggle",
+)
