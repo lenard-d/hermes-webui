@@ -81,7 +81,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       turn_execution.py    Shared Local/Gateway worker resource startup and teardown
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            GET + POST dispatch and compatibility facade for extracted route domains
-      routes_parts/        Importable workspace, git, cron, terminal, notes/wiki, TTS, security, compression, and response routes
+      routes_parts/        Importable workspace, git, cron, terminal, login, notes/wiki, TTS, security, compression, and response routes
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
       streaming.py         SSE orchestration and compatibility facade for extracted stream domains
@@ -892,7 +892,7 @@ Current backend structure (roles only; use `wc -l` for current sizes):
       api/
         __init__.py
         routes.py             GET + POST dispatch and route compatibility facade
-        routes_parts/         Cohesive importable workspace, terminal, notes/wiki, TTS, and runtime route domains
+        routes_parts/         Cohesive importable workspace, terminal, login, notes/wiki, TTS, and runtime route domains
         config.py             Config compatibility facade and shared mutable state owner
         config_parts/         Cohesive importable config domains with late binding
         helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
