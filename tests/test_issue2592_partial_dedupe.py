@@ -51,13 +51,13 @@ def test_tool_only_partial_dedupe_is_scoped_to_current_user_turn():
 
 
 def test_session_load_collapses_adjacent_duplicate_partials(tmp_path, monkeypatch):
-    import api.sessions.store as models
+    from api.sessions import records
 
     sid = "abc123"
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
 
     payload = {
         "session_id": sid,
@@ -77,7 +77,7 @@ def test_session_load_collapses_adjacent_duplicate_partials(tmp_path, monkeypatc
     }
     (session_dir / f"{sid}.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    loaded = models.Session.load(sid)
+    loaded = records.Session.load(sid)
 
     assert loaded is not None
     assert sum(1 for message in loaded.messages if message.get("_partial")) == 1
