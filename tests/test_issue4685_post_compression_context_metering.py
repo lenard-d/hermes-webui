@@ -1,9 +1,23 @@
 import json
 import subprocess
+import sys
+import types
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _install_model_metadata(monkeypatch, **estimators):
+    agent_package = types.ModuleType("agent")
+    agent_package.__path__ = []
+    model_metadata = types.ModuleType("agent.model_metadata")
+    for name, estimator in estimators.items():
+        setattr(model_metadata, name, estimator)
+    agent_package.model_metadata = model_metadata
+    monkeypatch.setitem(sys.modules, "agent", agent_package)
+    monkeypatch.setitem(sys.modules, "agent.model_metadata", model_metadata)
+    return model_metadata
 
 
 def _run_context_indicator(usage):
@@ -60,7 +74,7 @@ def test_post_compression_estimate_uses_pruned_request_and_preserves_last_prompt
         calls.append((messages, system_prompt, tools))
         return 4_096
 
-    monkeypatch.setattr("agent.model_metadata.estimate_request_tokens_rough", estimate, raising=False)
+    _install_model_metadata(monkeypatch, estimate_request_tokens_rough=estimate)
     pruned = [{"role": "assistant", "content": "summary"}]
     agent = type("Agent", (), {"tools": [{"name": "read_file"}]})()
 
@@ -77,8 +91,7 @@ def test_post_compression_estimate_falls_back_when_request_estimator_is_unavaila
         calls.append(messages)
         return len(messages) * 100
 
-    monkeypatch.delattr("agent.model_metadata.estimate_request_tokens_rough", raising=False)
-    monkeypatch.setattr("agent.model_metadata.estimate_messages_tokens_rough", estimate_messages, raising=False)
+    _install_model_metadata(monkeypatch, estimate_messages_tokens_rough=estimate_messages)
     pruned = [{"role": "assistant", "content": "summary"}]
     agent = type("Agent", (), {"tools": [{"name": "read_file"}]})()
 

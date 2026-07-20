@@ -817,8 +817,26 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
         "streaming.py must restore prior reasoning metadata into model context"
     assert "s.messages = _merge_display_messages_after_agent_result(" in src, \
         "streaming.py must merge restored result messages into the visible transcript"
-    assert "updated_messages.insert(safe_pos, copy.deepcopy(prev_msg))" in src, \
-        "streaming.py must reinsert dropped reasoning-only assistant messages"
+    from api.streaming import _restore_display_reasoning_metadata
+
+    reasoning_only = {
+        "role": "assistant",
+        "content": "",
+        "reasoning": "inspect the workspace",
+    }
+    restored = _restore_display_reasoning_metadata(
+        [
+            {"role": "user", "content": "hello"},
+            reasoning_only,
+            {"role": "assistant", "content": "answer"},
+        ],
+        [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "answer"},
+        ],
+    )
+
+    assert restored[1] == reasoning_only
 
 
 def test_routes_restores_prior_reasoning_metadata_after_followup():

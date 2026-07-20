@@ -195,3 +195,44 @@ def test_context_dedupe_observes_facade_identity_patch(monkeypatch):
     second = {"role": "assistant", "content": "second"}
 
     assert streaming._deduplicate_context_messages([first, second]) == [first]
+
+
+def test_post_compression_pruner_observes_facade_helpers(monkeypatch):
+    seen = []
+    monkeypatch.setattr(streaming, "_post_compression_tool_result_budget", lambda _compressor: 1)
+    monkeypatch.setattr(
+        streaming,
+        "_rough_text_token_count",
+        lambda text: seen.append(text) or 2,
+    )
+    monkeypatch.setattr(
+        streaming,
+        "_compressed_context_tool_result_summary",
+        lambda text, *, original_tokens, keep_tokens: (
+            f"patched:{text}:{original_tokens}:{keep_tokens}"
+        ),
+    )
+
+    result, pruned_count = streaming._hard_prune_post_compression_tool_results([
+        {"role": "tool", "content": "large result"},
+    ])
+
+    assert pruned_count == 1
+    assert seen == ["large result"]
+    assert result[0]["content"] == "patched:large result:2:1"
+
+
+def test_display_reasoning_restore_observes_facade_merge_patch(monkeypatch):
+    restored = [{"role": "assistant", "content": "patched"}]
+    monkeypatch.setattr(
+        streaming,
+        "_restore_reasoning_metadata",
+        lambda previous, updated: restored,
+    )
+    monkeypatch.setattr(streaming, "_api_safe_message_positions", lambda _messages: [])
+    monkeypatch.setattr(streaming, "_is_empty_partial_activity_message", lambda _message: True)
+
+    assert streaming._restore_display_reasoning_metadata(
+        [{"role": "assistant", "content": "before"}],
+        [{"role": "assistant", "content": "after"}],
+    ) is restored
