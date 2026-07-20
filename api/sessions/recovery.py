@@ -523,7 +523,7 @@ def _sql_optional_col(name: str, columns: set[str], fallback: str = "NULL") -> s
 
 def _state_db_row_to_sidecar(row: dict) -> dict:
     try:
-        from api.agent_sessions import normalize_agent_session_source
+        from api.agent_ops import normalize_agent_session_source
     except Exception:
         normalize_agent_session_source = None
     source = str(row.get('source') or '').strip().lower()

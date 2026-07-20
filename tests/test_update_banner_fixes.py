@@ -357,7 +357,7 @@ class TestUpdateChecker:
             seen.append((url, timeout))
             return FakeResponse()
 
-        monkeypatch.setattr(transaction, '_AGENT_DIR', None)
+        monkeypatch.setattr(policy, '_DEFAULT_AGENT_DIR', None)
         monkeypatch.setenv('GATEWAY_HEALTH_URL', 'http://hermes-agent:8642/health')
         monkeypatch.setattr(upd.urllib.request, 'urlopen', fake_urlopen)
 
@@ -986,7 +986,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         root_home = tmp_path / ".hermes"
@@ -1042,7 +1044,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         root_home = tmp_path / ".hermes"
@@ -1096,7 +1100,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         root_home = tmp_path / ".hermes"
@@ -1150,7 +1156,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         root_home = tmp_path / ".hermes"
@@ -1208,7 +1216,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         root_home = tmp_path / ".hermes"
@@ -1266,7 +1276,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         root_home = tmp_path / ".hermes"
@@ -1324,7 +1336,9 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch,
         tmp_path,
     ):
-        from api import agent_health, gateway_restart, profiles
+        from api import profiles
+        from api.agent_ops import gateway_control as gateway_restart
+        from api.agent_ops import gateway_status as agent_health
         import api.updates as upd
 
         base_home = tmp_path / ".hermes"

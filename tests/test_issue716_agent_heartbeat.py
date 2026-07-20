@@ -77,7 +77,8 @@ def _runtime_status(**overrides):
 
 
 def test_agent_health_uses_root_gateway_state_when_hermes_home_is_profile(monkeypatch, tmp_path):
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     root_home = tmp_path / "root-home"
     profile_home = root_home / "profiles" / "troubleshooting"
@@ -94,7 +95,7 @@ def test_agent_health_uses_root_gateway_state_when_hermes_home_is_profile(monkey
     )
     monkeypatch.setattr(agent_health, "_gateway_status_module", lambda: fake_gateway_status)
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["state"] == "alive"
@@ -103,7 +104,8 @@ def test_agent_health_uses_root_gateway_state_when_hermes_home_is_profile(monkey
 
 
 def test_agent_health_payload_alive_uses_safe_runtime_details(monkeypatch):
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     monkeypatch.setattr(
         agent_health,
@@ -111,7 +113,7 @@ def test_agent_health_payload_alive_uses_safe_runtime_details(monkeypatch):
         lambda: _FakeGatewayStatus(_runtime_status(), running_pid=12345),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["checked_at"]
@@ -133,7 +135,8 @@ def test_agent_health_payload_alive_uses_safe_runtime_details(monkeypatch):
 
 
 def test_active_profile_gateway_running_pid_uses_active_profile_path(monkeypatch, tmp_path):
-    from api import agent_health, profiles
+    from api import profiles
+    from api.agent_ops import gateway_status as agent_health
 
     active_home = tmp_path / "profiles" / "active"
     gateway_status = _PathSensitiveGatewayStatus(active_home)
@@ -145,7 +148,7 @@ def test_active_profile_gateway_running_pid_uses_active_profile_path(monkeypatch
 
 
 def test_active_profile_gateway_running_pid_fails_closed_when_status_is_unavailable(monkeypatch):
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
 
     monkeypatch.setattr(
         agent_health,
@@ -157,7 +160,8 @@ def test_active_profile_gateway_running_pid_fails_closed_when_status_is_unavaila
 
 
 def test_agent_health_payload_down_when_gateway_metadata_exists_but_no_process(monkeypatch):
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     monkeypatch.setattr(
         agent_health,
@@ -165,7 +169,7 @@ def test_agent_health_payload_down_when_gateway_metadata_exists_but_no_process(m
         lambda: _FakeGatewayStatus(_runtime_status(gateway_state="stale"), running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is False
     assert payload["details"]["state"] == "down"
@@ -174,7 +178,8 @@ def test_agent_health_payload_down_when_gateway_metadata_exists_but_no_process(m
 
 
 def test_agent_health_payload_unknown_when_gateway_is_not_configured(monkeypatch):
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     monkeypatch.setattr(
         agent_health,
@@ -182,7 +187,7 @@ def test_agent_health_payload_unknown_when_gateway_is_not_configured(monkeypatch
         lambda: _FakeGatewayStatus(runtime_status=None, running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is None
     assert payload["details"] == {"state": "unknown", "reason": "gateway_not_configured"}
@@ -193,7 +198,7 @@ def test_agent_health_route_is_registered_with_tri_state_payload_shape():
     assert "build_agent_health_payload()" in ROUTES_PY
     assert "gateway_chat_config_status()" in ROUTES_PY
     assert 'payload["gateway_chat"]' in ROUTES_PY
-    src = (REPO_ROOT / "api" / "agent_health.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "api" / "agent_ops" / "health.py").read_text(encoding="utf-8")
     assert '"alive"' in src
     assert '"checked_at"' in src
     assert '"details"' in src

@@ -125,7 +125,7 @@ class TestGatewaySessionNullModel(unittest.TestCase):
 
     def test_gateway_session_model_uses_none_fallback(self):
         """Both gateway projections preserve a NULL state-db model as None."""
-        from api import gateway_watcher
+        from api.agent_ops import session_watcher as gateway_watcher
         from api.sessions import store as models
 
         row = {

@@ -160,7 +160,7 @@ def test_gateway_watcher_fingerprint_opens_read_only(tmp_path, monkeypatch):
     # The 5s watcher poll (_cheap_change_fingerprint) calls open_state_db_readonly,
     # which resolves sqlite3.connect in agent_sessions' namespace — so the same
     # spy catches it. The DB needs a `source` column or the fingerprint bails to None.
-    import api.gateway_watcher as gateway_watcher
+    from api.agent_ops import session_watcher as gateway_watcher
 
     db = tmp_path / "state.db"
     _make_lineage_db(db)

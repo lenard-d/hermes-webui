@@ -210,7 +210,7 @@ def _computed_is_cli_session(row: dict) -> bool:
     if "webui" in sources:
         return False
     try:
-        from api.agent_sessions import is_cli_session_row
+        from api.agent_ops import is_cli_session_row
 
         return is_cli_session_row(row)
     except Exception:

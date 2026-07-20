@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     import sys
     from pathlib import Path
 
-    from api.agent_health import build_agent_health_payload
+    from api.agent_ops import build_agent_health_payload
     from api.helpers import _sanitize_error, bad, j
     from api.routes import (
         _MESSAGING_RAW_SOURCES,

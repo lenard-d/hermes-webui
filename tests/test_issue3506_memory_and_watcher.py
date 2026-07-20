@@ -197,7 +197,7 @@ def _add_session(conn, sid, source="telegram", mc=2, started=None, title="Chat")
 
 
 def test_cheap_fingerprint_stable_and_sensitive(tmp_path):
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db, conn = _make_db(tmp_path)
     _add_session(conn, "tg1", "telegram", mc=2)
     _add_session(conn, "dc1", "discord", mc=3)
@@ -220,7 +220,7 @@ def test_cheap_fingerprint_stable_and_sensitive(tmp_path):
 
 def test_cheap_fingerprint_ignores_excluded_sources(tmp_path):
     """cron/webui churn must not invalidate the fingerprint (matches projection scope)."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db, conn = _make_db(tmp_path)
     _add_session(conn, "tg1", "telegram", mc=2)
     fp1 = gw._cheap_change_fingerprint(db)
@@ -240,7 +240,7 @@ def test_cheap_fingerprint_ignores_excluded_sources(tmp_path):
 def test_cheap_fingerprint_detects_source_change(tmp_path):
     """A source retag changes the projection's derived source_label / visibility,
     so the cheap fingerprint MUST change even though no displayed field moved."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db, conn = _make_db(tmp_path)
     _add_session(conn, "s1", "telegram", mc=2)
     fp1 = gw._cheap_change_fingerprint(db)
@@ -258,7 +258,7 @@ def test_cheap_fingerprint_detects_same_count_message_rewrite(tmp_path):
     (MAX(messages.timestamp)) moves, so the cheap fingerprint MUST still change
     even though every sessions-table column is identical — otherwise the watcher
     skips a re-projection and other tabs show stale last_activity ordering."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db, conn = _make_db(tmp_path)
     _add_session(conn, "s1", "telegram", mc=3)
     fp1 = gw._cheap_change_fingerprint(db)
@@ -285,7 +285,7 @@ def test_cheap_fingerprint_detects_same_count_message_rewrite(tmp_path):
 def test_cheap_fingerprint_detects_lineage_only_change(tmp_path):
     """Lineage/visibility fields the projection uses for collapse (parent_session_id,
     end_reason, ended_at) must be part of the fingerprint."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db, conn = _make_db(tmp_path)
     _add_session(conn, "s1", "telegram", mc=2)
     fp0 = gw._cheap_change_fingerprint(db)
@@ -307,7 +307,7 @@ def test_cheap_fingerprint_detects_lineage_only_change(tmp_path):
 
 
 def test_cheap_fingerprint_handles_missing_db(tmp_path):
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     missing = tmp_path / "nope.db"
     # No exception, returns None so the caller falls back to the full read.
     assert gw._cheap_change_fingerprint(missing) is None
@@ -315,7 +315,7 @@ def test_cheap_fingerprint_handles_missing_db(tmp_path):
 
 def test_cheap_fingerprint_handles_missing_optional_columns(tmp_path):
     """Older agent schemas without archived/ended_at must still produce a fingerprint."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db = tmp_path / "old.db"
     conn = sqlite3.connect(str(db))
     conn.executescript(
@@ -349,7 +349,7 @@ def test_cheap_fingerprint_handles_missing_optional_columns(tmp_path):
 
 def test_cheap_fingerprint_returns_none_without_source_column(tmp_path):
     """A pre-source-tracking schema must return None (forces safe full read)."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db = tmp_path / "ancient.db"
     conn = sqlite3.connect(str(db))
     conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, started_at REAL)")
@@ -359,7 +359,7 @@ def test_cheap_fingerprint_returns_none_without_source_column(tmp_path):
 
 def test_poll_loop_skips_projection_when_unchanged(tmp_path, monkeypatch):
     """The poll body must call the expensive projection only when the cheap fp changes."""
-    gw = importlib.import_module("api.gateway_watcher")
+    gw = importlib.import_module("api.agent_ops.session_watcher")
     db, conn = _make_db(tmp_path)
     _add_session(conn, "tg1", "telegram", mc=2)
 
@@ -410,8 +410,8 @@ def test_lru_eviction_skips_active_runs():
     src = (
         pathlib.Path(__file__).resolve().parents[1]
         / "api"
-        / "streaming_parts"
-        / "local_run.py"
+            / "runs"
+            / "local.py"
     ).read_text()
     idx = src.index("while len(SESSION_AGENT_CACHE) > SESSION_AGENT_CACHE_MAX:")
     block = src[idx - 1600:idx + 700]

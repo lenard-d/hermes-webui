@@ -406,7 +406,7 @@ def test_gateway_watcher_hides_sessions_without_messages(monkeypatch):
             message_count=0,
         )
 
-        import api.gateway_watcher as gateway_watcher
+        from api.agent_ops import session_watcher as gateway_watcher
 
         monkeypatch.setattr(gateway_watcher, '_get_state_db_path', _get_state_db_path)
 
@@ -1230,7 +1230,7 @@ def test_gateway_watcher_uses_normalized_source_metadata(monkeypatch):
     try:
         _insert_gateway_session(conn, session_id='gw_watcher_source_001', source='weixin', title='Weixin Chat')
 
-        import api.gateway_watcher as gateway_watcher
+        from api.agent_ops import session_watcher as gateway_watcher
 
         monkeypatch.setattr(gateway_watcher, '_get_state_db_path', _get_state_db_path)
         sessions = gateway_watcher._get_agent_sessions_from_db()
@@ -2697,7 +2697,7 @@ def test_probe_payload_when_watcher_thread_dead():
 def test_gateway_watcher_is_alive_public_method():
     """GatewayWatcher.is_alive() is the public API the probe uses. Cover all
     three states: before start(), while running, after stop()."""
-    from api.gateway_watcher import GatewayWatcher
+    from api.agent_ops.session_watcher import GatewayWatcher
     w = GatewayWatcher()
     # Before start(): no thread
     assert w.is_alive() is False, "is_alive() must be False before start()"

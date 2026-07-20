@@ -32,7 +32,7 @@ def _call(monkeypatch, root: Path, profile_dir: Path | None = None) -> Path | No
     if profile_dir is not None:
         monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(profile_dir))
 
-    from api.agent_health import _gateway_root_pid_path
+    from api.agent_ops.gateway_status import _gateway_root_pid_path
     return _gateway_root_pid_path()
 
 
@@ -93,7 +93,7 @@ def test_returns_root_path_when_profile_lookup_raises(tmp_path, monkeypatch):
 
     monkeypatch.setattr(profiles, "get_active_hermes_home", _raise)
 
-    from api.agent_health import _gateway_root_pid_path
+    from api.agent_ops.gateway_status import _gateway_root_pid_path
     result = _gateway_root_pid_path()
     assert result == root / "gateway.pid"
 

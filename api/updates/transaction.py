@@ -6,7 +6,7 @@ import threading
 import time
 from pathlib import Path
 
-from api.agent_health import (
+from api.agent_ops import (
     get_active_profile_gateway_running_pid as _default_gateway_pid,
 )
 from api.config import REPO_ROOT as _DEFAULT_REPO_ROOT, STREAMS, STREAMS_LOCK
@@ -15,9 +15,7 @@ try:
     from api.config import _AGENT_DIR as _DEFAULT_AGENT_DIR
 except ImportError:
     _DEFAULT_AGENT_DIR = None
-from api.gateway_restart import (
-    restart_active_profile_gateway as _default_restart_gateway,
-)
+from api.agent_ops import restart_active_profile_gateway as _default_restart_gateway
 from api.profiles import get_active_profile_name as _default_active_profile_name
 from .policy import (
     DEFAULT_UPDATE_CHANNEL,

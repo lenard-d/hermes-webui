@@ -42,8 +42,8 @@ from api.config import (
 )
 from api.workspace import get_last_workspace
 from api.usage import prompt_cache_hit_percent
-from api.agent_sessions import (
-    _is_continuation_session,
+from api.agent_ops import (
+    is_continuation_session,
     is_cli_session_row,
     normalize_agent_session_source,
     open_state_db_readonly,
@@ -7683,7 +7683,7 @@ def get_state_db_session_messages(
                                 break
                             parent_dict = dict(parent_row)
                             rows_by_id[str(parent_row['id'])] = parent_dict
-                            if not _is_continuation_session(parent_dict, current):
+                            if not is_continuation_session(parent_dict, current):
                                 break
                             session_chain.insert(0, str(parent_row['id']))
                             current_id = str(parent_row['id'])

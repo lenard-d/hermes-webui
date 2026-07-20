@@ -22,7 +22,7 @@ import time
 
 import pytest
 
-from api import agent_health
+from api.agent_ops import remote_health as agent_health
 
 
 @pytest.fixture(autouse=True)

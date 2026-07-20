@@ -662,7 +662,7 @@ def _handle_gateway_sse_stream(handler, parsed):
     """
     settings = load_settings()
 
-    from api.gateway_watcher import get_watcher
+    from api.agent_ops import get_watcher
     watcher = get_watcher()
 
     probe = parse_qs(parsed.query).get('probe', [''])[0].lower() in {'1', 'true', 'yes'}

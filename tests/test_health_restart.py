@@ -5,7 +5,7 @@ import subprocess
 import threading
 import types
 
-import api.gateway_restart as gateway_restart
+from api.agent_ops import gateway_control as gateway_restart
 import api.routes as routes
 
 

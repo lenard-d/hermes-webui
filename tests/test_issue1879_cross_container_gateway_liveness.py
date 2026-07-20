@@ -80,7 +80,8 @@ def _iso(dt: datetime) -> str:
 
 def test_fresh_runtime_status_reports_alive_when_pid_lookup_returns_none(monkeypatch):
     """Container A's WebUI cannot see Container B's PID, but sees the file."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     fresh_ts = _iso(datetime.now(timezone.utc) - timedelta(seconds=30))
 
@@ -90,7 +91,7 @@ def test_fresh_runtime_status_reports_alive_when_pid_lookup_returns_none(monkeyp
         lambda: _FakeGatewayStatus(_runtime_status(fresh_ts), running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["state"] == "alive"
@@ -101,7 +102,8 @@ def test_fresh_runtime_status_reports_alive_when_pid_lookup_returns_none(monkeyp
 
 def test_cross_container_alive_path_does_not_leak_raw_process_fields(monkeypatch):
     """Same redaction guarantees as the in-namespace alive path (#716)."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     fresh_ts = _iso(datetime.now(timezone.utc) - timedelta(seconds=10))
     runtime = _runtime_status(
@@ -118,7 +120,7 @@ def test_cross_container_alive_path_does_not_leak_raw_process_fields(monkeypatch
         lambda: _FakeGatewayStatus(runtime, running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
     rendered = repr(payload)
 
     assert payload["alive"] is True
@@ -132,7 +134,8 @@ def test_cross_container_alive_path_does_not_leak_raw_process_fields(monkeypatch
 
 def test_cross_container_runtime_status_reads_sibling_runtime_file(monkeypatch, tmp_path):
     """#5030: the positional fallback must open gateway_state.json, not gateway.pid."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     pid_path = tmp_path / "gateway.pid"
     runtime_status_path = tmp_path / "gateway_state.json"
@@ -156,7 +159,7 @@ def test_cross_container_runtime_status_reads_sibling_runtime_file(monkeypatch, 
     monkeypatch.setattr(agent_health, "_gateway_status_module", lambda: gateway_status)
     monkeypatch.setattr(agent_health, "_gateway_root_pid_path", lambda: pid_path)
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["state"] == "alive"
@@ -168,7 +171,8 @@ def test_cross_container_runtime_status_reads_sibling_runtime_file(monkeypatch, 
 
 def test_stale_updated_at_with_running_state_reports_unknown(monkeypatch):
     """Older gateways may not refresh the file while still processing messages."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     stale_ts = _iso(datetime.now(timezone.utc) - timedelta(seconds=300))
 
@@ -178,7 +182,7 @@ def test_stale_updated_at_with_running_state_reports_unknown(monkeypatch):
         lambda: _FakeGatewayStatus(_runtime_status(stale_ts), running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is None
     assert payload["details"]["state"] == "unknown"
@@ -188,7 +192,8 @@ def test_stale_updated_at_with_running_state_reports_unknown(monkeypatch):
 
 def test_fresh_updated_at_with_non_running_state_reports_down(monkeypatch):
     """Crash-without-cleanup: file is fresh but gateway said it was stopping."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     fresh_ts = _iso(datetime.now(timezone.utc) - timedelta(seconds=10))
     runtime = _runtime_status(fresh_ts, gateway_state="stopping")
@@ -199,7 +204,7 @@ def test_fresh_updated_at_with_non_running_state_reports_down(monkeypatch):
         lambda: _FakeGatewayStatus(runtime, running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is False
     assert payload["details"]["state"] == "down"
@@ -212,7 +217,8 @@ def test_stale_stopped_runtime_status_reports_unknown_not_down(monkeypatch):
     root gateway_state.json says "stopped", treating it as down makes the
     heartbeat banner fire forever even though no root gateway is configured.
     """
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     stale_ts = _iso(datetime.now(timezone.utc) - timedelta(days=7))
     runtime = _runtime_status(stale_ts, gateway_state="stopped", active_agents=0)
@@ -223,7 +229,7 @@ def test_stale_stopped_runtime_status_reports_unknown_not_down(monkeypatch):
         lambda: _FakeGatewayStatus(runtime, running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is None
     assert payload["details"]["state"] == "unknown"
@@ -233,7 +239,8 @@ def test_stale_stopped_runtime_status_reports_unknown_not_down(monkeypatch):
 
 def test_fresh_stopped_runtime_status_still_reports_down(monkeypatch):
     """A recent stopped state still means the configured gateway is down."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     fresh_ts = _iso(datetime.now(timezone.utc) - timedelta(seconds=10))
     runtime = _runtime_status(fresh_ts, gateway_state="stopped", active_agents=0)
@@ -244,7 +251,7 @@ def test_fresh_stopped_runtime_status_still_reports_down(monkeypatch):
         lambda: _FakeGatewayStatus(runtime, running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is False
     assert payload["details"]["state"] == "down"
@@ -264,7 +271,8 @@ def test_fresh_stopped_runtime_status_still_reports_down(monkeypatch):
 )
 def test_malformed_or_naive_updated_at_does_not_report_alive(monkeypatch, broken_value):
     """Any non-aware ISO-8601 UTC timestamp is treated as not fresh."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     monkeypatch.setattr(
         agent_health,
@@ -272,7 +280,7 @@ def test_malformed_or_naive_updated_at_does_not_report_alive(monkeypatch, broken
         lambda: _FakeGatewayStatus(_runtime_status(broken_value), running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is False
     assert payload["details"]["state"] == "down"
@@ -283,7 +291,8 @@ def test_malformed_or_naive_updated_at_does_not_report_alive(monkeypatch, broken
 
 def test_slightly_future_updated_at_is_accepted_for_clock_skew(monkeypatch):
     """Containers may have small clock drift; <=threshold future is fresh."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     near_future = _iso(datetime.now(timezone.utc) + timedelta(seconds=15))
     monkeypatch.setattr(
@@ -292,7 +301,7 @@ def test_slightly_future_updated_at_is_accepted_for_clock_skew(monkeypatch):
         lambda: _FakeGatewayStatus(_runtime_status(near_future), running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["reason"] == "cross_container_freshness"
@@ -300,7 +309,8 @@ def test_slightly_future_updated_at_is_accepted_for_clock_skew(monkeypatch):
 
 def test_far_future_updated_at_is_rejected(monkeypatch):
     """A timestamp implausibly far in the future signals a broken clock."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     far_future = _iso(datetime.now(timezone.utc) + timedelta(hours=1))
     monkeypatch.setattr(
@@ -309,7 +319,7 @@ def test_far_future_updated_at_is_rejected(monkeypatch):
         lambda: _FakeGatewayStatus(_runtime_status(far_future), running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is False
 
@@ -321,7 +331,8 @@ def test_pid_based_alive_path_unchanged_when_namespace_is_shared(monkeypatch):
     """In-namespace deployments must keep the existing #716 contract: when
     ``get_running_pid`` returns a real PID, ``reason`` is NOT set (only the
     cross-container path adds a reason key on success)."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     runtime = _runtime_status(_iso(datetime.now(timezone.utc)))
     monkeypatch.setattr(
@@ -330,7 +341,7 @@ def test_pid_based_alive_path_unchanged_when_namespace_is_shared(monkeypatch):
         lambda: _FakeGatewayStatus(runtime, running_pid=4242),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["state"] == "alive"
@@ -339,7 +350,8 @@ def test_pid_based_alive_path_unchanged_when_namespace_is_shared(monkeypatch):
 
 def test_no_runtime_status_still_reports_unknown(monkeypatch):
     """No runtime status + no PID = WebUI-only deployment, still ``unknown``."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
+    from api.agent_ops.health import build_agent_health_payload
 
     monkeypatch.setattr(
         agent_health,
@@ -347,7 +359,7 @@ def test_no_runtime_status_still_reports_unknown(monkeypatch):
         lambda: _FakeGatewayStatus(runtime_status=None, running_pid=None),
     )
 
-    payload = agent_health.build_agent_health_payload()
+    payload = build_agent_health_payload()
 
     assert payload["alive"] is None
     assert payload["details"] == {"state": "unknown", "reason": "gateway_not_configured"}
@@ -358,7 +370,7 @@ def test_no_runtime_status_still_reports_unknown(monkeypatch):
 
 def test_runtime_status_is_fresh_unit_helper():
     """Direct coverage of the boundary helper for future maintainers."""
-    from api import agent_health
+    from api.agent_ops import gateway_status as agent_health
 
     now = datetime(2026, 5, 8, 12, 0, 0, tzinfo=timezone.utc)
 

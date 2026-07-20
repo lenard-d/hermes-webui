@@ -39,12 +39,13 @@ from api.runs.agent_runtime import (
     ensure_agent_runtime_current,
     require_ai_agent_class,
 )
-from api.agent_sessions import (
+from api.agent_ops import (
     MESSAGING_SOURCES,
-    _looks_like_default_cli_title,
     is_cli_session_row,
     is_cli_session_row_visible,
+    looks_like_default_cli_title,
     read_session_lineage_report,
+    restart_active_profile_gateway,
 )
 from api.compression_anchor import visible_messages_for_anchor
 from api.compression_recovery import (
@@ -59,7 +60,6 @@ from api.sessions.events import (
     subscribe_session_events,
     unsubscribe_session_events,
 )
-from api.gateway_restart import restart_active_profile_gateway
 from api.shares import create_or_refresh_share, load_share, revoke_share
 from api.sessions.repository import (
     SessionActiveError,
@@ -150,7 +150,7 @@ def _persist_generated_session_title(
                 "session_source": getattr(session, "session_source", None),
                 "source_label": getattr(session, "source_label", None),
             }
-            if not _looks_like_default_cli_title(latest_meta):
+            if not looks_like_default_cli_title(latest_meta):
                 return session.title
         session.title = normalized_title
         from api.sessions.operations import mark_session_title_generated
@@ -174,7 +174,7 @@ def _persist_generated_session_title(
 def _queue_generated_title_for_imported_session(session, cli_meta: dict | None) -> None:
     try:
         cli_meta = dict(cli_meta or {})
-        if not session or cli_meta.get("read_only") or not _looks_like_default_cli_title(cli_meta):
+        if not session or cli_meta.get("read_only") or not looks_like_default_cli_title(cli_meta):
             return
         sid = str(getattr(session, "session_id", "") or "")
         if not sid:
@@ -195,7 +195,7 @@ def _queue_generated_title_for_imported_session(session, cli_meta: dict | None) 
                     "session_source": getattr(current, "session_source", None),
                     "source_label": getattr(current, "source_label", None),
                 }
-                if not _looks_like_default_cli_title(current_meta):
+                if not looks_like_default_cli_title(current_meta):
                     return
                 next_title, _reason, _raw_preview = generate_session_title_for_session(current)
                 normalized_current = str(getattr(current, "title", "") or "").strip()
@@ -1700,7 +1700,7 @@ from api.helpers import (
     _redact_text,
     _CLIENT_DISCONNECT_ERRORS,
 )
-from api.agent_health import build_agent_health_payload
+from api.agent_ops import build_agent_health_payload
 from api.runs.gateway import gateway_chat_config_status
 from api.request_diagnostics import RequestDiagnostics
 from api.system_health import build_system_health_payload
@@ -7148,7 +7148,7 @@ def handle_post(handler, parsed) -> bool:
             from api.config import invalidate_models_cache
             invalidate_models_cache()
             try:
-                from api.gateway_watcher import restart_watcher_for_profile
+                from api.agent_ops import restart_watcher_for_profile
                 restart_watcher_for_profile(name)
             except Exception as exc:
                 logger.warning("Failed to restart gateway watcher for profile %s: %s", name, exc)

@@ -6,7 +6,9 @@ from unittest import mock
 
 import pytest
 
-from api import agent_health
+from api.agent_ops import gateway_status
+from api.agent_ops import remote_health as agent_health
+from api.agent_ops.health import build_agent_health_payload
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +47,7 @@ def test_remote_gateway_healthy_when_200(monkeypatch):
         return _FakeResp(200)
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["reason"] == "remote_gateway"
@@ -60,7 +62,7 @@ def test_remote_gateway_unreachable_when_network_error(monkeypatch):
         raise OSError("connection refused")
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is False
     assert payload["details"]["reason"] == "remote_gateway_unreachable"
@@ -77,8 +79,8 @@ def test_falls_back_to_local_when_no_env(monkeypatch):
     def boom(name):
         raise ModuleNotFoundError(name)
 
-    with mock.patch.object(agent_health.importlib, "import_module", boom):
-        payload = agent_health.build_agent_health_payload()
+    with mock.patch.object(gateway_status.importlib, "import_module", boom):
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is None
     assert payload["details"]["reason"] == "gateway_status_unavailable"
@@ -93,8 +95,8 @@ def test_remote_probe_result_cached_for_5s(monkeypatch):
         return _FakeResp(200)
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        first = agent_health.build_agent_health_payload()
-        second = agent_health.build_agent_health_payload()
+        first = build_agent_health_payload()
+        second = build_agent_health_payload()
 
     assert first["alive"] is True
     assert second["alive"] is True
@@ -117,7 +119,7 @@ def test_gateway_state_populated_from_health_detailed(monkeypatch):
         return _FakeResp(200, body=body)
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["gateway_state"] == "running"
@@ -135,7 +137,7 @@ def test_probe_order_prefers_health_detailed(monkeypatch):
         return _FakeResp(200, body=b'{"gateway_state": "running"}')
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        agent_health.build_agent_health_payload()
+        build_agent_health_payload()
 
     assert len(probed_urls) == 1
     assert probed_urls[0] == "http://fake-gateway:8642/health/detailed"
@@ -152,7 +154,7 @@ def test_health_detailed_probe_sends_bearer_when_api_key_configured(monkeypatch)
         return _FakeResp(200, body=json.dumps({"gateway_state": "running"}).encode())
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["gateway_state"] == "running"
@@ -172,7 +174,7 @@ def test_health_detailed_falls_back_to_api_server_key(monkeypatch):
         return _FakeResp(200, body=b'{"gateway_state": "running"}')
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        agent_health.build_agent_health_payload()
+        build_agent_health_payload()
 
     assert captured_headers[0].get("Authorization") == "Bearer shared-secret"
 
@@ -188,7 +190,7 @@ def test_health_probe_does_not_send_bearer_without_api_key(monkeypatch):
         return _FakeResp(200, body=b'{"gateway_state": "running"}')
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        agent_health.build_agent_health_payload()
+        build_agent_health_payload()
 
     assert "Authorization" not in captured_headers[0]
 
@@ -205,7 +207,7 @@ def test_gateway_health_url_env_used(monkeypatch):
         return _FakeResp(200, body=b'{}')
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert probed_urls[0].startswith("http://custom:9999/")
@@ -222,8 +224,8 @@ def test_default_url_when_no_env(monkeypatch):
     def boom(name):
         raise ModuleNotFoundError(name)
 
-    with mock.patch.object(agent_health.importlib, "import_module", boom):
-        payload = agent_health.build_agent_health_payload()
+    with mock.patch.object(gateway_status.importlib, "import_module", boom):
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is None
     assert payload["details"]["reason"] == "gateway_status_unavailable"
@@ -244,7 +246,7 @@ def test_gateway_health_url_with_health_suffix_is_normalized(monkeypatch):
         return _FakeResp(404)
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert all("/health/health" not in u for u in probed), probed
     assert "http://gw:8642/health/detailed" in probed
@@ -265,7 +267,7 @@ def test_gateway_webui_base_url_env_is_used_for_remote_probe(monkeypatch):
         return _FakeResp(200, body=b'{"gateway_state":"running"}')
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert payload["alive"] is True
     assert payload["details"]["reason"] == "remote_gateway"
@@ -288,7 +290,7 @@ def test_oversized_remote_body_does_not_hang_and_skips_parse(monkeypatch):
         return _HugeResp(200, body=huge)
 
     with mock.patch.object(agent_health.urllib_request, "urlopen", fake_urlopen):
-        payload = agent_health.build_agent_health_payload()
+        payload = build_agent_health_payload()
 
     assert captured_amt and all(a is not None for a in captured_amt)
     assert payload["alive"] is True

@@ -53,7 +53,7 @@ def _disable_auth_for_profile_switch(monkeypatch):
 
 
 def test_gateway_watcher_pins_explicit_profile_home(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
 
     profile_a = tmp_path / "profile-a"
     profile_b = tmp_path / "profile-b"
@@ -97,7 +97,7 @@ def test_gateway_watcher_pins_explicit_profile_home(tmp_path, monkeypatch):
 
 
 def test_restart_watcher_for_profile_replaces_singleton_with_profile_home(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
     from api import profiles
 
     created = []
@@ -138,7 +138,7 @@ def test_restart_watcher_for_profile_replaces_singleton_with_profile_home(tmp_pa
 
 
 def test_restart_watcher_for_profile_keeps_subscribed_other_profile(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
     from api import profiles
 
     default_home = (tmp_path / "default").resolve()
@@ -182,7 +182,7 @@ def test_restart_watcher_for_profile_keeps_subscribed_other_profile(tmp_path, mo
 
 
 def test_restart_watcher_for_profile_swaps_atomically(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
     from api import profiles
 
     target_home = (tmp_path / "target").resolve()
@@ -226,7 +226,7 @@ def test_restart_watcher_for_profile_swaps_atomically(tmp_path, monkeypatch):
 
 
 def test_watcher_registry_key_uses_concrete_values(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
 
     def fail_resolve(**kwargs):
         raise AssertionError("_watcher_registry_key should not resolve profile state")
@@ -238,7 +238,7 @@ def test_watcher_registry_key_uses_concrete_values(tmp_path, monkeypatch):
 
 
 def test_start_watcher_pins_active_profile_home(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
     from api import profiles
 
     profile_home = tmp_path / "active-profile"
@@ -273,7 +273,7 @@ def test_start_watcher_pins_active_profile_home(tmp_path, monkeypatch):
 
 
 def test_get_watcher_scopes_lookup_to_active_profile(tmp_path, monkeypatch):
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
     from api import profiles
 
     default_home = (tmp_path / "default").resolve()
@@ -309,7 +309,7 @@ def test_get_watcher_scopes_lookup_to_active_profile(tmp_path, monkeypatch):
 
 
 def test_profile_switch_restarts_watcher_best_effort(monkeypatch):
-    from api import config, gateway_watcher, profiles, routes
+    from api import agent_ops as gateway_watcher, config, profiles, routes
 
     calls = []
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
@@ -329,7 +329,7 @@ def test_profile_switch_restarts_watcher_best_effort(monkeypatch):
 
 
 def test_profile_switch_response_survives_watcher_restart_failure(monkeypatch):
-    from api import config, gateway_watcher, profiles, routes
+    from api import agent_ops as gateway_watcher, config, profiles, routes
 
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
     monkeypatch.setattr(routes, "read_body", lambda handler: {"name": "demo"})
@@ -355,7 +355,7 @@ def test_subscribe_after_stop_gets_sentinel_immediately():
     receive the None sentinel — otherwise the SSE loop hangs open with keepalives but
     no events (it never learns the watcher it attached to was reaped during a
     concurrent profile switch)."""
-    from api import gateway_watcher as gw
+    from api.agent_ops import session_watcher as gw
 
     watcher = gw.GatewayWatcher(hermes_home=None, profile_name="race")
     # Simulate the reaped/stopped watcher: stop() ran before this subscribe().
