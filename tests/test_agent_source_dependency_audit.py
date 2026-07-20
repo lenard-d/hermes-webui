@@ -166,7 +166,10 @@ def test_audit_reports_runtime_state_and_provider_imports():
     assert ("api/streaming.py", "hermes_state") in state_anchors
     assert ("api/state_sync.py", "hermes_state") in state_anchors
     assert ("api/streaming.py", "hermes_cli.runtime_provider") in provider_anchors
-    assert ("api/routes.py", "hermes_cli.runtime_provider") in provider_anchors
+    assert (
+        "api/http/routes/update_mutations.py",
+        "hermes_cli.runtime_provider",
+    ) in provider_anchors
 
 
 def test_runtime_import_scan_includes_root_python_entrypoints():

@@ -31,7 +31,7 @@ from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parent.parent
-ROUTES = ROOT / "api" / "routes.py"
+AUTOMATION_MUTATIONS = ROOT / "api" / "http" / "routes" / "automation_mutations.py"
 WORKSPACE_FILES = ROOT / "api" / "routes_parts" / "workspace_files.py"
 
 
@@ -75,7 +75,7 @@ class TestCopyFilePathMenuItem:
 
     def test_endpoint_handler_present(self):
         """Server-side endpoint must exist and route through the dispatcher."""
-        routes_src = ROUTES.read_text(encoding="utf-8")
+        routes_src = AUTOMATION_MUTATIONS.read_text(encoding="utf-8")
         src = WORKSPACE_FILES.read_text(encoding="utf-8")
         assert 'parsed.path == "/api/file/path"' in routes_src
         assert "def _handle_file_path(handler, body):" in src

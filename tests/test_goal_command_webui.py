@@ -14,7 +14,9 @@ MESSAGES_JS = family_source("messages")
 CONTROL_EVENTS_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "control-events.js"
 ).read_text(encoding="utf-8")
-ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+SESSION_MUTATIONS_PY = (
+    REPO_ROOT / "api" / "http" / "routes" / "session_mutations.py"
+).read_text(encoding="utf-8")
 CHAT_RUNS_PY = (
     REPO_ROOT / "api" / "routes_parts" / "chat_runs.py"
 ).read_text(encoding="utf-8")
@@ -462,8 +464,8 @@ def test_goal_endpoint_adapter_error_payload_still_controls_http_status(monkeypa
 
 
 def test_routes_register_goal_endpoint_and_kickoff_stream():
-    assert 'if parsed.path == "/api/goal"' in ROUTES_PY
-    assert "return _handle_goal_command(handler, body)" in ROUTES_PY
+    assert 'if parsed.path == "/api/goal"' in SESSION_MUTATIONS_PY
+    assert "return _handle_goal_command(handler, body)" in SESSION_MUTATIONS_PY
     assert "goal_command_payload" in CHAT_RUNS_PY
     assert "kickoff_prompt" in CHAT_RUNS_PY
     assert "_start_chat_stream_for_session" in CHAT_RUNS_PY

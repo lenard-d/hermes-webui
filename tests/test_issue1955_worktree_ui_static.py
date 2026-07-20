@@ -11,7 +11,7 @@ def read(path):
 
 
 def test_session_new_route_accepts_worktree_flag_and_uses_worktree_info():
-    src = read("api/routes.py")
+    src = read("api/http/routes/session_creation_mutations.py")
     assert "create_worktree_for_workspace" in src
     assert 'body.get("worktree")' in src or "body.get('worktree')" in src
     assert "worktree_info=" in src

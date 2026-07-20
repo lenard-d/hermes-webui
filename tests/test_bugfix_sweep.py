@@ -76,7 +76,7 @@ def test_bespoke_telemetry_body_readers_close_connection_on_oversize():
 
 
 def test_auth_sessions_have_lock_and_success_can_clear_login_attempts(monkeypatch, tmp_path):
-    import api.auth as auth
+    from api.auth import cookies_password as auth
 
     assert hasattr(auth, "_SESSIONS_LOCK"), "auth session dict mutations must be lock-protected"
     assert hasattr(auth, "_clear_login_attempts"), "successful login needs to clear failed attempt bucket"
@@ -144,10 +144,14 @@ def test_session_url_builder_strips_legacy_session_query_alias():
 
 
 def test_cross_profile_session_deep_links_switch_profile_instead_of_self_healing():
-    routes = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+    import api.routes as routes
+
+    session_queries = (
+        ROOT / "api" / "http" / "routes" / "session_queries.py"
+    ).read_text(encoding="utf-8")
     sessions = family_source("sessions")
-    assert '"code": "session_profile_mismatch"' in routes
-    assert 'if method == "GET" and path == "/api/session":' in routes
+    assert '"code": "session_profile_mismatch"' in session_queries
+    assert routes._request_session_visibility_exempt("GET", "/api/session") is True
     assert "function _sessionProfileMismatchFromError" in sessions
     assert "_switchProfileForSessionLoad(profileMismatch.profile)" in sessions
     assert "skipProfileResolve:true" in sessions

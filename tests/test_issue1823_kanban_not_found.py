@@ -14,7 +14,6 @@ from api import routes
 
 ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 PANELS = family_source("panels")
-ROUTES = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
 
 class _FakeHandler:
@@ -52,11 +51,18 @@ def test_unknown_kanban_endpoint_get_returns_stale_client_diagnostic():
     assert "Hard refresh now" in error
 
 
-def test_unknown_kanban_endpoint_routes_are_wrapped_for_all_methods():
-    assert 'return _kanban_unknown_endpoint(handler, parsed, "GET")' in ROUTES
-    assert 'return _kanban_unknown_endpoint(handler, parsed, "POST")' in ROUTES
-    assert 'return _kanban_unknown_endpoint(handler, parsed, "PATCH")' in ROUTES
-    assert 'return _kanban_unknown_endpoint(handler, parsed, "DELETE")' in ROUTES
+@pytest.mark.parametrize("method", ("GET", "POST", "PATCH", "DELETE"))
+def test_unknown_kanban_endpoint_routes_are_wrapped_for_all_methods(method):
+    handler = _FakeHandler()
+    handler_fn = getattr(routes, f"handle_{method.lower()}")
+
+    handled = handler_fn(handler, urlparse("/api/kanban/obsolete-shape"))
+
+    assert handled is True
+    assert handler.status == 404
+    error = handler.body_json()["error"]
+    assert f"unknown Kanban endpoint: {method} /api/kanban/obsolete-shape" in error
+    assert "stale cached bundle" in error
 
 
 def test_kanban_stale_client_error_renders_hard_refresh_escape_hatch():

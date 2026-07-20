@@ -7,7 +7,7 @@ from pathlib import Path
 from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = ROOT / "api" / "routes.py"
+WORKSPACE_QUERIES_PY = ROOT / "api" / "http" / "routes" / "workspace_queries.py"
 MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 MEDIA_DELIVERY_PY = ROOT / "api" / "media" / "delivery.py"
 UI_JS = ROOT / "static" / "ui.js"
@@ -21,7 +21,7 @@ def test_folder_download_handler_defined():
 
 
 def test_folder_download_dispatch_registered():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = WORKSPACE_QUERIES_PY.read_text(encoding="utf-8")
     assert 'parsed.path == "/api/folder/download"' in src
     assert "_handle_folder_download(handler, parsed)" in src
 

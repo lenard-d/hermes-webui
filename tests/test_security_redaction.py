@@ -503,15 +503,17 @@ def _create_session_with_credentials() -> str:
     return sid
 
 
-def test_api_session_redacts_messages():
-    """GET /api/session route must call redact_session_data() before returning."""
-    import inspect
-    import api.routes as routes
-    src = inspect.getsource(routes.handle_get)
-    # Verify redact_session_data is applied to the session payload
-    assert "redact_session_data" in src, (
-        "api/routes.py handle_get must call redact_session_data() on /api/session response"
-    )
+@_needs_server
+def test_api_session_redacts_messages(test_server):
+    """GET /api/session must never return plaintext transcript credentials."""
+    sid = _create_session_with_credentials()
+
+    data = _get(f"/api/session?session_id={sid}&messages=1&resolve_model=0")
+
+    dump = json.dumps(data)
+    _assert_no_plaintext_credentials(dump, "GET /api/session messages")
+    assert data["session"]["session_id"] == sid
+    assert len(data["session"]["messages"]) == 3
 
 
 def test_api_session_redacts_title():

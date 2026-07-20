@@ -29,7 +29,7 @@ import urllib.request
 from tests.frontend_asset_contract import family_source
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ROUTES = ROOT / "api" / "routes.py"
+AUTOMATION_MUTATIONS = ROOT / "api" / "http" / "routes" / "automation_mutations.py"
 WORKSPACE_FILES = ROOT / "api" / "routes_parts" / "workspace_files.py"
 UI_SOURCE = family_source("ui")
 I18N_SOURCE = family_source("i18n")
@@ -46,7 +46,7 @@ from conftest import TEST_BASE  # noqa: E402
 class TestOpenInVsCodeBackendWiring:
     def test_route_dispatch_entry_present(self):
         """Dispatcher must route /api/file/open-vscode to the handler."""
-        src = ROUTES.read_text(encoding="utf-8")
+        src = AUTOMATION_MUTATIONS.read_text(encoding="utf-8")
         assert 'parsed.path == "/api/file/open-vscode"' in src
 
     def test_handler_function_defined(self):

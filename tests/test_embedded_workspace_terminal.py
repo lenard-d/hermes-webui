@@ -206,15 +206,16 @@ def test_terminal_restart_ignores_stale_sse_events():
 
 
 def test_terminal_routes_are_registered():
-    routes = _read("api/routes.py")
+    session_mutations = _read("api/http/routes/session_mutations.py")
+    workspace_queries = _read("api/http/routes/workspace_queries.py")
     for path in (
         "/api/terminal/start",
         "/api/terminal/input",
-        "/api/terminal/output",
         "/api/terminal/resize",
         "/api/terminal/close",
     ):
-        assert path in routes
+        assert path in session_mutations
+    assert "/api/terminal/output" in workspace_queries
 
 
 def test_terminal_process_does_not_mutate_global_terminal_cwd(tmp_path, monkeypatch):

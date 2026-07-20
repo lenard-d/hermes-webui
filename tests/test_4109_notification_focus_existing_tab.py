@@ -10,7 +10,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SW_SRC = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 MESSAGES_SRC = family_source("messages")
-ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+PUBLIC_ROUTES_SRC = (
+    ROOT / "api" / "http" / "routes" / "public.py"
+).read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -79,7 +81,7 @@ def test_service_worker_update_delivery_keeps_versioned_no_store_route():
     assert "self.skipWaiting();" in SW_SRC
     assert "self.clients.claim();" in SW_SRC
 
-    route_idx = ROUTES_SRC.index('"/sw.js"')
-    route_block = ROUTES_SRC[route_idx : route_idx + 1200]
+    route_idx = PUBLIC_ROUTES_SRC.index('"/sw.js"')
+    route_block = PUBLIC_ROUTES_SRC[route_idx : route_idx + 1200]
     assert 'replace(\n                "__WEBUI_VERSION__", version_token\n            )' in route_block
     assert 'handler.send_header("Cache-Control", "no-store")' in route_block

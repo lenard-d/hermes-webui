@@ -31,13 +31,16 @@ def test_chat_runs_owner_imports_without_routes():
     assert result.returncode == 0, result.stderr
 
 
-def test_chat_runs_owner_is_file_backed_and_facade_dispatches_to_it():
+def test_chat_runs_owner_is_file_backed_and_http_owner_dispatches_to_it():
     owner_source = Path(chat_runs.__file__).read_text(encoding="utf-8")
     facade_source = Path(routes.__file__).read_text(encoding="utf-8")
+    http_owner_source = (
+        REPO / "api" / "http" / "routes" / "session_mutations.py"
+    ).read_text(encoding="utf-8")
 
     assert "def start_session_turn(" in owner_source
     assert "def _handle_chat_start(" in owner_source
     assert "def _handle_chat_sync(" in owner_source
     assert "def _handle_chat_start(" not in facade_source
-    assert "_handle_chat_start(handler, body, diag=diag)" in facade_source
+    assert "_handle_chat_start(handler, body, diag=diag)" in http_owner_source
     assert "exec(" not in owner_source

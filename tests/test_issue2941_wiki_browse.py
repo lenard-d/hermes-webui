@@ -24,7 +24,9 @@ def _page(root: Path, relative: str, content: str = "# page\n") -> Path:
 
 
 def test_wiki_routes_remain_registered_through_thin_adapters():
-    routes_source = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    routes_source = (
+        REPO / "api" / "http" / "routes" / "observability_queries.py"
+    ).read_text(encoding="utf-8")
     adapter_source = (REPO / "api" / "routes_parts" / "llm_wiki.py").read_text(
         encoding="utf-8"
     )
