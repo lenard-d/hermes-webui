@@ -398,37 +398,96 @@ def test_poll_loop_skips_projection_when_unchanged(tmp_path, monkeypatch):
     assert calls["n"] == 2, "expensive projection must run again after a real change"
 
 
-def test_lru_eviction_skips_active_runs():
+def test_lru_eviction_skips_active_runs(monkeypatch):
     """Regression (#3536 review round 2): lowering SESSION_AGENT_CACHE_MAX (50→25)
     makes LRU agent-cache eviction more likely to fire, so the eviction loop must
     NOT close an agent whose worker is still live. The loop must consult the
     ACTIVE_RUNS registry (worker lifecycle — survives a cancel/reconnect that
     drops STREAMS) and skip those session_ids, deferring (temporarily exceeding
-    the cap) if every over-cap entry is active. Source-contract test: the deep
-    streaming function isn't unit-invokable, so pin the invariant in source."""
-    import pathlib
-    src = (
-        pathlib.Path(__file__).resolve().parents[1]
-        / "api"
-            / "runs"
-            / "local.py"
-    ).read_text()
-    idx = src.index("while len(SESSION_AGENT_CACHE) > SESSION_AGENT_CACHE_MAX:")
-    block = src[idx - 1600:idx + 700]
-    # The eviction path must build an active-session set from ACTIVE_RUNS...
-    assert "ACTIVE_RUNS" in block and "_active_sids" in block, (
-        "eviction must consult ACTIVE_RUNS to find live workers"
+    the cap) if every over-cap entry is active."""
+    import api.config as config
+
+    local_agent_cache = importlib.import_module("api.runs.local_agent_cache")
+    runtime_state = importlib.import_module("api.runs.runtime_state")
+
+    class FakeAgent:
+        def __init__(self, **_kwargs):
+            pass
+
+    def acquire(session_id):
+        return local_agent_cache.acquire_local_agent(
+            agent_class=FakeAgent,
+            session_id=session_id,
+            ephemeral=False,
+            kwargs={},
+            session_db=None,
+            model="test-model",
+            provider="test-provider",
+            base_url=None,
+            api_key=None,
+            runtime={},
+            max_iterations=None,
+            max_tokens=None,
+            fallback_models=None,
+            toolsets=None,
+            reasoning=None,
+            request_overrides=None,
+            prefill_status=None,
+            profile_home=None,
+        )
+
+    active_agent = FakeAgent()
+    idle_agent = FakeAgent()
+    evicted = []
+    run_ids = ("issue3506-active", "issue3506-new", "issue3506-deferred")
+
+    monkeypatch.setattr(local_agent_cache, "_register_agent", lambda *_args: None)
+    monkeypatch.setattr(
+        local_agent_cache,
+        "_close_evicted_agent_at_session_boundary",
+        lambda session_id, agent: evicted.append((session_id, agent)),
     )
-    # ...skip active session_ids when choosing what to evict...
-    assert "_sid not in _active_sids" in block, (
-        "eviction must skip sessions with a live run"
-    )
-    # ...and defer (break) rather than evict when all over-cap entries are active.
-    assert "all over-cap entries are active; defer" in block, (
-        "eviction must defer (temporarily exceed cap) rather than close a live agent"
-    )
-    # The unconditional popitem(last=False) that closed the LRU agent regardless
-    # of liveness must be gone from this block.
-    assert "popitem(last=False)" not in block, (
-        "the liveness-blind popitem eviction must be replaced"
-    )
+    monkeypatch.setattr(config, "SESSION_AGENT_CACHE_MAX", 2)
+
+    with config.SESSION_AGENT_CACHE_LOCK:
+        original_cache = list(config.SESSION_AGENT_CACHE.items())
+        config.SESSION_AGENT_CACHE.clear()
+        config.SESSION_AGENT_CACHE["active-session"] = (active_agent, "old")
+        config.SESSION_AGENT_CACHE["idle-session"] = (idle_agent, "old")
+
+    runtime_state.register_active_run(run_ids[0], session_id="active-session")
+    runtime_state.register_active_run(run_ids[1], session_id="new-session")
+    try:
+        created = acquire("new-session")
+
+        with config.SESSION_AGENT_CACHE_LOCK:
+            assert list(config.SESSION_AGENT_CACHE) == [
+                "active-session",
+                "new-session",
+            ]
+            assert created.agent is config.SESSION_AGENT_CACHE["new-session"][0]
+        assert evicted == [("idle-session", idle_agent)]
+
+        # When every candidate has a live worker, exceeding the cap is safer
+        # than closing either agent out from under its run.
+        monkeypatch.setattr(config, "SESSION_AGENT_CACHE_MAX", 1)
+        runtime_state.register_active_run(run_ids[2], session_id="deferred-session")
+        deferred = acquire("deferred-session")
+
+        with config.SESSION_AGENT_CACHE_LOCK:
+            assert list(config.SESSION_AGENT_CACHE) == [
+                "active-session",
+                "new-session",
+                "deferred-session",
+            ]
+            assert (
+                deferred.agent
+                is config.SESSION_AGENT_CACHE["deferred-session"][0]
+            )
+        assert evicted == [("idle-session", idle_agent)]
+    finally:
+        for run_id in run_ids:
+            runtime_state.unregister_active_run(run_id)
+        with config.SESSION_AGENT_CACHE_LOCK:
+            config.SESSION_AGENT_CACHE.clear()
+            config.SESSION_AGENT_CACHE.update(original_cache)
