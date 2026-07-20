@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "parts": [
+    "001-run-control.js",
+    "002-shell-navigation.js",
+    "003-speech-capture.js",
+    "004-public-interfaces.js",
+    "005-conversation-voice.js",
+    "006-composer-session-actions.js",
+    "007-appearance-preferences.js",
+    "008-bootstrap-coordinator.js"
+  ]
+}

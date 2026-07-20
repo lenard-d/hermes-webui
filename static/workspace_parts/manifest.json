@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "parts": [
+    "001-navigation.js",
+    "002-preview-editor.js",
+    "003-upload.js"
+  ]
+}
