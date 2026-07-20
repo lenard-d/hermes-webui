@@ -17,7 +17,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _clear_stale_stream_state = ctx["_clear_stale_stream_state"]
     _get_cached_session_list_payload = ctx["_get_cached_session_list_payload"]
     _handle_session_compress_status = ctx["_handle_session_compress_status"]
-    hydrate_anchor_activity_scenes = ctx["hydrate_anchor_activity_scenes"]
+    _hydrate_anchor_activity_scenes = ctx["_hydrate_anchor_activity_scenes"]
     _is_isolated_profile_mode = ctx["_is_isolated_profile_mode"]
     _is_messaging_session_record = ctx["_is_messaging_session_record"]
     _is_subagent_child_session_id = ctx["_is_subagent_child_session_id"]
@@ -56,8 +56,8 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _resolve_effective_session_model_provider_for_display = ctx[
         "_resolve_effective_session_model_provider_for_display"
     ]
-    build_live_anchor_scene_snapshot = ctx["build_live_anchor_scene_snapshot"]
-    summarize_run_journal_status = ctx["summarize_run_journal_status"]
+    _run_journal_live_snapshot = ctx["_run_journal_live_snapshot"]
+    _run_journal_status_payload = ctx["_run_journal_status_payload"]
     _session_context_length_lookup_state = ctx["_session_context_length_lookup_state"]
     _session_detail_tail_cache_eligible = ctx["_session_detail_tail_cache_eligible"]
     _session_detail_tail_cache_get = ctx["_session_detail_tail_cache_get"]
@@ -360,7 +360,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 )
                 if msg_limit is not None:
                     _truncated_msgs = _messages_for_limited_payload(_truncated_msgs)
-                _truncated_msgs = hydrate_anchor_activity_scenes(
+                _truncated_msgs = _hydrate_anchor_activity_scenes(
                     _truncated_msgs,
                     getattr(s, "anchor_activity_scenes", None),
                     message_offset=_messages_offset,
@@ -493,7 +493,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                     journal = None
                 if journal:
                     journal_active = bool(original_stream_id in active_stream_ids)
-                    raw["runtime_journal"] = summarize_run_journal_status(
+                    raw["runtime_journal"] = _run_journal_status_payload(
                         journal,
                         active=journal_active,
                     )
@@ -503,7 +503,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                         emit_error=False,
                     ):
                         try:
-                            snapshot = build_live_anchor_scene_snapshot(
+                            snapshot = _run_journal_live_snapshot(
                                 original_stream_id
                             )
                         except Exception:

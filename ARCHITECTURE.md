@@ -347,14 +347,15 @@ larger migration remains incremental:
   origin metadata with their initial write. JSON sidecars remain authoritative;
   the repository is the migration seam, not a claim that unified SQLite storage
   is shipped.
-- `api/sessions/anchor_scene.py` owns the assistant-turn activity-scene
-  contract end to end: bounded input validation, journal-to-live-scene
-  projection, settled transcript hydration, assistant-message identity, and
-  atomic record replacement plus retention through the session repository.
-  `api.sessions` exposes only persistence, hydration, live snapshot, and
-  journal-status operations from that owner. `api/routes_parts/anchor_scene.py`
-  is only the HTTP adapter; it no longer re-exports the owner's implementation
-  helpers through `api.routes`. Authorization remains transport-owned, while
+- `api/sessions/anchor_scene/` owns the assistant-turn activity-scene contract
+  end to end. `journal_projection.py` rebuilds live snapshots from durable run
+  events, `transcript.py` interprets settled message evidence, `rows.py`
+  constructs renderer-neutral activity rows, `hydration.py` reconciles those
+  sources, and `persistence.py` validates/selects the message owner and performs
+  the atomic session-side write. The package interface exposes only that
+  persistence operation and its domain error; neighboring modules import the
+  specific internal owner they consume. `api/routes_parts/anchor_scene.py`
+  remains only the HTTP adapter. Authorization remains transport-owned, while
   sidecar layout, cache freshness, sidebar projection, and recovery continue
   to belong to their existing session owners.
 - `api/sessions/records.py` owns the `Session` record interface and the one

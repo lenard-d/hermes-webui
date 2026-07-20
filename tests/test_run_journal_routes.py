@@ -6,13 +6,13 @@ import json
 import queue
 
 import api.config as config
-from api.sessions import anchor_scene as anchor_scene_owner
+from api.sessions.anchor_scene import journal_projection as anchor_journal_owner
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-ANCHOR_SCENE_SRC = (ROOT / "api" / "sessions" / "anchor_scene.py").read_text(
-    encoding="utf-8"
-)
+ANCHOR_JOURNAL_SRC = (
+    ROOT / "api" / "sessions" / "anchor_scene" / "journal_projection.py"
+).read_text(encoding="utf-8")
 SESSION_QUERIES_SRC = (
     ROOT / "api" / "http" / "routes" / "session_queries.py"
 ).read_text(encoding="utf-8")
@@ -33,7 +33,7 @@ def test_stream_status_exposes_replay_summary():
     assert "find_run_summary(stream_id)" in block
     assert '"replay_available"' in block
     assert '"journal"' in block
-    assert "summarize_run_journal_status" in block
+    assert "_run_journal_status_payload" in block
 
 
 def test_dead_stream_sse_replays_journal_before_404_fallback():
@@ -273,22 +273,19 @@ def test_replay_emits_event_ids_and_stale_restart_diagnostic():
 def test_session_payload_exposes_runtime_journal_for_stale_streams():
     import api.routes as routes
 
-    assert (
-        routes.build_live_anchor_scene_snapshot
-        is anchor_scene_owner._run_journal_live_snapshot
-    )
+    assert routes._run_journal_live_snapshot is anchor_journal_owner._run_journal_live_snapshot
     assert "original_stream_id = getattr(s, \"active_stream_id\", None)" in SESSION_QUERIES_SRC
     assert '"runtime_journal"' in SESSION_QUERIES_SRC
     assert '"runtime_journal_snapshot"' in SESSION_QUERIES_SRC
-    assert "snapshot = build_live_anchor_scene_snapshot(" in SESSION_QUERIES_SRC
-    assert 'terminal_state = "lost-worker-bookkeeping"' in ANCHOR_SCENE_SRC
+    assert "snapshot = _run_journal_live_snapshot(original_stream_id)" in SESSION_QUERIES_SRC
+    assert 'terminal_state = "lost-worker-bookkeeping"' in ANCHOR_JOURNAL_SRC
     assert "active=journal_active" in SESSION_QUERIES_SRC
     assert "journal_active = bool(original_stream_id in active_stream_ids)" in SESSION_QUERIES_SRC
 
 
 def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(monkeypatch):
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "find_run_summary",
         lambda stream_id: {
             "session_id": "session_1",
@@ -298,7 +295,7 @@ def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(mo
         },
     )
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "read_run_events",
         lambda session_id, run_id: {
             "events": [
@@ -348,7 +345,7 @@ def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(mo
         },
     )
 
-    snapshot = anchor_scene_owner._run_journal_live_snapshot("run_1")
+    snapshot = anchor_journal_owner._run_journal_live_snapshot("run_1")
 
     assert snapshot["last_seq"] == 5
     assert snapshot["last_event_id"] == "run_1:5"
@@ -386,7 +383,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
         "items": [{"index": i, "payload": "x" * 100} for i in range(50_000)],
     }
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "find_run_summary",
         lambda stream_id: {
             "session_id": "session_1",
@@ -396,7 +393,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "read_run_events",
         lambda session_id, run_id: {
             "events": [
@@ -414,7 +411,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
         },
     )
 
-    snapshot = anchor_scene_owner._run_journal_live_snapshot("run_1")
+    snapshot = anchor_journal_owner._run_journal_live_snapshot("run_1")
     tool = snapshot["tool_calls"][0]
     assert tool["args"]["command"] == long_command
     assert len(tool["args"]["items"]) <= 64
@@ -422,7 +419,7 @@ def test_live_journal_snapshot_bounds_pathological_tool_args(monkeypatch):
 
 
 def test_status_payload_marks_non_terminal_dead_journal_as_stale():
-    payload = anchor_scene_owner._run_journal_status_payload(
+    payload = anchor_journal_owner._run_journal_status_payload(
         {
             "session_id": "session_1",
             "run_id": "run_1",
@@ -441,7 +438,7 @@ def test_status_payload_marks_non_terminal_dead_journal_as_stale():
 
 
 def test_status_payload_preserves_terminal_error_state():
-    payload = anchor_scene_owner._run_journal_status_payload(
+    payload = anchor_journal_owner._run_journal_status_payload(
         {
             "session_id": "session_1",
             "run_id": "run_1",

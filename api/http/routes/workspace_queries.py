@@ -37,7 +37,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _handle_sse_stream = ctx["_handle_sse_stream"]
     _handle_terminal_output = ctx["_handle_terminal_output"]
     _load_saved_prompts = ctx["_load_saved_prompts"]
-    summarize_run_journal_status = ctx["summarize_run_journal_status"]
+    _run_journal_status_payload = ctx["_run_journal_status_payload"]
     _session_events_path_session_id = ctx["_session_events_path_session_id"]
     _stream_id_visible_to_request_profile = ctx["_stream_id_visible_to_request_profile"]
     _terminal_remote_backend_enabled = ctx["_terminal_remote_backend_enabled"]
@@ -223,7 +223,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             journal = None
         if journal:
             payload["replay_available"] = True
-            payload["journal"] = summarize_run_journal_status(
+            payload["journal"] = _run_journal_status_payload(
                 journal,
                 active=active,
             )

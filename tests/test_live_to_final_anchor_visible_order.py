@@ -21,9 +21,12 @@ STREAM_PROGRESS_JS = (
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-ANCHOR_SCENE_PY = (ROOT / "api" / "sessions" / "anchor_scene.py").read_text(
-    encoding="utf-8"
-)
+ANCHOR_ROWS_PY = (
+    ROOT / "api" / "sessions" / "anchor_scene" / "rows.py"
+).read_text(encoding="utf-8")
+ANCHOR_HYDRATION_PY = (
+    ROOT / "api" / "sessions" / "anchor_scene" / "hydration.py"
+).read_text(encoding="utf-8")
 CHAT_RUNS_PY = (ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
     encoding="utf-8"
 )
@@ -796,8 +799,8 @@ def test_settled_scene_keeps_user_visible_lifecycle_and_control_rows():
     node = _function_body(UI_JS, "_anchorSceneNodeForRow")
 
     assert "return 'lifecycle:compression';" in rows
-    assert 'return "lifecycle:compression"' in ANCHOR_SCENE_PY
-    assert 'if key == "lifecycle:compression":' in ANCHOR_SCENE_PY
+    assert 'return "lifecycle:compression"' in ANCHOR_ROWS_PY
+    assert 'if key == "lifecycle:compression":' in ANCHOR_HYDRATION_PY
     assert "return out.slice().sort" not in rows
     assert "source==='compressing'||source==='compressed'" in rows
     assert "(weight(a)-weight(b))" not in rows

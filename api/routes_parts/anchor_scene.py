@@ -1,4 +1,4 @@
-"""HTTP adapter for assistant anchor scenes."""
+"""HTTP adapter for persisting assistant Anchor scenes."""
 
 from __future__ import annotations
 
@@ -16,22 +16,23 @@ def _int_or_none(value):
 
 
 def _message_index_from_request(body):
+    """Resolve the full-transcript index from a possibly windowed request."""
     if not isinstance(body, dict):
         return None
     message_index = _int_or_none(body.get("message_index"))
     message_offset = _int_or_none(body.get("message_offset"))
-    message_window_index = _int_or_none(body.get("message_window_index"))
+    window_index = _int_or_none(body.get("message_window_index"))
     if (
-        message_window_index is not None
+        window_index is not None
         and message_offset is not None
         and message_offset > 0
-        and (message_index is None or message_index == message_window_index)
+        and (message_index is None or message_index == window_index)
     ):
-        return message_window_index + message_offset
+        return window_index + message_offset
     return message_index
 
 
-def handle_session_anchor_scene(
+def _handle_session_anchor_scene(
     handler,
     body,
     *,

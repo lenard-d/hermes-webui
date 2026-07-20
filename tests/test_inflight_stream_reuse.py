@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from tests.test_sessions_split_support import SESSIONS_SOURCE
 
-from api.sessions import anchor_scene as anchor_scene_owner
+from api.sessions.anchor_scene import journal_projection as anchor_journal_owner
 
 REPO_ROOT = Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
@@ -1221,7 +1221,7 @@ def test_equal_seq_recovery_preserves_full_durable_tool_args(monkeypatch):
     ]
 
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "find_run_summary",
         lambda sid: {
             "session_id": "session-1",
@@ -1233,14 +1233,14 @@ def test_equal_seq_recovery_preserves_full_durable_tool_args(monkeypatch):
         else None,
     )
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "read_run_events",
         lambda session_id, run_id: {"events": events}
         if session_id == "session-1" and run_id == stream_id
         else {"events": []},
     )
 
-    snapshot = anchor_scene_owner._run_journal_live_snapshot(stream_id)
+    snapshot = anchor_journal_owner._run_journal_live_snapshot(stream_id)
     assert snapshot is not None
     assert snapshot["tool_calls"][0]["args"]["command"] == long_command
     assert snapshot["tool_calls"][1]["args"]["command"] == complete_only_command

@@ -5,7 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from api.sessions import anchor_scene as anchor_scene_owner
+from api.sessions.anchor_scene import hydration as anchor_hydration_owner
+from api.sessions.anchor_scene import journal_projection as anchor_journal_owner
+from api.sessions.anchor_scene import persistence as anchor_persistence_owner
 
 
 @pytest.fixture
@@ -172,7 +174,7 @@ def test_anchor_scene_persistence_round_trip_outside_provider_messages(
     assert record["scene"]["version"] == "activity_scene_v1"
 
     loaded = Session.load("anchorpersist1")
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         loaded.messages,
         loaded.anchor_activity_scenes,
         message_offset=0,
@@ -276,8 +278,8 @@ def test_anchor_scene_hydration_skips_ambiguous_ref_match(monkeypatch):
         {"role": "assistant", "content": "dup answer", "timestamp": 5.0},
         {"role": "assistant", "content": "dup answer", "timestamp": 5.0},
     ]
-    ref = anchor_scene_owner._assistant_anchor_scene_message_ref(messages[0])
-    assert ref == anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]), "refs must collide for this test"
+    ref = anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[0])
+    assert ref == anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]), "refs must collide for this test"
 
     # A single record keyed by that ambiguous ref, index-targeted at message 0.
     records = {
@@ -288,7 +290,7 @@ def test_anchor_scene_hydration_skips_ambiguous_ref_match(monkeypatch):
             "scene": {"version": "activity_scene_v1", "activity_rows": [], "final_answer": "dup answer"},
         }
     }
-    out = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, message_offset=0)
+    out = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, message_offset=0)
     attached = [("_anchor_activity_scene" in m) for m in out]
     # The ambiguous ref must NOT fan the scene out to BOTH messages.
     assert attached.count(True) <= 1, (
@@ -320,7 +322,7 @@ def test_anchor_scene_hydration_rejects_stale_index_fallback_when_final_answer_m
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records)
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records)
 
     assert "_anchor_activity_scene" not in hydrated[3]
 
@@ -374,7 +376,7 @@ def test_anchor_scene_persistence_prefers_unique_ref_over_stale_index(
     ]
     Session(session_id="anchorpersist_ref", messages=messages).save(skip_index=True)
     client_ref = _client_anchor_scene_message_ref(messages[3])
-    assert client_ref != anchor_scene_owner._assistant_anchor_scene_message_ref(messages[3])
+    assert client_ref != anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[3])
 
     captured = {}
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
@@ -508,7 +510,7 @@ def test_anchor_scene_persistence_converts_window_index_to_full_index(
     raw = json.loads((session_dir / "anchorpersist_window.json").read_text(encoding="utf-8"))
     record = next(iter(raw["anchor_activity_scenes"].values()))
     assert record["message_index"] == 3
-    assert record["message_ref"] == anchor_scene_owner._assistant_anchor_scene_message_ref(raw["messages"][3])
+    assert record["message_ref"] == anchor_persistence_owner._assistant_anchor_scene_message_ref(raw["messages"][3])
 
 
 def test_anchor_scene_persistence_rejects_unmatched_ref_without_index(
@@ -669,13 +671,13 @@ def test_anchor_scene_hydration_repairs_tail_only_scene_from_full_turn():
     records = {
         "record": {
             "message_index": 4,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[4]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[4]),
             "stream_id": "stream-1",
             "scene": old_scene,
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         message_offset=0,
@@ -723,7 +725,7 @@ def test_anchor_scene_hydration_backfills_turn_duration_from_final_message():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -736,7 +738,7 @@ def test_anchor_scene_hydration_backfills_turn_duration_from_final_message():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records)
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records)
 
     assert hydrated[1]["_anchor_activity_scene"]["turn_duration"] == 731.2
 
@@ -767,7 +769,7 @@ def test_anchor_scene_hydration_promotes_final_content_array_tool_use_to_ordered
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -780,7 +782,7 @@ def test_anchor_scene_hydration_promotes_final_content_array_tool_use_to_ordered
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -833,7 +835,7 @@ def test_anchor_scene_hydration_preserves_non_final_post_tool_text():
     records = {
         "record": {
             "message_index": 2,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[2]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[2]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -844,7 +846,7 @@ def test_anchor_scene_hydration_preserves_non_final_post_tool_text():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     scene = hydrated[2]["_anchor_activity_scene"]
     rows = scene["activity_rows"]
@@ -894,7 +896,7 @@ def test_anchor_scene_hydration_keeps_final_tail_thinking_as_activity_only():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -905,7 +907,7 @@ def test_anchor_scene_hydration_keeps_final_tail_thinking_as_activity_only():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     scene = hydrated[1]["_anchor_activity_scene"]
     rows = scene["activity_rows"]
@@ -955,7 +957,7 @@ def test_anchor_scene_hydration_promotes_output_text_content_tail_to_final_answe
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -966,7 +968,7 @@ def test_anchor_scene_hydration_promotes_output_text_content_tail_to_final_answe
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     scene = hydrated[1]["_anchor_activity_scene"]
     rows = scene["activity_rows"]
@@ -1016,7 +1018,7 @@ def test_anchor_scene_hydration_restores_durable_body_after_message_tool_merge()
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1027,7 +1029,7 @@ def test_anchor_scene_hydration_restores_durable_body_after_message_tool_merge()
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1079,7 +1081,7 @@ def test_anchor_scene_hydration_keeps_third_same_command_id_distinct_after_alt_i
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1090,7 +1092,7 @@ def test_anchor_scene_hydration_keeps_third_same_command_id_distinct_after_alt_i
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1143,7 +1145,7 @@ def test_anchor_scene_hydration_keeps_identical_output_repeat_distinct_after_alt
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1154,7 +1156,7 @@ def test_anchor_scene_hydration_keeps_identical_output_repeat_distinct_after_alt
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1207,7 +1209,7 @@ def test_anchor_scene_hydration_keeps_same_started_at_repeat_distinct_after_alt_
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1218,7 +1220,7 @@ def test_anchor_scene_hydration_keeps_same_started_at_repeat_distinct_after_alt_
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1274,7 +1276,7 @@ def test_anchor_scene_hydration_keeps_short_persisted_body_after_durable_merge()
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1285,7 +1287,7 @@ def test_anchor_scene_hydration_keeps_short_persisted_body_after_durable_merge()
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1339,7 +1341,7 @@ def test_anchor_scene_hydration_merges_missing_args_after_content_tool_match():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1350,7 +1352,7 @@ def test_anchor_scene_hydration_merges_missing_args_after_content_tool_match():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     tools = [
         row
@@ -1399,7 +1401,7 @@ def test_anchor_scene_hydration_keeps_consumed_different_name_tool_distinct():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1410,7 +1412,7 @@ def test_anchor_scene_hydration_keeps_consumed_different_name_tool_distinct():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1455,7 +1457,7 @@ def test_anchor_scene_hydration_does_not_position_merge_ambiguous_different_id_t
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1466,7 +1468,7 @@ def test_anchor_scene_hydration_does_not_position_merge_ambiguous_different_id_t
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1507,7 +1509,7 @@ def test_anchor_scene_hydration_does_not_name_merge_remaining_same_name_tool_aft
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1518,7 +1520,7 @@ def test_anchor_scene_hydration_does_not_name_merge_remaining_same_name_tool_aft
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     rows = hydrated[1]["_anchor_activity_scene"]["activity_rows"]
     tools = [row for row in rows if row.get("role") == "tool"]
@@ -1561,7 +1563,7 @@ def test_anchor_scene_hydration_merges_remaining_matching_tool_after_exact_match
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1572,7 +1574,7 @@ def test_anchor_scene_hydration_merges_remaining_matching_tool_after_exact_match
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     rows = hydrated[1]["_anchor_activity_scene"]["activity_rows"]
     tools = [row for row in rows if row.get("role") == "tool"]
@@ -1613,7 +1615,7 @@ def test_anchor_scene_hydration_keeps_distinct_used_singleton_tool_call():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1624,7 +1626,7 @@ def test_anchor_scene_hydration_keeps_distinct_used_singleton_tool_call():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1676,7 +1678,7 @@ def test_anchor_scene_hydration_keeps_same_command_used_singleton_tool_distinct(
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1687,7 +1689,7 @@ def test_anchor_scene_hydration_keeps_same_command_used_singleton_tool_distinct(
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1739,7 +1741,7 @@ def test_anchor_scene_hydration_keeps_anonymous_used_singleton_tool_distinct():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1750,7 +1752,7 @@ def test_anchor_scene_hydration_keeps_anonymous_used_singleton_tool_distinct():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1800,7 +1802,7 @@ def test_anchor_scene_hydration_keeps_body_only_distinct_used_singleton_tool_cal
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1811,7 +1813,7 @@ def test_anchor_scene_hydration_keeps_body_only_distinct_used_singleton_tool_cal
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(
         messages,
         records,
         tool_calls=[
@@ -1861,7 +1863,7 @@ def test_anchor_scene_hydration_does_not_name_merge_singleton_with_conflicting_a
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1872,7 +1874,7 @@ def test_anchor_scene_hydration_does_not_name_merge_singleton_with_conflicting_a
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records, tool_calls=[])
 
     rows = hydrated[1]["_anchor_activity_scene"]["activity_rows"]
     tools = [row for row in rows if row.get("role") == "tool"]
@@ -1895,7 +1897,7 @@ def test_anchor_scene_hydration_dedupes_compression_lifecycle_rows():
     records = {
         "record": {
             "message_index": 2,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[2]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[2]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1932,7 +1934,7 @@ def test_anchor_scene_hydration_dedupes_compression_lifecycle_rows():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records)
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records)
 
     rows = hydrated[2]["_anchor_activity_scene"]["activity_rows"]
     compression_rows = [
@@ -1960,7 +1962,7 @@ def test_anchor_scene_hydration_drops_stale_live_running_thinking_when_settled_t
     records = {
         "record": {
             "message_index": 2,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[2]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[2]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -1982,7 +1984,7 @@ def test_anchor_scene_hydration_drops_stale_live_running_thinking_when_settled_t
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records)
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records)
 
     rows = hydrated[2]["_anchor_activity_scene"]["activity_rows"]
     thinking_rows = [row for row in rows if row.get("role") == "thinking"]
@@ -2003,7 +2005,7 @@ def test_anchor_scene_hydration_seals_unmatched_live_running_activity_rows():
     records = {
         "record": {
             "message_index": 1,
-            "message_ref": anchor_scene_owner._assistant_anchor_scene_message_ref(messages[1]),
+            "message_ref": anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[1]),
             "stream_id": "stream-1",
             "scene": {
                 "version": "activity_scene_v1",
@@ -2044,7 +2046,7 @@ def test_anchor_scene_hydration_seals_unmatched_live_running_activity_rows():
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records)
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records)
 
     rows = hydrated[1]["_anchor_activity_scene"]["activity_rows"]
     activity_rows = [row for row in rows if row.get("role") in {"thinking", "prose", "tool"}]
@@ -2088,7 +2090,7 @@ def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics
     )
     writer.append_sse_event("token", {"text": f" {process_after_tool}"})
 
-    runtime_snapshot = anchor_scene_owner._run_journal_live_snapshot(
+    runtime_snapshot = anchor_journal_owner._run_journal_live_snapshot(
         stream_id,
         session_dir=session_dir,
     )
@@ -2141,7 +2143,7 @@ def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics
         {"role": "assistant", "content": process_after_tool},
         {"role": "assistant", "content": final_answer},
     ]
-    message_ref = anchor_scene_owner._assistant_anchor_scene_message_ref(messages[4])
+    message_ref = anchor_persistence_owner._assistant_anchor_scene_message_ref(messages[4])
     records = {
         message_ref: {
             "version": "anchor_activity_scene_record_v1",
@@ -2152,7 +2154,7 @@ def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics
         }
     }
 
-    hydrated = anchor_scene_owner._hydrate_anchor_activity_scenes(messages, records)
+    hydrated = anchor_hydration_owner._hydrate_anchor_activity_scenes(messages, records)
     settled_scene = hydrated[4]["_anchor_activity_scene"]
 
     assert settled_scene["final_answer"] == final_answer
@@ -2219,7 +2221,7 @@ def test_runtime_journal_snapshot_includes_live_anchor_activity_scene(monkeypatc
         },
     ]
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "find_run_summary",
         lambda sid: {
             "session_id": "session-live-scene",
@@ -2228,12 +2230,12 @@ def test_runtime_journal_snapshot_includes_live_anchor_activity_scene(monkeypatc
         },
     )
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "read_run_events",
         lambda session_id, run_id: {"events": events},
     )
 
-    snapshot = anchor_scene_owner._run_journal_live_snapshot(stream_id)
+    snapshot = anchor_journal_owner._run_journal_live_snapshot(stream_id)
     scene = snapshot["anchor_activity_scene"]
     rows = scene["activity_rows"]
 
@@ -2269,7 +2271,7 @@ def test_runtime_journal_snapshot_dedupes_reasoning_interim_progress_echo(monkey
         },
     ]
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "find_run_summary",
         lambda sid: {
             "session_id": "session-live-reasoning-interim-echo",
@@ -2278,12 +2280,12 @@ def test_runtime_journal_snapshot_dedupes_reasoning_interim_progress_echo(monkey
         },
     )
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "read_run_events",
         lambda session_id, run_id: {"events": events},
     )
 
-    snapshot = anchor_scene_owner._run_journal_live_snapshot(stream_id)
+    snapshot = anchor_journal_owner._run_journal_live_snapshot(stream_id)
     rows = snapshot["anchor_activity_scene"]["activity_rows"]
 
     assert snapshot["last_assistant_text"] == progress
@@ -2295,7 +2297,7 @@ def test_runtime_journal_snapshot_dedupes_reasoning_interim_progress_echo(monkey
 def test_runtime_journal_snapshot_has_running_anchor_row_before_first_token(monkeypatch):
     stream_id = "stream-live-empty"
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "find_run_summary",
         lambda sid: {
             "session_id": "session-live-empty",
@@ -2304,7 +2306,7 @@ def test_runtime_journal_snapshot_has_running_anchor_row_before_first_token(monk
         },
     )
     monkeypatch.setattr(
-        anchor_scene_owner,
+        anchor_journal_owner,
         "read_run_events",
         lambda session_id, run_id: {
             "events": [
@@ -2319,7 +2321,7 @@ def test_runtime_journal_snapshot_has_running_anchor_row_before_first_token(monk
         },
     )
 
-    snapshot = anchor_scene_owner._run_journal_live_snapshot(stream_id)
+    snapshot = anchor_journal_owner._run_journal_live_snapshot(stream_id)
     rows = snapshot["anchor_activity_scene"]["activity_rows"]
 
     assert rows

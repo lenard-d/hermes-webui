@@ -1854,11 +1854,11 @@ def _clear_stale_stream_state(session) -> bool:
     return cleared
 
 
-from api.routes_parts.anchor_scene import handle_session_anchor_scene
-from api.sessions import (
-    build_live_anchor_scene_snapshot,
-    hydrate_anchor_activity_scenes,
-    summarize_run_journal_status,
+from api.routes_parts.anchor_scene import _handle_session_anchor_scene
+from api.sessions.anchor_scene.hydration import _hydrate_anchor_activity_scenes
+from api.sessions.anchor_scene.journal_projection import (
+    _run_journal_live_snapshot,
+    _run_journal_status_payload,
 )
 
 

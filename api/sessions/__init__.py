@@ -5,9 +5,6 @@ the owning module (for example ``api.sessions.recovery``) instead of depending
 on a broad compatibility facade.
 """
 
-from importlib import import_module
-from typing import Any
-
 from .channels import (
     SESSION_CHANNELS,
     SESSION_CHANNELS_LOCK,
@@ -46,6 +43,7 @@ from .repository import (
     session_write_owner,
 )
 from .cache import get_session, new_session
+from .anchor_scene import AnchorSceneMessageNotFound, persist_anchor_activity_scene
 from .external import clear_cli_sessions_cache
 from .pending_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 from .process_wakeup import clear_process_wakeup_pause
@@ -66,41 +64,6 @@ REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
 def active_state_db_path():
     """Return the active profile's Hermes state database path."""
     return _active_state_db_path()
-
-
-_LAZY_PUBLIC = {
-    "AnchorSceneMessageNotFound": (
-        ".anchor_scene",
-        "AnchorSceneMessageNotFound",
-    ),
-    "build_live_anchor_scene_snapshot": (
-        ".anchor_scene",
-        "_run_journal_live_snapshot",
-    ),
-    "hydrate_anchor_activity_scenes": (
-        ".anchor_scene",
-        "_hydrate_anchor_activity_scenes",
-    ),
-    "persist_anchor_activity_scene": (
-        ".anchor_scene",
-        "persist_anchor_activity_scene",
-    ),
-    "summarize_run_journal_status": (
-        ".anchor_scene",
-        "_run_journal_status_payload",
-    ),
-}
-
-
-def __getattr__(name: str) -> Any:
-    """Load specialized session operations without widening import cycles."""
-    try:
-        module_name, attribute = _LAZY_PUBLIC[name]
-    except KeyError as exc:
-        raise AttributeError(name) from exc
-    value = getattr(import_module(module_name, __name__), attribute)
-    globals()[name] = value
-    return value
 
 
 def commit_session_memory(
@@ -151,7 +114,6 @@ __all__ = [
     "all_sessions",
     "apply_session_title_rename",
     "audit_session_recovery",
-    "build_live_anchor_scene_snapshot",
     "clear_cli_sessions_cache",
     "clear_process_wakeup_pause",
     "cleanup_session_store",
@@ -166,7 +128,6 @@ __all__ = [
     "get_session",
     "get_session_for_file_ops",
     "get_session_channel",
-    "hydrate_anchor_activity_scenes",
     "is_safe_session_id",
     "load_projects",
     "mark_turn_completed",
@@ -185,7 +146,6 @@ __all__ = [
     "session_write_owner",
     "should_emit_session_updated",
     "subscribe_to_session_channel",
-    "summarize_run_journal_status",
     "title_from",
     "truncate_context_for_display_keep",
     "truncate_session_at_keep",
