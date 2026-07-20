@@ -95,10 +95,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       streaming.py         SSE orchestration and compatibility facade for extracted stream domains
       streaming_parts/     Importable payload, replay, compression, Gateway routing metadata,
                            attachment, terminal, live-control, and local-run domains
-      updates.py           Stable self-update compatibility facade and status orchestration
-      update_repository.py Git/source discovery and hardened update repository boundary
-      update_policy.py     Version, channel, eligibility, and release-selection policy
-      update_transaction.py Install, rollback, restart, and recovery transaction owner
+      updates/             Self-update package with a small public interface
+        __init__.py        Stable `api.updates` exports and cached status orchestration
+        repository.py      Git/source discovery and hardened repository operations
+        policy.py          Version, channel, eligibility, and release selection
+        summary.py         Human-readable update-summary formatting and bounded cache
+        transaction.py     Install, rollback, restart, and recovery transaction owner
       upload.py            Multipart parser, file upload handler
       workspace.py         Workspace identity/registry compatibility facade
       workspace_parts/     Path safety, anchored file access, escape navigation, and git summary
@@ -317,7 +319,7 @@ larger migration remains incremental:
   and returns a payload; the route wrapper only supplies those values and
   serializes the response.
 - `api.config`, `api.models`, `api.routes`, `api.streaming`, `api.providers`,
-  `api.profiles`, `api.updates`, `api.workspace`, and `api.workspace_git`
+  `api.profiles`, `api.workspace`, and `api.workspace_git`
   preserve their established import and monkeypatch surfaces as compatibility
   facades. Cohesive implementations live in their corresponding owner modules
   and `*_parts/` packages. Moved functions are rebound to the exporting facade
@@ -325,6 +327,11 @@ larger migration remains incremental:
   locks, caches, registries, and `ContextVar` state retain one authoritative
   owner. These are normal Python modules, not source strings or
   runtime-concatenated fragments.
+- `api.updates` is the pilot semantic package. Its small `__init__.py` preserves
+  the established import path and public exports, while repository, policy,
+  summary, and transaction implementations use direct relative imports. Update
+  execution no longer resolves internal calls through a facade binder,
+  `ContextVar`, or `sys.modules`.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.
@@ -940,9 +947,9 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         provider_parts/       Credentials, costs, and account/quota lifecycle
         profiles.py           Profile compatibility facade and shared identity state
         profiles_parts/       Catalog, management, runtime, and cron scopes
-        updates.py            Stable update facade and status orchestration
-        update_{repository,policy,transaction}.py
-                              Repository, selection policy, and atomic update transaction
+        updates/              Stable update interface plus semantic implementation modules
+          {repository,policy,summary,transaction}.py
+                              Repository, selection policy, summaries, and atomic transactions
         workspace.py          Workspace identity and registry facade
         workspace_parts/      Path safety, anchored access, escape navigation, git summary
         workspace_git.py      High-level Git workflow facade

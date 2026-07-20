@@ -399,6 +399,11 @@ an explicit, reviewed exception.
 
 ### Phase 1: pilot the package pattern with updates
 
+**Status: Implemented.** `api.updates` is now backed by `api/updates/__init__.py`
+with direct package modules for repository operations, policy, summaries, and
+transactions. The previous update facade binder and flat `api/update_*.py`
+modules have been removed.
+
 Convert the existing update facade and `update_*.py` modules into a real
 `api/updates/` package. Preserve the public import path and update behavior.
 

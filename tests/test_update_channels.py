@@ -17,6 +17,7 @@ import subprocess
 import pytest
 
 import api.updates as updates
+from api.updates import policy, repository, transaction
 
 
 def _git(repo, *args):
@@ -198,14 +199,14 @@ def test_force_update_refuses_rewind_when_ref_is_ancestor(channel_repo, monkeypa
     """The rewind guard: apply_force_update must refuse to reset --hard onto a
     ref that is a strict ANCESTOR of HEAD (a downgrade). HEAD is on v0.52.5;
     we force to a ref resolving to the older v0.52.2 (an ancestor)."""
-    monkeypatch.setattr(updates, 'REPO_ROOT', channel_repo)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', channel_repo)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        transaction, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0},
     )
     # Force the compare ref to the older stable tag (a strict ancestor of HEAD).
     monkeypatch.setattr(
-        updates, '_select_apply_compare_ref',
+        transaction, '_select_apply_compare_ref',
         lambda path, channel='stable', target=None: 'v0.52.2',
     )
     real_run_git = updates._run_git
@@ -215,7 +216,7 @@ def test_force_update_refuses_rewind_when_ref_is_ancestor(channel_repo, monkeypa
             return '', True
         return real_run_git(args, cwd, timeout=timeout)
 
-    monkeypatch.setattr(updates, '_run_git', no_fetch)
+    monkeypatch.setattr(repository, '_run_git', no_fetch)
     result = updates.apply_force_update('webui', channel='stable')
     assert result.get('refused_rewind') is True, result
     assert result['ok'] is False
@@ -258,9 +259,9 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
     lock-recovery retry silently falls back to stable (_apply_update_inner
     defaults to stable)."""
     (tmp_path / '.git').mkdir()
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        transaction, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0},
     )
     # No lock present → clear-lock takes the "re-run normal update" branch.
@@ -273,18 +274,18 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
                 'other_locks': []}
 
     monkeypatch.setattr(
-        updates, '_inventory_locks',
+        transaction, '_inventory_locks',
         fake_inventory,
     )
     # User's configured channel is experimental.
-    monkeypatch.setattr(updates, '_read_update_channel', lambda: 'experimental')
+    monkeypatch.setattr(transaction, '_read_update_channel', lambda: 'experimental')
     seen = {}
 
     def fake_inner(target, channel='stable'):
         seen['channel'] = channel
         return {'ok': True, 'target': target, 'channel': channel}
 
-    monkeypatch.setattr(updates, '_apply_update_inner', fake_inner)
+    monkeypatch.setattr(transaction, '_apply_update_inner', fake_inner)
     result = updates.apply_clear_lock('webui')
     assert inventory_calls == [tmp_path]
     assert seen.get('channel') == 'experimental', (
@@ -336,7 +337,7 @@ def test_stable_pinned_experimental_reports_installed_version_not_unknown(stable
     """#5862: current_version must be the neutral installed tag (v0.52.0), NOT
     None (which the UI renders as 'unknown'), and the count must be the real
     number of exp releases ahead (3), NOT the bogus _release_gap fallback of 1."""
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.52.0')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.52.0')
     info = updates._check_repo_release(stable_pinned_repo, 'webui', 'experimental')
     assert info is not None
     assert info['current_version'] == 'v0.52.0', 'must not be None/"unknown"'
@@ -348,7 +349,7 @@ def test_stable_pinned_experimental_reports_installed_version_not_unknown(stable
 def test_stable_pinned_stable_channel_still_up_to_date(stable_pinned_repo, monkeypatch):
     """Sanity: the SAME install on the stable channel is up-to-date on v0.52.0
     (the exp-v* tags ahead must not be offered as stable updates)."""
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.52.0')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.52.0')
     info = updates._check_repo_release(stable_pinned_repo, 'webui', 'stable')
     assert info is not None
     assert info['behind'] == 0
@@ -358,8 +359,8 @@ def test_stable_pinned_stable_channel_still_up_to_date(stable_pinned_repo, monke
 def test_channel_version_badge_no_bare_sha_on_experimental(stable_pinned_repo, monkeypatch):
     """#5862 chip: channel_version_badge must fall back to the neutral installed
     version, never a bare git SHA, when no channel tag is reachable."""
-    monkeypatch.setattr(updates, 'REPO_ROOT', stable_pinned_repo)
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.52.0')
+    monkeypatch.setattr(policy, '_DEFAULT_REPO_ROOT', stable_pinned_repo)
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.52.0')
     badge = updates.channel_version_badge('experimental')
     assert badge == 'v0.52.0', f'expected installed version, got bare SHA-ish {badge!r}'
     # Stable channel resolves its own reachable tag directly.
@@ -383,7 +384,7 @@ def test_stable_pinned_experimental_agent_repo_does_not_inject_webui_version(sta
     shared with the Agent repo, where WEBUI_VERSION (v0.52.0) is not a valid ref —
     it must NOT be injected as the Agent's current_version/current_sha (that would
     show the WebUI version as the Agent's and emit a broken Agent compare link)."""
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.52.0')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.52.0')
     info = updates._check_repo_release(stable_pinned_repo, 'agent', 'experimental')
     assert info is not None
     # Agent must NOT carry the WebUI version.
@@ -398,7 +399,7 @@ def test_stable_pinned_experimental_current_sha_is_verified_ref_only(stable_pinn
     string, the compare ref falls back to None (no broken /compare link) while the
     displayed version still shows the real installed string."""
     # HEAD is exactly on v0.52.0 → verified tag resolves for the compare link.
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.52.0-dirty-deadbeef')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.52.0-dirty-deadbeef')
     info = updates._check_repo_release(stable_pinned_repo, 'webui', 'experimental')
     assert info is not None
     # current_version shows the real (dirty) installed string...

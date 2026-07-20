@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 import api.updates as updates
+from api.updates import repository, transaction
 
 
 def test_pull_failure_untracked_overwrite_flags_conflict(tmp_path):
@@ -28,10 +29,10 @@ def test_pull_failure_untracked_overwrite_flags_conflict(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, 'REPO_ROOT', tmp_path),
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(transaction, 'REPO_ROOT', tmp_path),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -67,10 +68,10 @@ def test_apply_force_update_removes_untracked_files_before_reset(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, 'REPO_ROOT', tmp_path),
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(transaction, 'REPO_ROOT', tmp_path),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates.apply_force_update('webui')
 
@@ -110,10 +111,10 @@ def test_apply_force_update_proceeds_when_clean_fails(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, 'REPO_ROOT', tmp_path),
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(transaction, 'REPO_ROOT', tmp_path),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates.apply_force_update('webui')
 
@@ -149,9 +150,9 @@ def test_stash_apply_conflict_preserves_stash(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -187,9 +188,9 @@ def test_stash_apply_reset_failure_returns_error(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -226,9 +227,9 @@ def test_stash_apply_success_drops_and_restarts(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -262,9 +263,9 @@ def test_stash_apply_success_discloses_drop_failure(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -297,9 +298,9 @@ def test_pull_failure_stash_apply_recovery(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -333,9 +334,9 @@ def test_pull_failure_stash_apply_recovery_discloses_drop_failure(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart'),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart'),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -366,9 +367,9 @@ def test_pull_failure_stash_apply_recovery_warns_before_diverged_reset(tmp_path)
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart'),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart'),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -403,9 +404,9 @@ def test_pull_failure_stash_apply_conflict_cleans_worktree(tmp_path):
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -441,9 +442,9 @@ def test_pull_failure_stash_apply_conflict_preserves_diverged_flag(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart'),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart'),
     ):
         result = updates._apply_update_inner('webui')
 
@@ -476,9 +477,9 @@ def test_pull_failure_stash_apply_conflict_reset_failure_returns_error(tmp_path)
     restart_calls = []
 
     with (
-        patch.object(updates, '_run_git', side_effect=fake_git),
-        patch.object(updates, '_select_apply_compare_ref', return_value='origin/master'),
-        patch.object(updates, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
+        patch.object(repository, '_run_git', side_effect=fake_git),
+        patch.object(transaction, '_select_apply_compare_ref', return_value='origin/master'),
+        patch.object(transaction, '_schedule_restart', side_effect=lambda: restart_calls.append(1)),
     ):
         result = updates._apply_update_inner('webui')
 

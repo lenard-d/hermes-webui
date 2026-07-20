@@ -10,41 +10,37 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from api.config import REPO_ROOT as _DEFAULT_REPO_ROOT
+
 try:
     from api.config import _AGENT_DIR as _DEFAULT_AGENT_DIR
 except ImportError:
     _DEFAULT_AGENT_DIR = None
-from api.update_repository import (
-    _build_compare_url,
-    _detect_default_branch,
-    _normalize_remote_url,
-    _run_git as _repository_run_git,
-    _sanitize_git_diagnostic,
-)
-from api.update_runtime import facade_attr
+from . import repository as _repository
+
+_build_compare_url = _repository._build_compare_url
+_detect_default_branch = _repository._detect_default_branch
+_normalize_remote_url = _repository._normalize_remote_url
+_sanitize_git_diagnostic = _repository._sanitize_git_diagnostic
 
 
 def _git(args, cwd, timeout=10):
-    return facade_attr("_run_git", _repository_run_git)(args, cwd, timeout=timeout)
+    return _repository._run_git(args, cwd, timeout=timeout)
 
 
 def _repo_root() -> Path:
-    return facade_attr("REPO_ROOT", _DEFAULT_REPO_ROOT)
+    return _DEFAULT_REPO_ROOT
 
 
 def _agent_dir():
-    return facade_attr("_AGENT_DIR", _DEFAULT_AGENT_DIR)
+    return _DEFAULT_AGENT_DIR
 
 
 def _webui_version() -> str:
-    return str(facade_attr("WEBUI_VERSION", "unknown"))
-
-
-def _facade_call(name, default, /, *args, **kwargs):
-    return facade_attr(name, default)(*args, **kwargs)
+    return _RUNNING_WEBUI_VERSION
 
 
 _RELEASE_TAG_RE = re.compile(r'^v[0-9][0-9A-Za-z.+-]*$')
+_RUNNING_WEBUI_VERSION = "unknown"
 
 
 def _dirty_suffix(path: Path, timeout=1) -> str:
@@ -63,7 +59,9 @@ def _dirty_suffix(path: Path, timeout=1) -> str:
     if not out or out.startswith('git exited with status '):
         diff, diff_ok = _git(['diff', '--binary', 'HEAD', '--'], path, timeout=timeout)
         if diff_ok and diff:
-            digest = hashlib.sha1(diff.encode('utf-8', errors='replace')).hexdigest()[:8]
+            digest = hashlib.sha1(diff.encode('utf-8', errors='replace')).hexdigest()[
+                :8
+            ]
             return f"-dirty-{digest}"
         return "-dirty"
     return ""
@@ -74,9 +72,7 @@ def _describe_git_version(path: Path, *, timeout=5, dirty_timeout=1) -> str | No
     out, ok = _git(['describe', '--tags', '--always'], path, timeout=timeout)
     if not (ok and out):
         return None
-    return out + _facade_call(
-        "_dirty_suffix", _dirty_suffix, path, timeout=dirty_timeout
-    )
+    return out + _dirty_suffix(path, timeout=dirty_timeout)
 
 
 def _detect_webui_version() -> str:
@@ -94,7 +90,7 @@ def _detect_webui_version() -> str:
     """
     # Timeout capped at 3s: git describe on a healthy local repo is <50ms;
     # a 10s stall on import (NFS-mounted .git, broken git binary) is unacceptable.
-    out = _facade_call("_describe_git_version", _describe_git_version, _repo_root())
+    out = _describe_git_version(_repo_root())
     if out:
         return out
 
@@ -105,6 +101,7 @@ def _detect_webui_version() -> str:
     if version_file.exists():
         try:
             import re as _re
+
             m = _re.search(
                 r"""__version__\s*=\s*['"]([^'"]+)['"]""",
                 version_file.read_text(encoding='utf-8'),
@@ -162,7 +159,7 @@ def _version_from_gateway_health_payload(payload: object) -> str | None:
 
 def _detect_agent_version_from_gateway_health(timeout: float = 0.75) -> str | None:
     """Best-effort cross-container gateway API fallback for Agent version."""
-    base = _facade_call("_gateway_health_base_url", _gateway_health_base_url)
+    base = _gateway_health_base_url()
     if not base:
         return None
     parsed = urlparse(base)
@@ -172,11 +169,15 @@ def _detect_agent_version_from_gateway_health(timeout: float = 0.75) -> str | No
         try:
             with urllib.request.urlopen(f'{base}{path}', timeout=timeout) as resp:
                 payload = json.loads(resp.read().decode('utf-8'))
-        except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError):
+        except (
+            OSError,
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            UnicodeDecodeError,
+        ):
             continue
-        version = _facade_call(
-            "_version_from_gateway_health_payload",
-            _version_from_gateway_health_payload,
+        version = _version_from_gateway_health_payload(
             payload,
         )
         if version:
@@ -204,7 +205,7 @@ def _detect_agent_version() -> str:
             # Symmetric with _detect_webui_version() above — `--dirty` flags a
             # locally-modified checkout so operators can see when their agent has
             # uncommitted changes vs a clean tag. Per Opus advisor on stage-293.
-            out = _facade_call("_describe_git_version", _describe_git_version, agent_dir)
+            out = _describe_git_version(agent_dir)
             if out:
                 return out
 
@@ -212,16 +213,11 @@ def _detect_agent_version() -> str:
             # tree without .git metadata or a VERSION file.  The package version
             # still lives in hermes_cli/__init__.py, so prefer that before giving
             # up or relying on a live gateway probe.
-            source_version = _facade_call(
-                "_read_agent_source_version", _read_agent_source_version, agent_dir
-            )
+            source_version = _read_agent_source_version(agent_dir)
             if source_version:
                 return source_version
 
-    gateway_version = _facade_call(
-        "_detect_agent_version_from_gateway_health",
-        _detect_agent_version_from_gateway_health,
-    )
+    gateway_version = _detect_agent_version_from_gateway_health()
     if gateway_version:
         return gateway_version
 
@@ -261,7 +257,7 @@ def _normalize_channel(channel) -> str:
 
 def _channel_tag_glob(channel) -> str:
     """Return the ``git tag --list`` glob for the given channel."""
-    normalized = _facade_call("_normalize_channel", _normalize_channel, channel)
+    normalized = _normalize_channel(channel)
     return _CHANNEL_TAG_GLOBS[normalized]
 
 
@@ -273,9 +269,8 @@ def _read_update_channel() -> str:
     """
     try:
         from api.config import load_settings
-        return _facade_call(
-            "_normalize_channel", _normalize_channel, load_settings().get('update_channel')
-        )
+
+        return _normalize_channel(load_settings().get('update_channel'))
     except Exception:
         return DEFAULT_UPDATE_CHANNEL
 
@@ -296,8 +291,8 @@ def channel_version_badge(channel=None) -> str:
     channel tag is reachable (fresh clone, Docker image without channel tags).
     """
     if channel is None:
-        channel = _facade_call("_read_update_channel", _read_update_channel)
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
+        channel = _read_update_channel()
+    channel = _normalize_channel(channel)
     # NOTE: no ``--always`` here (deliberately different from _detect_webui_version).
     # The current version is channel-INDEPENDENT — it's just what's installed. The
     # channel only picks which tag family we compare AGAINST for updates. On a
@@ -309,19 +304,21 @@ def channel_version_badge(channel=None) -> str:
     # (#5862)
     out, ok = _git(
         [
-            'describe', '--tags', '--match',
-            _facade_call("_channel_tag_glob", _channel_tag_glob, channel),
+            'describe',
+            '--tags',
+            '--match',
+            _channel_tag_glob(channel),
         ],
         _repo_root(),
     )
     if ok and out:
-        return out + _facade_call("_dirty_suffix", _dirty_suffix, _repo_root())
+        return out + _dirty_suffix(_repo_root())
     return _webui_version()
 
 
 def _release_tags(path, channel=DEFAULT_UPDATE_CHANNEL):
     """Return the channel's release tags newest-first, in version-sort order."""
-    glob = _facade_call("_channel_tag_glob", _channel_tag_glob, channel)
+    glob = _channel_tag_glob(channel)
     out, ok = _git(['tag', '--list', glob, '--sort=-v:refname'], path)
     if not (ok and out):
         return []
@@ -338,8 +335,11 @@ def _current_release_tag(path, channel=DEFAULT_UPDATE_CHANNEL):
     """
     out, ok = _git(
         [
-            'describe', '--tags', '--abbrev=0', '--match',
-            _facade_call("_channel_tag_glob", _channel_tag_glob, channel),
+            'describe',
+            '--tags',
+            '--abbrev=0',
+            '--match',
+            _channel_tag_glob(channel),
         ],
         path,
     )
@@ -368,9 +368,11 @@ def _count_channel_tags_ahead(path, channel=DEFAULT_UPDATE_CHANNEL):
     """
     out, ok = _git(
         [
-            'tag', '--list',
-            _facade_call("_channel_tag_glob", _channel_tag_glob, channel),
-            '--contains', 'HEAD',
+            'tag',
+            '--list',
+            _channel_tag_glob(channel),
+            '--contains',
+            'HEAD',
         ],
         path,
     )
@@ -398,7 +400,11 @@ def _is_stable_release_tag(tag):
     return bool(_RELEASE_TAG_RE.fullmatch(raw) and '-' not in raw[1:])
 
 
-def _github_release_tags(url='https://api.github.com/repos/nesquena/hermes-webui/tags?per_page=100', *, timeout=3.0):
+def _github_release_tags(
+    url='https://api.github.com/repos/nesquena/hermes-webui/tags?per_page=100',
+    *,
+    timeout=3.0,
+):
     """Return GitHub release tags newest-first, including commit SHAs when available."""
     request = urllib.request.Request(
         url,
@@ -419,7 +425,7 @@ def _github_release_tags(url='https://api.github.com/repos/nesquena/hermes-webui
         if not isinstance(name, str):
             continue
         name = name.strip()
-        if not _facade_call("_is_stable_release_tag", _is_stable_release_tag, name):
+        if not _is_stable_release_tag(name):
             continue
         commit = item.get('commit')
         sha = None
@@ -432,9 +438,7 @@ def _github_release_tags(url='https://api.github.com/repos/nesquena/hermes-webui
         tags.append({'name': name, 'sha': sha})
     return sorted(
         tags,
-        key=lambda item: _facade_call(
-            "_release_tag_sort_key", _release_tag_sort_key, item['name']
-        ),
+        key=lambda item: _release_tag_sort_key(item['name']),
         reverse=True,
     )
 
@@ -445,8 +449,15 @@ def _check_webui_published_release_update():
     if not _RELEASE_TAG_RE.fullmatch(current_version):
         return None
     try:
-        tags = _facade_call("_github_release_tags", _github_release_tags)
-    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        tags = _github_release_tags()
+    except (
+        OSError,
+        TimeoutError,
+        urllib.error.URLError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        ValueError,
+    ):
         return None
     if not tags:
         return None
@@ -457,13 +468,13 @@ def _check_webui_published_release_update():
 
     latest = tags[0]
     latest_version = latest['name']
-    behind = _facade_call(
-        "_release_gap", _release_gap, tag_names, current_version, latest_version
-    )
+    behind = _release_gap(tag_names, current_version, latest_version)
     if behind <= 0:
         return None
 
-    current = next((item for item in tags if item['name'] == current_version), None) or {}
+    current = (
+        next((item for item in tags if item['name'] == current_version), None) or {}
+    )
     current_ref = current.get('sha') or current_version
     latest_ref = latest.get('sha') or latest_version
     repo_url = 'https://github.com/nesquena/hermes-webui'
@@ -477,9 +488,7 @@ def _check_webui_published_release_update():
         'release_based': True,
         'current_version': current_version,
         'latest_version': latest_version,
-        'compare_url': _facade_call(
-            "_build_compare_url",
-            _build_compare_url,
+        'compare_url': _build_compare_url(
             repo_url,
             current_ref,
             latest_ref,
@@ -505,8 +514,11 @@ def _head_is_past_latest_tag(path, current_tag, channel=DEFAULT_UPDATE_CHANNEL):
         return False
     full_desc, ok = _git(
         [
-            'describe', '--tags', '--always', '--match',
-            _facade_call("_channel_tag_glob", _channel_tag_glob, channel),
+            'describe',
+            '--tags',
+            '--always',
+            '--match',
+            _channel_tag_glob(channel),
         ],
         path,
     )
@@ -561,17 +573,13 @@ def _select_apply_compare_ref(path, channel=DEFAULT_UPDATE_CHANNEL, target=None)
     tracks master past its tags) — keeps the historical branch fallthrough
     unchanged. This mirrors ``_check_repo_release``.
     """
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
-    suppress_stable_fallthrough = (channel == 'stable' and target == 'webui')
-    tags = _facade_call("_release_tags", _release_tags, path, channel)
+    channel = _normalize_channel(channel)
+    suppress_stable_fallthrough = channel == 'stable' and target == 'webui'
+    tags = _release_tags(path, channel)
     if tags:
         latest_tag = tags[0]
-        current_tag = _facade_call(
-            "_current_release_tag", _current_release_tag, path, channel
-        )
-        behind = _facade_call(
-            "_release_gap", _release_gap, tags, current_tag, latest_tag
-        )
+        current_tag = _current_release_tag(path, channel)
+        behind = _release_gap(tags, current_tag, latest_tag)
         # Mirror the check side exactly: fall through to the branch comparison
         # whenever the checkout has already moved past the release tag that the
         # banner would otherwise advertise. The common case is behind == 0 and
@@ -583,24 +591,14 @@ def _select_apply_compare_ref(path, channel=DEFAULT_UPDATE_CHANNEL, target=None)
         if (
             (
                 behind == 0
-                and _facade_call(
-                    "_head_is_past_latest_tag",
-                    _head_is_past_latest_tag,
+                and _head_is_past_latest_tag(
                     path,
                     current_tag,
                     channel,
                 )
             )
-            or (
-                behind > 0
-                and _facade_call("_head_contains_ref", _head_contains_ref, path, latest_tag)
-            )
-            or (
-                behind > 0
-                and not _facade_call(
-                    "_can_fast_forward_to", _can_fast_forward_to, path, latest_tag
-                )
-            )
+            or (behind > 0 and _head_contains_ref(path, latest_tag))
+            or (behind > 0 and not _can_fast_forward_to(path, latest_tag))
         ):
             # WebUI stable: "HEAD past/contains the latest stable tag" means
             # up-to-date on the promoted subset — NOT a signal to advance to
@@ -616,7 +614,7 @@ def _select_apply_compare_ref(path, channel=DEFAULT_UPDATE_CHANNEL, target=None)
     if ok and upstream:
         return upstream
 
-    branch = _facade_call("_detect_default_branch", _detect_default_branch, path)
+    branch = _detect_default_branch(path)
     return f'origin/{branch}'
 
 
@@ -629,9 +627,7 @@ def _channel_up_to_date_info(path, name, channel, current_tag):
     would advance the user onto the experimental firehose.
     """
     remote_url, _ = _git(['remote', 'get-url', 'origin'], path)
-    remote_url = _facade_call(
-        "_normalize_remote_url", _normalize_remote_url, remote_url
-    )
+    remote_url = _normalize_remote_url(remote_url)
     return {
         'name': name,
         'behind': 0,
@@ -648,18 +644,14 @@ def _channel_up_to_date_info(path, name, channel, current_tag):
 
 def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     """Check if a git repo is behind its latest published channel release tag."""
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
-    tags = _facade_call("_release_tags", _release_tags, path, channel)
+    channel = _normalize_channel(channel)
+    tags = _release_tags(path, channel)
     if not tags:
         return None
 
     latest_tag = tags[0]
-    current_tag = _facade_call(
-        "_current_release_tag", _current_release_tag, path, channel
-    )
-    behind = _facade_call(
-        "_release_gap", _release_gap, tags, current_tag, latest_tag
-    )
+    current_tag = _current_release_tag(path, channel)
+    behind = _release_gap(tags, current_tag, latest_tag)
 
     # When NO channel tag is reachable behind HEAD, _current_release_tag returns
     # None (channel-scoped `describe --abbrev=0` fatals with "No tags can describe").
@@ -675,9 +667,7 @@ def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     # tag; may be refined below in the no-channel-tag-behind-HEAD fallback).
     current_sha_ref = current_tag
     if current_tag is None:
-        ahead = _facade_call(
-            "_count_channel_tags_ahead", _count_channel_tags_ahead, path, channel
-        )
+        ahead = _count_channel_tags_ahead(path, channel)
         if ahead > 0:
             behind = ahead
         # Scope the installed-version fallback to the WebUI repo only.
@@ -693,9 +683,7 @@ def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
             # on HEAD across ALL release families (channel-neutral), so a stable-
             # pinned Experimental install still gets a resolvable /compare/<tag>...
             # link; fall back to None (no link) when HEAD is not exactly on a tag. (#5864)
-            exact_tag, ok = _git(
-                ['describe', '--tags', '--exact-match', 'HEAD'], path
-            )
+            exact_tag, ok = _git(['describe', '--tags', '--exact-match', 'HEAD'], path)
             exact_tag = (exact_tag or '').strip()
             current_sha_ref = exact_tag if ok and exact_tag else None
 
@@ -711,18 +699,14 @@ def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     # up-to-date on the promoted subset, NOT a signal to branch-compare against
     # origin/master (the firehose). Report up-to-date. The AGENT repo and the
     # experimental channel keep the historical fall-through.
-    suppress_stable_fallthrough = (channel == 'stable' and name == 'webui')
-    if behind == 0 and _facade_call(
-        "_head_is_past_latest_tag",
-        _head_is_past_latest_tag,
+    suppress_stable_fallthrough = channel == 'stable' and name == 'webui'
+    if behind == 0 and _head_is_past_latest_tag(
         path,
         current_tag,
         channel,
     ):
         if suppress_stable_fallthrough:
-            return _facade_call(
-                "_channel_up_to_date_info",
-                _channel_up_to_date_info,
+            return _channel_up_to_date_info(
                 path,
                 name,
                 channel,
@@ -735,13 +719,9 @@ def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     # only "there is a newer tag name", not "HEAD is behind that tag" (#3140).
     # Fall through to the branch check so the banner compares against the
     # configured upstream instead of advertising a tag that cannot fast-forward.
-    if behind > 0 and _facade_call(
-        "_head_contains_ref", _head_contains_ref, path, latest_tag
-    ):
+    if behind > 0 and _head_contains_ref(path, latest_tag):
         if suppress_stable_fallthrough:
-            return _facade_call(
-                "_channel_up_to_date_info",
-                _channel_up_to_date_info,
+            return _channel_up_to_date_info(
                 path,
                 name,
                 channel,
@@ -752,13 +732,9 @@ def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     # Patch releases can land on a side branch while day-to-day installs track
     # main past an older tag. A positive tag-name gap then advertises an update
     # that `git pull --ff-only <latest-tag>` cannot reach.
-    if behind > 0 and not _facade_call(
-        "_can_fast_forward_to", _can_fast_forward_to, path, latest_tag
-    ):
+    if behind > 0 and not _can_fast_forward_to(path, latest_tag):
         if suppress_stable_fallthrough:
-            return _facade_call(
-                "_channel_up_to_date_info",
-                _channel_up_to_date_info,
+            return _channel_up_to_date_info(
                 path,
                 name,
                 channel,
@@ -767,9 +743,7 @@ def _check_repo_release(path, name, channel=DEFAULT_UPDATE_CHANNEL):
         return None
 
     remote_url, _ = _git(['remote', 'get-url', 'origin'], path)
-    remote_url = _facade_call(
-        "_normalize_remote_url", _normalize_remote_url, remote_url
-    )
+    remote_url = _normalize_remote_url(remote_url)
 
     return {
         'name': name,
@@ -810,7 +784,7 @@ def _check_repo_branch(path, name, *, fetch=True):
         # upstream is like "origin/feat/foo" — use it directly in rev-list
         compare_ref = upstream
     else:
-        branch = _facade_call("_detect_default_branch", _detect_default_branch, path)
+        branch = _detect_default_branch(path)
         compare_ref = f'origin/{branch}'
 
     # Count commits behind
@@ -850,9 +824,7 @@ def _check_repo_branch(path, name, *, fetch=True):
 
     # Get repo URL for "What's new?" link
     remote_url, _ = _git(['remote', 'get-url', 'origin'], path)
-    remote_url = _facade_call(
-        "_normalize_remote_url", _normalize_remote_url, remote_url
-    )
+    remote_url = _normalize_remote_url(remote_url)
 
     return {
         'name': name,
@@ -861,9 +833,7 @@ def _check_repo_branch(path, name, *, fetch=True):
         'latest_sha': latest,
         'branch': compare_ref,
         'repo_url': remote_url,
-        'compare_url': _facade_call(
-            "_build_compare_url", _build_compare_url, remote_url, current, latest
-        ),
+        'compare_url': _build_compare_url(remote_url, current, latest),
     }
 
 
@@ -880,13 +850,10 @@ def _check_repo(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     with ``no_git: True`` and ``behind: None`` so the frontend can distinguish
     "can't check" from "up to date" (issue #4356).
     """
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
+    channel = _normalize_channel(channel)
     if path is None or not (path / '.git').exists():
         if name == 'webui':
-            release_info = _facade_call(
-                "_check_webui_published_release_update",
-                _check_webui_published_release_update,
-            )
+            release_info = _check_webui_published_release_update()
             if release_info is not None:
                 release_info = dict(release_info)
                 release_info['no_git'] = True
@@ -906,45 +873,39 @@ def _check_repo(path, name, channel=DEFAULT_UPDATE_CHANNEL):
     # after a squash-merge that re-points a release tag at a new SHA) jams
     # the update path indefinitely with "would clobber existing tag" errors.
     # See #2756.
-    fetch_out, fetch_ok = _git(['fetch', 'origin', '--tags', '--force'], path, timeout=15)
+    fetch_out, fetch_ok = _git(
+        ['fetch', 'origin', '--tags', '--force'], path, timeout=15
+    )
     if not fetch_ok:
-        release_info = _facade_call(
-            "_check_repo_release", _check_repo_release, path, name, channel
-        )
+        release_info = _check_repo_release(path, name, channel)
         message = 'fetch failed'
         if fetch_out:
-            detail = _facade_call(
-                "_sanitize_git_diagnostic", _sanitize_git_diagnostic, fetch_out
-            )
+            detail = _sanitize_git_diagnostic(fetch_out)
             message = f'{message}: {detail}'
         if release_info is not None:
             release_info = dict(release_info)
             release_info['error'] = message
             release_info['stale_check'] = True
-            release_info['dirty'] = _facade_call("_is_dirty", _is_dirty, path)
+            release_info['dirty'] = _is_dirty(path)
             return release_info
         return {
             'name': name,
             'behind': None,
             'error': message,
             'stale_check': True,
-            'dirty': _facade_call("_is_dirty", _is_dirty, path),
+            'dirty': _is_dirty(path),
         }
 
-    release_info = _facade_call(
-        "_check_repo_release", _check_repo_release, path, name, channel
-    )
+    release_info = _check_repo_release(path, name, channel)
     if release_info is not None:
         release_info = dict(release_info)
-        release_info['dirty'] = _facade_call("_is_dirty", _is_dirty, path)
+        release_info['dirty'] = _is_dirty(path)
         return release_info
 
-    branch_info = _facade_call(
-        "_check_repo_branch", _check_repo_branch, path, name, fetch=False
-    )
+    branch_info = _check_repo_branch(path, name, fetch=False)
     if branch_info is not None:
         branch_info = dict(branch_info)
-        branch_info['dirty'] = _facade_call("_is_dirty", _is_dirty, path)
+        branch_info['dirty'] = _is_dirty(path)
         branch_info['channel'] = channel
         return branch_info
     return None

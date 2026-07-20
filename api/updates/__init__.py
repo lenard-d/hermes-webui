@@ -1,9 +1,9 @@
-"""Hermes WebUI update facade and cached status orchestration.
+"""Public interface for Hermes WebUI update checks and transactions.
 
 The historical import surface remains here. Repository I/O, release/version
 policy, update transactions, and human-readable summaries each have a dedicated
-owner module; their implementations resolve patched facade dependencies at
-operation time for compatibility with existing integrations and tests.
+package module. Internal modules use direct relative imports; this interface
+keeps the established ``api.updates`` exports for production callers.
 """
 
 # Standard-library module exports are compatibility surfaces for tests and
@@ -25,13 +25,14 @@ from urllib.parse import urlparse  # noqa: F401
 
 from api.agent_health import get_active_profile_gateway_running_pid  # noqa: F401
 from api.config import REPO_ROOT, STREAMS, STREAMS_LOCK  # noqa: F401
+
 try:
     from api.config import _AGENT_DIR
 except ImportError:
     _AGENT_DIR = None
 from api.gateway_restart import restart_active_profile_gateway  # noqa: F401
 from api.profiles import get_active_profile_name  # noqa: F401
-from api.update_policy import (  # noqa: F401
+from .policy import (  # noqa: F401
     DEFAULT_UPDATE_CHANNEL,
     _CHANNEL_TAG_GLOBS,
     _RELEASE_TAG_RE,
@@ -65,7 +66,7 @@ from api.update_policy import (  # noqa: F401
     _version_from_gateway_health_payload,
     channel_version_badge,
 )
-from api.update_repository import (  # noqa: F401
+from .repository import (  # noqa: F401
     _CREDENTIAL_IN_URL_RE,
     _FETCH_NETWORK_FAILURE_SIGNATURES,
     _GITHUB_TOKEN_RE,
@@ -84,9 +85,8 @@ from api.update_repository import (  # noqa: F401
     _split_remote_ref,
     _windows_git_from_registry,
 )
-from api.update_runtime import bind_update_function, bind_updates_api
-from api.update_summary import summarize_update_payload as _summarize_update_payload
-from api.update_transaction import (  # noqa: F401
+from .summary import summarize_update_payload as _summarize_update_payload
+from .transaction import (  # noqa: F401
     _AGENT_GATEWAY_RESTART_RETRY_DELAY_S,
     _active_stream_count,
     _agent_gateway_restart_failure_message,
@@ -106,48 +106,16 @@ from api.update_transaction import (  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-# Owner functions are bound to the facade instance that exported them. This is
-# required when tests or embedders load more than one ``api.updates`` module:
-# nested owner calls must observe patches on the calling instance, not whichever
-# object currently occupies the canonical ``sys.modules`` entry.
-_UPDATE_FACADE = sys.modules[__name__]
-bind_updates_api(lambda: _UPDATE_FACADE)
-for _owner_function_name in (
-    # Repository adapter.
-    '_sanitize_git_diagnostic', '_apply_fetch_failure_message', '_run_git',
-    '_is_git_lock_error', '_inventory_locks', '_windows_git_from_registry',
-    '_resolve_git_executable', '_normalize_remote_url', '_build_compare_url',
-    '_split_remote_ref', '_detect_default_branch',
-    # Release/version policy.
-    '_dirty_suffix', '_describe_git_version', '_detect_webui_version',
-    '_read_agent_source_version', '_gateway_health_base_url',
-    '_version_from_gateway_health_payload', '_detect_agent_version_from_gateway_health',
-    '_detect_agent_version', '_normalize_channel', '_read_update_channel',
-    '_channel_tag_glob', 'channel_version_badge', '_release_tags',
-    '_current_release_tag', '_release_gap', '_count_channel_tags_ahead',
-    '_release_tag_sort_key', '_is_stable_release_tag', '_github_release_tags',
-    '_check_webui_published_release_update', '_head_is_past_latest_tag',
-    '_head_contains_ref', '_can_fast_forward_to', '_select_apply_compare_ref',
-    '_channel_up_to_date_info', '_check_repo_release', '_check_repo_branch',
-    '_check_repo', '_is_dirty',
-    # Update transaction.
-    '_restart_blocker_snapshot', '_active_stream_count',
-    '_restart_blocked_response', '_wait_until_restart_safe', 'apply_clear_lock',
-    '_purge_agent_pycache', '_schedule_restart',
-    '_ensure_gateway_restart_for_agent_update',
-    '_agent_gateway_restart_failure_message', 'apply_force_update', 'apply_update',
-    '_restore_stash_after_pull_failure', '_apply_update_inner',
-):
-    globals()[_owner_function_name] = bind_update_function(
-        _UPDATE_FACADE, globals()[_owner_function_name]
-    )
-del _owner_function_name
-
-
-# Version identity is process-stable; policy checks use these facade values
-# late-bound so tests and packaged builds can replace them deliberately.
+# Version identity is process-stable and is passed once to the policy owner.
 WEBUI_VERSION: str = _detect_webui_version()
 AGENT_VERSION: str = _detect_agent_version()
+
+# The policy owner keeps process-stable version identity for no-git release
+# checks without consulting this public interface at operation time.
+from . import policy as _policy
+from . import transaction as _transaction
+
+_policy._RUNNING_WEBUI_VERSION = WEBUI_VERSION
 
 _update_cache = {
     'webui': None,
@@ -159,6 +127,7 @@ _update_cache = {
 _cache_lock = threading.Lock()
 _check_in_progress = False
 CACHE_TTL = 1800
+_transaction._configure_status_cache(cache=_update_cache, lock=_cache_lock)
 
 
 def _ignored_agent_update_info() -> dict:
@@ -211,7 +180,8 @@ def check_for_updates(force=False, *, include_agent=True, channel=None):
         ):
             return dict(_update_cache)
         if _check_in_progress and cache_matches:
-            return dict(_update_cache)  # another thread is already checking this channel
+            # Another thread is already checking this channel.
+            return dict(_update_cache)
         _check_in_progress = True
 
     try:
@@ -222,7 +192,11 @@ def check_for_updates(force=False, *, include_agent=True, channel=None):
         # tags; it must ALWAYS use the default channel regardless of the user's
         # WebUI channel selection. (Codex gate: passing 'experimental' here made
         # the Agent ignore its v* tags and fall back to origin/master.)
-        agent_info = _check_repo(_AGENT_DIR, 'agent', DEFAULT_UPDATE_CHANNEL) if include_agent else _ignored_agent_update_info()
+        agent_info = (
+            _check_repo(_AGENT_DIR, 'agent', DEFAULT_UPDATE_CHANNEL)
+            if include_agent
+            else _ignored_agent_update_info()
+        )
 
         with _cache_lock:
             _update_cache['webui'] = webui_info
@@ -249,13 +223,17 @@ def _commit_subjects_for_update(info: dict, *, limit: int = 24) -> list[str]:
     return subjects
 
 
-def _commit_subjects_for_update_with_limit(info: dict, *, limit: int = 24) -> tuple[list[str], bool]:
+def _commit_subjects_for_update_with_limit(
+    info: dict, *, limit: int = 24
+) -> tuple[list[str], bool]:
     """Return recent commit subjects plus whether the local list was capped."""
     if not isinstance(info, dict):
         return [], False
     target = info.get('name')
     if target not in ('webui', 'agent'):
-        target = 'webui' if info.get('repo_url', '').endswith('hermes-webui') else target
+        target = (
+            'webui' if info.get('repo_url', '').endswith('hermes-webui') else target
+        )
     path = _repo_path_for_update_target(target)
     if path is None or not (Path(path) / '.git').exists():
         return [], False
@@ -264,7 +242,11 @@ def _commit_subjects_for_update_with_limit(info: dict, *, limit: int = 24) -> tu
     if not (current and latest):
         return [], False
     probe_limit = max(1, int(limit)) + 1
-    out, ok = _run_git(['log', '--format=%s', f'{current}..{latest}', f'-n{probe_limit}'], path, timeout=5)
+    out, ok = _run_git(
+        ['log', '--format=%s', f'{current}..{latest}', f'-n{probe_limit}'],
+        path,
+        timeout=5,
+    )
     if not ok or not out:
         return [], False
     subjects = [line.strip() for line in out.splitlines() if line.strip()]
@@ -272,12 +254,18 @@ def _commit_subjects_for_update_with_limit(info: dict, *, limit: int = 24) -> tu
     return subjects[:limit], truncated
 
 
-def summarize_update_payload(updates: dict, llm_callback=None, *, target: str | None = None, use_cache: bool = True) -> dict:
+def summarize_update_payload(
+    updates: dict,
+    llm_callback=None,
+    *,
+    target: str | None = None,
+    use_cache: bool = True,
+) -> dict:
     """Build a human-readable What's New summary without mutating repositories.
 
     Git-range discovery remains here with the update checker; presentation,
     prompt construction, normalization, and caching belong to
-    :mod:`api.update_summary`.
+    :mod:`api.updates.summary`.
     """
     return _summarize_update_payload(
         updates,

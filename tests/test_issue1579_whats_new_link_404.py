@@ -1,7 +1,7 @@
 """Tests for issue #1579: What's new link can open a 404 GitHub compare page.
 
 Bug shape:
-  api/updates.py shipped current_sha=local-HEAD-short. When the local HEAD
+  api.updates shipped current_sha=local-HEAD-short. When the local HEAD
   is not present upstream (unpushed work, dirty stage, fork, in-flight
   rebase, release-time merge commit), the resulting compare URL
   https://github.com/<repo>/compare/<localHEAD>...<upstream> returns
@@ -18,7 +18,6 @@ Fix:
 from tests.frontend_asset_contract import family_source
 
 
-import os
 import re
 import subprocess
 import sys
@@ -175,7 +174,8 @@ def test_current_sha_falls_back_to_None_when_merge_base_fails(tmp_path):
             return ('', False)
         return real_run(args, *a, **kw)
 
-    with patch.object(upd, '_run_git', side_effect=fake_run):
+    from api.updates import repository
+    with patch.object(repository, '_run_git', side_effect=fake_run):
         result = upd._check_repo(repo, 'webui')
 
     assert result is not None
@@ -241,7 +241,7 @@ def test_reporter_url_shape_no_longer_produces_invalid_compare_url(tmp_path):
     base_sha = _short_sha(repo, 'HEAD~2')  # the merge-base
 
     # The compare URL the JS would build
-    cur, latest = result['current_sha'], result['latest_sha']
+    cur = result['current_sha']
     # In a real run repo_url is converted from origin's URL; in this test the
     # value will be a file:// path, but that's fine — what we care about is
     # the cur and latest shas.

@@ -1,27 +1,14 @@
-"""Tests for self-update diagnostics (api/updates.py)."""
-import importlib.util
+"""Tests for self-update diagnostics through the api.updates package."""
+import importlib
 import json
 import os
-import sys
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import api.updates as updates
-
-
-def _load_isolated_updates_facade(module_name):
-    spec = importlib.util.spec_from_file_location(module_name, updates.__file__)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.modules.pop(module_name, None)
-    return module
-
+from api.updates import policy, repository, transaction
 
 def _fake_git_for_release_fetch_failure(args, cwd, timeout=10):
     if args == ['diff-index', '--quiet', 'HEAD', '--']:
@@ -44,7 +31,7 @@ def _fake_git_for_release_fetch_failure(args, cwd, timeout=10):
 def test_check_repo_reports_release_gap_even_when_tag_fetch_fails(tmp_path):
     """A tag fetch error must not collapse the UI state to "up to date"."""
     (tmp_path / '.git').mkdir()
-    with patch.object(updates, '_run_git', side_effect=_fake_git_for_release_fetch_failure):
+    with patch.object(repository, '_run_git', side_effect=_fake_git_for_release_fetch_failure):
         info = updates._check_repo(tmp_path, 'webui')
 
     assert info is not None
@@ -77,7 +64,7 @@ def test_check_repo_redacts_credentialed_fetch_failure(tmp_path):
             return '', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         info = updates._check_repo(tmp_path, 'webui')
 
     assert info is not None
@@ -118,7 +105,7 @@ def test_check_repo_reports_manual_update_for_baked_webui_version(tmp_path, monk
         return FakeResponse(json.dumps(payload).encode('utf-8'))
 
     monkeypatch.setattr(updates.urllib.request, 'urlopen', fake_urlopen)
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.51.833')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.51.833')
 
     info = updates._check_repo(tmp_path, 'webui')
 
@@ -138,12 +125,12 @@ def test_check_repo_reports_manual_update_for_baked_webui_version(tmp_path, monk
     assert seen['timeout'] == 3.0
 
 
-def test_published_release_check_observes_facade_tag_provider(monkeypatch):
-    """Nested release discovery keeps the historical facade patch seam."""
-    from api import update_policy
+def test_published_release_check_uses_policy_tag_provider(monkeypatch):
+    """Published-release discovery uses its package-owned policy seam."""
+    from api.updates import policy
 
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v1.0.0')
-    monkeypatch.setattr(update_policy, '_github_release_tags', lambda: [])
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v1.0.0')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v1.0.0')
     calls = []
 
     def facade_tags():
@@ -153,9 +140,9 @@ def test_published_release_check_observes_facade_tag_provider(monkeypatch):
             {'name': 'v1.0.0', 'sha': 'current'},
         ]
 
-    monkeypatch.setattr(updates, '_github_release_tags', facade_tags)
+    monkeypatch.setattr(policy, '_github_release_tags', facade_tags)
 
-    info = updates._check_webui_published_release_update()
+    info = policy._check_webui_published_release_update()
 
     assert calls == [True]
     assert info is not None
@@ -163,31 +150,22 @@ def test_published_release_check_observes_facade_tag_provider(monkeypatch):
     assert info['latest_version'] == 'v1.1.0'
 
 
-def test_isolated_update_facades_keep_their_own_release_seams(monkeypatch):
-    """Each exported function resolves patches on its own facade instance."""
-    first = _load_isolated_updates_facade('isolated_updates_first')
-    second = _load_isolated_updates_facade('isolated_updates_second')
-
-    monkeypatch.setattr(first, 'WEBUI_VERSION', 'v1.0.0')
-    monkeypatch.setattr(second, 'WEBUI_VERSION', 'v2.0.0')
-    monkeypatch.setattr(first, '_github_release_tags', lambda: [
-        {'name': 'v1.1.0', 'sha': 'first-latest'},
-        {'name': 'v1.0.0', 'sha': 'first-current'},
-    ])
-    monkeypatch.setattr(second, '_github_release_tags', lambda: [
-        {'name': 'v2.2.0', 'sha': 'second-latest'},
-        {'name': 'v2.0.0', 'sha': 'second-current'},
-    ])
-
-    assert first._check_webui_published_release_update()['latest_version'] == 'v1.1.0'
-    assert second._check_webui_published_release_update()['latest_version'] == 'v2.2.0'
+def test_updates_package_preserves_public_import_and_owner_exports():
+    """The package keeps the historical import path while owners stay direct."""
+    imported = importlib.import_module('api.updates')
+    assert imported is updates
+    assert imported._check_repo is policy._check_repo
+    assert imported._run_git is repository._run_git
+    assert imported.apply_update is transaction.apply_update
+    assert transaction._update_cache_current() is imported._update_cache
+    assert transaction._cache_lock_current() is imported._cache_lock
 
 
 def test_check_repo_webui_no_git_falls_back_to_old_payload_on_tags_failure(tmp_path, monkeypatch):
     """If GitHub tags cannot be read, the Docker path must stay on can't-check."""
 
     monkeypatch.setattr(updates.urllib.request, 'urlopen', lambda *args, **kwargs: (_ for _ in ()).throw(updates.urllib.error.URLError('boom')))
-    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v0.51.833')
+    monkeypatch.setattr(policy, '_RUNNING_WEBUI_VERSION', 'v0.51.833')
 
     info = updates._check_repo(tmp_path, 'webui')
 
@@ -215,7 +193,7 @@ def test_check_repo_fetch_failure_without_tags_is_not_up_to_date(tmp_path):
             return '', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         info = updates._check_repo(tmp_path, 'webui')
 
     assert info is not None
@@ -233,9 +211,9 @@ def test_apply_force_update_fetch_failure_reports_local_diagnostic(tmp_path):
             return "fatal: cannot lock ref 'refs/tags/v0.51.106': is at 123 but expected 456", False
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git), \
-         patch.object(updates, 'REPO_ROOT', tmp_path), \
-         patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+    with patch.object(repository, '_run_git', side_effect=fake_git), \
+         patch.object(transaction, 'REPO_ROOT', tmp_path), \
+         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_force_update('webui')
 
     assert result == {
@@ -253,9 +231,9 @@ def test_apply_update_fetch_failure_reports_local_diagnostic(tmp_path):
             return "fatal: cannot lock ref 'refs/tags/v0.51.106': is at 123 but expected 456", False
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git), \
-         patch.object(updates, 'REPO_ROOT', tmp_path), \
-         patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+    with patch.object(repository, '_run_git', side_effect=fake_git), \
+         patch.object(transaction, 'REPO_ROOT', tmp_path), \
+         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_update('webui')
 
     assert result == {
@@ -279,9 +257,9 @@ def test_apply_fetch_failure_keeps_connectivity_guidance_for_network_errors(tmp_
     ]
 
     for apply_fn, expected_message in cases:
-        with patch.object(updates, '_run_git', side_effect=fake_git), \
-             patch.object(updates, 'REPO_ROOT', tmp_path), \
-             patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+        with patch.object(repository, '_run_git', side_effect=fake_git), \
+             patch.object(transaction, 'REPO_ROOT', tmp_path), \
+             patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
             result = apply_fn('webui')
 
         assert result == {'ok': False, 'message': expected_message}
@@ -302,9 +280,9 @@ def test_apply_fetch_failure_keeps_connectivity_guidance_for_timeout_shape(tmp_p
     ]
 
     for apply_fn, expected_message in cases:
-        with patch.object(updates, '_run_git', side_effect=fake_git), \
-             patch.object(updates, 'REPO_ROOT', tmp_path), \
-             patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+        with patch.object(repository, '_run_git', side_effect=fake_git), \
+             patch.object(transaction, 'REPO_ROOT', tmp_path), \
+             patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
             result = apply_fn('webui')
 
         assert result == {'ok': False, 'message': expected_message}
@@ -323,9 +301,9 @@ def test_apply_force_update_fetch_failure_redacts_credentials(tmp_path):
             ), False
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git), \
-         patch.object(updates, 'REPO_ROOT', tmp_path), \
-         patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+    with patch.object(repository, '_run_git', side_effect=fake_git), \
+         patch.object(transaction, 'REPO_ROOT', tmp_path), \
+         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_force_update('webui')
 
     assert secret not in result['message']
@@ -358,9 +336,9 @@ def test_apply_force_update_fetch_failure_redacts_query_secrets(tmp_path):
             return (f"fatal: repository not found at {remote}"), False
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git), \
-         patch.object(updates, 'REPO_ROOT', tmp_path), \
-         patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+    with patch.object(repository, '_run_git', side_effect=fake_git), \
+         patch.object(transaction, 'REPO_ROOT', tmp_path), \
+         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_force_update('webui')
 
     for name, value in secrets.items():
@@ -527,7 +505,7 @@ def test_check_repo_fetches_tags_with_force(tmp_path):
             return '', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         updates._check_repo(tmp_path, 'webui')
 
     fetch_calls = [a for a in seen_args if a[:2] == ['fetch', 'origin']]
@@ -552,9 +530,9 @@ def test_apply_force_update_fetches_tags_with_force(tmp_path):
             return '', False  # short-circuit; we just want the args shape.
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git), \
-         patch.object(updates, 'REPO_ROOT', tmp_path), \
-         patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+    with patch.object(repository, '_run_git', side_effect=fake_git), \
+         patch.object(transaction, 'REPO_ROOT', tmp_path), \
+         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         updates.apply_force_update('webui')
 
     fetch_calls = [a for a in seen_args if a[:2] == ['fetch', 'origin']]
@@ -577,9 +555,9 @@ def test_apply_update_fetches_tags_with_force(tmp_path):
             return '', False  # short-circuit on fetch failure.
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git), \
-         patch.object(updates, 'REPO_ROOT', tmp_path), \
-         patch.object(updates, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+    with patch.object(repository, '_run_git', side_effect=fake_git), \
+         patch.object(transaction, 'REPO_ROOT', tmp_path), \
+         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         updates.apply_update('webui')
 
     fetch_calls = [a for a in seen_args if a[:2] == ['fetch', 'origin']]
@@ -621,7 +599,7 @@ def test_check_repo_recovers_from_remote_retag(tmp_path):
         # Branch-check fallback is fine to no-op for this assertion.
         return '', True
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         info = updates._check_repo(tmp_path, 'webui')
 
     assert info is not None
@@ -664,7 +642,7 @@ def test_check_repo_release_falls_through_when_head_is_past_tag(tmp_path):
             return 'v2026.5.16-608-g1d22b9c2d', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         result = updates._check_repo_release(tmp_path, 'test-repo')
 
     assert result is None, (
@@ -689,7 +667,7 @@ def test_check_repo_release_not_affected_when_head_exactly_on_tag(tmp_path):
             return 'https://github.com/nesquena/hermes-agent.git', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         result = updates._check_repo_release(tmp_path, 'agent')
 
     assert result is not None
@@ -732,7 +710,7 @@ def test_check_repo_branch_check_runs_for_post_tag_commits(tmp_path):
             return 'https://github.com/nesquena/hermes-agent.git', True
         return '', True
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         info = updates._check_repo(tmp_path, 'agent')
 
     assert info is not None
@@ -767,7 +745,7 @@ def test_select_apply_compare_ref_uses_tag_when_head_is_on_tag(tmp_path):
             return 'v2026.5.16', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         ref = updates._select_apply_compare_ref(tmp_path)
 
     assert ref == 'v2026.5.16'
@@ -795,7 +773,7 @@ def test_select_apply_compare_ref_falls_through_when_head_is_past_tag(tmp_path):
             return 'origin/main', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         ref = updates._select_apply_compare_ref(tmp_path, 'stable', 'agent')
 
     assert ref == 'origin/main', (
@@ -815,7 +793,7 @@ def test_select_apply_compare_ref_no_tags_uses_upstream(tmp_path):
             return 'origin/feat/foo', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         ref = updates._select_apply_compare_ref(tmp_path)
 
     assert ref == 'origin/feat/foo'
@@ -834,7 +812,7 @@ def test_select_apply_compare_ref_no_tags_no_upstream_uses_default_branch(tmp_pa
             return 'refs/remotes/origin/main', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         ref = updates._select_apply_compare_ref(tmp_path)
 
     assert ref == 'origin/main'
@@ -860,7 +838,7 @@ def test_check_and_apply_paths_agree_when_head_is_past_tag(tmp_path):
             return 'origin/main', True
         return '', True
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         check_result = updates._check_repo_release(tmp_path, 'agent')
         apply_ref = updates._select_apply_compare_ref(tmp_path, 'stable', 'agent')
 
@@ -895,7 +873,7 @@ def test_check_repo_release_falls_through_when_head_contains_newer_tag(tmp_path)
             return '', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         result = updates._check_repo_release(tmp_path, 'agent')
 
     assert result is None, (
@@ -919,7 +897,7 @@ def test_select_apply_compare_ref_falls_through_when_head_contains_newer_tag(tmp
             return 'origin/main', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         ref = updates._select_apply_compare_ref(tmp_path, 'stable', 'agent')
 
     assert ref == 'origin/main', (
@@ -960,7 +938,7 @@ def test_select_apply_compare_ref_case_d_older_tag_with_commits_and_newer_tag_ex
             return 'origin/main', True
         return '', True
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         apply_ref = updates._select_apply_compare_ref(tmp_path)
 
     # User is genuinely behind v2026.5.16 (the newer published tag) — apply
@@ -995,7 +973,7 @@ def test_check_repo_release_falls_through_when_latest_tag_is_not_ff_reachable(tm
             return '', False
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         result = updates._check_repo_release(tmp_path, 'agent')
 
     assert result is None
@@ -1020,7 +998,7 @@ def test_select_apply_compare_ref_falls_through_when_latest_tag_is_not_ff_reacha
             return 'origin/main', True
         raise AssertionError(f'unexpected git args: {args!r}')
 
-    with patch.object(updates, '_run_git', side_effect=fake_git):
+    with patch.object(repository, '_run_git', side_effect=fake_git):
         ref = updates._select_apply_compare_ref(tmp_path, 'stable', 'agent')
 
     assert ref == 'origin/main'
@@ -1056,7 +1034,7 @@ def test_is_git_lock_error_returns_false_for_non_lock(output):
 # ── _apply_update_inner lock detection tests ────────────────────────────────
 
 
-_MODULE = 'api.updates'
+_MODULE = 'api.updates.transaction'
 
 
 def _assert_lock_conflict_result(result):
@@ -1070,7 +1048,7 @@ def test_apply_update_fetch_lock_error_returns_lock_conflict(tmp_path):
     (tmp_path / '.git').mkdir()
     from api import updates as mod
     with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-         patch(f'{_MODULE}._run_git') as mock_run_git:
+         patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ("fatal: Unable to create '/app/.git/index.lock': File exists.", False),
         ]
@@ -1083,7 +1061,7 @@ def test_apply_update_fetch_lock_error_does_not_attempt_pull(tmp_path):
     (tmp_path / '.git').mkdir()
     from api import updates as mod
     with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-         patch(f'{_MODULE}._run_git') as mock_run_git:
+         patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ("fatal: Unable to create '.git/index.lock': File exists.", False),
         ]
@@ -1097,7 +1075,7 @@ def test_apply_update_status_lock_error_returns_lock_conflict(tmp_path):
     from api import updates as mod
     with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
          patch(f'{_MODULE}._select_apply_compare_ref', return_value='origin/main'), \
-         patch(f'{_MODULE}._run_git') as mock_run_git:
+         patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ('', True),   # fetch succeeds
             ("fatal: Unable to create '.git/index.lock': File exists.", False),  # status fails
@@ -1113,7 +1091,7 @@ def test_apply_update_pull_lock_error_returns_lock_conflict(tmp_path):
     with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
          patch(f'{_MODULE}._select_apply_compare_ref', return_value='origin/main'), \
          patch(f'{_MODULE}.STREAMS', {}), \
-         patch(f'{_MODULE}._run_git') as mock_run_git:
+         patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ('', True),    # fetch succeeds
             ('', True),    # status --porcelain (clean)
@@ -1128,7 +1106,7 @@ def test_apply_update_non_lock_fetch_failure_does_not_include_lock_conflict(tmp_
     (tmp_path / '.git').mkdir()
     from api import updates as mod
     with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-         patch(f'{_MODULE}._run_git') as mock_run_git:
+         patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ("fatal: unable to access 'https://github.com/repo.git/': Could not resolve host", False),
         ]
@@ -1158,9 +1136,9 @@ def test_apply_force_update_no_longer_touches_locks(tmp_path, monkeypatch):
     old_mtime = time.time() - 999  # ancient mtime -- would have been removed pre-v2
     os.utime(lock, (old_mtime, old_mtime))
 
-    monkeypatch.setattr(updates, '_run_git',
+    monkeypatch.setattr(repository, '_run_git',
                          MagicMock(return_value=('', True)))
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
@@ -1260,9 +1238,9 @@ def test_apply_clear_lock_with_no_lock_runs_normal_update(tmp_path, monkeypatch)
     the normal non-destructive apply path."""
     (tmp_path / '.git').mkdir()
     # No lock file written.
-    monkeypatch.setattr(updates, '_run_git',
+    monkeypatch.setattr(repository, '_run_git',
                          MagicMock(return_value=('', True)))
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
@@ -1299,7 +1277,7 @@ def test_apply_clear_lock_with_lock_present_returns_manual_instruction(tmp_path,
     # Patch os.remove + Path.unlink on the instance/module to record any
     # destructive attempt. apply_clear_lock must NOT call them.
     monkeypatch.setattr(updates.os, 'remove', forbid_delete)
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
@@ -1330,7 +1308,7 @@ def test_apply_clear_lock_listing_includes_other_locks(tmp_path, monkeypatch):
     (tmp_path / '.git' / 'index.lock').write_text('')
     (tmp_path / '.git' / 'refs').mkdir()
     (tmp_path / '.git' / 'refs' / 'main.lock').write_text('')
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
@@ -1343,7 +1321,7 @@ def test_apply_clear_lock_listing_includes_other_locks(tmp_path, monkeypatch):
 
 
 def test_apply_clear_lock_rejects_unknown_target(tmp_path, monkeypatch):
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
@@ -1356,7 +1334,7 @@ def test_apply_clear_lock_rejects_unknown_target(tmp_path, monkeypatch):
 def test_apply_clear_lock_rejects_not_git_repo(tmp_path, monkeypatch):
     """If REPO_ROOT has no .git, apply_clear_lock must refuse."""
     # tmp_path has no .git
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
@@ -1382,8 +1360,8 @@ def test_apply_update_pull_lock_restores_stash(tmp_path, monkeypatch):
             return "fatal: Unable to create '.git/index.lock': File exists.", False
         return '', True
 
-    monkeypatch.setattr(updates, '_run_git', fake_git)
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(repository, '_run_git', fake_git)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_select_apply_compare_ref',
         lambda path, channel='stable', target=None: 'origin/main'
@@ -1434,8 +1412,8 @@ def test_apply_update_pull_lock_no_stash_when_clean(tmp_path, monkeypatch):
             return "fatal: Unable to create '.git/index.lock': File exists.", False
         return '', True
 
-    monkeypatch.setattr(updates, '_run_git', fake_git)
-    monkeypatch.setattr(updates, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(repository, '_run_git', fake_git)
+    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_select_apply_compare_ref',
         lambda path, channel='stable', target=None: 'origin/main'

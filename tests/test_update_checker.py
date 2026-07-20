@@ -1,5 +1,5 @@
 """
-Tests for api/updates.py -- specifically the diagnostic code paths added
+Tests for the api.updates package -- specifically the diagnostic code paths added
 in fix/223-update-pull-failed-diagnostics (PR #227).
 
 Tests cover the four new branches in _apply_update_inner():
@@ -8,11 +8,8 @@ Tests cover the four new branches in _apply_update_inner():
   3. pull fails + no upstream tracking  → recovery command with set-upstream-to
   4. pull fails + generic fallback  → raw git output truncated at 300 chars
 """
-from pathlib import Path
-from unittest.mock import patch, call
-import subprocess
-
-import pytest
+from unittest.mock import patch
+from api.updates import repository, transaction
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +28,7 @@ def _make_run_git_side_effect(*sequence):
 # Path used for patching
 # ---------------------------------------------------------------------------
 
-_MODULE = 'api.updates'
+_MODULE = 'api.updates.transaction'
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +41,8 @@ class TestApplyUpdateDiagnostics:
     def _apply(self, target, run_git_side_effect):
         """Call _apply_update_inner with _apply_lock bypassed and _run_git mocked."""
         from api import updates
-        with patch(f'{_MODULE}._run_git', side_effect=run_git_side_effect), \
-             patch.object(updates, '_apply_lock') as mock_lock:
+        with patch.object(repository, '_run_git', side_effect=run_git_side_effect), \
+             patch.object(transaction, '_apply_lock') as mock_lock:
             mock_lock.acquire.return_value = True
             mock_lock.release.return_value = None
             return updates._apply_update_inner(target)
@@ -60,7 +57,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             # Call sequence: fetch
             mock_run_git.side_effect = [
                 ('', False),               # fetch fails
@@ -77,7 +74,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', False),               # fetch fails
             ]
@@ -95,7 +92,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),                                       # fetch succeeds
                 ('', True),                                       # no release tags
@@ -116,7 +113,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),                         # fetch
                 ('', True),                         # no release tags
@@ -135,7 +132,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),
                 ('', True),
@@ -158,7 +155,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),                                            # fetch
                 ('', True),                                            # no release tags
@@ -178,7 +175,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),
                 ('', True),
@@ -197,7 +194,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),
                 ('', True),
@@ -221,7 +218,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),
                 ('', True),
@@ -243,7 +240,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),
                 ('', True),
@@ -262,7 +259,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', True),
                 ('', True),
@@ -288,9 +285,9 @@ class TestApplyUpdateDiagnostics:
         # invalidation block raising. We use a fresh dict swap.
         fake_cache = {'webui': None, 'agent': None, 'checked_at': 1}
         with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git, \
-             patch(f'{_MODULE}._update_cache', fake_cache), \
-             patch(f'{_MODULE}._cache_lock'):
+             patch.object(repository, '_run_git') as mock_run_git, \
+             patch(f'{_MODULE}._fallback_update_cache', fake_cache), \
+             patch(f'{_MODULE}._fallback_cache_lock'):
             mock_run_git.side_effect = [
                 ('', True),                       # fetch succeeds
                 ('', True),                       # no release tags
@@ -312,7 +309,7 @@ class TestApplyUpdateDiagnostics:
 
         from api import updates
         with patch(f'{_MODULE}._AGENT_DIR', tmp_path), \
-             patch(f'{_MODULE}._run_git') as mock_run_git:
+             patch.object(repository, '_run_git') as mock_run_git:
             mock_run_git.side_effect = [
                 ('', False),   # fetch fails
             ]
@@ -347,7 +344,7 @@ class TestCheckRepoDirtyFlag:
             raise AssertionError(f'unexpected git args: {args!r}')
 
         from api import updates
-        with patch(f'{_MODULE}._run_git', side_effect=fake_git):
+        with patch.object(repository, '_run_git', side_effect=fake_git):
             info = updates._check_repo(tmp_path, 'webui')
 
         assert info is not None

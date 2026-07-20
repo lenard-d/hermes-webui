@@ -8,9 +8,6 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from api.update_runtime import facade_attr
-
-
 _GIT_DIAGNOSTIC_MAX_CHARS = 300
 _CREDENTIAL_IN_URL_RE = re.compile(r"([a-zA-Z][a-zA-Z0-9+.-]*://)([^/@\s'\"]+)@")
 _GITHUB_TOKEN_RE = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")
@@ -55,7 +52,7 @@ def _sanitize_git_diagnostic(output: str, *, limit: int = _GIT_DIAGNOSTIC_MAX_CH
 
 def _apply_fetch_failure_message(fetch_out: str, network_message: str) -> str:
     """Return the apply-path fetch failure message for the given stderr."""
-    detail = facade_attr("_sanitize_git_diagnostic", _sanitize_git_diagnostic)(fetch_out)
+    detail = _sanitize_git_diagnostic(fetch_out)
     if not detail:
         return network_message
     detail_lower = detail.lower()
@@ -70,7 +67,7 @@ def _run_git(args, cwd, timeout=10):
     On failure, returns stderr (or stdout as fallback) so callers can
     surface actionable git error messages instead of empty strings.
     """
-    git_executable = facade_attr("_resolve_git_executable", _resolve_git_executable)()
+    git_executable = _resolve_git_executable()
     if not git_executable:
         return 'git executable not found', False
     try:
@@ -192,7 +189,7 @@ def _resolve_git_executable():
     if sys.platform == 'darwin' and os.path.exists('/usr/bin/git'):
         return '/usr/bin/git'
     if sys.platform == 'win32':
-        from_registry = facade_attr("_windows_git_from_registry", _windows_git_from_registry)()
+        from_registry = _windows_git_from_registry()
         if from_registry:
             return from_registry
         for candidate in (
@@ -246,14 +243,13 @@ def _split_remote_ref(ref):
 
 def _detect_default_branch(path):
     """Detect the remote default branch (master or main)."""
-    run_git = facade_attr("_run_git", _run_git)
-    out, ok = run_git(['symbolic-ref', 'refs/remotes/origin/HEAD'], path)
+    out, ok = _run_git(['symbolic-ref', 'refs/remotes/origin/HEAD'], path)
     if ok and out:
         # refs/remotes/origin/master -> master
         return out.split('/')[-1]
     # Fallback: try master, then main
     for branch in ('master', 'main'):
-        _, ok = run_git(['rev-parse', '--verify', f'origin/{branch}'], path)
+        _, ok = _run_git(['rev-parse', '--verify', f'origin/{branch}'], path)
         if ok:
             return branch
     return 'master'

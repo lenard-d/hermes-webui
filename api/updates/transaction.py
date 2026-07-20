@@ -6,15 +6,20 @@ import threading
 import time
 from pathlib import Path
 
-from api.agent_health import get_active_profile_gateway_running_pid as _default_gateway_pid
+from api.agent_health import (
+    get_active_profile_gateway_running_pid as _default_gateway_pid,
+)
 from api.config import REPO_ROOT as _DEFAULT_REPO_ROOT, STREAMS, STREAMS_LOCK
+
 try:
     from api.config import _AGENT_DIR as _DEFAULT_AGENT_DIR
 except ImportError:
     _DEFAULT_AGENT_DIR = None
-from api.gateway_restart import restart_active_profile_gateway as _default_restart_gateway
+from api.gateway_restart import (
+    restart_active_profile_gateway as _default_restart_gateway,
+)
 from api.profiles import get_active_profile_name as _default_active_profile_name
-from api.update_policy import (
+from .policy import (
     DEFAULT_UPDATE_CHANNEL,
     _can_fast_forward_to,
     _head_contains_ref,
@@ -22,101 +27,104 @@ from api.update_policy import (
     _read_update_channel,
     _select_apply_compare_ref,
 )
-from api.update_repository import (
+from . import repository as _repository
+from .repository import (
     _apply_fetch_failure_message,
     _inventory_locks,
     _is_git_lock_error,
-    _run_git as _repository_run_git,
     _split_remote_ref,
 )
-from api.update_runtime import bind_update_function, facade_attr, updates_api
-
 
 logger = logging.getLogger(__name__)
 _AGENT_GATEWAY_RESTART_RETRY_DELAY_S = 1.0
+REPO_ROOT = _DEFAULT_REPO_ROOT
+_AGENT_DIR = _DEFAULT_AGENT_DIR
 _apply_lock = threading.Lock()
-_fallback_cache_lock = threading.Lock()
-_fallback_update_cache = {'checked_at': 0}
+_status_cache_lock = threading.Lock()
+_status_cache = {'checked_at': 0}
 
 
-def _facade_call(name, default, /, *args, **kwargs):
-    return facade_attr(name, default)(*args, **kwargs)
+def _configure_status_cache(*, cache: dict, lock) -> None:
+    """Use the status owner's cache for post-transaction invalidation."""
+    global _status_cache, _status_cache_lock
+    _status_cache = cache
+    _status_cache_lock = lock
 
 
 def _git(args, cwd, timeout=10):
-    return facade_attr("_run_git", _repository_run_git)(args, cwd, timeout=timeout)
+    return _repository._run_git(args, cwd, timeout=timeout)
 
 
 def _repo_root() -> Path:
-    return facade_attr("REPO_ROOT", _DEFAULT_REPO_ROOT)
+    return REPO_ROOT
 
 
 def _agent_dir():
-    return facade_attr("_AGENT_DIR", _DEFAULT_AGENT_DIR)
+    return _AGENT_DIR
 
 
 def _apply_lock_current():
-    return facade_attr("_apply_lock", _apply_lock)
+    return _apply_lock
 
 
 def _cache_lock_current():
-    return facade_attr("_cache_lock", _fallback_cache_lock)
+    return _status_cache_lock
 
 
 def _update_cache_current():
-    return facade_attr("_update_cache", _fallback_update_cache)
+    return _status_cache
 
 
 def _inventory_locks_current(path):
-    return facade_attr("_inventory_locks", _inventory_locks)(path)
+    return _inventory_locks(path)
 
 
 def _restart_snapshot_current():
-    return facade_attr("_restart_blocker_snapshot", _restart_blocker_snapshot)()
+    return _restart_blocker_snapshot()
 
 
 def _read_channel():
-    return facade_attr("_read_update_channel", _read_update_channel)()
+    return _read_update_channel()
 
 
 def _select_compare_ref(path, channel, target):
-    return facade_attr("_select_apply_compare_ref", _select_apply_compare_ref)(path, channel, target)
+    return _select_apply_compare_ref(path, channel, target)
 
 
 def _head_contains_ref_current(path, ref):
-    return facade_attr("_head_contains_ref", _head_contains_ref)(path, ref)
+    return _head_contains_ref(path, ref)
 
 
 def _can_fast_forward_current(path, ref):
-    return facade_attr("_can_fast_forward_to", _can_fast_forward_to)(path, ref)
+    return _can_fast_forward_to(path, ref)
 
 
 def _schedule_current():
-    return facade_attr("_schedule_restart", _schedule_restart)()
+    return _schedule_restart()
 
 
 def _apply_inner(target, channel):
-    return facade_attr("_apply_update_inner", _apply_update_inner)(target, channel)
+    return _apply_update_inner(target, channel)
 
 
 def _purge_current(path):
-    return facade_attr("_purge_agent_pycache", _purge_agent_pycache)(path)
+    return _purge_agent_pycache(path)
 
 
 def _wait_current():
-    return facade_attr("_wait_until_restart_safe", _wait_until_restart_safe)()
+    return _wait_until_restart_safe()
 
 
 def _active_profile_name():
-    return facade_attr("get_active_profile_name", _default_active_profile_name)()
+    return _default_active_profile_name()
 
 
 def _gateway_pid(*, profile):
-    return facade_attr("get_active_profile_gateway_running_pid", _default_gateway_pid)(profile=profile)
+    return _default_gateway_pid(profile=profile)
 
 
 def _restart_gateway(*, profile):
-    return facade_attr("restart_active_profile_gateway", _default_restart_gateway)(profile=profile)
+    return _default_restart_gateway(profile=profile)
 
 
 def _restart_blocker_snapshot() -> dict:
@@ -126,6 +134,7 @@ def _restart_blocker_snapshot() -> dict:
     run_ids: list[str] = []
     try:
         from api import config as _config
+
         active_runs = getattr(_config, 'ACTIVE_RUNS', {})
         active_runs_lock = getattr(_config, 'ACTIVE_RUNS_LOCK', None)
         if active_runs_lock is not None:
@@ -166,7 +175,9 @@ def _restart_blocked_response(target: str, blocker_snapshot: dict | int) -> dict
     active_runs = int(blocker_snapshot.get('active_runs') or 0)
     parts = []
     if active_streams:
-        parts.append(f"{active_streams} active chat stream{'s' if active_streams != 1 else ''}")
+        parts.append(
+            f"{active_streams} active chat stream{'s' if active_streams != 1 else ''}"
+        )
     if active_runs:
         parts.append(f"{active_runs} active agent run{'s' if active_runs != 1 else ''}")
     detail = ' and '.join(parts) or 'active chat work'
@@ -185,7 +196,9 @@ def _restart_blocked_response(target: str, blocker_snapshot: dict | int) -> dict
     }
 
 
-def _wait_until_restart_safe(poll_seconds: float = 2.0, max_wait_seconds: float = 300.0) -> dict:
+def _wait_until_restart_safe(
+    poll_seconds: float = 2.0, max_wait_seconds: float = 300.0
+) -> dict:
     """Wait for active work to finish before self-reexec.
 
     Bounded by ``max_wait_seconds`` so a long-running (or stuck/orphaned) agent
@@ -202,7 +215,8 @@ def _wait_until_restart_safe(poll_seconds: float = 2.0, max_wait_seconds: float 
             logger.warning(
                 "restart-safety wait exceeded %.0fs with work still in flight (%s); "
                 "proceeding with re-exec anyway",
-                max_wait_seconds, snapshot,
+                max_wait_seconds,
+                snapshot,
             )
             snapshot = dict(snapshot)
             snapshot['wait_timed_out'] = True
@@ -233,9 +247,7 @@ def apply_clear_lock(target: str) -> dict:
     """
     blocker_snapshot = _restart_snapshot_current()
     if blocker_snapshot.get('restart_blocked'):
-        return _facade_call(
-            "_restart_blocked_response",
-            _restart_blocked_response,
+        return _restart_blocked_response(
             target,
             blocker_snapshot,
         )
@@ -297,6 +309,7 @@ def apply_clear_lock(target: str) -> dict:
     finally:
         apply_lock.release()
 
+
 def _purge_agent_pycache(repo_dir: Path) -> None:
     """Delete all __pycache__ dirs under *repo_dir* so the next import
     recompiles from source, avoiding stale-bytecode errors after git pull.
@@ -350,6 +363,7 @@ def _schedule_restart(delay: float = 2.0) -> None:
 
     def _do():
         import time
+
         time.sleep(delay)
         # Hold _apply_lock through os.execv so no new update can start between
         # the lock-release and the process replacement.  Any in-flight update
@@ -402,6 +416,7 @@ def _schedule_restart(delay: float = 2.0) -> None:
                 # we use subprocess.Popen() + os._exit() instead.
                 if sys.platform == 'win32':
                     import subprocess
+
                     if getattr(sys, "frozen", False):
                         args = sys.argv
                     else:
@@ -451,11 +466,10 @@ def _schedule_restart(delay: float = 2.0) -> None:
                 # process supervisor (start.sh / Docker) restarts us.
                 os._exit(0)
 
-    # A new thread does not inherit ContextVar values. Bind the callback to the
-    # facade that scheduled it so delayed lock/path/restart lookups cannot drift
-    # to another freshly imported facade instance.
+    # The worker receives the concrete callback directly; it does not resolve
+    # an update interface after the thread starts.
     threading.Thread(
-        target=bind_update_function(updates_api(), _do),
+        target=_do,
         daemon=True,
     ).start()
 
@@ -559,12 +573,10 @@ def apply_force_update(target: str, channel=None) -> dict:
     """
     if channel is None:
         channel = _read_channel()
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
+    channel = _normalize_channel(channel)
     blocker_snapshot = _restart_snapshot_current()
     if blocker_snapshot.get('restart_blocked'):
-        return _facade_call(
-            "_restart_blocked_response",
-            _restart_blocked_response,
+        return _restart_blocked_response(
             target,
             blocker_snapshot,
         )
@@ -597,13 +609,13 @@ def apply_force_update(target: str, channel=None) -> dict:
         # --force so a remote re-tag (e.g. squash-merge that re-points an
         # existing release tag) doesn't jam the apply path with "would clobber
         # existing tag". See #2756.
-        fetch_out, fetch_ok = _git(['fetch', 'origin', '--quiet', '--tags', '--force'], path, timeout=15)
+        fetch_out, fetch_ok = _git(
+            ['fetch', 'origin', '--quiet', '--tags', '--force'], path, timeout=15
+        )
         if not fetch_ok:
             return {
                 'ok': False,
-                'message': _facade_call(
-                    "_apply_fetch_failure_message",
-                    _apply_fetch_failure_message,
+                'message': _apply_fetch_failure_message(
                     fetch_out,
                     'Could not reach the remote repository. Check your connection.',
                 ),
@@ -629,7 +641,9 @@ def apply_force_update(target: str, channel=None) -> dict:
         # allowed. Refs on a divergent line (neither ancestor nor descendant) are
         # the legitimate force-update case (conflict/diverged recovery) and are
         # also allowed — the guard fires ONLY on a pure-ancestor rewind.
-        if _head_contains_ref_current(path, compare_ref) and not _can_fast_forward_current(path, compare_ref):
+        if _head_contains_ref_current(
+            path, compare_ref
+        ) and not _can_fast_forward_current(path, compare_ref):
             return {
                 'ok': False,
                 'message': (
@@ -670,16 +684,11 @@ def apply_force_update(target: str, channel=None) -> dict:
             _update_cache_current()['checked_at'] = 0
 
         if target == 'agent':
-            gateway_ok, gateway_result = _facade_call(
-                "_ensure_gateway_restart_for_agent_update",
-                _ensure_gateway_restart_for_agent_update,
-            )
+            gateway_ok, gateway_result = _ensure_gateway_restart_for_agent_update()
             if not gateway_ok:
                 return {
                     'ok': False,
-                    'message': _facade_call(
-                        "_agent_gateway_restart_failure_message",
-                        _agent_gateway_restart_failure_message,
+                    'message': _agent_gateway_restart_failure_message(
                         target,
                         gateway_result,
                     ),
@@ -706,12 +715,10 @@ def apply_update(target, channel=None):
     """Stash, pull --ff-only, pop for the given target repo."""
     if channel is None:
         channel = _read_channel()
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
+    channel = _normalize_channel(channel)
     blocker_snapshot = _restart_snapshot_current()
     if blocker_snapshot.get('restart_blocked'):
-        return _facade_call(
-            "_restart_blocked_response",
-            _restart_blocked_response,
+        return _restart_blocked_response(
             target,
             blocker_snapshot,
         )
@@ -742,27 +749,28 @@ def _restore_stash_after_pull_failure(
     """
     _, pop_ok = _git(['stash', 'pop'], path)
     if pop_ok:
-        return ('Local modifications were restored from the temporary stash.')
+        return 'Local modifications were restored from the temporary stash.'
 
     # `git stash pop` failed -- could be that the working tree changed under
     # us. Try apply + drop to keep the change separation explicit.
     _, apply_ok = _git(['stash', 'apply'], path)
     if apply_ok:
         _, _ = _git(['stash', 'drop'], path)
-        return ('Local modifications were restored from the temporary stash.')
+        return 'Local modifications were restored from the temporary stash.'
 
     detail = (pull_out or '').strip()[:200]
     return (
         'Your local modifications could not be restored automatically '
         f'(stash pop failed after pull error: {detail or "no detail"}). '
         'They remain safely in `git stash list`; run `git -C '
-        + str(path) + ' stash pop` once the lock is cleared.'
+        + str(path)
+        + ' stash pop` once the lock is cleared.'
     )
 
 
 def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
     """Inner implementation of apply_update, called under _apply_lock."""
-    channel = _facade_call("_normalize_channel", _normalize_channel, channel)
+    channel = _normalize_channel(channel)
     if target == 'webui':
         path = _repo_root()
     elif target == 'agent':
@@ -778,9 +786,11 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
 
     # Fetch before attempting pull, so the remote ref is current.
     # --force so a remote re-tag doesn't block the update path (see #2756).
-    fetch_out, fetch_ok = _git(['fetch', 'origin', '--quiet', '--tags', '--force'], path, timeout=15)
+    fetch_out, fetch_ok = _git(
+        ['fetch', 'origin', '--quiet', '--tags', '--force'], path, timeout=15
+    )
     if not fetch_ok:
-        if _facade_call("_is_git_lock_error", _is_git_lock_error, fetch_out):
+        if _is_git_lock_error(fetch_out):
             return {
                 'ok': False,
                 'message': f'Fetch failed due to a repository lock: {fetch_out.strip()}',
@@ -788,9 +798,7 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
             }
         return {
             'ok': False,
-            'message': _facade_call(
-                "_apply_fetch_failure_message",
-                _apply_fetch_failure_message,
+            'message': _apply_fetch_failure_message(
                 fetch_out,
                 'Could not reach the remote repository. Check your internet connection and try again.',
             ),
@@ -816,16 +824,21 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
         ['status', '--porcelain', '--untracked-files=no'], path
     )
     if not status_ok:
-        if _facade_call("_is_git_lock_error", _is_git_lock_error, status_out):
+        if _is_git_lock_error(status_out):
             return {
                 'ok': False,
                 'message': f'Failed to inspect repo status due to a repository lock: {status_out.strip()}',
                 'lock_conflict': True,
             }
-        return {'ok': False, 'message': f'Failed to inspect repo status: {status_out[:200]}'}
+        return {
+            'ok': False,
+            'message': f'Failed to inspect repo status: {status_out[:200]}',
+        }
     # Fail early on unresolved merge conflicts
-    if any(line[:2] in {'DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'}
-           for line in status_out.splitlines()):
+    if any(
+        line[:2] in {'DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'}
+        for line in status_out.splitlines()
+    ):
         return {
             'ok': False,
             'message': (
@@ -846,9 +859,7 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
     # Pull with ff-only (no merge commits).
     # Split tracking refs like 'origin/main' into separate remote + branch
     # arguments — git treats 'origin/main' as a repository name otherwise.
-    remote, branch = _facade_call(
-        "_split_remote_ref", _split_remote_ref, compare_ref
-    )
+    remote, branch = _split_remote_ref(compare_ref)
     pull_args = ['pull', '--ff-only']
     if remote:
         pull_args.extend([remote, branch])
@@ -856,16 +867,14 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
         pull_args.extend(['origin', compare_ref])
     pull_out, pull_ok = _git(pull_args, path, timeout=30)
     if not pull_ok:
-        if _facade_call("_is_git_lock_error", _is_git_lock_error, pull_out):
+        if _is_git_lock_error(pull_out):
             # Lock conflict during pull. If a stash was pushed for the local
             # modifications, attempt to restore it before returning so the
             # user's working tree is not silently left empty with changes
             # stranded in the stash (Greptile P1 on PR #5688).
             stash_recovery_note = ''
             if stashed:
-                stash_recovery_note = _facade_call(
-                    "_restore_stash_after_pull_failure",
-                    _restore_stash_after_pull_failure,
+                stash_recovery_note = _restore_stash_after_pull_failure(
                     target,
                     path,
                     pull_out,
@@ -904,8 +913,7 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
                             'conflict while restoring local changes. Manual '
                             'intervention needed: run git -C ' + str(path) + ' '
                             'reset --hard HEAD to remove conflict markers. Your '
-                            'changes remain in the git stash. Pull error: '
-                            + detail
+                            'changes remain in the git stash. Pull error: ' + detail
                         ),
                         'stash_conflict': True,
                     }
@@ -918,7 +926,9 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
                         f'Pull failed, and your local {target} modifications '
                         'conflicted while restoring from stash. The index and '
                         'tracked files were restored to HEAD, and your changes '
-                        'remain in the git stash. To inspect: git -C ' + str(path) + ' stash show -p. '
+                        'remain in the git stash. To inspect: git -C '
+                        + str(path)
+                        + ' stash show -p. '
                         'To re-apply: git -C ' + str(path) + ' stash apply, then '
                         'resolve conflicts. Pull error: ' + detail
                     ),
@@ -1006,16 +1016,11 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
                 _update_cache_current()['checked_at'] = 0
 
             if target == 'agent':
-                gateway_ok, gateway_result = _facade_call(
-                    "_ensure_gateway_restart_for_agent_update",
-                    _ensure_gateway_restart_for_agent_update,
-                )
+                gateway_ok, gateway_result = _ensure_gateway_restart_for_agent_update()
                 if not gateway_ok:
                     return {
                         'ok': False,
-                        'message': _facade_call(
-                            "_agent_gateway_restart_failure_message",
-                            _agent_gateway_restart_failure_message,
+                        'message': _agent_gateway_restart_failure_message(
                             target,
                             gateway_result,
                         ),
@@ -1046,16 +1051,11 @@ def _apply_update_inner(target, channel=DEFAULT_UPDATE_CHANNEL):
         _update_cache_current()['checked_at'] = 0
 
     if target == 'agent':
-        gateway_ok, gateway_result = _facade_call(
-            "_ensure_gateway_restart_for_agent_update",
-            _ensure_gateway_restart_for_agent_update,
-        )
+        gateway_ok, gateway_result = _ensure_gateway_restart_for_agent_update()
         if not gateway_ok:
             return {
                 'ok': False,
-                'message': _facade_call(
-                    "_agent_gateway_restart_failure_message",
-                    _agent_gateway_restart_failure_message,
+                'message': _agent_gateway_restart_failure_message(
                     target,
                     gateway_result,
                 ),
