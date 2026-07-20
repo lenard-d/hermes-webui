@@ -120,25 +120,32 @@ class TestActiveProviderNormalization:
 class TestLiveModelsProviderNormalization:
     """_handle_live_models must normalize the provider query param."""
 
-    def test_live_models_normalizes_provider_alias(self):
-        src = read("api/routes.py")
-        # Find _handle_live_models function
-        m = re.search(
-            r"def _handle_live_models\(.*?\ndef ",
-            src,
-            re.DOTALL,
-        )
-        assert m, "_handle_live_models not found"
-        fn = m.group(0)
-        assert "_resolve_provider_alias" in fn, (
-            "_handle_live_models must normalize provider via "
-            "api.config._resolve_provider_alias so 'z.ai' -> 'zai' "
-            "before calling provider_model_ids()"
-        )
+    def test_live_models_normalizes_provider_alias(self, monkeypatch):
+        import types
+
+        import api.config as c
+        import api.routes as r
+
+        seen = []
+        hermes_cli = types.ModuleType("hermes_cli")
+        hermes_cli.__path__ = []
+        models = types.ModuleType("hermes_cli.models")
+        models.provider_model_ids = lambda provider: seen.append(provider) or ["zai-model"]
+        monkeypatch.setitem(sys.modules, "hermes_cli", hermes_cli)
+        monkeypatch.setitem(sys.modules, "hermes_cli.models", models)
+        monkeypatch.setattr(c, "get_config", lambda: {"model": {"provider": "z.ai"}})
+        monkeypatch.setattr(r, "j", lambda _handler, payload, **_kwargs: payload)
+        r._clear_live_models_cache()
+
+        parsed = mock.MagicMock(query="provider=z.ai")
+        payload = r._handle_live_models(object(), parsed)
+
+        assert seen == ["zai"]
+        assert payload["provider"] == "zai"
 
     def test_live_models_normalization_before_provider_model_ids(self):
         """Normalization call must appear before the provider_model_ids call site."""
-        src = read("api/routes.py")
+        src = read("api/routes_parts/live_models.py")
         alias_match = re.search(
             r"provider\s*=\s*_resolve_provider_alias\(provider\)",
             src,
@@ -147,7 +154,7 @@ class TestLiveModelsProviderNormalization:
             r"ids\s*=\s*_pmi\(provider\)",
             src,
         )
-        assert alias_match, "_resolve_provider_alias call not found in routes.py"
+        assert alias_match, "_resolve_provider_alias call not found in live-model owner"
         assert pmi_call_match, "ids = _pmi(provider) call not found"
         assert alias_match.start() < pmi_call_match.start(), (
             "alias normalization must occur before ids = _pmi(provider)"
@@ -220,22 +227,22 @@ class TestLiveModelsCustomProviderFallback:
         parsed.query = f"provider={provider}"
         return r._handle_live_models(object(), parsed)
 
-    def test_custom_fallback_code_present(self):
-        src = read("api/routes.py")
-        m = re.search(
-            r"def _handle_live_models\(.*?\ndef ",
-            src,
-            re.DOTALL,
-        )
-        assert m, "_handle_live_models not found"
-        fn = m.group(0)
-        assert "custom_providers" in fn, (
-            "_handle_live_models must read custom_providers from config "
-            "as fallback when provider='custom' and provider_model_ids() returns []"
-        )
-        assert 'provider == "custom"' in fn or "provider=='custom'" in fn, (
-            "_handle_live_models must check provider == 'custom' before fallback"
-        )
+    def test_custom_fallback_reads_configured_models(self, monkeypatch):
+        import api.routes as r
+
+        try:
+            payload = self._call_live_models(
+                monkeypatch,
+                {
+                    "model": {"provider": "custom"},
+                    "custom_providers": [{"model": "configured-model"}],
+                },
+                "custom",
+            )
+        finally:
+            r._clear_live_models_cache()
+
+        assert [model["id"] for model in payload["models"]] == ["configured-model"]
 
     def test_custom_fallback_returns_configured_models(self, tmp_path, monkeypatch):
         """End-to-end: /api/models/live?provider=custom returns custom_providers models."""

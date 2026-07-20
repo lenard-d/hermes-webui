@@ -140,7 +140,7 @@ def test_live_models_handler_delegates_to_provider_model_ids():
     """
     import pathlib
     routes_src = (
-        pathlib.Path(__file__).parent.parent / "api" / "routes.py"
+        pathlib.Path(__file__).parent.parent / "api" / "routes_parts" / "live_models.py"
     ).read_text(encoding="utf-8")
     assert "provider_model_ids" in routes_src, (
         "_handle_live_models must call hermes_cli.models.provider_model_ids() "

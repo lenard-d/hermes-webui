@@ -13,7 +13,7 @@ import unittest
 from unittest import mock
 
 REPO = pathlib.Path(__file__).parent.parent
-ROUTES_PY = REPO / "api" / "routes.py"
+LIVE_MODELS_PY = REPO / "api" / "routes_parts" / "live_models.py"
 
 
 class TestLiveModelsCustomProviderProbe(unittest.TestCase):
@@ -95,12 +95,12 @@ class TestLiveModelsCustomProviderProbe(unittest.TestCase):
         `if provider == "custom" ...` so the probe always runs regardless
         of whether config entries populated ids.
         """
-        source = ROUTES_PY.read_text(encoding="utf-8")
+        source = LIVE_MODELS_PY.read_text(encoding="utf-8")
 
         # Find the "Always try live fetch" comment (added by the fix)
         marker = "Always try live fetch for custom providers"
         self.assertIn(marker, source, (
-            "routes.py must contain the 'Always try live fetch' comment (#3718)"
+            "the live-model owner must contain the 'Always try live fetch' comment (#3718)"
         ))
 
         # Extract the block between the marker and the next major section
@@ -171,7 +171,7 @@ class TestLiveModelsCustomProviderProbe(unittest.TestCase):
 
     def test_timeout_uses_config_constant(self):
         """The live fetch must use CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS, not a hardcoded value."""
-        source = ROUTES_PY.read_text(encoding="utf-8")
+        source = LIVE_MODELS_PY.read_text(encoding="utf-8")
 
         # Find the custom-provider live fetch block
         marker = "Always try live fetch for custom providers"

@@ -14,6 +14,7 @@ REPO = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 CONFIG_PY    = (REPO / "api" / "config.py").read_text(encoding="utf-8")
 ROUTES_PY    = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+LIVE_MODELS_PY = (REPO / "api" / "routes_parts" / "live_models.py").read_text(encoding="utf-8")
 MESSAGES_JS  = family_source("messages")
 UI_JS        = family_source("ui")
 
@@ -162,9 +163,9 @@ class TestLiveModelFetching:
         )
 
     def test_live_models_handler_function_exists(self):
-        """routes.py must define _handle_live_models() function (#375)."""
-        assert "def _handle_live_models(" in ROUTES_PY, (
-            "routes.py must define _handle_live_models() for live model fetching (#375)"
+        """The live-model owner must define _handle_live_models() (#375)."""
+        assert "def _handle_live_models(" in LIVE_MODELS_PY, (
+            "the live-model owner must define _handle_live_models() (#375)"
         )
 
     def test_live_models_all_providers_handled_via_agent(self):
@@ -172,7 +173,7 @@ class TestLiveModelFetching:
         providers gracefully — live fetch where possible, static fallback otherwise.
         The old 'not_supported' return for Anthropic/Google is superseded: those
         providers now return live or static model lists via the agent delegate."""
-        assert "provider_model_ids" in ROUTES_PY, (
+        assert "provider_model_ids" in LIVE_MODELS_PY, (
             "_handle_live_models must delegate to hermes_cli.models.provider_model_ids() "
             "so all providers are handled uniformly (#375 upgrade)"
         )
