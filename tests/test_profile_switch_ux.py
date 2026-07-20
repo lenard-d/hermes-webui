@@ -6,7 +6,10 @@ Covered behavior:
 - Non-visible refresh work runs after the visible switch completes.
 - Session-list refreshes animate rows with row-level FLIP motion.
 """
+import json
 import re
+import shutil
+import subprocess
 from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
@@ -286,19 +289,64 @@ class TestProfileSessionListFlip:
         assert capture < clear < row_render < play
 
     def test_profile_refresh_drops_queued_reflow_before_playing_flip(self):
-        start = self.JS.index("// Refresh FLIP and queued archive/delete reflow both drive")
-        # The split keeps this block and its owning render function together;
-        # stop at that module's explicit export instead of crossing asset boundaries.
-        end = self.JS.index("window.HermesSessions.parts.sidebarRendering", start)
-        block = self.JS[start:end]
+        owner = (
+            REPO_ROOT / "static" / "modules" / "sessions" / "sidebar-renderer.js"
+        ).read_text(encoding="utf-8")
+        function_start = owner.index("function renderSessionListFromCache()")
+        tail_start = owner.index(
+            "// Refresh FLIP and queued archive/delete reflow both drive",
+            function_start,
+        )
+        function_end = owner.index("\n}\n", tail_start)
+        reflow_tail = owner[tail_start:function_end]
 
-        assert "const reflowBefore=animateRefresh?flipBefore:_pendingSessionReflowPositions;" in block
-        assert "const reflowTimeout=animateRefresh?SESSION_LIST_FLIP_TIMEOUT_MS:SESSION_REFLOW_TIMEOUT_MS;" in block
-        assert "_pendingSessionReflowPositions=null;" in block
-        assert "_playSessionRowsReflowFromPositions(reflowBefore,reflowTimeout,_sessionPrefersReducedMotion);" in block
-        assert block.index("const reflowBefore=animateRefresh?flipBefore:_pendingSessionReflowPositions;") < block.index("const reflowTimeout=animateRefresh?SESSION_LIST_FLIP_TIMEOUT_MS:SESSION_REFLOW_TIMEOUT_MS;")
-        assert block.index("const reflowTimeout=animateRefresh?SESSION_LIST_FLIP_TIMEOUT_MS:SESSION_REFLOW_TIMEOUT_MS;") < block.index("_pendingSessionReflowPositions=null;")
-        assert block.index("_pendingSessionReflowPositions=null;") < block.index("_playSessionRowsReflowFromPositions(reflowBefore,reflowTimeout,_sessionPrefersReducedMotion);")
+        node = shutil.which("node")
+        assert node, "node is required for frontend behavior tests"
+        script = f"""
+const SESSION_LIST_FLIP_TIMEOUT_MS=460;
+const SESSION_REFLOW_TIMEOUT_MS=420;
+const calls=[];
+const sidebarStateBindings={{_pendingSessionReflowPositions:null}};
+function _sessionPrefersReducedMotion(){{ return false; }}
+function _playSessionRowsReflowFromPositions(positions,timeout,reduced){{
+  calls.push({{
+    positions,
+    timeout,
+    reducedIsResolver:reduced===_sessionPrefersReducedMotion,
+    pendingAtPlay:sidebarStateBindings._pendingSessionReflowPositions,
+  }});
+}}
+function run(animateRefresh){{
+  sidebarStateBindings._pendingSessionReflowPositions='queued';
+  const flipBefore='flip';
+  {reflow_tail}
+}}
+run(true);
+run(false);
+process.stdout.write(JSON.stringify(calls));
+"""
+        completed = subprocess.run(
+            [node, "-e", script],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert json.loads(completed.stdout) == [
+            {
+                "positions": "flip",
+                "timeout": 460,
+                "reducedIsResolver": True,
+                "pendingAtPlay": None,
+            },
+            {
+                "positions": "queued",
+                "timeout": 420,
+                "reducedIsResolver": True,
+                "pendingAtPlay": None,
+            },
+        ]
 
     def test_first_non_empty_session_render_is_animated(self):
         assert "_sessionListFirstRenderAnimated" in self.JS
