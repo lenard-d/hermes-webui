@@ -676,7 +676,7 @@ def test_chat_start_persists_pending_turn_metadata_for_reload_recovery(
 
 def test_session_detail_uses_runtime_streaming_state(cleanup_test_sessions):
     """GET /api/session must agree with /api/sessions on live stream ownership."""
-    routes_src = (REPO_ROOT / "api/routes.py").read_text()
+    routes_src = (REPO_ROOT / "api/http/routes/session_queries.py").read_text()
     session_route = routes_src.split('if parsed.path == "/api/session":', 1)[1].split(
         'if parsed.path == "/api/session/lineage/report":', 1
     )[0]

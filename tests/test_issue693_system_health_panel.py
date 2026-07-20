@@ -16,8 +16,12 @@ UI_JS = family_source("ui")
 PANELS_JS = family_source("panels")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
-ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-AUTH_PY = (REPO_ROOT / "api" / "auth.py").read_text(encoding="utf-8")
+ROUTES_PY = (
+    REPO_ROOT / "api" / "http" / "routes" / "observability_queries.py"
+).read_text(encoding="utf-8")
+AUTH_PY = (
+    REPO_ROOT / "api" / "auth" / "authorization.py"
+).read_text(encoding="utf-8")
 
 
 class _FakeHandler:

@@ -12,6 +12,7 @@ Covers:
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -138,56 +139,42 @@ class TestServiceWorker:
 
 class TestPWARoutes:
     def test_manifest_route_serves_correct_content_type(self):
-        src = ROUTES.read_text(encoding="utf-8")
-        # The handler block for /manifest.json
-        idx = src.find('"/manifest.json"')
-        assert idx != -1, "routes.py must handle /manifest.json"
-        block = src[idx:idx + 800]
-        # After the #2226 refactor, the root route delegates to _serve_manifest().
-        # Verify the helper exists and sets the correct Content-Type.
-        assert "_serve_manifest" in block, (
-            "manifest.json route must delegate to _serve_manifest()"
-        )
-        helper_idx = src.find("def _serve_manifest")
-        assert helper_idx != -1, "routes.py must define _serve_manifest helper"
-        helper_block = src[helper_idx:helper_idx + 800]
-        assert "application/manifest+json" in helper_block, (
-            "_serve_manifest must serve Content-Type: application/manifest+json"
-        )
-        assert "no-store" in helper_block or "Cache-Control" in helper_block, (
-            "_serve_manifest should set Cache-Control: no-store so updates are picked up"
-        )
+        from api.routes import handle_get
 
-    def test_sw_route_injects_cache_version(self):
-        src = ROUTES.read_text(encoding="utf-8")
-        idx = src.find('"/sw.js"')
-        assert idx != -1, "routes.py must handle /sw.js"
-        block = src[idx:idx + 1000]
-        assert "__WEBUI_VERSION__" in block, (
-            "sw.js route must replace __WEBUI_VERSION__ with the current WEBUI_VERSION"
-        )
-        assert "WEBUI_VERSION" in block, (
-            "sw.js route must import and use WEBUI_VERSION for cache busting"
-        )
+        handler = _FakeHandler()
+        assert handle_get(handler, urlparse("/manifest.json")) is True
+        assert handler.status == 200
+        assert handler.header("Content-Type") == "application/manifest+json; charset=utf-8"
+        assert handler.header("Cache-Control") == "no-store"
+        assert json.loads(bytes(handler.body))
 
-    def test_sw_route_url_encodes_cache_version(self):
-        src = ROUTES.read_text(encoding="utf-8")
-        idx = src.find('"/sw.js"')
-        assert idx != -1, "routes.py must handle /sw.js"
-        block = src[idx:idx + 1200]
-        assert "quote(WEBUI_VERSION, safe=\"\")" in block, (
-            "sw.js route must URL-encode the injected cache version so unusual git tags "
-            "cannot break the JavaScript string literal"
-        )
+    def test_sw_route_injects_cache_version(self, monkeypatch):
+        from api import updates
+        from api.routes import handle_get
+
+        monkeypatch.setattr(updates, "WEBUI_VERSION", "test-version")
+        handler = _FakeHandler()
+        assert handle_get(handler, urlparse("/sw.js")) is True
+        assert handler.status == 200
+        body = bytes(handler.body).decode("utf-8")
+        assert "__WEBUI_VERSION__" not in body
+        assert "test-version" in body
+
+    def test_sw_route_url_encodes_cache_version(self, monkeypatch):
+        from api import updates
+        from api.routes import handle_get
+
+        monkeypatch.setattr(updates, "WEBUI_VERSION", "release/test tag")
+        handler = _FakeHandler()
+        assert handle_get(handler, urlparse("/sw.js")) is True
+        assert "release%2Ftest%20tag" in bytes(handler.body).decode("utf-8")
 
     def test_sw_route_sets_service_worker_allowed(self):
-        src = ROUTES.read_text(encoding="utf-8")
-        idx = src.find('"/sw.js"')
-        block = src[idx:idx + 1000]
-        assert "Service-Worker-Allowed" in block, (
-            "sw.js route must set Service-Worker-Allowed header so the SW can control "
-            "the expected scope"
-        )
+        from api.routes import handle_get
+
+        handler = _FakeHandler()
+        assert handle_get(handler, urlparse("/sw.js")) is True
+        assert handler.header("Service-Worker-Allowed") == "/"
 
     def test_sw_is_public_auth_path(self):
         src = AUTH.read_text(encoding="utf-8")

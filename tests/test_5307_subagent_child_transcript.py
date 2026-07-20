@@ -363,17 +363,21 @@ def test_mutation_routes_guard_subagent_source_in_source():
     before mutating, and the /api/sessions list coerces subagent rows to
     read_only=True / is_cli_session=False (#5307 Codex round 8 — prevents
     delete/swipe from erasing the child's state.db transcript)."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
-    # each mutation route body must call the guard
-    for route in ("/api/session/delete", "/api/session/clear",
-                  "/api/session/truncate", "/api/session/pin"):
+    route_owners = {
+        "/api/session/delete": ROOT / "api/http/routes/session_mutations.py",
+        "/api/session/clear": ROOT / "api/http/routes/session_mutations.py",
+        "/api/session/truncate": ROOT / "api/http/routes/session_mutations.py",
+        "/api/session/pin": ROOT / "api/http/routes/session_organization_mutations.py",
+    }
+    for route, owner in route_owners.items():
+        src = owner.read_text(encoding="utf-8")
         idx = src.index(f'parsed.path == "{route}"')
-        nxt = src.index('parsed.path == "/api/session', idx + 10)
-        block = src[idx:nxt]
+        nxt = src.find('parsed.path == "/api/session', idx + 10)
+        block = src[idx:] if nxt < 0 else src[idx:nxt]
         assert "_session_is_subagent_view_only(" in block, (
             f"{route} must guard against subagent children before mutating"
         )
     # list coercion present
-    assert "_coerce_subagent_rows" in src, (
+    assert "_coerce_subagent_rows" in ROUTES_PY.read_text(encoding="utf-8"), (
         "the /api/sessions list must coerce subagent rows to read_only/non-CLI"
     )

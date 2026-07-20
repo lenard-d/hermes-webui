@@ -27,7 +27,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MESSAGES_JS = family_source("messages")
-SESSION_OPS = (REPO_ROOT / "api" / "session_ops.py").read_text(encoding="utf-8")
+SESSION_OPS = (
+    REPO_ROOT / "api" / "sessions" / "operations.py"
+).read_text(encoding="utf-8")
 
 
 # ── Backend: session_status exposes a LIVE-validated active_stream_id ───────

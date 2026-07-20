@@ -19,6 +19,7 @@ import sys
 from tests.frontend_asset_contract import family_source
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -275,10 +276,21 @@ class TestHandleChatSteerInputValidation:
 class TestRouting:
     """The POST handler must dispatch /api/chat/steer to _handle_chat_steer."""
 
-    def test_route_registered(self):
-        src = (Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
-        assert '/api/chat/steer' in src
-        assert '_handle_chat_steer' in src
+    def test_route_registered(self, monkeypatch):
+        from api import routes, streaming
+
+        sentinel = object()
+        body = {"session_id": "sid", "text": "continue"}
+        monkeypatch.setattr(routes, "_csrf_exempt_path", lambda _path: True)
+        monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(routes, "_guard_request_session_visibility", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(routes, "read_body", lambda _handler: body)
+        monkeypatch.setattr(streaming, "_handle_chat_steer", lambda handler, payload: sentinel)
+
+        result = routes.handle_post(
+            object(), SimpleNamespace(path="/api/chat/steer", query="")
+        )
+        assert result is sentinel
 
 
 # ── Frontend: cmdSteer + busy-mode steer use the new endpoint ────────────

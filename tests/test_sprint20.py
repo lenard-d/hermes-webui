@@ -10,6 +10,7 @@ import re
 import urllib.request
 import json
 import pathlib
+from types import SimpleNamespace
 
 from tests._pytest_port import BASE
 
@@ -389,16 +390,30 @@ def test_boot_js_keeps_explicit_server_stt_preference_on_transcribe_failure():
     assert "localStorage.getItem(_micForceMediaRecorderKey)!=='1'" in js
 
 
-def test_routes_define_transcribe_endpoint():
+def test_routes_define_transcribe_endpoint(monkeypatch):
     """Server routes must expose /api/transcribe for MediaRecorder fallback uploads."""
-    routes = pathlib.Path(__file__).parent.parent.joinpath("api/routes.py").read_text(encoding="utf-8")
-    assert '"/api/transcribe"' in routes
+    from api import routes
+
+    sentinel = object()
+    monkeypatch.setattr(routes, "_csrf_exempt_path", lambda _path: True)
+    monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(routes, "handle_transcribe", lambda _handler: sentinel)
+    result = routes.handle_post(object(), SimpleNamespace(path="/api/transcribe", query=""))
+    assert result is sentinel
 
 
-def test_routes_define_transcribe_capability_endpoint():
+def test_routes_define_transcribe_capability_endpoint(monkeypatch):
     """Server routes must expose a cheap STT capability probe before defaulting to MediaRecorder."""
-    routes = pathlib.Path(__file__).parent.parent.joinpath("api/routes.py").read_text(encoding="utf-8")
-    assert '"/api/transcribe/capability"' in routes
+    from api import routes
+
+    sentinel = object()
+    monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args: False)
+    monkeypatch.setattr(routes, "_guard_request_session_visibility", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(routes, "handle_transcribe_capability", lambda _handler: sentinel)
+    result = routes.handle_get(
+        object(), SimpleNamespace(path="/api/transcribe/capability", query="")
+    )
+    assert result is sentinel
 
 
 def test_boot_js_shows_mic_button_when_any_voice_path_is_supported():

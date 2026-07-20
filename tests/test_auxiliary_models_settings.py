@@ -459,17 +459,50 @@ class TestAuxiliaryModelsBackend:
         ROOT / "api" / "config" / "model_settings.py"
     ).read_text(encoding="utf-8")
 
-    def test_model_auxiliary_route_exists(self):
-        """/api/model/auxiliary route must be registered in routes.py."""
-        assert '"/api/model/auxiliary"' in self.ROUTES_PY, (
-            "Missing /api/model/auxiliary route in routes.py"
-        )
+    def test_model_auxiliary_route_dispatches(self, monkeypatch):
+        """GET /api/model/auxiliary must return the config owner's payload."""
+        from api import config, routes
 
-    def test_model_set_route_exists(self):
-        """/api/model/set route must be registered in routes.py."""
-        assert '"/api/model/set"' in self.ROUTES_PY, (
-            "Missing /api/model/set route in routes.py"
+        expected = {"tasks": [{"task": "vision"}]}
+        monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args: False)
+        monkeypatch.setattr(
+            routes,
+            "_guard_request_session_visibility",
+            lambda *_args, **_kwargs: True,
         )
+        monkeypatch.setattr(config, "get_auxiliary_models", lambda: expected)
+        monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+
+        result = routes.handle_get(
+            object(), SimpleNamespace(path="/api/model/auxiliary", query="")
+        )
+        assert result == expected
+
+    def test_model_set_route_exists(self, monkeypatch):
+        """POST /api/model/set must dispatch a main-model update."""
+        from api import routes
+
+        seen = []
+        monkeypatch.setattr(routes, "_csrf_exempt_path", lambda _path: True)
+        monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(routes, "_guard_request_session_visibility", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(
+            routes,
+            "read_body",
+            lambda _handler: {"scope": "main", "model": "gpt-test", "provider": "auto"},
+        )
+        monkeypatch.setattr(
+            routes,
+            "set_hermes_default_model",
+            lambda model, provider=None, advanced=None: seen.append((model, provider)) or {"ok": True},
+        )
+        monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+
+        result = routes.handle_post(
+            object(), SimpleNamespace(path="/api/model/set", query="")
+        )
+        assert result == {"ok": True}
+        assert seen == [("gpt-test", None)]
 
     def test_default_model_routes_drop_auxiliary_auto_provider_sentinel(self, monkeypatch):
         from api import routes
