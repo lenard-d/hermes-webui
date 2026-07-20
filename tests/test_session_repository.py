@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 
@@ -90,7 +92,18 @@ def test_edit_does_not_save_a_failed_mutation():
     from api.session_repository import SessionRepository
 
     lock = _RecordingLock()
-    full = _FakeSession("s1", metadata_only=False, messages=[])
+    original_messages = [
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Before"}],
+            "metadata": {"labels": ["keep"]},
+        }
+    ]
+    full = _FakeSession(
+        "s1",
+        metadata_only=False,
+        messages=copy.deepcopy(original_messages),
+    )
     full.lock = lock
     repository = SessionRepository(
         load=lambda _sid: full,
@@ -99,12 +112,20 @@ def test_edit_does_not_save_a_failed_mutation():
         cache_full=lambda _sid, _session: None,
     )
 
-    with pytest.raises(RuntimeError, match="stop"):
+    mutation_error = RuntimeError("stop")
+    with pytest.raises(RuntimeError, match="stop") as exc_info:
         with repository.edit("s1") as session:
             session.title = "Not persisted"
-            raise RuntimeError("stop")
+            session.messages[0]["content"][0]["text"] = "Mutated"
+            session.messages[0]["metadata"]["labels"].append("discard")
+            session.messages.append({"role": "user", "content": "discard"})
+            raise mutation_error
 
+    assert exc_info.value is mutation_error
+    assert full.title == "Before"
+    assert full.messages == original_messages
     assert full.saved == []
+    assert full.lock is lock
     assert lock.held is False
 
 

@@ -367,7 +367,12 @@ class SessionRepository:
 
         with self._hold_lock(sid, lock_timeout):
             current = self._load_for_edit(sid, session)
-            yield current
+            before = self._snapshot_session_state(current)
+            try:
+                yield current
+            except BaseException:
+                self._restore_session_state(current, before)
+                raise
 
             if save_when is not None and not save_when(current):
                 return
