@@ -3,13 +3,14 @@ import { _deferClearProgrammaticScroll, _firstValidTimestampSeconds, _lastMessag
 import { _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
 import { _sessionHtmlCache, _sessionHtmlCacheSid } from './message-render-cache.js';
 import { _captureMessageScrollSnapshot, _desktopAnchorRealignDelta, _restoreMessageScrollSnapshot, _restorePinnedMessageScrollSnapshot } from './message-scroll-snapshot.js';
-import { _isTouchLikeMessageViewport, _messageViewportIntersectsRenderedRow, _remountMessageViewportAnchor, _restoreMessageViewportAnchor } from './navigation.js';
+import { _isTouchLikeMessageViewport, _messageViewportIntersectsRenderedRow, _remountMessageViewportAnchor, _restoreMessageViewportAnchor } from './message-viewport-anchor.js';
 import { isTransparentStream } from './activity-presentation.js';
 import { _assistantAnchorSceneFinalAnswerText, _stripLeadingAssistantThinkingMarkup } from './assistant-turn-presentation.js';
-import { renderMessages } from './renderer.js';
-import { $, S, _messageVirtualWindowKey, _stripWorkspaceDisplayPrefix } from './state.js';
+import { rerenderMessages as renderMessages } from './transcript-render-dispatch.js';
+import { $, S } from './state.js';
+import { _messageVirtualWindowKey, compatibilityBindings as virtualStateBindings } from './message-virtualization-state.js';
+import { _stripWorkspaceDisplayPrefix } from './user-message-presentation.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
-import { compatibilityBindings as stateBindings } from './state.js';
 
 function _stripAttachedFilesMarkerForDisplay(text){
   return String(text||'').replace(/\n\n\[Attached files: [^\]]+\]$/,'').trim();
@@ -387,7 +388,7 @@ function _maybeRecoverVirtualizedBlankViewport(options, preserveScroll, virtualW
   if(_sessionHtmlCacheSid&&S.session&&S.session.session_id===_sessionHtmlCacheSid){
     _sessionHtmlCache.delete(_sessionHtmlCacheSid);
   }
-  stateBindings._messageVirtualWindowKey='';
+  virtualStateBindings._messageVirtualWindowKey='';
   renderMessages({preserveScroll:true,_virtualFallback:true});
   return true;
 }

@@ -45,7 +45,16 @@ import * as modelCatalog from './model-catalog.js';
 import * as modelPickerRendering from './model-picker-rendering.js';
 import * as modelSelection from './model-selection.js';
 import * as modelState from './model-state.js';
-import * as navigation from './navigation.js';
+import * as compressionRecovery from './compression-recovery.js';
+import * as dashboardNavigation from './dashboard-navigation.js';
+import * as messageNavigation from './message-navigation.js';
+import * as messageViewportAnchor from './message-viewport-anchor.js';
+import * as messageVirtualization from './message-virtualization.js';
+import * as messageVirtualizationState from './message-virtualization-state.js';
+import * as offlineRecovery from './offline-recovery.js';
+import * as sessionQueueState from './session-queue-state.js';
+import * as userMessagePresentation from './user-message-presentation.js';
+import * as transcriptRenderDispatch from './transcript-render-dispatch.js';
 import * as presentation from './presentation.js';
 import * as reasoningEffort from './reasoning-effort.js';
 import * as renderer from './renderer.js';
@@ -83,7 +92,16 @@ import { publishCompatibilityDomain } from '../compatibility.js';
 
 const modules = Object.assign(Object.create(null), {
   state,
-  navigation,
+  compressionRecovery,
+  dashboardNavigation,
+  messageNavigation,
+  messageViewportAnchor,
+  messageVirtualization,
+  messageVirtualizationState,
+  offlineRecovery,
+  sessionQueueState,
+  userMessagePresentation,
+  transcriptRenderDispatch,
   mediaAndQuota,
   modelState,
   modelCatalog,

@@ -5,7 +5,8 @@ import { _composerLockState, _compressionPlaceholderSaved, compatibilityBindings
 import { isCompressionUiRunning } from './compression-ui.js';
 import { syncModelChip } from './model-catalog.js';
 import { _applyModelToDropdown } from './model-state.js';
-import { $, S, _queueDrainSid, assistantDisplayName, queueSessionMessage, shiftQueuedSessionMessage, compatibilityBindings as stateBindings } from './state.js';
+import { $, S, assistantDisplayName } from './state.js';
+import { _queueDrainSid, queueSessionMessage, shiftQueuedSessionMessage, compatibilityBindings as queueStateBindings } from './session-queue-state.js';
 import { setStatus } from './toast-notifications.js';
 
 function setComposerStatus(t){
@@ -221,7 +222,7 @@ function setBusy(v){
     setStatus('');
     setComposerStatus('');
     const sid=_queueDrainSid||(S.session&&S.session.session_id);
-    stateBindings._queueDrainSid=null;
+    queueStateBindings._queueDrainSid=null;
     updateQueueBadge(sid);
     // Drain one queued message for the finished session after UI settles
     const _isViewedSid=!S.session||sid===S.session.session_id;

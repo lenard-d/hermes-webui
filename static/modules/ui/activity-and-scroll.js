@@ -1,7 +1,7 @@
 import { _activityClockLabel, _activityElapsedLabel, _activityElapsedStartedAt, _activityElapsedTimer, _activityElapsedTimerGroup, _activityMarkObserved, _activityNowSeconds, _activityProcessedElapsedLabel, _bottomSettleToken, _clearNewMessageScrollCue, _deferClearProgrammaticScroll, _fmtTokens, _lastMessageClientHeight, _lastScrollTop, _messageUserUnpinned, _nearBottomCount, _programmaticScroll, _programmaticScrollSetAt, _recentMessageKeyScrollIntent, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _recentMessageWheelIntent, _recentNonMessageScrollIntent, _scrollPinned, _settleFinalTimer, _settleRAF, _settleRO, _settleTimer, _syncScrollToBottomCue, openComposerContextMenu } from './composer-controls.js';
 import { _dynamicModelLabels } from './media-and-quota.js';
 import { _compactComposerModelChipLabel } from './model-catalog.js';
-import { _updateSessionStartJumpButton } from './navigation.js';
+import { _updateSessionStartJumpButton } from './message-navigation.js';
 import { $, S, esc } from './state.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
 

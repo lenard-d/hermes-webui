@@ -9,19 +9,23 @@ import { _syncLiveRunStatusAfterRender } from './live-run-status.js';
 import { _messageRenderCacheSignature, _sessionHtmlCache, _sessionHtmlCacheSid } from './message-render-cache.js';
 import { _captureMessageScrollSnapshot } from './message-scroll-snapshot.js';
 import { _initMediaPlaybackObserver, _renderAttachmentHtml } from './media-and-quota.js';
-import { _applySessionNavigationPrefs, _applyUserRowIntrinsicHeight, _getCachedRender, _questionJumpButtonHtml, _rememberRenderedUserRowIntrinsicHeights, _updateMessageVirtualMeasurements, _userMessageDomId, _wireMessageWindowLoadEarlierButton } from './navigation.js';
+import { _applySessionNavigationPrefs, _questionJumpButtonHtml, _userMessageDomId, _wireMessageWindowLoadEarlierButton } from './message-navigation.js';
+import { _applyUserRowIntrinsicHeight, _getCachedRender, _rememberRenderedUserRowIntrinsicHeights, _updateMessageVirtualMeasurements } from './message-virtualization.js';
 import { _captureWorklogDetailDisclosureState, _decorateTransparentEventRow, _rehydrateTransparentStreamDom, _thinkingCardHtml, _transparentToolStatus, isCompactWorklogMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
 import { _ERR_MSG_RE, _assistantMessageBelongsInWorklog, _assistantReasoningPayloadText, _assistantRoleHtml, _assistantThinkingBelongsInWorklog, _assistantTurnBlocks, _assistantTurnFinalVisibleContentMap, _assistantTurnVisibleContentMap, _createAssistantTurn, _fmtDateSep, _formatTurnTps, _isAssistantEmptyPlaceholderContent, _setLatestAssistantTurnLandmark, _worklogReasoningTextFromMessage, isTpsDisplayEnabled, msgContent } from './assistant-turn-presentation.js';
 import { _assistantTurnAnchorSettledFinalAnswer, _collectToolResultSnippetsByTid, _maybeRecoverVirtualizedBlankViewport, _reanchorPinnedTailAfterRender, _scrollAfterMessageRender, _stripAttachedFilesMarkerForDisplay, _transparentOrderedDisplayText, _transparentOrderedToolCall, _transparentStreamOrderedParts } from './render-support.js';
-import { $, INFLIGHT, S, _activeCompressionRecoveryPayload, _compressionRecoveryHtml, _currentMessageVirtualWindow, _getVisibleMessagesWithIdx, _messageRenderWindowSid, _messageSessionIndexForRawIdx, _messageViewportAnchorKeyForMessage, _messageVirtualKeepTailCount, _messageVirtualSpacer, _messageVirtualWindowKey, _messageVirtualWindowKeyFor, _msgNodeRecycleEnabled, _recycleResetAttrs, _recycleStash, _resetMessageRenderWindow, _setCompressionSessionLock, _statusCardHtml, _stripWorkspaceDisplayPrefix, esc } from './state.js';
+import { $, INFLIGHT, S, esc } from './state.js';
+import { _activeCompressionRecoveryPayload, _compressionRecoveryHtml, _setCompressionSessionLock } from './compression-recovery.js';
+import { _currentMessageVirtualWindow, _getVisibleMessagesWithIdx, _messageRenderWindowSid, _messageSessionIndexForRawIdx, _messageViewportAnchorKeyForMessage, _messageVirtualKeepTailCount, _messageVirtualSpacer, _messageVirtualWindowKey, _messageVirtualWindowKeyFor, _msgNodeRecycleEnabled, _recycleResetAttrs, _recycleStash, _resetMessageRenderWindow, compatibilityBindings as virtualStateBindings } from './message-virtualization-state.js';
+import { _statusCardHtml, _stripWorkspaceDisplayPrefix } from './user-message-presentation.js';
 import { buildToolCard } from './tool-card-presentation.js';
 import { _rehydrateDeferredWorklogsFromCache } from './worklog-disclosure.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
 import { compatibilityBindings as messageRenderCacheBindings } from './message-render-cache.js';
-import { compatibilityBindings as stateBindings } from './state.js';
 import { captureLiveAssistantTurn, restoreLiveAssistantTurn } from './live-turn-preservation.js';
 import { rebuildSettledActivity } from './settled-activity-renderer.js';
 import { finalizeSettledTurns } from './settled-turn-finalization.js';
+import { registerTranscriptRenderer } from './transcript-render-dispatch.js';
 
 // Coordinates the ordered transcript rebuild transaction. Domain owners handle
 // live parser-node preservation, persisted Activity reconstruction, and settled
@@ -83,7 +87,7 @@ function renderMessages(options){
     const cached=_sessionHtmlCache.get(sid);
     if(cached&&cached.msgCount===msgCount&&cached.renderWindowKey===renderWindowKey&&cached.signature===renderSignature){
       inner.innerHTML=cached.html;
-      stateBindings._messageVirtualWindowKey=renderWindowKey;
+      virtualStateBindings._messageVirtualWindowKey=renderWindowKey;
       messageRenderCacheBindings._sessionHtmlCacheSid=sid;
       _rehydrateTransparentStreamDom(inner);
       _rehydrateDeferredWorklogsFromCache(inner);
@@ -863,6 +867,8 @@ function renderMessages(options){
 }
 
 
+
+registerTranscriptRenderer(renderMessages);
 
 export {
   renderMessages,

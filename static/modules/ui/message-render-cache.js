@@ -1,6 +1,7 @@
 import { _messageHasReasoningPayload, msgContent } from './assistant-turn-presentation.js';
-import { _clearRenderCache } from './navigation.js';
-import { S, _clearMessageVirtualHeightCache, clearVisibleMessageRowCache } from './state.js';
+import { _clearRenderCache } from './message-virtualization.js';
+import { S } from './state.js';
+import { _clearMessageVirtualHeightCache, clearVisibleMessageRowCache } from './message-virtualization-state.js';
 import { createRenderSignature, createSessionRenderCache } from '../../session_render_cache.js';
 
 // Session render cache: avoids full markdown+DOM rebuild when switching back

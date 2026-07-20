@@ -190,7 +190,16 @@ UI_MODULE_DIR = STATIC_DIR / "modules" / "ui"
 UI_ENTRYPOINT = UI_MODULE_DIR / "index.js"
 _UI_MODULE_NAMES = (
     "state.js",
-    "navigation.js",
+    "compression-recovery.js",
+    "dashboard-navigation.js",
+    "message-navigation.js",
+    "message-viewport-anchor.js",
+    "message-virtualization.js",
+    "message-virtualization-state.js",
+    "offline-recovery.js",
+    "session-queue-state.js",
+    "user-message-presentation.js",
+    "transcript-render-dispatch.js",
     "media-and-quota.js",
     "model-state.js",
     "model-catalog.js",
@@ -289,6 +298,7 @@ const composerControlsBindings = _uiTestBindingProxy();
 const composerStateBindings = _uiTestBindingProxy();
 const liveActivityBindings = _uiTestBindingProxy();
 const stateBindings = _uiTestBindingProxy();
+const virtualStateBindings = _uiTestBindingProxy();
 const transparentWorklogBindings = _uiTestBindingProxy();
 """
 

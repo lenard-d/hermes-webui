@@ -224,6 +224,17 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       style.css            Base CSS loaded before ordered domain styles
       style_parts/         Direct-loaded theme, layout, transcript, settings, and panel CSS
       modules/ui/          Native UI owners plus `index.js` entrypoint and compatibility publication
+        state.js         Identity-stable application, in-flight, upload-limit, and DOM utility state
+        session-queue-state.js Per-session queued-turn persistence and drain ownership
+        offline-recovery.js Browser/network probe, banner, soft reattach, and probe cleanup lifecycle
+        user-message-presentation.js Plain user content, fenced blocks, and status-card HTML
+        compression-recovery.js Exhausted-context continuation policy, action, and session lock
+        message-virtualization-state.js Per-session virtual window identity, height cache, and row policy
+        message-virtualization.js DOM measurement, intrinsic-height, render scheduling, and HTML cache
+        message-viewport-anchor.js Semantic viewport capture, remount, and scroll compensation
+        message-navigation.js Transcript start/question navigation and navigation preferences
+        dashboard-navigation.js Dashboard discovery, settings, navigation mirrors, and polling lifecycle
+        transcript-render-dispatch.js One-way transcript render registration for navigation/editing owners
         composer.js      Stable interface for Markdown, composer state/actions,
                          queued turns, and toast owners
         composer-primary-control.js Composer action selection, lock/status, and busy lifecycle
@@ -1104,6 +1115,15 @@ across a rebuild, `settled-activity-renderer.js` reconstructs persisted
 Activity/Worklog history, and `settled-turn-finalization.js` applies metadata,
 transparent-mode wiring, and the never-blank settled-turn invariant. These are
 internal transcript seams; callers continue to use `renderMessages()`.
+
+The UI state/navigation graph separates identity from browser lifecycle.
+`state.js` retains only the identity-stable application and in-flight stores;
+queued turns and offline recovery have independent session- and probe-scoped
+owners. Transcript virtualization is split between its per-session cache/window
+model, DOM measurement/render scheduling, and semantic viewport anchoring.
+Transcript jump policy and Dashboard navigation are separate modules, so
+session switches clear measured caches without also resetting unrelated
+Dashboard polling or browser connectivity state.
 
 The model-control graph follows the same ownership rule: `model-catalog.js`
 owns provider discovery and catalog hydration, `model-state.js` owns selection

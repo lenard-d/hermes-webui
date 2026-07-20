@@ -1,7 +1,8 @@
 import { _setMessageScrollToBottom } from './activity-and-scroll.js';
-import { _isSessionEndlessScrollEnabled, _scheduleMessageVirtualizedRender, _updateSessionStartJumpButton } from './navigation.js';
-import { $, _markMessageVirtualScrollActive, _scrollbarDragActive } from './state.js';
-import { compatibilityBindings as stateBindings } from './state.js';
+import { _isSessionEndlessScrollEnabled, _updateSessionStartJumpButton } from './message-navigation.js';
+import { _scheduleMessageVirtualizedRender } from './message-virtualization.js';
+import { $ } from './state.js';
+import { _markMessageVirtualScrollActive, _scrollbarDragActive, compatibilityBindings as virtualStateBindings } from './message-virtualization-state.js';
 
 // When streaming, auto-scroll only while the user is following the live tail.
 // Any manual scroll up sets a sticky unpinned flag until the user scrolls back
@@ -310,21 +311,21 @@ if(typeof window!=='undefined'){
   const el=document.getElementById('messages');
   if(!el) return;
   el.addEventListener('pointerdown',(e)=>{
-    if(e.target===el&&e.offsetX>=el.clientWidth) stateBindings._scrollbarDragActive=true;
+    if(e.target===el&&e.offsetX>=el.clientWidth) virtualStateBindings._scrollbarDragActive=true;
   },{passive:true});
   window.addEventListener('pointerup',()=>{
     if(!_scrollbarDragActive) return;
-    stateBindings._scrollbarDragActive=false;
+    virtualStateBindings._scrollbarDragActive=false;
     _scheduleMessageVirtualizedRender(true);
   },{passive:true});
   window.addEventListener('pointercancel',()=>{
     if(!_scrollbarDragActive) return;
-    stateBindings._scrollbarDragActive=false;
+    virtualStateBindings._scrollbarDragActive=false;
     _scheduleMessageVirtualizedRender(true);
   },{passive:true});
-  window.addEventListener('blur',()=>{ stateBindings._scrollbarDragActive=false; },{passive:true});
+  window.addEventListener('blur',()=>{ virtualStateBindings._scrollbarDragActive=false; },{passive:true});
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden') stateBindings._scrollbarDragActive=false;
+    if(document.visibilityState==='hidden') virtualStateBindings._scrollbarDragActive=false;
   },{passive:true});
   // #4970 review (greptile P1): record keyboard-driven message-pane scrolling as
   // user intent. PageUp/PageDown, Arrow keys, Space/Shift+Space, Home/End scroll

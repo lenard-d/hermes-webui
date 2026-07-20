@@ -1,5 +1,6 @@
 import { _inlineMediaHtmlForRef, _isSafeDataImageUri, _mdImageHtml } from './media-and-quota.js';
-import { _isBacktickFenceClose, _matchBacktickFenceLine, esc } from './state.js';
+import { esc } from './state.js';
+import { _isBacktickFenceClose, _matchBacktickFenceLine } from './user-message-presentation.js';
 
 function renderMd(raw){
   let s=(raw||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');

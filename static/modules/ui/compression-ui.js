@@ -6,7 +6,8 @@ import { _assistantTurnBlocks, _createAssistantTurn, msgContent } from './assist
 import { closeCurrentLiveActivityGroup, _moveLiveRunStatusToTurnEnd } from './live-run-status.js';
 import { _captureMessageScrollSnapshot } from './message-scroll-snapshot.js';
 import { _restoreMessageScrollSnapshotSameFrame } from './render-support.js';
-import { $, S, _compressionSessionLock, _setCompressionSessionLock, esc } from './state.js';
+import { $, S, esc } from './state.js';
+import { _compressionSessionLock, _setCompressionSessionLock } from './compression-recovery.js';
 import { _syncToolCallGroupSummary, _toolWorklogListEl } from './worklog-tool-groups.js';
 import { _activityKeyForLiveTurn } from './worklog-disclosure.js';
 import { ensureLiveWorklogContainer } from './worklog-reasoning.js';

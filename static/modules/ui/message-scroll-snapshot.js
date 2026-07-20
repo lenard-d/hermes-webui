@@ -16,7 +16,7 @@ import {
   _captureMessageViewportAnchor,
   _remountMessageViewportAnchor,
   _restoreMessageViewportAnchor,
-} from './navigation.js';
+} from './message-viewport-anchor.js';
 import { $ } from './state.js';
 
 function _captureMessageScrollSnapshot(){

@@ -1,7 +1,7 @@
 import { loadCsvInline, loadDiffInline, loadExcalidrawInline, loadHtmlInline, loadPdfInline } from './artifact-postprocessing.js';
 import { addCopyButtons, highlightCode, initTreeViews } from './code-postprocessing.js';
 import { renderKatexBlocks, renderMermaidBlocks } from './markdown-postprocessing.js';
-import { _suppressBrowserOverflowAnchor } from './navigation.js';
+import { _suppressBrowserOverflowAnchor } from './message-viewport-anchor.js';
 import { $ } from './state.js';
 
 // The content post-processing transaction has one ordered interface. Each

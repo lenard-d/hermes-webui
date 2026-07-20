@@ -6,7 +6,16 @@ from tests.frontend_asset_contract import UI_ENTRYPOINT, UI_MODULE_DIR, ui_modul
 
 REQUIRED_MODULES = {
     "state.js",
-    "navigation.js",
+    "compression-recovery.js",
+    "dashboard-navigation.js",
+    "message-navigation.js",
+    "message-viewport-anchor.js",
+    "message-virtualization.js",
+    "message-virtualization-state.js",
+    "offline-recovery.js",
+    "session-queue-state.js",
+    "user-message-presentation.js",
+    "transcript-render-dispatch.js",
     "model-state.js",
     "model-catalog.js",
     "model-picker-rendering.js",
@@ -152,7 +161,7 @@ if (!window.HermesUI?.ready) throw new Error('HermesUI did not become ready');
 if (typeof window.renderMessages !== 'function') throw new Error('renderer compatibility binding missing');
 if (window.S !== window.HermesUI.modules.state.S) throw new Error('state binding is not live');
 window._messageRenderWindowSize = 321;
-if (window.HermesUI.modules.state._messageRenderWindowSize !== 321) throw new Error('mutable compatibility binding is not live');
+if (window.HermesUI.modules.messageVirtualizationState._messageRenderWindowSize !== 321) throw new Error('mutable compatibility binding is not live');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 """
     result = subprocess.run(

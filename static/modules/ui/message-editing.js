@@ -1,7 +1,7 @@
 import { msgContent } from './assistant-turn-presentation.js';
 import { setStatus } from './toast-notifications.js';
 import { _deliberateSessionModelPick, _reArmRecoveryPick } from './model-state.js';
-import { renderMessages } from './renderer.js';
+import { rerenderMessages as renderMessages } from './transcript-render-dispatch.js';
 import { $, S } from './state.js';
 
 function editMessage(btn) {

@@ -1,5 +1,6 @@
 import { scrollIfPinned } from './activity-and-scroll.js';
-import { SESSION_QUEUES, S, _clearPersistedSessionQueue, _getSessionQueue, _persistSessionQueueStorage, getQueuedSessionCount } from './state.js';
+import { S } from './state.js';
+import { SESSION_QUEUES, _clearPersistedSessionQueue, _getSessionQueue, _persistSessionQueueStorage, getQueuedSessionCount } from './session-queue-state.js';
 import { showToast } from './toast-notifications.js';
 
 const _queueRenderKeys={};  // per-session fingerprint to avoid redundant rebuilds
