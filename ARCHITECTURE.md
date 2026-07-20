@@ -843,10 +843,20 @@ state and action owners independent of concrete DOM renderers without creating
 reverse imports. A domain stays
 intact when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
-`config/model_catalog.py`, `runs/local.py`, and
+`config/model_catalog.py` and
 `modules/ui/renderer.js` are deliberately larger than the line-count
 heuristic because their state and cleanup lifecycles do not expose a narrower
 safe Interface.
+
+The local-agent path uses `runs/local.py` as its transaction coordinator, not as
+the owner of every phase. Construction and provider resolution live in
+`local_agent_runtime.py`; conversation input and invocation in
+`local_conversation.py`; compression and session-ID rotation in
+`local_compression.py`; durable checkpoints in `local_checkpoint.py`; approval
+and clarification cleanup in `local_interactions.py`; successful persistence
+and terminal projection in `local_success.py`; and every failure/cancel/retry
+exit in `local_failures.py`. These owners are independently importable modules,
+while `local.py` preserves the ordering and lock boundaries between them.
 
 Three-panel layout (in static/index.html):
 
@@ -1109,6 +1119,10 @@ The api/ modules in turn import Hermes internals:
       api.runs.agent_runtime         Guarded Hermes agent runtime interface.
     api/runs/{local,gateway}.py imports:
       api.runs.*                     Run-owned execution and transcript modules.
+    api/runs/local.py coordinates:
+      api.runs/local_{agent_runtime,conversation,compression,checkpoint,
+      interactions,success,failures}.py
+                                     Phase owners for one local turn.
     api/streaming/live_controls.py imports:
       api.runs.*                     Cancellation persistence and run cleanup helpers.
     api/config/__init__.py imports:
