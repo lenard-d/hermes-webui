@@ -269,8 +269,7 @@ def profile_env_for_background_worker(
             return
 
         try:
-            from api.config import thread_env_scope
-            from api.streaming.diagnostics import _ENV_LOCK
+            from api.config import environment_mutation_lock, thread_env_scope
 
             profile_home_path = Path(api.get_hermes_home_for_profile(profile))
             runtime_env = api.get_profile_runtime_env(profile_home_path)
@@ -317,7 +316,7 @@ def profile_env_for_background_worker(
                     )
                 except Exception:
                     home_override_token = None
-            with _ENV_LOCK:
+            with environment_mutation_lock:
                 old_runtime_env = api._apply_profile_env_to_process(
                     os.environ,
                     safe_runtime_env,
@@ -353,7 +352,7 @@ def profile_env_for_background_worker(
             # compatibility state.  The latter may involve third-party module
             # hooks, so it must not be able to strand a request-local override.
             thread_env_stack.close()
-            with _ENV_LOCK:
+            with environment_mutation_lock:
                 for key, old_value in old_runtime_env.items():
                     if old_value is None:
                         os.environ.pop(key, None)

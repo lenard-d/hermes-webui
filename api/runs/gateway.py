@@ -33,19 +33,19 @@ from .runtime_state import (
     start_runtime_tool_call,
     update_active_run,
 )
-from api.streaming.attachments import _build_native_multimodal_message
-from api.streaming.compression_anchors import _is_context_compression_marker
-from api.streaming.message_sanitization import _assign_stable_message_ids, _strip_oob_blocks
-from api.streaming.payloads import _session_payload_with_full_messages
-from api.streaming.prompts import _webui_ephemeral_system_prompt
-from api.streaming.provider_errors import _classify_provider_error, _provider_error_payload
-from api.streaming.terminal_outcomes import _persist_cancelled_turn
-from api.streaming.transcript import (
+from .attachments import _build_native_multimodal_message
+from .compression_anchors import _is_context_compression_marker
+from .message_sanitization import _assign_stable_message_ids, _strip_oob_blocks
+from .payloads import _session_payload_with_full_messages
+from .prompts import _webui_ephemeral_system_prompt
+from .provider_errors import _classify_provider_error, _provider_error_payload
+from .terminal_outcomes import _persist_cancelled_turn
+from .transcript import (
     _materialize_pending_user_turn_before_error,
     _merge_display_messages_after_agent_result,
     _snapshot_and_append_partial_on_error,
 )
-from api.streaming.webui_prefill import (
+from .webui_prefill import (
     _load_webui_prefill_context,
     _normalize_prefill_messages_before_user_turn,
     _prefill_messages_with_webui_context,

@@ -6,14 +6,11 @@ import logging
 import os
 from pathlib import Path
 
-from api.config import set_thread_env
-from api.runs.agent_runtime import ensure_agent_runtime_current
-from api.streaming.diagnostics import (
-    _ENV_LOCK,
-    _install_streaming_cronjob_profile_wrapper,
-)
-from api.streaming.agent_loader import _prewarm_skill_tool_modules
-from api.streaming.turn_identity import _build_agent_thread_env
+from api.config import environment_mutation_lock as _ENV_LOCK, set_thread_env
+from .agent_runtime import ensure_agent_runtime_current
+from .diagnostics import _install_streaming_cronjob_profile_wrapper
+from .agent_loader import _prewarm_skill_tool_modules
+from .turn_identity import _build_agent_thread_env
 
 
 logger = logging.getLogger(__name__)

@@ -6,13 +6,11 @@ import contextlib
 import contextvars
 import logging
 import os
-import threading
 import time
 from pathlib import Path
 
 
 logger = logging.getLogger(__name__)
-_ENV_LOCK = threading.Lock()
 _STREAM_WRITEBACK_DIAG_DEFAULT_THRESHOLD_MS = 250.0
 _STREAMING_CRON_PROFILE_HOME: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "webui_streaming_cron_profile_home",

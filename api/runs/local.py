@@ -49,7 +49,7 @@ from api.sessions.process_wakeup import (
 )
 from api.sessions.projects import title_from
 from api.sessions.reconciliation import reconciled_state_db_messages_for_session
-from api.streaming.agent_cache import (
+from .agent_cache import (
     _attempt_credential_self_heal,
     _build_session_db_for_stream,
     _cached_agent_matches_session,
@@ -58,51 +58,51 @@ from api.streaming.agent_cache import (
     _last_resort_sync_from_core,
     _replace_session_db_in_kwargs,
 )
-from api.streaming.agent_loader import _clarify_timeout_seconds, _get_ai_agent
-from api.streaming.attachments import _attachment_name, _build_native_multimodal_message
-from api.streaming.compression_anchors import (
+from .agent_loader import _clarify_timeout_seconds, _get_ai_agent
+from .attachments import _attachment_name, _build_native_multimodal_message
+from .compression_anchors import (
     _compact_summary_text,
     _compression_anchor_message_key,
     _compression_summary_from_messages,
     _is_context_compression_marker,
 )
-from api.streaming.compression_snapshot import _preserve_pre_compression_snapshot
-from api.streaming.context_replay import _dedupe_replayed_context_messages
-from api.streaming.diagnostics import (
+from .compression_snapshot import _preserve_pre_compression_snapshot
+from .context_replay import _dedupe_replayed_context_messages
+from .diagnostics import (
     _STREAMING_CRON_PROFILE_HOME,
     _log_stream_writeback_timings,
     _stream_writeback_stage,
 )
-from api.streaming.gateway_routing_metadata import _extract_gateway_routing_metadata
-from api.streaming.message_sanitization import (
+from .gateway_routing_metadata import _extract_gateway_routing_metadata
+from .message_sanitization import (
     _assign_stable_message_ids,
     _deduplicate_context_messages,
     _sanitize_messages_for_api,
 )
-from api.streaming.payloads import (
+from .payloads import (
     _cancel_event_payload,
     _session_payload_with_full_messages,
 )
-from api.streaming.post_compression_context import (
+from .post_compression_context import (
     _estimate_post_compression_context_tokens,
     _prune_context_tool_results_after_compression,
     _restore_display_reasoning_metadata,
     _restore_reasoning_metadata,
 )
-from api.streaming.process_notifications import (
+from .process_notifications import (
     _accept_pending_async_delegations,
     _drain_webui_process_notifications,
 )
-from api.streaming.prompts import _webui_ephemeral_system_prompt
-from api.streaming.provider_errors import _classify_provider_error, _provider_error_payload
-from api.streaming.runtime_resolution import (
+from .prompts import _webui_ephemeral_system_prompt
+from .provider_errors import _classify_provider_error, _provider_error_payload
+from .runtime_resolution import (
     _apply_profile_home_context_to_streaming_model,
     _persistent_state_changes,
     _persistent_state_snapshot,
     _resolve_custom_provider_runtime_overrides,
     _runtime_preferred_base_url,
 )
-from api.streaming.terminal_outcomes import (
+from .terminal_outcomes import (
     _agent_result_tool_limit_reached,
     _aiagent_import_error_detail,
     _cleanup_ephemeral_cancelled_turn,
@@ -111,19 +111,19 @@ from api.streaming.terminal_outcomes import (
     _mark_latest_assistant_tool_limit_status,
     _maybe_inject_max_iteration_summary_fallback,
 )
-from api.streaming.thinking_content import (
+from .thinking_content import (
     _looks_invalid_generated_title,
     _split_thinking_from_content,
     _strip_xml_tool_calls,
 )
-from api.streaming.title_generation import (
+from .title_generation import (
     _first_exchange_snippets,
     _is_provisional_title,
     _maybe_schedule_title_refresh,
     _run_background_title_update,
 )
-from api.streaming.tool_events import _extract_tool_calls_from_messages
-from api.streaming.transcript import (
+from .tool_events import _extract_tool_calls_from_messages
+from .transcript import (
     _agent_result_terminal_failure,
     _assistant_reply_added_after_current_turn,
     _has_new_assistant_reply,
@@ -134,15 +134,15 @@ from api.streaming.transcript import (
     _snapshot_and_append_partial_on_error,
     _stamp_missing_message_timestamps,
 )
-from api.streaming.turn_context import (
+from .turn_context import (
     _advance_truncation_watermark_after_commit,
     _new_turn_context_from_messages,
     _save_streaming_checkpoint,
     _stream_writeback_can_supersede_recovery_marker,
     _stream_writeback_is_current,
 )
-from api.streaming.turn_identity import _reset_turn_session_identity, _set_turn_session_identity
-from api.streaming.webui_prefill import (
+from .turn_identity import _reset_turn_session_identity, _set_turn_session_identity
+from .webui_prefill import (
     _load_webui_prefill_context,
     _normalize_prefill_messages_before_user_turn,
     _prefill_messages_with_webui_context,

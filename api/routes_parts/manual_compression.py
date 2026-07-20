@@ -352,7 +352,7 @@ def _handle_session_compress(handler, body):
         return bad(handler, "Session is still streaming; wait for the current turn to finish.", 409)
 
     try:
-        from api.streaming.message_sanitization import _sanitize_messages_for_api
+        from api.runs.message_sanitization import _sanitize_messages_for_api
 
         messages = _sanitize_messages_for_api(s.messages)
         if len(messages) < 4:
@@ -519,7 +519,7 @@ def _handle_session_compress(handler, body):
                 return bad(handler, "Session was modified during compression; please retry.", 409)
 
             from api.sessions.operations import _truncation_watermark_for
-            from api.streaming.transcript import _stamp_missing_message_timestamps
+            from api.runs.transcript import _stamp_missing_message_timestamps
 
             compressed_copy = copy.deepcopy(compressed)
             _stamp_missing_message_timestamps(compressed_copy)

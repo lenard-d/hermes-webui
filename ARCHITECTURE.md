@@ -386,11 +386,14 @@ larger migration remains incremental:
   `api.models` preserves only a stateless compatibility import, while the
   durable owner lives in `api.sessions`.
 - `api.updates`, `api.workspace`, and `api.workspace_git` use explicit package
-  owners and stateless compatibility interfaces. `api.streaming` is a real
-  package: `__init__.py` preserves the public interface, semantic modules import
-  their actual owners, and Local/Gateway orchestration remains authoritative in
-  `api.runs.local` and `api.runs.gateway`. No runtime binder, module alias, or
-  source concatenation layer connects those owners.
+  owners and stateless compatibility interfaces. `api.runs` owns local and
+  Gateway execution plus the transcript, payload, agent-cache, attachment,
+  compression, terminal-outcome, and title-generation implementations used by
+  those runs. `api.streaming` owns only SSE transport and live controls. Its
+  entrypoint has one temporary eight-symbol Adapter for the unchanged
+  `api.routes` import block; the Adapter must be deleted when that block imports
+  run execution/helpers from `api.runs` directly and transport/control from
+  `api.streaming`. No other caller may extend that compatibility surface.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.
@@ -501,14 +504,15 @@ Initial session-tail response cache:
 
 ### 4.3 SSE Streaming Engine
 
-This is the most architecturally interesting part. Two endpoints cooperate:
+Two independently owned paths cooperate:
 
-    POST /api/chat/start     Receives the user message. Creates a queue.Queue, stores it
-                             in STREAMS[stream_id], spawns a daemon thread running
-                             _run_agent_streaming(), returns {stream_id} immediately.
+    POST /api/chat/start     Admits the turn through api.runs, registers its live
+                             channel, starts the local or Gateway run, and returns
+                             {stream_id} immediately.
 
-    GET  /api/chat/stream    Long-lived SSE connection. Reads from STREAMS[stream_id]
-                             and forwards events to the browser until 'done' or 'error'.
+    GET  /api/chat/stream    Long-lived api.streaming transport. Subscribes to the
+                             registered channel and forwards events to the browser
+                             until a terminal event or disconnect.
 
 Queue registry:
 
@@ -532,15 +536,15 @@ The SSE handler loop:
     - On 'done' or 'error' event: breaks the loop and returns
     - Catches BrokenPipeError and ConnectionResetError silently (browser disconnected)
 
-Stream cleanup: _run_agent_streaming() pops its stream_id from STREAMS in a finally
-block. If the browser disconnects mid-stream, the daemon thread runs to completion and
-then cleans up. The queue fills and the put_nowait() calls fail silently (queue.Full
-is caught).
+Run cleanup belongs to `api.runs`: its outer lifecycle owner releases the worker,
+transport, cancellation, partial-output, reasoning, and live-tool state on every
+terminal exit. Browser disconnect cleanup belongs to `api.streaming`; disconnecting
+one subscriber does not cancel the producing run.
 
 Fallback sync endpoint: POST /api/chat still exists and holds the connection open until
 the agent finishes. The frontend never uses it but it can be useful for debugging.
 
-### 4.4 Agent Invocation (_run_agent_streaming)
+### 4.4 Agent Invocation (`api.runs.local_entrypoint.run_agent_streaming`)
 
     def _run_agent_streaming(session_id, msg_text, model, workspace, stream_id):
 
@@ -931,10 +935,12 @@ Step-by-step trace of what happens when you type a message and press Send:
 server.py imports from api/ modules (config, helpers, models, workspace, upload, streaming).
 The api/ modules in turn import Hermes internals:
 
-    api/streaming/agent_loader.py imports:
+    api/runs/agent_loader.py imports:
       api.runs.agent_runtime         Guarded Hermes agent runtime interface.
     api/runs/{local,gateway}.py imports:
-      api.streaming.*                Shared semantic streaming owners.
+      api.runs.*                     Run-owned execution and transcript modules.
+    api/streaming/live_controls.py imports:
+      api.runs.*                     Cancellation persistence and run cleanup helpers.
     api/config/__init__.py imports:
       yaml                           Config loading.
     server.py imports:
@@ -1057,9 +1063,9 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         workspace/            Identity, path safety, anchored access, navigation, and Git owners
         workspace_git.py      Stateless high-level Git compatibility interface
         upload.py             Multipart parser and file upload handler
-        streaming/            Public interface plus semantic transport, replay, payload,
-                              attachment, compression, terminal, and title owners
-        runs/                 Local/Gateway orchestration, admission, publication, and journaling
+        streaming/            SSE transport, live controls, and the temporary route Adapter
+        runs/                 Local/Gateway execution, admission, publication, journaling,
+                              transcript, payload, agent, tool, compression, and title owners
         model_context.py      Shared model context-window policy
         workspace_context.py  Shared workspace runtime/display policy
       static/
@@ -1078,12 +1084,12 @@ Current backend structure (roles only; use `wc -l` for current sizes):
 Route extraction to `api/routes.py` completed in Sprint 11. `server.py` remains a
 thin shell relative to the rest of the app: Handler class with headers,
 structured logging, dispatch to routes, TLS wrapping, and `main()`. The later
-semantic splits keep the established `api.config`, `api.models`, `api.routes`, and
-`api.streaming` import surfaces. Streaming is now a real package whose
-`__init__.py` exposes the compatibility interface while implementations import
-their semantic owners directly. Run lifecycle orchestration stays in
-`api.runs`; further extraction should follow typed state and phase boundaries
-rather than a line-count target.
+semantic splits keep the established `api.config`, `api.models`, and `api.routes`
+import surfaces. `api.streaming` intentionally no longer serves as a facade for
+run execution. Its remaining private route Adapter is removable once
+`api.routes` is free to migrate its eight-symbol import block; that migration
+must not add replacement re-exports. Further extraction inside `api.runs`
+should follow typed state and phase seams rather than a line-count target.
 
 ### Phase B: Thread-Safe Request Context (Priority: Critical, Effort: Medium)
 

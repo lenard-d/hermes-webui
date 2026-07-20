@@ -350,15 +350,15 @@ def _write_env_file(env_path: Path, updates: dict[str, str | None]) -> None:
     Preserves comments, blank lines, and original key order (#1164).
     New keys are appended at the end of the file with a blank-line separator.
 
-    Holds ``_ENV_LOCK`` from ``api.streaming`` for the entire load → modify →
+    Holds the shared config environment lock for the entire load → modify →
     write cycle to prevent TOCTOU races between concurrent POST /api/providers
     calls (each reading the same file baseline and overwriting the other's key).
     Also serialises os.environ mutations with streaming sessions.
     """
-    from api.streaming.diagnostics import _ENV_LOCK
+    from api.config import environment_mutation_lock
     import stat as _stat
 
-    with _ENV_LOCK:
+    with environment_mutation_lock:
         # ── Read existing lines (preserving comments and blank lines) ──
         existing_lines: list[str] = []
         if env_path.exists():
@@ -415,7 +415,7 @@ def _write_env_file(env_path: Path, updates: dict[str, str | None]) -> None:
         # (Telegram bot, CLI) never see a half-truncated file.  The shared
         # ``~/.hermes/.env`` is also written by ``hermes_cli.config.save_env_value``
         # using the same atomic pattern; matching it here closes the
-        # cross-process leg of #1164 (within-process is covered by _ENV_LOCK).
+        # cross-process leg of #1164 (the config lock covers this process).
         _mode = _stat.S_IRUSR | _stat.S_IWUSR  # 0o600
         import tempfile as _tempfile
         _tmp_fd, _tmp_path = _tempfile.mkstemp(

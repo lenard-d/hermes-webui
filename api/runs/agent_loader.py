@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from api.config import get_config
-from api.runs.agent_runtime import ensure_agent_runtime_current, get_ai_agent_class
+from .agent_runtime import ensure_agent_runtime_current, get_ai_agent_class
 
 
 AIAgent = get_ai_agent_class()

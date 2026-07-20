@@ -7,7 +7,7 @@ import json
 import logging
 from dataclasses import dataclass
 
-from api.streaming.agent_cache import (
+from .agent_cache import (
     _adopt_session_db_for_cached_agent,
     _agent_cache_api_key_sig,
     _cached_agent_matches_session,

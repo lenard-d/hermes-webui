@@ -157,6 +157,12 @@ else:
 # uses a ${VAR} reference. Depends only on os + threading (both imported above).
 _thread_ctx = threading.local()
 
+# Process-wide environment writes are shared by profile switching, OAuth
+# onboarding, provider credential updates, and local run setup.  Configuration
+# owns this lock because those writers all mutate the same configuration input;
+# live/SSE transport must not own process environment synchronization.
+environment_mutation_lock = threading.Lock()
+
 # ── Config file state (reloadable -- supports profile switching) ─────────────
 from api.config import io as _config_io
 

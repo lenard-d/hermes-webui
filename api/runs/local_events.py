@@ -9,12 +9,12 @@ from collections.abc import Callable
 from api.config import STREAM_PARTIAL_TEXT, STREAM_REASONING_TEXT
 from api.metering import meter
 from api.todo_state import emit_todo_state
-from api.streaming.payloads import _compact_for_echo_compare, _strip_compact_echo_suffix
-from api.streaming.runtime_resolution import (
+from .payloads import _compact_for_echo_compare, _strip_compact_echo_suffix
+from .runtime_resolution import (
     _is_agent_compression_start_status,
     _is_fallback_lifecycle_message,
 )
-from api.streaming.tool_events import (
+from .tool_events import (
     _TOOL_ARG_CONTENT_CAP,
     _TOOL_ARG_CONTENT_KEYS,
     _tool_result_snippet,

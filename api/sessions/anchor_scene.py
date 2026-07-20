@@ -13,7 +13,7 @@ from api.runs import (
     find_run_summary,
     read_run_events,
 )
-from api.streaming import _compact_for_echo_compare, _strip_compact_echo_suffix
+from api.runs.payloads import _compact_for_echo_compare, _strip_compact_echo_suffix
 
 from .repository import edit_session
 
