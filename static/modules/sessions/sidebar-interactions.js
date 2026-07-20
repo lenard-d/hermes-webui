@@ -1,5 +1,13 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { SESSION_ARCHIVE_SWIPE_THRESHOLD_PX, SESSION_DELETE_SWIPE_THRESHOLD_PX, SESSION_LONG_PRESS_DELAY_MS, SESSION_SWIPE_CANCEL_RATIO, _forgetObservedStreamingSession, _isSessionEffectivelyStreaming, _rememberSessionListSource, _sessionStreamingById, sessionStateBindings } from './state.js';
+import { _newSessionInFlight, newSession } from './lifecycle.js';
+import { _isCliSession, _isMessagingSession, _openSidebarSession, _setActiveProjectFilter } from './message-loading.js';
+import { _stripAttachedFilesMarker } from './message-timeline.js';
+import { NO_PROJECT_FILTER, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, _archiveSession, _openSessionActionMenu, _sessionActionMenu, _sessionIdFromLocation, _waitForSessionMotion, closeSessionActionMenu, toggleSessionSelect, sidebarStateBindings } from './sidebar-state.js';
+import { _schedulePendingSessionListApply, renderSessionList, sessionListBindings } from './session-list.js';
+import { _attachChildSessionsToSidebarRows, _collapseSessionLineageForSidebar, _isChildSession, sessionDiscoveryBindings } from './session-discovery.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { deleteSession } from './management.js';
+
 function _sessionDisplayTitle(s){
   const rawTitle=String((s&&(s.display_title||s._state_db_title||s.title))||'Untitled').trim();
   const strip=(typeof _stripAttachedFilesMarker==='function')
@@ -37,7 +45,7 @@ function upsertActiveSessionForLocalTurn({title='', messageCount=0, timestampMs=
   if((S.session.title==='Untitled'||!S.session.title)&&title){
     S.session.title=title;
   }
-  const existingIdx=_allSessions.findIndex(s=>s&&s.session_id===sid);
+  const existingIdx=sidebarStateBindings._allSessions.findIndex(s=>s&&s.session_id===sid);
   const row={
     ...S.session,
     session_id:sid,
@@ -48,8 +56,8 @@ function upsertActiveSessionForLocalTurn({title='', messageCount=0, timestampMs=
     profile:S.session.profile||S.activeProfile||'default',
     is_streaming:true,
   };
-  if(existingIdx>=0) _allSessions[existingIdx]={..._allSessions[existingIdx],...row};
-  else _allSessions.unshift(row);
+  if(existingIdx>=0) sidebarStateBindings._allSessions[existingIdx]={...sidebarStateBindings._allSessions[existingIdx],...row};
+  else sidebarStateBindings._allSessions.unshift(row);
   renderSessionListFromCache();
 }
 
@@ -96,11 +104,11 @@ function clearOptimisticSessionStreaming(sid){
     S.session.active_stream_id=null;
     S.activeStreamId=null;
   }
-  if(Array.isArray(_allSessions)){
-    const idx=_allSessions.findIndex(s=>s&&s.session_id===sid);
+  if(Array.isArray(sidebarStateBindings._allSessions)){
+    const idx=sidebarStateBindings._allSessions.findIndex(s=>s&&s.session_id===sid);
     if(idx>=0){
-      _allSessions[idx]={
-        ..._allSessions[idx],
+      sidebarStateBindings._allSessions[idx]={
+        ...sidebarStateBindings._allSessions[idx],
         active_stream_id:null,
         pending_user_message:null,
         pending_started_at:null,
@@ -156,14 +164,14 @@ function _sessionVirtualSpacer(height, where){
 }
 
 function _scheduleSessionVirtualizedRender(){
-  _sessionListLastScrollAt=Date.now();
+  sessionStateBindings._sessionListLastScrollAt=Date.now();
   // While a profile-switch skeleton is up, ignore virtual-scroll events: the
   // cached rows are the PREVIOUS profile's, and repainting them here would
   // clobber the skeleton before the new /api/sessions response lands (#4662
   // Codex gate). The real render clears _sessionListSkeletonActive.
-  if(_sessionListSkeletonActive) return;
-  if(_renamingSid||_sessionVirtualScrollRaf) return;
-  const list=_sessionVirtualScrollList;
+  if(sessionListBindings._sessionListSkeletonActive) return;
+  if(sidebarStateBindings._renamingSid||sidebarStateBindings._sessionVirtualScrollRaf) return;
+  const list=sidebarStateBindings._sessionVirtualScrollList;
   const total=Number(list&&list.dataset&&list.dataset.sessionVirtualTotal||0);
   // Skip the re-render if the list is below the virtualization threshold —
   // there's no virtual window to recompute, and re-rendering would just
@@ -171,9 +179,9 @@ function _scheduleSessionVirtualizedRender(){
   // unconditional scroll listener (attached for any list) caused
   // user-facing scroll jumps on small lists. (#1669 follow-up)
   if(total>0&&total<=SESSION_VIRTUAL_THRESHOLD_ROWS) return;
-  _sessionVirtualScrollRaf=requestAnimationFrame(()=>{
-    _sessionVirtualScrollRaf=0;
-    const liveList=_sessionVirtualScrollList;
+  sidebarStateBindings._sessionVirtualScrollRaf=requestAnimationFrame(()=>{
+    sidebarStateBindings._sessionVirtualScrollRaf=0;
+    const liveList=sidebarStateBindings._sessionVirtualScrollList;
     const liveTotal=Number(liveList&&liveList.dataset&&liveList.dataset.sessionVirtualTotal||0);
     if(liveList&&liveTotal>SESSION_VIRTUAL_THRESHOLD_ROWS){
       const nextWindow=_sessionVirtualWindow({
@@ -195,15 +203,15 @@ function _scheduleSessionVirtualizedRender(){
 
 function _ensureSessionVirtualScrollHandler(list){
   if(!list) return;
-  if(_sessionVirtualScrollList===list) return;
-  if(_sessionVirtualScrollList){
-    _sessionVirtualScrollList.removeEventListener('scroll', _scheduleSessionVirtualizedRender);
-    _sessionVirtualScrollList.removeEventListener('pointerdown', _markSessionListPointerDown);
-    _sessionVirtualScrollList.removeEventListener('pointerup', _markSessionListPointerUp);
-    _sessionVirtualScrollList.removeEventListener('pointercancel', _markSessionListPointerUp);
-    _sessionVirtualScrollList.removeEventListener('pointerleave', _markSessionListPointerUp);
+  if(sidebarStateBindings._sessionVirtualScrollList===list) return;
+  if(sidebarStateBindings._sessionVirtualScrollList){
+    sidebarStateBindings._sessionVirtualScrollList.removeEventListener('scroll', _scheduleSessionVirtualizedRender);
+    sidebarStateBindings._sessionVirtualScrollList.removeEventListener('pointerdown', _markSessionListPointerDown);
+    sidebarStateBindings._sessionVirtualScrollList.removeEventListener('pointerup', _markSessionListPointerUp);
+    sidebarStateBindings._sessionVirtualScrollList.removeEventListener('pointercancel', _markSessionListPointerUp);
+    sidebarStateBindings._sessionVirtualScrollList.removeEventListener('pointerleave', _markSessionListPointerUp);
   }
-  _sessionVirtualScrollList=list;
+  sidebarStateBindings._sessionVirtualScrollList=list;
   list.addEventListener('scroll', _scheduleSessionVirtualizedRender, {passive:true});
   list.addEventListener('pointerdown', _markSessionListPointerDown, {passive:true});
   list.addEventListener('pointerup', _markSessionListPointerUp, {passive:true});
@@ -212,14 +220,14 @@ function _ensureSessionVirtualScrollHandler(list){
 }
 
 function _markSessionListPointerDown(){
-  _sessionListPointerActive=true;
-  _sessionListLastScrollAt=Date.now();
+  sessionStateBindings._sessionListPointerActive=true;
+  sessionStateBindings._sessionListLastScrollAt=Date.now();
 }
 
 function _markSessionListPointerUp(){
-  _sessionListPointerActive=false;
-  _sessionListLastScrollAt=Date.now();
-  if(_pendingSessionListPayload) _schedulePendingSessionListApply();
+  sessionStateBindings._sessionListPointerActive=false;
+  sessionStateBindings._sessionListLastScrollAt=Date.now();
+  if(sessionStateBindings._pendingSessionListPayload) _schedulePendingSessionListApply();
 }
 
 let _sessionVirtualResyncRaf = 0;
@@ -230,7 +238,7 @@ function _resyncSessionVirtualWindowAfterRender(list, expectedScrollTop, virtual
   if(_sessionVirtualResyncRaf) cancelAnimationFrame(_sessionVirtualResyncRaf);
   _sessionVirtualResyncRaf=requestAnimationFrame(()=>{
     _sessionVirtualResyncRaf=0;
-    if(_renamingSid) return;
+    if(sidebarStateBindings._renamingSid) return;
     const actualScrollTop=Number(list.scrollTop)||0;
     const tolerance=Math.max(2, Number(virtualWindow.itemHeight||SESSION_VIRTUAL_ROW_HEIGHT)/2);
     if(Math.abs(actualScrollTop-expectedScrollTop)<=tolerance) return;
@@ -295,29 +303,29 @@ function _partitionSidebarSessionRows(allMatched, activeSidForSidebar){
     if(!_sidebarRowHasVisibleMessages(s, activeSidForSidebar)) continue;
     const isCli=_isCliSession(s);
     if(isCli) cliSessionCount++;
-    if(s.default_hidden&&!(_activeProject&&_activeProject!==NO_PROJECT_FILTER&&s.project_id===_activeProject)) continue;
+    if(s.default_hidden&&!(sidebarStateBindings._activeProject&&sidebarStateBindings._activeProject!==NO_PROJECT_FILTER&&s.project_id===sidebarStateBindings._activeProject)) continue;
     const profileFiltered=isCli ? cliProfileFiltered : webuiProfileFiltered;
     const referenceRaw=isCli ? cliReferenceRaw : webuiReferenceRaw;
     const sessionsRaw=isCli ? cliSessionsRaw : webuiSessionsRaw;
     profileFiltered.push(s);
-    if(_activeProject===NO_PROJECT_FILTER){
+    if(sidebarStateBindings._activeProject===NO_PROJECT_FILTER){
       if(s.project_id) continue;
-    } else if(_activeProject){
-      if(s.project_id!==_activeProject) continue;
+    } else if(sidebarStateBindings._activeProject){
+      if(s.project_id!==sidebarStateBindings._activeProject) continue;
     }
     referenceRaw.push(s);
     if(s.archived){
       if(isCli) cliArchivedCount++;
       else webuiArchivedCount++;
     }
-    if(!_showArchived&&s.archived) continue;
+    if(!sidebarStateBindings._showArchived&&s.archived) continue;
     sessionsRaw.push(s);
   }
-  if(_sessionSourceFilter==='cli' && !window._showCliSessions && cliSessionCount===0){
-    _sessionSourceFilter='webui';
+  if(sidebarStateBindings._sessionSourceFilter==='cli' && !window._showCliSessions && cliSessionCount===0){
+    sidebarStateBindings._sessionSourceFilter='webui';
   }
-  const showCliOnly=_sessionSourceFilter==='cli';
-  const serverArchivedCount=showCliOnly?_archivedCliCount:_archivedWebuiCount;
+  const showCliOnly=sidebarStateBindings._sessionSourceFilter==='cli';
+  const serverArchivedCount=showCliOnly?sidebarStateBindings._archivedCliCount:sidebarStateBindings._archivedWebuiCount;
   return {
     cliSessionCount,
     profileFiltered: showCliOnly ? cliProfileFiltered : webuiProfileFiltered,
@@ -339,14 +347,14 @@ function _partitionSidebarSessionRows(allMatched, activeSidForSidebar){
 // ancestor lives outside the current view. Scope the references to the same
 // project + source bucket as the render they feed before using them.
 function _scopedSidebarReferenceRows(isCli){
-  if(typeof _sidebarReferenceSessions==='undefined'||!Array.isArray(_sidebarReferenceSessions)||!_sidebarReferenceSessions.length) return [];
-  return _sidebarReferenceSessions.filter(s=>{
+  if(typeof sidebarStateBindings._sidebarReferenceSessions==='undefined'||!Array.isArray(sidebarStateBindings._sidebarReferenceSessions)||!sidebarStateBindings._sidebarReferenceSessions.length) return [];
+  return sidebarStateBindings._sidebarReferenceSessions.filter(s=>{
     if(!s) return false;
     // Source scope: only references in the same webui/cli bucket as this render.
     if(_isCliSession(s)!==!!isCli) return false;
     // Project scope: mirror _partitionSidebarSessionRows exactly.
-    if(_activeProject===NO_PROJECT_FILTER){ if(s.project_id) return false; }
-    else if(_activeProject){ if(s.project_id!==_activeProject) return false; }
+    if(sidebarStateBindings._activeProject===NO_PROJECT_FILTER){ if(s.project_id) return false; }
+    else if(sidebarStateBindings._activeProject){ if(s.project_id!==sidebarStateBindings._activeProject) return false; }
     return true;
   });
 }
@@ -385,7 +393,7 @@ function _attachProjectQuickCreateButton(chip, project){
       }
       return;
     }
-    const previousProject=(typeof _activeProject!=='undefined')?_activeProject:NO_PROJECT_FILTER;
+    const previousProject=(typeof sidebarStateBindings._activeProject!=='undefined')?sidebarStateBindings._activeProject:NO_PROJECT_FILTER;
     _setActiveProjectFilter(project.project_id);
     try{
       await newSession(false,{project_id:project.project_id});
@@ -418,7 +426,7 @@ function _installForkChildSwipe(rowEl, childSession, actionsEl, committedSwipeDu
   let _clearDragTimer=null;
   let _longPressTimer=null;
   let _longPressMenuOpened=false;
-  const _isForkSwipeTarget=()=>_gesturePointerType!=='mouse'&&!_sessionSelectMode;
+  const _isForkSwipeTarget=()=>_gesturePointerType!=='mouse'&&!sidebarStateBindings._sessionSelectMode;
   const _isForkActionTarget=(target)=>!!(actionsEl&&target&&actionsEl.contains(target));
   const _clearForkLongPressTimer=()=>{
     if(_longPressTimer){clearTimeout(_longPressTimer);_longPressTimer=null;}
@@ -442,7 +450,7 @@ function _installForkChildSwipe(rowEl, childSession, actionsEl, committedSwipeDu
     _clearForkLongPressTimer();
     rowEl.classList.add('long-pressing');
     _longPressTimer=setTimeout(()=>{
-      if(_gestureState!=='pressing'||_renamingSid||_sessionSelectMode) return;
+      if(_gestureState!=='pressing'||sidebarStateBindings._renamingSid||sidebarStateBindings._sessionSelectMode) return;
       _longPressMenuOpened=true;
       rowEl._skipNextChildOpen=true;
       _openSessionActionMenu(childSession, rowEl);
@@ -516,7 +524,7 @@ function _installForkChildSwipe(rowEl, childSession, actionsEl, committedSwipeDu
         _archiveSession(childSession,false,()=>_waitForSessionMotion(committedSwipeDuration)).then((restored)=>{
           if(!restored) _settleForkSwipePaint();
         });
-      }else if(_showArchived){
+      }else if(sidebarStateBindings._showArchived){
         _settleForkSwipePaint();
         _archiveSession(childSession,true,()=>_waitForSessionMotion(committedSwipeDuration)).then((archived)=>{
           if(!archived) _settleForkSwipePaint();
@@ -627,7 +635,7 @@ const _scheduleSessionLongPressMenu=()=>{
   _clearLongPressTimer();
   el.classList.add('long-pressing');
   _longPressTimer=setTimeout(()=>{
-    if(_gestureState!=='pressing'||_renamingSid||_sessionSelectMode||readOnly) return;
+    if(_gestureState!=='pressing'||sidebarStateBindings._renamingSid||sidebarStateBindings._sessionSelectMode||readOnly) return;
     _longPressMenuOpened=true;
     clearTimeout(_tapTimer);
     _tapTimer=null;
@@ -636,7 +644,7 @@ const _scheduleSessionLongPressMenu=()=>{
   },SESSION_LONG_PRESS_DELAY_MS);
 };
 const _isSessionSwipeTarget=()=>{
-  return _gesturePointerType!=='mouse'&&!readOnly&&!_renamingSid&&!_sessionSelectMode;
+  return _gesturePointerType!=='mouse'&&!readOnly&&!sidebarStateBindings._renamingSid&&!sidebarStateBindings._sessionSelectMode;
 };
 const _isSessionActionTarget=(target)=>{
   return !!(actions&&target&&actions.contains(target));
@@ -737,7 +745,7 @@ const _handleSessionSwipe=(signedDx,signedDy)=>{
       _archiveSession(s,false,()=>_waitForSessionMotion(committedSwipeDuration)).then((restored)=>{
         if(!restored) _settleSessionSwipePaint();
       });
-    }else if(_showArchived){
+    }else if(sidebarStateBindings._showArchived){
       _settleSessionSwipePaint();
       _archiveSession(s,true,()=>_waitForSessionMotion(committedSwipeDuration)).then((archived)=>{
         if(!archived) _settleSessionSwipePaint();
@@ -783,7 +791,7 @@ const _finishSessionGesture=(clientX,clientY,target,pointerType)=>{
   if(_gestureState==='idle') return false;  // press never began on this row
   const wasDragging=_gestureState==='dragging'||_swipeTracking;
   _clearLongPressTimer();
-  if(_renamingSid){_gestureState='idle';return false;}
+  if(sidebarStateBindings._renamingSid){_gestureState='idle';return false;}
   if(_isSessionActionTarget(target)){_gestureState='idle';return false;}
   _pointerX=clientX;
   _pointerY=clientY;
@@ -795,7 +803,7 @@ const _finishSessionGesture=(clientX,clientY,target,pointerType)=>{
     return true;
   }
   if(target&&target.closest&&target.closest('.session-child-count,.session-child-sessions,.session-child-session,.session-lineage-count,.session-lineage-segments,.session-lineage-segment')) return false;
-  if(_sessionSelectMode){if(!readOnly)toggleSessionSelect(s.session_id);return true;}
+  if(sidebarStateBindings._sessionSelectMode){if(!readOnly)toggleSessionSelect(s.session_id);return true;}
   if(wasDragging){
     clearTimeout(_tapTimer);_tapTimer=null;_lastTapTime=0;
     _gestureState='idle';
@@ -819,9 +827,9 @@ const _finishSessionGesture=(clientX,clientY,target,pointerType)=>{
   _tapTimer=setTimeout(async()=>{
     _tapTimer=null;
     _lastTapTime=0;
-    if(_renamingSid) return;
+    if(sidebarStateBindings._renamingSid) return;
     try{
-      if(($('sessionSearch').value||'').trim()) _hideSearchPreviewsAfterSelect=true;
+      if(($('sessionSearch').value||'').trim()) sessionDiscoveryBindings._hideSearchPreviewsAfterSelect=true;
       await _openSidebarSession(s);
     }finally{
       el.classList.remove('loading');
@@ -860,11 +868,11 @@ el.onpointerup=(e)=>{
 // Add ondblclick for more reliable double-click detection
 el.ondblclick=(e)=>{
   if(e.pointerType==='mouse' && e.button!==0) return;
-  if(_renamingSid) return;
+  if(sidebarStateBindings._renamingSid) return;
   if(actions&&actions.contains(e.target)) return;
-  if(_sessionSelectMode){e.stopPropagation();if(!readOnly)toggleSessionSelect(s.session_id);return;}
+  if(sidebarStateBindings._sessionSelectMode){e.stopPropagation();if(!readOnly)toggleSessionSelect(s.session_id);return;}
   // Guard: prevent renaming if session is currently being loaded
-  if (_loadingSessionId && _loadingSessionId !== s.session_id) return;
+  if (sessionStateBindings._loadingSessionId && sessionStateBindings._loadingSessionId !== s.session_id) return;
   startRename();
 };
 el.addEventListener('touchstart',(e)=>{
@@ -887,4 +895,6 @@ el.addEventListener('touchend',(e)=>{
 },{passive:true});
 }
 
-window.HermesSessions.parts.sidebarRowBehavior=Object.freeze({upsert:upsertActiveSessionForLocalTurn,clearOptimistic:clearOptimisticSessionStreaming,installGestures:_installSessionRowGestures,installForkGestures:_installForkChildSwipe});
+export const sidebarRowBehavior=Object.freeze({upsert:upsertActiveSessionForLocalTurn,clearOptimistic:clearOptimisticSessionStreaming,installGestures:_installSessionRowGestures,installForkGestures:_installForkChildSwipe});
+
+export { _activeSessionIdForSidebar, _attachProjectQuickCreateButton, _ensureActiveSessionRowPresent, _ensureSessionVirtualScrollHandler, _installForkChildSwipe, _installSessionRowGestures, _partitionSidebarSessionRows, _renderSidebarRowsFromRawSessions, _resyncSessionVirtualWindowAfterRender, _scopedSidebarReferenceRows, _sessionAttentionState, _sessionDisplayTitle, _sessionRowsWithActiveEphemeralSession, _sessionTitleTags, _sessionVirtualSpacer, _sessionVirtualWindow, clearOptimisticSessionStreaming, upsertActiveSessionForLocalTurn };

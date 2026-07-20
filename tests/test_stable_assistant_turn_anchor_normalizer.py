@@ -8,12 +8,7 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-ANCHORS_JS = REPO / "static" / "assistant_turn_anchors.js"
-ANCHOR_JS_PATHS = (
-    REPO / "static" / "assistant_turn_anchors_parts" / "model.js",
-    REPO / "static" / "assistant_turn_anchors_parts" / "activity_scene.js",
-    ANCHORS_JS,
-)
+ANCHORS_JS = REPO / "static" / "modules" / "assistant-turn-anchors" / "index.js"
 MESSAGES_JS = REPO / "static" / "messages.js"
 UI_JS = REPO / "static" / "ui.js"
 SESSIONS_JS = REPO / "static" / "sessions.js"
@@ -33,14 +28,7 @@ def _read(path: Path) -> str:
 def _normalizer_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js normalizer tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 const context = {{
   session_id:'sid-1',
   turn_id:'turn-1',
@@ -185,7 +173,7 @@ console.log(JSON.stringify({{
   localNoSeqKey,
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 

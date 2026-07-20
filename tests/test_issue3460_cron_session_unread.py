@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_asset_paths
+from tests.frontend_asset_contract import family_asset_paths, module_family_paths
 
 import io
 import json
@@ -47,7 +47,8 @@ def _payload(handler):
 
 
 def _family_path_arg(family: str) -> str:
-    return json.dumps([str(path) for path in family_asset_paths(family)])
+    paths = module_family_paths(family) if family == "sessions" else family_asset_paths(family)
+    return json.dumps([str(path) for path in paths])
 
 
 def _run_node(script: str, family: str) -> dict:
@@ -394,7 +395,7 @@ def test_sessions_helper_marks_background_completion_with_existing_snapshot():
     script = f"""
 const fs = require('fs');
 // Ordered split family: {"sessions"}
-const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('').replace(/\\b[A-Za-z][A-Za-z0-9]*Bindings\\./g, '');
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);
@@ -436,7 +437,7 @@ def test_sessions_helper_marks_actively_viewed_completion_as_read():
     script = f"""
 const fs = require('fs');
 // Ordered split family: {"sessions"}
-const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('').replace(/\\b[A-Za-z][A-Za-z0-9]*Bindings\\./g, '');
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);
@@ -478,7 +479,7 @@ def test_cron_polling_marks_sidebar_unread_without_needing_toast():
     script = f"""
 const fs = require('fs');
 // Ordered split family: {"panels"}
-const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('');
+const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('').replace(/\\b[A-Za-z][A-Za-z0-9]*Bindings\\./g, '');
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);

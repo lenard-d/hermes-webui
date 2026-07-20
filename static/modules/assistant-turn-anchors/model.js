@@ -2,11 +2,7 @@
 //
 // Identity, normalization, registry mutation, replay/recovery hydration, and
 // settlement stay in this factory so one turn never acquires a second owner.
-(function registerAssistantTurnAnchorModel(root){
-  const parts=root.HermesAssistantTurnAnchorParts||(root.HermesAssistantTurnAnchorParts=Object.create(null));
-  if(parts.createModel) throw new Error('assistant turn anchor model already registered');
-
-  parts.createModel=function createAssistantTurnAnchorModel(){
+export function createAssistantTurnAnchorModel(){
     const ACTIVITY_EVENT_KINDS=Object.freeze([
       'process_prose',
       'reasoning',
@@ -883,5 +879,4 @@
       normalizeTerminalState:normalizeAssistantTurnAnchorTerminalState,
     });
     return Object.freeze({publicApi,sceneSupport});
-  };
-})(typeof window!=='undefined'?window:globalThis);
+}

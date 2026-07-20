@@ -1,13 +1,11 @@
 """Browser regression coverage for the portaled conversation-actions menu."""
-from pathlib import Path
 import re
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
 
-SESSIONS_JS = (Path(__file__).resolve().parents[1] / "static" / "sessions.js").read_text(
-    encoding="utf-8"
-)
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_source(name: str) -> str:

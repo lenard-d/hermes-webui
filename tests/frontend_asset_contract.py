@@ -7,6 +7,7 @@ list their complete dependency surface and identify one page entrypoint.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -81,6 +82,45 @@ _BOOT_MODULE_NAMES = (
     "index.js",
 )
 
+_SESSION_MODULE_NAMES = (
+    "state.js",
+    "lifecycle.js",
+    "message-loading.js",
+    "message-timeline.js",
+    "sidebar-state.js",
+    "session-list.js",
+    "session-discovery.js",
+    "sidebar-interactions.js",
+    "sidebar-renderer.js",
+    "management.js",
+    "legacy-adapter.js",
+    "index.js",
+)
+
+_ASSISTANT_TURN_ANCHOR_MODULE_NAMES = (
+    "model.js",
+    "activity-scene.js",
+    "legacy-adapter.js",
+    "index.js",
+)
+
+
+def module_family_paths(family: str) -> tuple[Path, ...]:
+    """Return a native module family's complete source inventory."""
+
+    if family == "sessions":
+        directory = STATIC_DIR / "modules" / "sessions"
+        return tuple(directory / name for name in _SESSION_MODULE_NAMES)
+    if family == "assistant-turn-anchors":
+        directory = STATIC_DIR / "modules" / "assistant-turn-anchors"
+        return tuple(directory / name for name in _ASSISTANT_TURN_ANCHOR_MODULE_NAMES)
+    if family == "boot":
+        directory = STATIC_DIR / "modules" / "boot"
+        return tuple(directory / name for name in _BOOT_MODULE_NAMES)
+    if family == "commands":
+        directory = STATIC_DIR / "modules" / "commands"
+        return tuple(directory / name for name in _COMMAND_MODULE_NAMES)
+    raise ValueError(f"unknown frontend module family: {family}")
 
 def _numbered_parts(directory: str, suffix: str) -> tuple[Path, ...]:
     pattern = f"[0-9][0-9][0-9]-*{suffix}"
@@ -105,7 +145,7 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
             *_numbered_parts("workspace_parts", ".js"),
         )
     if family == "sessions":
-        return (*_numbered_parts("sessions_parts", ".js"), STATIC_DIR / "sessions.js")
+        return (STATIC_DIR / "modules" / "sessions" / "index.js",)
     if family == "commands":
         return tuple(
             STATIC_DIR / "modules" / "commands" / name
@@ -127,11 +167,22 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
 
 
 def family_source(family: str) -> str:
-    """Read one family's source in browser load order for source-level tests."""
+    """Read one family's implementation sources in their documented order."""
 
-    return "".join(
-        path.read_text(encoding="utf-8") for path in family_asset_paths(family)
+    paths = (
+        module_family_paths(family)
+        if family in {"boot", "commands", "sessions"}
+        else family_asset_paths(family)
     )
+    source = "".join(
+        path.read_text(encoding="utf-8") for path in paths
+    )
+    if family == "sessions":
+        # Transitional source-extraction harnesses evaluate individual functions
+        # outside their module. Present owner-backed mutable bindings under their
+        # former local names there; production tests import the real ESM graph.
+        source = re.sub(r"\b[A-Za-z][A-Za-z0-9]*Bindings\.", "", source)
+    return source
 
 
 def family_entrypoint_path(family: str) -> Path | None:
@@ -141,5 +192,7 @@ def family_entrypoint_path(family: str) -> Path | None:
         return STATIC_DIR / "modules" / "boot" / "index.js"
     if family == "commands":
         return None  # imported by boot/index.js through the compatibility seam
+    if family == "sessions":
+        return STATIC_DIR / "modules" / "sessions" / "index.js"
     paths = family_asset_paths(family)
     return paths[0] if paths else None

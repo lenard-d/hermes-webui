@@ -1,5 +1,11 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { ICONS, SESSION_LIST_FLIP_TIMEOUT_MS, SESSION_REFLOW_TIMEOUT_MS, SESSION_SWIPE_DURATION_MS, SESSION_SWIPE_REFLOW_LEAD_MS, _formatSessionModelWithGateway, _hasUnreadForSession, _isSessionEffectivelyStreaming, _purgeStaleInflightEntries, _rememberRenderedSessionSnapshot, _rememberRenderedStreamingState, sessionStateBindings } from './state.js';
+import { _getChannelLabel, _isCliSession, _isMessagingSession, _isReadOnlySession, _openSidebarSession, _sessionArchivePagingFilterActive, _sessionSourceLabel, _sessionSourceTabCount, _setActiveProjectFilter, _setSessionSourceFilter, _sourceKeyForSession } from './message-loading.js';
+import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, _buildSessionRenameStarter, _captureSessionReflowPositions, _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportInflight, _makeSessionSwipeAffordance, _openSessionActionMenu, _playSessionRowsReflowFromPositions, _renderBatchActionBar, _selectedSessions, _sessionActionMenu, _sessionPrefersReducedMotion, _sessionSwipeReturnOffsets, _setShowAllProfiles, closeSessionActionMenu, exitSessionSelectMode, selectAllSessions, setSessionSelected, toggleSessionSelectMode, sidebarStateBindings } from './sidebar-state.js';
+import { _renderSessionListLoadErrorNote, renderSessionList, sessionListBindings } from './session-list.js';
+import { _appendHighlightedText, _fetchLineageReportForRow, _formatRelativeSessionTime, _lineageReportCacheKey, _lineageReportNeedsFetch, _lineageSegmentsForRender, _serverNowMs, _sessionChildBadgeTooltip, _sessionForkTooltip, _sessionFullTitleTooltip, _sessionLineageBadgeTooltip, _sessionLineageContainsSession, _sessionSearchContentPreview, _sessionSearchMergeMatches, _sessionSegmentCount, _sessionSidebarSortCompare, _sessionSortTimestampMs, _sessionStateTooltip, _sessionTimeBucketLabel, _sessionTimestampMs, _sessionTitleForForkParent, _sidebarLineageKeyForRow, _syncSidebarExpansionForActiveSession, _truncatedSessionId, filterSessions, sessionDiscoveryBindings } from './session-discovery.js';
+import { _activeSessionIdForSidebar, _attachProjectQuickCreateButton, _ensureActiveSessionRowPresent, _ensureSessionVirtualScrollHandler, _installForkChildSwipe, _installSessionRowGestures, _partitionSidebarSessionRows, _renderSidebarRowsFromRawSessions, _resyncSessionVirtualWindowAfterRender, _scopedSidebarReferenceRows, _sessionAttentionState, _sessionDisplayTitle, _sessionRowsWithActiveEphemeralSession, _sessionTitleTags, _sessionVirtualSpacer, _sessionVirtualWindow } from './sidebar-interactions.js';
+import { _showProjectContextMenu, _startProjectCreate, _startProjectRename } from './management.js';
+
 function _renderOneSession(s, isPinnedGroup=false, renderContext){
   const {activeSidForSidebar,searchQueryRaw,animateRefresh,enterAllAnimatedRows,flipBefore,committedSwipeDuration,committedSwipeReflowDelay}=renderContext;
   const el=document.createElement('div');
@@ -41,7 +47,7 @@ function _renderOneSession(s, isPinnedGroup=false, renderContext){
     cleanTitle='Session';
   }
   // Checkbox for batch select mode
-  if(_sessionSelectMode&&!readOnly){
+  if(sidebarStateBindings._sessionSelectMode&&!readOnly){
     const cbWrapper=document.createElement('label');cbWrapper.className='session-select-cb-wrapper';
     const cb=document.createElement('input');cb.type='checkbox';cb.className='session-select-cb';
     cb.dataset.sid=s.session_id;cb.checked=_selectedSessions.has(s.session_id);
@@ -100,7 +106,7 @@ function _renderOneSession(s, isPinnedGroup=false, renderContext){
   // to need the project marker. As a flex-flow sibling it stays visible
   // regardless of title length and sits next to the timestamp on the right.
   if(s.project_id){
-    const proj=_allProjects.find(p=>p.project_id===s.project_id);
+    const proj=sidebarStateBindings._allProjects.find(p=>p.project_id===s.project_id);
     if(proj){
       const dot=document.createElement('span');
       dot.className='session-project-dot';
@@ -189,7 +195,7 @@ function _renderOneSession(s, isPinnedGroup=false, renderContext){
     const sourceLabel=_getChannelLabel(s);
     if(sourceLabel&&(s.is_cli_session||_isMessagingSession(s))) metaBits.push(sourceLabel);
     if(readOnly) metaBits.push('read-only');
-    if(_showAllProfiles&&s.profile) metaBits.push(s.profile);
+    if(sidebarStateBindings._showAllProfiles&&s.profile) metaBits.push(s.profile);
     const meta=document.createElement('div');
     meta.className='session-meta';
     meta.textContent=metaBits.join(' · ');
@@ -253,7 +259,7 @@ function _renderOneSession(s, isPinnedGroup=false, renderContext){
           +(childAttention?' needs-attention':'')
           +childAttentionClass;
         row.dataset.sid=child.session_id;
-        if(_sessionSelectMode&&!_isReadOnlySession(child)){
+        if(sidebarStateBindings._sessionSelectMode&&!_isReadOnlySession(child)){
           const cbW=document.createElement('label');cbW.className='session-select-cb-wrapper';
           const cb=document.createElement('input');cb.type='checkbox';cb.className='session-select-cb';
           cb.dataset.sid=child.session_id;cb.checked=_selectedSessions.has(child.session_id);
@@ -449,9 +455,9 @@ function renderSessionListFromCache(){
   // skeleton. The authoritative switch render clears the flag from inside
   // _applySessionListPayload — once _allSessions is fresh — so only a render backed by
   // up-to-date data replaces the skeleton. The failure-restore path clears it too.
-  if(_sessionListSkeletonActive) return;
+  if(sessionListBindings._sessionListSkeletonActive) return;
   // Don't re-render while user is actively renaming a session (would destroy the input)
-  if(_renamingSid) return;
+  if(sidebarStateBindings._renamingSid) return;
   // Keep the per-conversation actions menu stable while the user is trying to
   // click it. Sidebar syncs, stream/unread updates, and panel-resync repairs can
   // all call this while the fixed-position menu is open; rebuilding the row DOM
@@ -465,11 +471,11 @@ function renderSessionListFromCache(){
   const searchQueryRaw=($('sessionSearch').value||'').trim();
   const q=searchQueryRaw.toLowerCase();
   const activeSidForSidebar=_activeSessionIdForSidebar();
-  const sidebarRows=_sessionRowsWithActiveEphemeralSession(_allSessions);
+  const sidebarRows=_sessionRowsWithActiveEphemeralSession(sidebarStateBindings._allSessions);
   // Merge direct session-id/link matches, title matches, then content matches (deduped).
   // Direct matches must not disable content search: if a user pasted the same
   // session id into another conversation, that content hit should still appear.
-  const searchMatches=_sessionSearchMergeMatches(sidebarRows,searchQueryRaw,_contentSearchResults);
+  const searchMatches=_sessionSearchMergeMatches(sidebarRows,searchQueryRaw,sessionDiscoveryBindings._contentSearchResults);
   const allMatched=_ensureActiveSessionRowPresent(searchMatches,sidebarRows);
   const {
     cliSessionCount,
@@ -481,27 +487,27 @@ function renderSessionListFromCache(){
     webuiSessionsRaw,
     cliSessionsRaw,
   }=_partitionSidebarSessionRows(allMatched, activeSidForSidebar);
-  const referenceRaw=_sessionSourceFilter==='cli'?cliReferenceRaw:webuiReferenceRaw;
-  const isCliView=_sessionSourceFilter==='cli';
+  const referenceRaw=sidebarStateBindings._sessionSourceFilter==='cli'?cliReferenceRaw:webuiReferenceRaw;
+  const isCliView=sidebarStateBindings._sessionSourceFilter==='cli';
   const sessions=_renderSidebarRowsFromRawSessions(sessionsRaw, [...referenceRaw, ..._scopedSidebarReferenceRows(isCliView)]);
   // Server-provided source bucket counts are authoritative for the current
   // payload. When present, skip the expensive cross-bucket render/count pass;
   // null is a deliberate "not computed" sentinel consumed only by
   // _sessionSourceTabCount's fallback path below.
-  const renderedWebuiSessionCount=_serverWebuiSessionCount===null
+  const renderedWebuiSessionCount=sidebarStateBindings._serverWebuiSessionCount===null
     ? _renderSidebarRowsFromRawSessions(webuiSessionsRaw, [...webuiReferenceRaw, ..._scopedSidebarReferenceRows(false)]).length
     : null;
-  const renderedCliSessionCount=_serverCliSessionCount===null
+  const renderedCliSessionCount=sidebarStateBindings._serverCliSessionCount===null
     ? _renderSidebarRowsFromRawSessions(cliSessionsRaw, [...cliReferenceRaw, ..._scopedSidebarReferenceRows(true)]).length
     : null;
   const webuiSessionTabCount=_sessionSourceTabCount('webui', renderedWebuiSessionCount, renderedCliSessionCount);
   const cliSessionTabCount=_sessionSourceTabCount('cli', renderedWebuiSessionCount, renderedCliSessionCount);
   _syncSidebarExpansionForActiveSession(sessions, activeSidForSidebar);
   const list=$('sessionList');
-  const animateRefresh=_sessionListRefreshAnimationPending;
-  _sessionListRefreshAnimationPending=false;
-  const enterAllAnimatedRows=animateRefresh&&_sessionListEnterAllAnimationPending;
-  _sessionListEnterAllAnimationPending=false;
+  const animateRefresh=sidebarStateBindings._sessionListRefreshAnimationPending;
+  sidebarStateBindings._sessionListRefreshAnimationPending=false;
+  const enterAllAnimatedRows=animateRefresh&&sidebarStateBindings._sessionListEnterAllAnimationPending;
+  sidebarStateBindings._sessionListEnterAllAnimationPending=false;
   const flipBefore=animateRefresh?_captureSessionReflowPositions():null;
   const committedSwipeDuration=_sessionPrefersReducedMotion()?0:SESSION_SWIPE_DURATION_MS;
   const committedSwipeReflowDelay=Math.max(0,committedSwipeDuration-SESSION_SWIPE_REFLOW_LEAD_MS);
@@ -513,9 +519,9 @@ function renderSessionListFromCache(){
   // flag is still true — so by the time we paint here the flag is already false. Keep
   // this assignment as a defensive backstop for any future non-switch caller that
   // reaches a real paint with the flag somehow still set.
-  _sessionListSkeletonActive=false;
+  sessionListBindings._sessionListSkeletonActive=false;
   // Batch select bar (when in select mode)
-  if(_sessionSelectMode){
+  if(sidebarStateBindings._sessionSelectMode){
     const selectBar=document.createElement('div');selectBar.className='session-select-bar';
     const exitBtn=document.createElement('button');exitBtn.className='batch-exit-btn';
     exitBtn.textContent='\u2715';exitBtn.title='Exit select mode';
@@ -531,9 +537,9 @@ function renderSessionListFromCache(){
   let batchBar=$('batchActionBar');
   if(!batchBar){batchBar=document.createElement('div');batchBar.id='batchActionBar';batchBar.className='batch-action-bar';}
   list.appendChild(batchBar);
-  if(_sessionSelectMode&&_selectedSessions.size>0){batchBar.style.display='flex';_renderBatchActionBar();}
+  if(sidebarStateBindings._sessionSelectMode&&_selectedSessions.size>0){batchBar.style.display='flex';_renderBatchActionBar();}
   else{batchBar.style.display='none';}
-  if(_sessionListLoadError){
+  if(sessionStateBindings._sessionListLoadError){
     const note=_renderSessionListLoadErrorNote();
     if(note) list.appendChild(note);
   }
@@ -544,9 +550,9 @@ function renderSessionListFromCache(){
       const count=filter==='cli'?cliSessionTabCount:webuiSessionTabCount;
       const btn=document.createElement('button');
       btn.type='button';
-      btn.className='session-source-tab'+(_sessionSourceFilter===filter?' active':'');
+      btn.className='session-source-tab'+(sidebarStateBindings._sessionSourceFilter===filter?' active':'');
       btn.textContent=_sessionSourceLabel(filter,count);
-      btn.setAttribute('aria-pressed', _sessionSourceFilter===filter?'true':'false');
+      btn.setAttribute('aria-pressed', sidebarStateBindings._sessionSourceFilter===filter?'true':'false');
       btn.onclick=()=>_setSessionSourceFilter(filter);
       sourceTabs.appendChild(btn);
     }
@@ -555,12 +561,12 @@ function renderSessionListFromCache(){
   // Project filter bar — show when there are real projects OR there are
   // unassigned sessions (so the Unassigned chip has something to filter to).
   const hasUnprojected=profileFiltered.some(s=>!s.project_id);
-  if(_allProjects.length>0||hasUnprojected){
+  if(sidebarStateBindings._allProjects.length>0||hasUnprojected){
     const bar=document.createElement('div');
     bar.className='project-bar';
     // "All" chip
     const allChip=document.createElement('span');
-    allChip.className='project-chip'+(!_activeProject?' active':'');
+    allChip.className='project-chip'+(!sidebarStateBindings._activeProject?' active':'');
     allChip.textContent='All';
     allChip.onclick=()=>{_setActiveProjectFilter(null);};
     bar.appendChild(allChip);
@@ -569,16 +575,16 @@ function renderSessionListFromCache(){
     // organized, to keep the chip bar uncluttered.
     if(hasUnprojected){
       const noneChip=document.createElement('span');
-      noneChip.className='project-chip no-project'+(_activeProject===NO_PROJECT_FILTER?' active':'');
+      noneChip.className='project-chip no-project'+(sidebarStateBindings._activeProject===NO_PROJECT_FILTER?' active':'');
       noneChip.textContent='Unassigned';
       noneChip.title='Show conversations not yet assigned to a project';
       noneChip.onclick=()=>{_setActiveProjectFilter(NO_PROJECT_FILTER);};
       bar.appendChild(noneChip);
     }
     // Project chips
-    for(const p of _allProjects){
+    for(const p of sidebarStateBindings._allProjects){
       const chip=document.createElement('span');
-      chip.className='project-chip'+(p.project_id===_activeProject?' active':'');
+      chip.className='project-chip'+(p.project_id===sidebarStateBindings._activeProject?' active':'');
       if(p.color){
         const dot=document.createElement('span');
         dot.className='color-dot';
@@ -656,14 +662,14 @@ function renderSessionListFromCache(){
   // must trigger a refetch — there's no client-cached aggregate to slice through.
   // The server is authoritative for the count (renamed-root cross-alias is
   // server-side). A naive strict-equality client fallback would mis-count.
-  const otherProfileCount = _otherProfileCount;
-  if(otherProfileCount>0&&!_showAllProfiles){
+  const otherProfileCount = sidebarStateBindings._otherProfileCount;
+  if(otherProfileCount>0&&!sidebarStateBindings._showAllProfiles){
     const pfToggle=document.createElement('div');
     pfToggle.style.cssText='font-size:10px;padding:4px 10px;color:var(--muted);cursor:pointer;text-align:center;opacity:.7;';
     pfToggle.textContent='Show '+otherProfileCount+' from other profiles';
     pfToggle.onclick=()=>{_setShowAllProfiles(true);renderSessionList({deferWhileInteracting:false});};
     list.appendChild(pfToggle);
-  } else if(_showAllProfiles){
+  } else if(sidebarStateBindings._showAllProfiles){
     const pfToggle=document.createElement('div');
     pfToggle.style.cssText='font-size:10px;padding:4px 10px;color:var(--muted);cursor:pointer;text-align:center;opacity:.7;';
     pfToggle.textContent='Show active profile only';
@@ -672,27 +678,27 @@ function renderSessionListFromCache(){
   }
   // Show/hide archived toggle if there are archived sessions. Archived rows
   // are fetched on demand so large histories do not bloat every sidebar poll.
-  if(archivedCount>0||_showArchived){
+  if(archivedCount>0||sidebarStateBindings._showArchived){
     const toggle=document.createElement('div');
     toggle.style.cssText='font-size:10px;padding:4px 10px;color:var(--muted);cursor:pointer;text-align:center;opacity:.7;';
-    toggle.textContent=_showArchived?'Hide archived':'Show '+archivedCount+' archived';
+    toggle.textContent=sidebarStateBindings._showArchived?'Hide archived':'Show '+archivedCount+' archived';
     toggle.onclick=()=>{
-      _showArchived=!_showArchived;
-      if(_showArchived) _archivedRowsLoadedLimit=SESSION_ARCHIVED_PAGE_SIZE;
+      sidebarStateBindings._showArchived=!sidebarStateBindings._showArchived;
+      if(sidebarStateBindings._showArchived) sidebarStateBindings._archivedRowsLoadedLimit=SESSION_ARCHIVED_PAGE_SIZE;
       renderSessionList();
     };
     list.appendChild(toggle);
   }
   // Empty state for active project filter
-  if(_sessionSourceFilter==='cli'&&sessions.length===0){
+  if(sidebarStateBindings._sessionSourceFilter==='cli'&&sessions.length===0){
     const empty=document.createElement('div');
     empty.className='session-empty-note';
     empty.textContent=window._showCliSessions?'No CLI sessions found.':'Enable Show agent sessions in Settings to list CLI sessions here.';
     list.appendChild(empty);
-  } else if(_activeProject&&sessions.length===0){
+  } else if(sidebarStateBindings._activeProject&&sessions.length===0){
     const empty=document.createElement('div');
     empty.className='session-empty-note';
-    empty.textContent=_activeProject===NO_PROJECT_FILTER?'No unassigned sessions.':'No sessions in this project yet.';
+    empty.textContent=sidebarStateBindings._activeProject===NO_PROJECT_FILTER?'No unassigned sessions.':'No sessions in this project yet.';
     list.appendChild(empty);
   }
   const orderedSessions=[...sessions].sort(_sessionSidebarSortCompare);
@@ -723,7 +729,7 @@ function renderSessionListFromCache(){
     if(_groupCollapsed[g.label]) continue;
     for(const s of g.items){ flatSessionRows.push({group:g,session:s}); }
   }
-  _sessionVisibleSidebarIds=flatSessionRows.map(row=>row.session&&row.session.session_id).filter(Boolean);
+  sidebarStateBindings._sessionVisibleSidebarIds=flatSessionRows.map(row=>row.session&&row.session.session_id).filter(Boolean);
   for(const row of flatSessionRows){
     const s=row.session;
     if(!s||!Array.isArray(s._child_sessions)) continue;
@@ -731,7 +737,7 @@ function renderSessionListFromCache(){
     if(!_expandedChildSessionKeys.has(key)&&!searchQueryRaw) continue;
     for(const child of s._child_sessions){
       if(child&&child.session_source==='fork'&&child.session_id&&!_isReadOnlySession(child)){
-        _sessionVisibleSidebarIds.push(child.session_id);
+        sidebarStateBindings._sessionVisibleSidebarIds.push(child.session_id);
       }
     }
   }
@@ -831,10 +837,10 @@ function renderSessionListFromCache(){
     _resyncSessionVirtualWindowAfterRender(list, listScrollTopBeforeRender, virtualWindow);
   }
   const archivePagingFilterActive=_sessionArchivePagingFilterActive();
-  if(_showArchived&&!archivePagingFilterActive){
-    const activeArchivedTotal=_sessionSourceFilter==='cli'?_archivedCliCount:_archivedWebuiCount;
-    const loadedArchivedCount=sidebarRows.filter(s=>s&&s.archived&&(_sessionSourceFilter==='cli'?_isCliSession(s):!_isCliSession(s))).length;
-    const archiveLoadCapReached=Number(_archivedRowsLoadedLimit||0)>=SESSION_ARCHIVED_MAX_LOADED_LIMIT;
+  if(sidebarStateBindings._showArchived&&!archivePagingFilterActive){
+    const activeArchivedTotal=sidebarStateBindings._sessionSourceFilter==='cli'?sidebarStateBindings._archivedCliCount:sidebarStateBindings._archivedWebuiCount;
+    const loadedArchivedCount=sidebarRows.filter(s=>s&&s.archived&&(sidebarStateBindings._sessionSourceFilter==='cli'?_isCliSession(s):!_isCliSession(s))).length;
+    const archiveLoadCapReached=Number(sidebarStateBindings._archivedRowsLoadedLimit||0)>=SESSION_ARCHIVED_MAX_LOADED_LIMIT;
     const remainingArchived=archiveLoadCapReached?0:Math.max(0, Number(activeArchivedTotal||0)-loadedArchivedCount);
     if(remainingArchived>0){
       const more=document.createElement('div');
@@ -842,9 +848,9 @@ function renderSessionListFromCache(){
       more.style.cssText='font-size:10px;padding:6px 10px;color:var(--muted);cursor:pointer;text-align:center;opacity:.8;';
       more.textContent='Load '+Math.min(SESSION_ARCHIVED_PAGE_SIZE, remainingArchived)+' more archived ('+remainingArchived+' remaining)';
       more.onclick=()=>{
-        _archivedRowsLoadedLimit=Math.min(
+        sidebarStateBindings._archivedRowsLoadedLimit=Math.min(
           SESSION_ARCHIVED_MAX_LOADED_LIMIT,
-          Math.max(SESSION_ARCHIVED_PAGE_SIZE, Number(_archivedRowsLoadedLimit)||SESSION_ARCHIVED_PAGE_SIZE)+SESSION_ARCHIVED_PAGE_SIZE
+          Math.max(SESSION_ARCHIVED_PAGE_SIZE, Number(sidebarStateBindings._archivedRowsLoadedLimit)||SESSION_ARCHIVED_PAGE_SIZE)+SESSION_ARCHIVED_PAGE_SIZE
         );
         renderSessionList();
       };
@@ -852,7 +858,7 @@ function renderSessionListFromCache(){
     }
   }
   // Select mode toggle button (only when NOT in select mode)
-  if(!_sessionSelectMode){
+  if(!sidebarStateBindings._sessionSelectMode){
     const toggleBtn=document.createElement('div');toggleBtn.className='session-select-toggle';
     toggleBtn.textContent=t('session_select_mode');
     toggleBtn.onclick=(e)=>{e.stopPropagation();toggleSessionSelectMode();};
@@ -860,13 +866,15 @@ function renderSessionListFromCache(){
   }
   // Refresh FLIP and queued archive/delete reflow both drive
   // --session-reflow-offset. Refresh wins so one render has one transform writer.
-  const reflowBefore=animateRefresh?flipBefore:_pendingSessionReflowPositions;
+  const reflowBefore=animateRefresh?flipBefore:sidebarStateBindings._pendingSessionReflowPositions;
   const reflowTimeout=animateRefresh?SESSION_LIST_FLIP_TIMEOUT_MS:SESSION_REFLOW_TIMEOUT_MS;
-  _pendingSessionReflowPositions=null;
+  sidebarStateBindings._pendingSessionReflowPositions=null;
   _playSessionRowsReflowFromPositions(reflowBefore,reflowTimeout,_sessionPrefersReducedMotion);
 
 }
 
 
 
-window.HermesSessions.parts.sidebarRendering=Object.freeze({renderRow:_renderOneSession,renderList:renderSessionListFromCache});
+export const sidebarRendering=Object.freeze({renderRow:_renderOneSession,renderList:renderSessionListFromCache});
+
+export { renderSessionListFromCache };

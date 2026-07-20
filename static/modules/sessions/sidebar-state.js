@@ -1,5 +1,11 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { ICONS, _manualTitleRegenerateTimeoutMs, sessionStateBindings } from './state.js';
+import { loadSession } from './lifecycle.js';
+import { _clearHandoffStorageForSession, _isCliSession, _isMessagingSession, _isReadOnlySession, _restoreSessionSourceFilter, _sessionListQueryString } from './message-loading.js';
+import { _dropStaleOptimisticSessionRow, renderSessionList } from './session-list.js';
+import { _sessionDisplayTitle } from './sidebar-interactions.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { _showProjectPicker, deleteSession, removeWorktree } from './management.js';
+
 const SESSION_ARCHIVED_PAGE_SIZE = 100;
 const SESSION_ARCHIVED_MAX_LOADED_LIMIT = 2000;
 let _allSessions = [];  // cached for search filter
@@ -647,7 +653,7 @@ function _findSessionRenameRow(sessionId){
 function _buildSessionRenameStarter(session, displayEl, renderDisplay){
   return ()=>{
     if(_isReadOnlySession(session)){ if(typeof showToast==='function') showToast('Read-only imported sessions cannot be renamed.',3000); return; }
-    if(_loadingSessionId&&_loadingSessionId!==session.session_id) return;
+    if(sessionStateBindings._loadingSessionId&&sessionStateBindings._loadingSessionId!==session.session_id) return;
 
     closeSessionActionMenu();
     _renamingSid=session.session_id;
@@ -1159,7 +1165,7 @@ let _sessionListEnterAllAnimationPending = false;
 // pending/queued payloads drops a deferred apply that would do the same.
 function _invalidateSessionListRenders(){
   _renderSessionListGen++;
-  _pendingSessionListPayload = null;
+  sessionStateBindings._pendingSessionListPayload = null;
   _renderSessionListQueuedRequest = null;
   // A retry whose fetch is invalidated here (e.g. a profile switch mid-retry)
   // would otherwise leave the error note stuck as an inert "Retrying…" button
@@ -1167,10 +1173,10 @@ function _invalidateSessionListRenders(){
   // _showSessionListLoadError and the .finally() bails when the old button was
   // removed. Clear the pending retry markers so the next repaint shows an
   // actionable idle Retry again.
-  if(_sessionListLoadError && (_sessionListLoadError.retrying || _sessionListLoadError._retryFailedFocus)){
-    _sessionListLoadError = {..._sessionListLoadError};
-    delete _sessionListLoadError.retrying;
-    delete _sessionListLoadError._retryFailedFocus;
+  if(sessionStateBindings._sessionListLoadError && (sessionStateBindings._sessionListLoadError.retrying || sessionStateBindings._sessionListLoadError._retryFailedFocus)){
+    sessionStateBindings._sessionListLoadError = {...sessionStateBindings._sessionListLoadError};
+    delete sessionStateBindings._sessionListLoadError.retrying;
+    delete sessionStateBindings._sessionListLoadError._retryFailedFocus;
   }
 }
 if(typeof window!=='undefined') window._invalidateSessionListRenders = _invalidateSessionListRenders;
@@ -1183,4 +1189,67 @@ if(typeof window!=='undefined') window._invalidateSessionListRenders = _invalida
 // the switch-owned render — which runs after the switch clears the embargo — replaces the
 // skeleton. The switch sets it before showSessionListSkeleton() and clears it immediately
 // before its own renderSessionList() (and in the failure-restore path).
-window.HermesSessions.parts.sidebarControls=Object.freeze({setUrl:_setActiveSessionUrl,toggleSelect:toggleSessionSelectMode,closeActionMenu:closeSessionActionMenu,copyLink:_copySessionLink,openActionMenu:_openSessionActionMenu,archive:_archiveSession});
+export const sidebarControls=Object.freeze({setUrl:_setActiveSessionUrl,toggleSelect:toggleSessionSelectMode,closeActionMenu:closeSessionActionMenu,copyLink:_copySessionLink,openActionMenu:_openSessionActionMenu,archive:_archiveSession});
+
+export { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, SHOW_ALL_PROFILES_STORAGE_KEY, _appRootPath, _archiveSession, _buildSessionRenameStarter, _captureSessionReflowPositions, _composerPrefillIntentFromLocation, _consumeComposerPrefillParamsFromLocation, _consumeProfileQueryParamFromLocation, _expandedChildSessionKeys, _expandedLineageKeys, _invalidateSessionListRenders, _lineageReportCache, _lineageReportInflight, _makeSessionSwipeAffordance, _openSessionActionMenu, _optimisticallyRemoveSessionFromList, _optimisticallyRemovedSessionIds, _playSessionRowsReflowFromPositions, _profileQueryIntentFromLocation, _renderBatchActionBar, _selectedSessions, _sessionActionMenu, _sessionAttentionSoundState, _sessionIdFromLocation, _sessionPrefersReducedMotion, _sessionResponseRetainsWorktree, _sessionSnapshotById, _sessionSwipeReturnOffsets, _sessionUrlForSid, _setActiveSessionUrl, _setShowAllProfiles, _waitForSessionMotion, closeSessionActionMenu, exitSessionSelectMode, selectAllSessions, setSessionSelected, toggleSessionSelect, toggleSessionSelectMode };
+
+export const sidebarStateBindings=Object.freeze({
+  get _activeProject(){ return _activeProject; },
+  set _activeProject(value){ _activeProject=value; },
+  get _allProjects(){ return _allProjects; },
+  set _allProjects(value){ _allProjects=value; },
+  get _allSessions(){ return _allSessions; },
+  set _allSessions(value){ _allSessions=value; },
+  get _allSessionsScope(){ return _allSessionsScope; },
+  set _allSessionsScope(value){ _allSessionsScope=value; },
+  get _archivedCliCount(){ return _archivedCliCount; },
+  set _archivedCliCount(value){ _archivedCliCount=value; },
+  get _archivedRowsLoadedLimit(){ return _archivedRowsLoadedLimit; },
+  set _archivedRowsLoadedLimit(value){ _archivedRowsLoadedLimit=value; },
+  get _archivedWebuiCount(){ return _archivedWebuiCount; },
+  set _archivedWebuiCount(value){ _archivedWebuiCount=value; },
+  get _lineageReportCacheGeneration(){ return _lineageReportCacheGeneration; },
+  set _lineageReportCacheGeneration(value){ _lineageReportCacheGeneration=value; },
+  get _otherProfileCount(){ return _otherProfileCount; },
+  set _otherProfileCount(value){ _otherProfileCount=value; },
+  get _pendingSessionReflowPositions(){ return _pendingSessionReflowPositions; },
+  set _pendingSessionReflowPositions(value){ _pendingSessionReflowPositions=value; },
+  get _profileSwitchOpeningExistingSession(){ return _profileSwitchOpeningExistingSession; },
+  set _profileSwitchOpeningExistingSession(value){ _profileSwitchOpeningExistingSession=value; },
+  get _renamingSid(){ return _renamingSid; },
+  set _renamingSid(value){ _renamingSid=value; },
+  get _renderSessionListGen(){ return _renderSessionListGen; },
+  set _renderSessionListGen(value){ _renderSessionListGen=value; },
+  get _renderSessionListInFlight(){ return _renderSessionListInFlight; },
+  set _renderSessionListInFlight(value){ _renderSessionListInFlight=value; },
+  get _renderSessionListQueuedRequest(){ return _renderSessionListQueuedRequest; },
+  set _renderSessionListQueuedRequest(value){ _renderSessionListQueuedRequest=value; },
+  get _serverCliSessionCount(){ return _serverCliSessionCount; },
+  set _serverCliSessionCount(value){ _serverCliSessionCount=value; },
+  get _serverWebuiSessionCount(){ return _serverWebuiSessionCount; },
+  set _serverWebuiSessionCount(value){ _serverWebuiSessionCount=value; },
+  get _sessionAttentionSoundPrimed(){ return _sessionAttentionSoundPrimed; },
+  set _sessionAttentionSoundPrimed(value){ _sessionAttentionSoundPrimed=value; },
+  get _sessionListEnterAllAnimationPending(){ return _sessionListEnterAllAnimationPending; },
+  set _sessionListEnterAllAnimationPending(value){ _sessionListEnterAllAnimationPending=value; },
+  get _sessionListFirstRenderAnimated(){ return _sessionListFirstRenderAnimated; },
+  set _sessionListFirstRenderAnimated(value){ _sessionListFirstRenderAnimated=value; },
+  get _sessionListRefreshAnimationPending(){ return _sessionListRefreshAnimationPending; },
+  set _sessionListRefreshAnimationPending(value){ _sessionListRefreshAnimationPending=value; },
+  get _sessionSelectMode(){ return _sessionSelectMode; },
+  set _sessionSelectMode(value){ _sessionSelectMode=value; },
+  get _sessionSourceFilter(){ return _sessionSourceFilter; },
+  set _sessionSourceFilter(value){ _sessionSourceFilter=value; },
+  get _sessionVirtualScrollList(){ return _sessionVirtualScrollList; },
+  set _sessionVirtualScrollList(value){ _sessionVirtualScrollList=value; },
+  get _sessionVirtualScrollRaf(){ return _sessionVirtualScrollRaf; },
+  set _sessionVirtualScrollRaf(value){ _sessionVirtualScrollRaf=value; },
+  get _sessionVisibleSidebarIds(){ return _sessionVisibleSidebarIds; },
+  set _sessionVisibleSidebarIds(value){ _sessionVisibleSidebarIds=value; },
+  get _showAllProfiles(){ return _showAllProfiles; },
+  set _showAllProfiles(value){ _showAllProfiles=value; },
+  get _showArchived(){ return _showArchived; },
+  set _showArchived(value){ _showArchived=value; },
+  get _sidebarReferenceSessions(){ return _sidebarReferenceSessions; },
+  set _sidebarReferenceSessions(value){ _sidebarReferenceSessions=value; },
+});

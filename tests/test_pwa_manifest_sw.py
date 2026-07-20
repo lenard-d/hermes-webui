@@ -255,7 +255,7 @@ class TestIndexHtmlIntegration:
             "session_render_cache_adapter.js",
             "ui.js",
             "messages.js",
-            "sessions.js",
+            "modules/sessions/index.js",
             "panels.js",
             "icons.js",
             "i18n.js",

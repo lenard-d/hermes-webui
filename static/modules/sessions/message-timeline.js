@@ -1,5 +1,6 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { sessionStateBindings } from './state.js';
+import { _INITIAL_MSG_LIMIT, _msgLimitMax, _syncToolCallsForLoadedMessages, messageLoadingBindings } from './message-loading.js';
+
 function _messageComparableText(m){
   if(!m) return '';
   if(typeof msgContent==='function'){
@@ -396,10 +397,10 @@ function _bumpMessagesGeneration() {
 }
 
 async function _loadOlderMessages() {
-  if (_loadingOlder || !_messagesTruncated) return;
+  if (_loadingOlder || !messageLoadingBindings._messagesTruncated) return;
   const sid = S.session ? S.session.session_id : null;
   if (!sid || !S.messages.length) return;
-  if (_oldestIdx <= 0) { _messagesTruncated = false; return; }
+  if (_oldestIdx <= 0) { messageLoadingBindings._messagesTruncated = false; return; }
   _loadingOlder = true;
   // Snapshot the generation BEFORE we await. If S.messages is wholesale
   // replaced while the request is in flight, the post-await check below
@@ -444,7 +445,7 @@ async function _loadOlderMessages() {
     //    stale response could prepend onto the new session's S.messages.
     if (!data || !data.session) return;
     if (!S.session || S.session.session_id !== sid) return;
-    if (_loadingSessionId !== null && _loadingSessionId !== sid) return;
+    if (sessionStateBindings._loadingSessionId !== null && sessionStateBindings._loadingSessionId !== sid) return;
     // Generation guard: another code path (typically jumpToSessionStart →
     // _ensureAllMessagesLoaded) may have replaced S.messages while we were
     // awaiting. Prepending older messages onto that replacement would
@@ -494,14 +495,14 @@ async function _loadOlderMessages() {
         );
         if (!fallback || !fallback.session) { _loadingOlder = false; return; }
         if (!S.session || S.session.session_id !== sid) return;
-        if (_loadingSessionId !== null && _loadingSessionId !== sid) return;
+        if (sessionStateBindings._loadingSessionId !== null && sessionStateBindings._loadingSessionId !== sid) return;
         if (_messagesGeneration !== startGeneration) return;
         responseSession = fallback.session;
       }
       olderMsgs = (responseSession.messages || []).filter(m => m && m.role);
       nextMessages = [...olderMsgs, ...S.messages];
     }
-    if (!olderMsgs.length) { _messagesTruncated = !!responseSession._messages_truncated; return; }
+    if (!olderMsgs.length) { messageLoadingBindings._messagesTruncated = !!responseSession._messages_truncated; return; }
     // Replace with the larger tail window and preserve scroll as if older
     // messages were prepended. When the suffix check fails, nextMessages
     // already encodes the legacy prepend fallback so the visible behavior
@@ -538,7 +539,7 @@ async function _loadOlderMessages() {
       return !!(msgContent(m)||m._statusCard||m.attachments?.length||(m.role==='assistant'&&(hasTc||hasTu||hasPartialTc||(typeof _messageHasReasoningPayload==='function'&&_messageHasReasoningPayload(m))||(typeof _assistantMessageHasVisibleContent==='function'&&_assistantMessageHasVisibleContent(m)))));
     }).length;
     _messageRenderWindowSize=_currentMessageRenderWindowSize()+Math.max(addedRenderable, MESSAGE_RENDER_WINDOW_DEFAULT);
-    _messagesTruncated = !!responseSession._messages_truncated;
+    messageLoadingBindings._messagesTruncated = !!responseSession._messages_truncated;
     _oldestIdx = responseSession._messages_offset || 0;
     renderMessages({ preserveScroll: true });
     if (container) {
@@ -586,7 +587,7 @@ async function _loadOlderMessages() {
 //   2. Bump _messagesGeneration before mutating S.messages so any
 //      in-flight prefetch's post-await generation check bails out.
 async function _ensureAllMessagesLoaded() {
-  if (!_messagesTruncated || !S.session) return;
+  if (!messageLoadingBindings._messagesTruncated || !S.session) return;
   if (_loadingOlder) {
     // A prefetch is mid-flight (between the `_loadingOlder = true` line
     // and its post-await guards). Bumping the generation token now
@@ -599,7 +600,7 @@ async function _ensureAllMessagesLoaded() {
     while (_loadingOlder) {
       await new Promise(resolve => setTimeout(resolve, 16));
     }
-    if (!_messagesTruncated || !S.session) return;
+    if (!messageLoadingBindings._messagesTruncated || !S.session) return;
   }
   _loadingOlder = true;
   try {
@@ -610,7 +611,7 @@ async function _ensureAllMessagesLoaded() {
     // Session may have been switched while we awaited. Bail rather than
     // overwrite the new session's messages.
     if (!S.session || S.session.session_id !== sid) return;
-    if (_loadingSessionId !== null && _loadingSessionId !== sid) return;
+    if (sessionStateBindings._loadingSessionId !== null && sessionStateBindings._loadingSessionId !== sid) return;
     const msgs = (data.session.messages || []).filter(m => m && m.role);
     // Bump the generation BEFORE the wholesale replace so any racing
     // prefetch (whose snapshot was taken before this call's mutex
@@ -625,7 +626,7 @@ async function _ensureAllMessagesLoaded() {
       _msgsToAssign = window._carryForwardEphemeralTurnFields(S.messages || [], msgs);
     }
     S.messages = _msgsToAssign;
-    _messagesTruncated = false;
+    messageLoadingBindings._messagesTruncated = false;
     _oldestIdx = 0;
     _syncToolCallsForLoadedMessages(msgs, data.session.tool_calls);
     if (S.session && S.session.session_id === sid) {
@@ -636,4 +637,13 @@ async function _ensureAllMessagesLoaded() {
   }
 }
 
-window.HermesSessions.parts.messageTimeline=Object.freeze({mergeInflight:_mergeInflightTailMessages,prepareRunningTail:_prepareRunningLiveTail,loadOlder:_loadOlderMessages,ensureAllLoaded:_ensureAllMessagesLoaded});
+export const messageTimeline=Object.freeze({mergeInflight:_mergeInflightTailMessages,prepareRunningTail:_prepareRunningLiveTail,loadOlder:_loadOlderMessages,ensureAllLoaded:_ensureAllMessagesLoaded});
+
+export { _dropCurrentTurnAssistantMessages, _ensureAllMessagesLoaded, _ensureInflightLiveAssistantMessage, _hasCurrentTailUserDuplicate, _loadOlderMessages, _mergeInflightTailMessages, _messageComparableText, _prepareRunningLiveTail, _projectInflightMessagesForActivityBursts, _sameTranscriptMessage, _stripAttachedFilesMarker };
+
+export const messageTimelineBindings=Object.freeze({
+  get _loadingOlder(){ return _loadingOlder; },
+  set _loadingOlder(value){ _loadingOlder=value; },
+  get _oldestIdx(){ return _oldestIdx; },
+  set _oldestIdx(value){ _oldestIdx=value; },
+});

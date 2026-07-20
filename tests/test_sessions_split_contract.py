@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from pathlib import Path
 
@@ -16,52 +15,45 @@ from tests.test_sessions_split_support import (
 def test_sessions_manifest_is_a_strict_ordered_relative_file_list():
     manifest = json.loads(SESSIONS_MANIFEST.read_text(encoding="utf-8"))
 
-    assert set(manifest) == {"version", "parts"}
-    assert manifest["version"] == 1
-    assert manifest["parts"]
-    assert 8 <= len(manifest["parts"]) <= 12
-    assert len(manifest["parts"]) == len(set(manifest["parts"]))
-    assert manifest["parts"] == sorted(manifest["parts"])
-    for name in manifest["parts"]:
+    assert set(manifest) == {"version", "entrypoint", "modules"}
+    assert manifest["version"] == 2
+    assert manifest["entrypoint"] == "index.js"
+    assert 10 <= len(manifest["modules"]) <= 14
+    assert len(manifest["modules"]) == len(set(manifest["modules"]))
+    assert manifest["modules"][-1] == manifest["entrypoint"]
+    assert not any(name[:3].isdigit() for name in manifest["modules"])
+    for name in manifest["modules"]:
         assert Path(name).name == name
         assert name.endswith(".js")
         assert (SESSIONS_MANIFEST.parent / name).is_file()
 
 
-def test_sessions_facade_and_every_production_part_fit_the_coarse_module_budget():
-    production_files = [
-        REPO_ROOT / "static" / "sessions.js",
-        SESSIONS_MANIFEST,
-        *sessions_part_paths(),
-    ]
+def test_every_session_module_fits_the_coarse_module_budget():
+    production_files = [SESSIONS_MANIFEST, *sessions_part_paths()]
 
     for path in production_files:
         line_count = len(path.read_text(encoding="utf-8").splitlines())
         assert line_count <= 1400, f"{path.relative_to(REPO_ROOT)} has {line_count} lines"
 
 
-def test_sessions_parts_are_individually_parseable_and_concatenate_parseably(tmp_path):
+def test_sessions_modules_are_individually_parseable_and_entrypoint_typechecks():
     for path in sessions_part_paths():
         source = path.read_text(encoding="utf-8")
         assert source.endswith("\n"), f"{path.name} must own its concatenation separator"
         subprocess.run(["node", "--check", str(path)], check=True, capture_output=True, text=True)
 
-    composed = tmp_path / "sessions-composed.js"
-    composed.write_text(read_sessions_source(), encoding="utf-8")
-    subprocess.run(["node", "--check", str(composed)], check=True, capture_output=True, text=True)
     subprocess.run(
-        ["node", "--check", str(REPO_ROOT / "static" / "sessions.js")],
+        ["deno", "check", str(SESSIONS_MANIFEST.parent / "index.js")],
         check=True,
         capture_output=True,
         text=True,
     )
 
 
-def test_sessions_composition_preserves_order_namespaces_and_compatibility_globals():
+def test_sessions_modules_publish_semantic_interfaces_and_one_legacy_seam():
     source = read_sessions_source()
 
     ordered_sentinels = [
-        "window.HermesSessions=window.HermesSessions||{};",
         "async function newSession(",
         "async function loadSession(",
         "async function _ensureMessagesLoaded(",
@@ -88,34 +80,21 @@ def test_sessions_composition_preserves_order_namespaces_and_compatibility_globa
         "sessionManagement",
     }
     for module in expected_modules:
-        assert f"window.HermesSessions.parts.{module}=Object.freeze(" in source
+        assert f"export const {module}=Object.freeze(" in source
 
-    # Classic-script function declarations remain the compatibility globals
-    # consumed by boot.js, messages.js, panels.js, extensions and Node harnesses.
-    for name in (
-        "newSession",
-        "loadSession",
-        "renderSessionList",
-        "renderSessionListFromCache",
-        "deleteSession",
-        "navigateSession",
-    ):
-        assert f"function {name}(" in source
-
-    facade = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    part_paths = sessions_part_paths()
-    facade_positions = [facade.index(f"'{path.name}'") for path in part_paths]
-    assert facade_positions == sorted(facade_positions)
-    load_order_match = re.search(
-        r"sessions\.loadOrder=Object\.freeze\(\[(.*?)\]\);",
-        facade,
-        re.DOTALL,
-    )
-    assert load_order_match is not None
-    assert re.findall(r"'([^']+\.js)'", load_order_match.group(1)) == [
-        path.name for path in part_paths
+    internal_paths = [
+        path for path in sessions_part_paths()
+        if path.name not in {"index.js", "legacy-adapter.js"}
     ]
-    assert "Object.assign(root,sessions.api);" in facade
+    for path in internal_paths:
+        module_source = path.read_text(encoding="utf-8")
+        assert "HermesSessions" not in module_source
+        assert "window.HermesSessions" not in module_source
+
+    entrypoint = (SESSIONS_MANIFEST.parent / "index.js").read_text(encoding="utf-8")
+    adapter = (SESSIONS_MANIFEST.parent / "legacy-adapter.js").read_text(encoding="utf-8")
+    assert "installLegacySessionGlobals" in entrypoint
+    assert "Object.defineProperty(root,'HermesSessions'" in adapter
 
 
 def test_oversized_list_renderer_was_deepened_without_changing_call_order():

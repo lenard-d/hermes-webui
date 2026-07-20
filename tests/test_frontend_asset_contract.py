@@ -10,6 +10,7 @@ from tests.frontend_asset_contract import (
     REPO_ROOT,
     family_asset_paths,
     family_entrypoint_path,
+    module_family_paths,
 )
 
 
@@ -55,7 +56,7 @@ def _direct_urls_for_family(family: str) -> list[str]:
 def _expected_direct_urls(family: str) -> list[str]:
     if family == "commands":
         return []
-    if family == "boot":
+    if family in {"boot", "sessions"}:
         entrypoint = family_entrypoint_path(family)
         assert entrypoint is not None
         path = entrypoint.relative_to(REPO_ROOT).as_posix()
@@ -73,7 +74,9 @@ def test_index_direct_load_order_matches_each_split_family_architecture(family: 
 
 
 def test_facades_have_the_required_side_of_each_direct_load_order():
-    assert family_asset_paths("sessions")[-1].name == "sessions.js"
+    assert family_asset_paths("sessions") == (
+        REPO_ROOT / "static" / "modules" / "sessions" / "index.js",
+    )
 
     for family in ("i18n", "ui", "messages", "panels"):
         assert family_asset_paths(family)[0].name == f"{family}.js"
@@ -100,12 +103,28 @@ def test_every_frontend_asset_is_precached_at_its_browser_request_url():
 
     native_dependencies = {
         path.relative_to(REPO_ROOT).as_posix()
-        for family in ("boot", "commands")
-        for path in family_asset_paths(family)
+        for family in ("boot", "commands", "sessions", "assistant-turn-anchors")
+        for path in module_family_paths(family)
         if path != family_entrypoint_path(family)
     }
     native_dependencies.add("static/modules/compatibility.js")
     assert native_dependencies <= unversioned_shell_paths
+
+
+@pytest.mark.parametrize("family", ("sessions", "assistant-turn-anchors"))
+def test_native_module_family_imports_are_explicit_and_precached(family: str):
+    paths = module_family_paths(family)
+    entrypoint = paths[-1]
+    source = entrypoint.read_text(encoding="utf-8")
+    imported_names = set(re.findall(r"from\s+['\"]\./([^'\"]+)['\"]", source))
+    expected_names = {path.name for path in paths[:-1]}
+
+    assert imported_names == expected_names
+
+    shell_assets = SERVICE_WORKER.read_text(encoding="utf-8")
+    for dependency in paths[:-1]:
+        relative = dependency.relative_to(REPO_ROOT).as_posix()
+        assert f"'./{relative}'" in shell_assets
 
 
 def test_split_families_use_direct_assets_not_runtime_manifests():

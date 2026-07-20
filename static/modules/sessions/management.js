@@ -1,5 +1,9 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { loadSession } from './lifecycle.js';
+import { _clearHandoffStorageForSession, _sessionListQueryString } from './message-loading.js';
+import { SHOW_ALL_PROFILES_STORAGE_KEY, _captureSessionReflowPositions, _optimisticallyRemoveSessionFromList, _optimisticallyRemovedSessionIds, _sessionIdFromLocation, _sessionResponseRetainsWorktree, _sessionSnapshotById, exitSessionSelectMode, sidebarStateBindings } from './sidebar-state.js';
+import { renderSessionList } from './session-list.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
+
 async function _handleActiveSessionStorageEvent(e){
   if(!e || e.key !== 'hermes-webui-session') return;
   // Do not treat localStorage as a global active-session bus. Each tab owns its
@@ -11,8 +15,8 @@ async function _handleActiveSessionStorageEvent(e){
 async function _handleShowAllProfilesStorageEvent(e){
   if(!e || e.key !== SHOW_ALL_PROFILES_STORAGE_KEY) return;
   const next=e.newValue==='1'||e.newValue==='true';
-  if(_showAllProfiles===next) return;
-  _showAllProfiles=next;
+  if(sidebarStateBindings._showAllProfiles===next) return;
+  sidebarStateBindings._showAllProfiles=next;
   if(typeof renderSessionList==='function') await renderSessionList({deferWhileInteracting:false});
 }
 
@@ -120,7 +124,7 @@ async function deleteSession(sid, beforeDelete=null){
   if(!ok)return false;
   const reflowPositions=_captureSessionReflowPositions();
   const beforeDeleteHold=beforeDelete?Promise.resolve().then(beforeDelete):null;
-  const previousSessions=_allSessions;
+  const previousSessions=sidebarStateBindings._allSessions;
   let optimisticRendered=false;
   const deleteRequest=api('/api/session/delete',{method:'POST',body:JSON.stringify({session_id:sid})}).then(response=>{
     _clearHandoffStorageForSession(sid);
@@ -129,16 +133,16 @@ async function deleteSession(sid, beforeDelete=null){
   if(beforeDeleteHold){
     await beforeDeleteHold;
     _optimisticallyRemovedSessionIds.add(sid);
-    _pendingSessionReflowPositions=reflowPositions;
+    sidebarStateBindings._pendingSessionReflowPositions=reflowPositions;
     _optimisticallyRemoveSessionFromList(sid);
     optimisticRendered=true;
   }
   const deleteResult=await deleteRequest;
   if(deleteResult&&deleteResult.error){
-    _pendingSessionReflowPositions=null;
+    sidebarStateBindings._pendingSessionReflowPositions=null;
     if(optimisticRendered){
       _optimisticallyRemovedSessionIds.delete(sid);
-      _allSessions=previousSessions;
+      sidebarStateBindings._allSessions=previousSessions;
       renderSessionListFromCache();
     }
     const err=deleteResult.error;
@@ -149,7 +153,7 @@ async function deleteSession(sid, beforeDelete=null){
   const cleanupFailed=!!(response&&response.state_db_cleanup_failed);
   if(typeof _clearPersistedSessionQueue==='function') _clearPersistedSessionQueue(sid);
   if(!optimisticRendered){
-    _pendingSessionReflowPositions=reflowPositions;
+    sidebarStateBindings._pendingSessionReflowPositions=reflowPositions;
     _optimisticallyRemoveSessionFromList(sid);
   }
   if(S.session&&S.session.session_id===sid){
@@ -199,8 +203,8 @@ function _showProjectPicker(session, anchorEl){
       // _attachChildSessionsToSidebarRows), so mutating `session` only updates
       // the discarded copy. Write into the authoritative cache so the next
       // renderSessionListFromCache() reflects the move. (#2551)
-      const idx=_allSessions.findIndex(s=>s&&s.session_id===session.session_id);
-      if(idx>=0) _allSessions[idx].project_id=null;
+      const idx=sidebarStateBindings._allSessions.findIndex(s=>s&&s.session_id===session.session_id);
+      if(idx>=0) sidebarStateBindings._allSessions[idx].project_id=null;
       renderSessionListFromCache();
       showToast('Removed from project');
     } catch(e) {
@@ -223,7 +227,7 @@ function _showProjectPicker(session, anchorEl){
     if(projProfile === 'default' || sessionProfile === 'default') return false;
     return true;
   };
-  for(const p of _allProjects){
+  for(const p of sidebarStateBindings._allProjects){
     if (_profileHidesProject(p.profile)) continue;
     const item=document.createElement('div');
     item.className='project-picker-item'+(session.project_id===p.project_id?' active':'');
@@ -242,8 +246,8 @@ function _showProjectPicker(session, anchorEl){
       try{
         await api('/api/session/move',{method:'POST',body:JSON.stringify({session_id:session.session_id,project_id:p.project_id})});
         // See #2551 — write to _allSessions, not the shallow sidebar copy.
-        const idx=_allSessions.findIndex(s=>s&&s.session_id===session.session_id);
-        if(idx>=0) _allSessions[idx].project_id=p.project_id;
+        const idx=sidebarStateBindings._allSessions.findIndex(s=>s&&s.session_id===session.session_id);
+        if(idx>=0) sidebarStateBindings._allSessions[idx].project_id=p.project_id;
         renderSessionListFromCache();
         showToast('Moved to '+p.name);
       }catch(e){showToast('Move failed: '+(e.message||e));}
@@ -263,11 +267,11 @@ function _showProjectPicker(session, anchorEl){
       placeholder:'Project name'
     });
     if(!name||!name.trim()) return;
-    const color=PROJECT_COLORS[_allProjects.length%PROJECT_COLORS.length];
+    const color=PROJECT_COLORS[sidebarStateBindings._allProjects.length%PROJECT_COLORS.length];
     const profile = session.profile || undefined;
     const res=await api('/api/projects/create',{method:'POST',body:JSON.stringify({name:name.trim(),color,profile})});
     if(res.project){
-      _allProjects.push(res.project);
+      sidebarStateBindings._allProjects.push(res.project);
       // Guard the move so a 503 (session busy/streaming, #3746) shows a toast
       // instead of an unhandled rejection. Keep the authoritative refetch (#2551).
       try{
@@ -336,7 +340,7 @@ function _startProjectCreate(bar, addBtn){
     if(_finishDone) return;
     _finishDone=true;
     if(save&&inp.value.trim()){
-      const color=PROJECT_COLORS[_allProjects.length%PROJECT_COLORS.length];
+      const color=PROJECT_COLORS[sidebarStateBindings._allProjects.length%PROJECT_COLORS.length];
       try{
         await api('/api/projects/create',{method:'POST',body:JSON.stringify({name:inp.value.trim(),color})});
       }catch(e){
@@ -470,7 +474,7 @@ async function _confirmDeleteProject(proj){
   if(!ok){return;}
   try {
     await api('/api/projects/delete',{method:'POST',body:JSON.stringify({project_id:proj.project_id})});
-    if(_activeProject===proj.project_id) _activeProject=null;
+    if(sidebarStateBindings._activeProject===proj.project_id) sidebarStateBindings._activeProject=null;
     await renderSessionList();
     showToast('Project deleted');
   } catch(e) {
@@ -480,7 +484,7 @@ async function _confirmDeleteProject(proj){
 
 // Global Escape handler for batch select mode
 document.addEventListener('keydown',(e)=>{
-  if(e.key==='Escape'&&_sessionSelectMode) exitSessionSelectMode();
+  if(e.key==='Escape'&&sidebarStateBindings._sessionSelectMode) exitSessionSelectMode();
 });
 
 // Keyboard session navigation — J/K bindings
@@ -501,4 +505,6 @@ document.addEventListener('keydown',(e)=>{
   e.preventDefault();
   navigateSession(e.key==='j'?1:-1);
 });
-window.HermesSessions.parts.sessionManagement=Object.freeze({removeWorktree:removeWorktree,deleteSession:deleteSession,showProjectPicker:_showProjectPicker,navigate:navigateSession});
+export const sessionManagement=Object.freeze({removeWorktree:removeWorktree,deleteSession:deleteSession,showProjectPicker:_showProjectPicker,navigate:navigateSession});
+
+export { _showProjectContextMenu, _showProjectPicker, _startProjectCreate, _startProjectRename, deleteSession, removeWorktree };

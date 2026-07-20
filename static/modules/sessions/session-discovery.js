@@ -1,5 +1,10 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { _hasUnreadForSession, _isSessionEffectivelyStreaming } from './state.js';
+import { _isExternalSession, _isMessagingSession, _isReadOnlySession } from './message-loading.js';
+import { _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportCache, _lineageReportInflight, sidebarStateBindings } from './sidebar-state.js';
+import { renderSessionList } from './session-list.js';
+import { _sessionDisplayTitle } from './sidebar-interactions.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
+
 let _searchDebounceTimer = null;
 let _contentSearchResults = [];  // results from /api/sessions/search content scan
 let _lastSessionSearchQuery = '';
@@ -173,7 +178,7 @@ function _syncArchivedSearchPagingRefresh(query){
   const queryActive=Boolean(String(query||'').trim());
   const previous=_archivedSearchPagingQueryActive;
   _archivedSearchPagingQueryActive=queryActive;
-  if(!_showArchived||queryActive===previous) return;
+  if(!sidebarStateBindings._showArchived||queryActive===previous) return;
   // Archived title/id filtering is client-side. When search becomes active,
   // refetch without archived_limit so matches beyond the first archived page are
   // reachable; when search clears, refetch again to restore normal archive paging.
@@ -199,7 +204,7 @@ function filterSessions(){
       const data = await api(`/api/sessions/search?q=${encodeURIComponent(requestedQ)}&content=1&depth=5`);
       const currentQ = ($('sessionSearch').value || '').trim();
       if(currentQ!==requestedQ) return;
-      const directAndTitleMatches=_sessionSearchDirectAndTitleMatches(_allSessions,currentQ);
+      const directAndTitleMatches=_sessionSearchDirectAndTitleMatches(sidebarStateBindings._allSessions,currentQ);
       const directOrTitleIds=new Set(directAndTitleMatches.map(s=>s.session_id));
       _contentSearchResults = (data.sessions||[]).filter(s => s.match_type === 'content' && !directOrTitleIds.has(s.session_id));
       renderSessionListFromCache();
@@ -394,8 +399,8 @@ function _authoritativeLineageTipId(s){
 
 function _resolveSessionIdFromSidebarLineage(sid){
   sid=String(sid||'').trim();
-  if(!sid||!Array.isArray(_allSessions)||!_allSessions.length) return sid||null;
-  const visibleRows=_collapseSessionLineageForSidebar(_allSessions).filter(row=>row&&!_isChildSession(row));
+  if(!sid||!Array.isArray(sidebarStateBindings._allSessions)||!sidebarStateBindings._allSessions.length) return sid||null;
+  const visibleRows=_collapseSessionLineageForSidebar(sidebarStateBindings._allSessions).filter(row=>row&&!_isChildSession(row));
   if(visibleRows.some(row=>row&&row.session_id===sid)) return sid;
   const candidates=[];
   for(const row of visibleRows){
@@ -438,7 +443,7 @@ function _sessionSegmentCount(s){
 function _clearLineageReportCache(){
   _lineageReportCache.clear();
   _lineageReportInflight.clear();
-  _lineageReportCacheGeneration++;
+  sidebarStateBindings._lineageReportCacheGeneration++;
 }
 
 function _pruneLineageReportCacheToVisibleSessions(sessions){
@@ -526,18 +531,18 @@ function _fetchLineageReportForRow(s,lineageKey){
   if(!s||!s.session_id||!key) return Promise.resolve(null);
   if(_lineageReportCache.has(key)) return Promise.resolve(_lineageReportCache.get(key));
   if(_lineageReportInflight.has(key)) return _lineageReportInflight.get(key);
-  const generation=_lineageReportCacheGeneration;
+  const generation=sidebarStateBindings._lineageReportCacheGeneration;
   let request;
   request=api('/api/session/lineage/report?session_id='+encodeURIComponent(s.session_id))
     .then(report=>{
-      if(generation===_lineageReportCacheGeneration&&_lineageReportInflight.get(key)===request){
+      if(generation===sidebarStateBindings._lineageReportCacheGeneration&&_lineageReportInflight.get(key)===request){
         _lineageReportCache.set(key,(report&&report.found!==false)?report:{error:true});
       }
       return report;
     })
     .catch(err=>{
       console.warn('lineage report',err);
-      if(generation===_lineageReportCacheGeneration&&_lineageReportInflight.get(key)===request){
+      if(generation===sidebarStateBindings._lineageReportCacheGeneration&&_lineageReportInflight.get(key)===request){
         _lineageReportCache.set(key,{error:true});
       }
       return null;
@@ -563,8 +568,8 @@ function _truncatedSessionId(sid){
 }
 
 function _sessionTitleForForkParent(parentSid){
-  if(!parentSid||!Array.isArray(_allSessions)) return '';
-  const parent=_allSessions.find(item=>item&&item.session_id===parentSid);
+  if(!parentSid||!Array.isArray(sidebarStateBindings._allSessions)) return '';
+  const parent=sidebarStateBindings._allSessions.find(item=>item&&item.session_id===parentSid);
   const title=parent&&String(parent.title||'').trim();
   if(!title||title==='Untitled') return '';
   return title;
@@ -684,7 +689,7 @@ function _attachChildSessionsToSidebarRows(collapsedRows, rawSessions, rawRefere
     }
   }
   const hiddenArchivedChildTree=new Set();
-  const archivedRowsVisible=typeof _showArchived!=='undefined'&&!!_showArchived;
+  const archivedRowsVisible=typeof sidebarStateBindings._showArchived!=='undefined'&&!!sidebarStateBindings._showArchived;
   const hasHiddenArchivedAncestor=(session)=>{
     if(!session||!session.session_id||archivedRowsVisible) return false;
     const seen=new Set();
@@ -838,4 +843,17 @@ function _collapseSessionLineageForSidebar(sessions){
   return result;
 }
 
-window.HermesSessions.parts.sessionDiscovery=Object.freeze({filter:filterSessions,clear:clearSessionSearch,resolveLineage:_resolveSessionIdFromSidebarLineage,collapseLineage:_collapseSessionLineageForSidebar});
+export const sessionDiscovery=Object.freeze({filter:filterSessions,clear:clearSessionSearch,resolveLineage:_resolveSessionIdFromSidebarLineage,collapseLineage:_collapseSessionLineageForSidebar});
+
+export { _appendHighlightedText, _attachChildSessionsToSidebarRows, _collapseSessionLineageForSidebar, _fetchLineageReportForRow, _formatInServerTz, _formatRelativeSessionTime, _isChildSession, _lineageReportCacheKey, _lineageReportNeedsFetch, _lineageSegmentsForRender, _pruneLineageReportCacheToVisibleSessions, _resolveSessionIdFromSidebarLineage, _serverNowMs, _sessionChildBadgeTooltip, _sessionForkTooltip, _sessionFullTitleTooltip, _sessionLineageBadgeTooltip, _sessionLineageContainsSession, _sessionSearchContentPreview, _sessionSearchMergeMatches, _sessionSegmentCount, _sessionSidebarSortCompare, _sessionSortTimestampMs, _sessionStateTooltip, _sessionTimeBucketLabel, _sessionTimestampMs, _sessionTitleForForkParent, _sidebarLineageKeyForRow, _syncSidebarExpansionForActiveSession, _truncatedSessionId, clearSessionSearch, filterSessions, syncSessionSearchClear };
+
+export const sessionDiscoveryBindings=Object.freeze({
+  get _contentSearchResults(){ return _contentSearchResults; },
+  set _contentSearchResults(value){ _contentSearchResults=value; },
+  get _hideSearchPreviewsAfterSelect(){ return _hideSearchPreviewsAfterSelect; },
+  set _hideSearchPreviewsAfterSelect(value){ _hideSearchPreviewsAfterSelect=value; },
+  get _serverTimeDelta(){ return _serverTimeDelta; },
+  set _serverTimeDelta(value){ _serverTimeDelta=value; },
+  get _serverTz(){ return _serverTz; },
+  set _serverTz(value){ _serverTz=value; },
+});

@@ -24,10 +24,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
 SESSION_PROJECTION_PY = ROOT / "api" / "routes_parts" / "session_projection.py"
-SESSIONS_JS = ROOT / "static" / "sessions.js"
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +178,7 @@ def test_sessions_js_open_handlers_keep_isexternalsession_contract():
     the #3603 contract that the open/tap/child handlers gate on
     _isExternalSession is preserved (subagent children are recovered read-only
     by the server, not by widening the client import trigger)."""
-    js = SESSIONS_JS.read_text(encoding="utf-8")
+    js = family_source("sessions")
     # We did NOT add a widened import predicate — recovery is server-side.
     assert "_sessionNeedsServerImportForLoad" not in js, (
         "the #5307 fix is server-side (read-only recovery); the client import "

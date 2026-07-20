@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "entrypoint": "index.js",
+  "modules": [
+    "state.js",
+    "lifecycle.js",
+    "message-loading.js",
+    "message-timeline.js",
+    "sidebar-state.js",
+    "session-list.js",
+    "session-discovery.js",
+    "sidebar-interactions.js",
+    "sidebar-renderer.js",
+    "management.js",
+    "legacy-adapter.js",
+    "index.js"
+  ]
+}

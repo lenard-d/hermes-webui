@@ -10,7 +10,7 @@ from tests._pytest_port import BASE
 STATIC_FAMILIES = {
     "/static/ui.js": "ui",
     "/static/workspace.js": "workspace",
-    "/static/sessions.js": "sessions",
+    "/static/modules/sessions/index.js": "sessions",
     "/static/messages.js": "messages",
     "/static/panels.js": "panels",
     "/static/modules/boot/index.js": "boot",
@@ -77,9 +77,9 @@ def test_workspace_js_served(cleanup_test_sessions):
     assert "async function openFile(" in src  # renderFileTree is in ui.js
 
 def test_sessions_js_served(cleanup_test_sessions):
-    served = get_text("/static/sessions.js")
-    assert "installHermesSessionsFacade" in served
-    src = get_family_source("/static/sessions.js")
+    served = get_text("/static/modules/sessions/index.js")
+    assert "installLegacySessionGlobals" in served
+    src = get_family_source("/static/modules/sessions/index.js")
     assert "async function newSession(" in src
     assert "async function loadSession(" in src
     assert "async function renderSessionList(" in src
@@ -114,7 +114,7 @@ def test_app_js_no_longer_referenced_in_html(cleanup_test_sessions):
     html = get_text("/")
     assert 'src="static/app.js"' not in html
     # All split modules must be present with the server-injected cache-busting version query.
-    for module in ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js"]:
+    for module in ["ui.js", "workspace.js", "modules/sessions/index.js", "messages.js", "panels.js"]:
         assert f'src="static/{module}?v=' in html, f"Missing versioned {module} in index.html"
     assert 'src="static/modules/boot/index.js?v=' in html
 
@@ -123,7 +123,7 @@ def test_module_load_order_correct(cleanup_test_sessions):
     html = get_text("/")
     ui_pos = html.find('src="static/ui.js?v=')
     ws_pos = html.find('src="static/workspace.js?v=')
-    sess_pos = html.find('src="static/sessions.js?v=')
+    sess_pos = html.find('src="static/modules/sessions/index.js?v=')
     msg_pos = html.find('src="static/messages.js?v=')
     panels_pos = html.find('src="static/panels.js?v=')
     boot_pos = html.find('src="static/modules/boot/index.js?v=')
@@ -132,7 +132,7 @@ def test_module_load_order_correct(cleanup_test_sessions):
 def test_no_duplicate_function_definitions(cleanup_test_sessions):
     """No function name should appear in more than one module."""
     import re
-    modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "modules/boot/index.js"]
+    modules = ["ui.js", "workspace.js", "modules/sessions/index.js", "messages.js", "panels.js", "modules/boot/index.js"]
     seen = {}
     for m in modules:
         src = family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")
@@ -145,7 +145,7 @@ def test_no_duplicate_function_definitions(cleanup_test_sessions):
 
 def test_all_functions_present_across_modules(cleanup_test_sessions):
     """Key functions must be present somewhere in the split modules."""
-    modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "modules/boot/index.js"]
+    modules = ["ui.js", "workspace.js", "modules/sessions/index.js", "messages.js", "panels.js", "modules/boot/index.js"]
     all_src = ""
     for m in modules:
         all_src += family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")

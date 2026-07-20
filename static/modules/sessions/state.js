@@ -1,6 +1,10 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
-// ── Session action icons (SVG, monochrome, inherit currentColor) ──
+import { loadSession } from './lifecycle.js';
+import { _isCliSession, _sourceKeyForSession } from './message-loading.js';
+import { _messageComparableText } from './message-timeline.js';
+import { sidebarStateBindings } from './sidebar-state.js';
+import { _deferActiveSessionExternalRefresh, refreshActiveSessionIfExternallyUpdated } from './session-list.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
+
 const ICONS={
   stop:'<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" stroke="none"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>',
   pin:'<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" stroke="none"><polygon points="8,1.5 9.8,5.8 14.5,6.2 11,9.4 12,14 8,11.5 4,14 5,9.4 1.5,6.2 6.2,5.8"/></svg>',
@@ -529,7 +533,7 @@ function _markSessionCompletionUnreadIfBackground(sid, messageCount = null, meta
   let count = Number.isFinite(messageCount) ? Number(messageCount) : NaN;
   if (!Number.isFinite(count)) {
     const snapshot = _sessionListSnapshotById.get(sid)
-      || (_allSessions || []).find(s => s && s.session_id === sid)
+      || (sidebarStateBindings._allSessions || []).find(s => s && s.session_id === sid)
       || null;
     count = Number(snapshot && snapshot.message_count) || 0;
   }
@@ -587,8 +591,8 @@ function _resolveCronCompletionMarkerOrigin(sid, marker) {
     ? marker.profile.trim()
     : '';
   let session = null;
-  if (Array.isArray(_allSessions)) {
-    session = _allSessions.find((s) => s && s.session_id === sid) || null;
+  if (Array.isArray(sidebarStateBindings._allSessions)) {
+    session = sidebarStateBindings._allSessions.find((s) => s && s.session_id === sid) || null;
   }
   if (!session && typeof _sessionListSnapshotById !== 'undefined'
     && _sessionListSnapshotById && typeof _sessionListSnapshotById.get === 'function') {
@@ -909,8 +913,8 @@ function _purgeStaleInflightEntries() {
   // from deleted sessions do not accumulate. (#2092)
   if (typeof INFLIGHT !== 'object' || !INFLIGHT) return;
   const sessionsById = new Map();
-  if (Array.isArray(_allSessions)) {
-    for (const s of _allSessions) {
+  if (Array.isArray(sidebarStateBindings._allSessions)) {
+    for (const s of sidebarStateBindings._allSessions) {
       if (s && s.session_id) sessionsById.set(s.session_id, s);
     }
   }
@@ -919,10 +923,10 @@ function _purgeStaleInflightEntries() {
     && typeof _sessionListSourceById.get === 'function'
     ? _sessionListSourceById
     : null;
-  const currentSidebarSource = typeof _allSessionsScope !== 'undefined'
-    && _allSessionsScope
-    && typeof _allSessionsScope.sidebarSource === 'string'
-    ? _allSessionsScope.sidebarSource
+  const currentSidebarSource = typeof sidebarStateBindings._allSessionsScope !== 'undefined'
+    && sidebarStateBindings._allSessionsScope
+    && typeof sidebarStateBindings._allSessionsScope.sidebarSource === 'string'
+    ? sidebarStateBindings._allSessionsScope.sidebarSource
     : null;
   for (const sid of Object.keys(INFLIGHT)) {
     // #4354: purge stale INFLIGHT even for a hung/idle session, BUT skip the one
@@ -960,18 +964,18 @@ function _rememberSessionListSource(s, sid = null, allowScopeFallback = true) {
   if (s && typeof _isCliSession === 'function') {
     source = _isCliSession(s) ? 'cli' : 'webui';
   }
-  if (!source && Array.isArray(_allSessions)) {
-    const cached = _allSessions.find(item => item && item.session_id === resolvedSid);
+  if (!source && Array.isArray(sidebarStateBindings._allSessions)) {
+    const cached = sidebarStateBindings._allSessions.find(item => item && item.session_id === resolvedSid);
     if (cached && typeof _isCliSession === 'function') {
       source = _isCliSession(cached) ? 'cli' : 'webui';
     }
   }
   if (!source
     && allowScopeFallback
-    && typeof _allSessionsScope !== 'undefined'
-    && _allSessionsScope
-    && typeof _allSessionsScope.sidebarSource === 'string') {
-    source = _allSessionsScope.sidebarSource;
+    && typeof sidebarStateBindings._allSessionsScope !== 'undefined'
+    && sidebarStateBindings._allSessionsScope
+    && typeof sidebarStateBindings._allSessionsScope.sidebarSource === 'string') {
+    source = sidebarStateBindings._allSessionsScope.sidebarSource;
   }
   if (source
     && typeof _sessionListSourceById !== 'undefined'
@@ -1141,22 +1145,22 @@ function _rememberRenderedSessionSnapshot(s) {
 }
 
 function _markSessionCompletedInList(session, previousSid = null) {
-  if (!session || !Array.isArray(_allSessions)) return;
+  if (!session || !Array.isArray(sidebarStateBindings._allSessions)) return;
   const finalSid = session.session_id || previousSid;
   if (!finalSid) return;
-  const finalIdx = _allSessions.findIndex(s => s && s.session_id === finalSid);
-  const previousIdx = previousSid ? _allSessions.findIndex(s => s && s.session_id === previousSid) : -1;
+  const finalIdx = sidebarStateBindings._allSessions.findIndex(s => s && s.session_id === finalSid);
+  const previousIdx = previousSid ? sidebarStateBindings._allSessions.findIndex(s => s && s.session_id === previousSid) : -1;
   const idx = finalIdx >= 0 ? finalIdx : previousIdx;
   if (idx < 0) return;
   const {messages: _messages, tool_calls: _toolCalls, ...sessionMeta} = session;
   const messageCount = Number(
     session.message_count != null
       ? session.message_count
-      : (Array.isArray(session.messages) ? session.messages.length : (_allSessions[idx].message_count || 0))
+      : (Array.isArray(session.messages) ? session.messages.length : (sidebarStateBindings._allSessions[idx].message_count || 0))
   );
-  const lastMessageAt = Number(session.last_message_at || session.updated_at || _allSessions[idx].last_message_at || 0);
-  _allSessions[idx] = {
-    ..._allSessions[idx],
+  const lastMessageAt = Number(session.last_message_at || session.updated_at || sidebarStateBindings._allSessions[idx].last_message_at || 0);
+  sidebarStateBindings._allSessions[idx] = {
+    ...sidebarStateBindings._allSessions[idx],
     ...sessionMeta,
     session_id: finalSid,
     message_count: messageCount,
@@ -1166,13 +1170,13 @@ function _markSessionCompletedInList(session, previousSid = null) {
     pending_started_at: null,
     is_streaming: false,
   };
-  if (typeof _rememberSessionListSource === 'function') _rememberSessionListSource(_allSessions[idx], finalSid);
+  if (typeof _rememberSessionListSource === 'function') _rememberSessionListSource(sidebarStateBindings._allSessions[idx], finalSid);
   _sessionStreamingById.set(finalSid, false);
   _forgetObservedStreamingSession(finalSid);
   if (previousSid && previousSid !== finalSid) {
-    for (let i = _allSessions.length - 1; i >= 0; i--) {
-      if (i !== idx && _allSessions[i] && _allSessions[i].session_id === previousSid) {
-        _allSessions.splice(i, 1);
+    for (let i = sidebarStateBindings._allSessions.length - 1; i >= 0; i--) {
+      if (i !== idx && sidebarStateBindings._allSessions[i] && sidebarStateBindings._allSessions[i].session_id === previousSid) {
+        sidebarStateBindings._allSessions.splice(i, 1);
       }
     }
     _sessionStreamingById.delete(previousSid);
@@ -1197,10 +1201,10 @@ function _markPollingCompletionUnreadTransitions(sessions) {
     && typeof _sessionListSourceById.delete === 'function'
     ? _sessionListSourceById
     : new Map();
-  const currentSidebarSource = typeof _allSessionsScope !== 'undefined'
-    && _allSessionsScope
-    && typeof _allSessionsScope.sidebarSource === 'string'
-    ? _allSessionsScope.sidebarSource
+  const currentSidebarSource = typeof sidebarStateBindings._allSessionsScope !== 'undefined'
+    && sidebarStateBindings._allSessionsScope
+    && typeof sidebarStateBindings._allSessionsScope.sidebarSource === 'string'
+    ? sidebarStateBindings._allSessionsScope.sidebarSource
     : null;
   for (const s of sessions) {
     if (!s || !s.session_id) continue;
@@ -1234,7 +1238,7 @@ function _markPollingCompletionUnreadTransitions(sessions) {
           : null;
         // Defense: never re-create a cron unread for a non-active profile while
         // the sidebar is single-profile (stale pre-switch payloads).
-        const allProfilesOn = (typeof _showAllProfiles !== 'undefined' && !!_showAllProfiles);
+        const allProfilesOn = (typeof sidebarStateBindings._showAllProfiles !== 'undefined' && !!sidebarStateBindings._showAllProfiles);
         if (
           meta
           && meta.source === 'cron'
@@ -1278,4 +1282,27 @@ function _markPollingCompletionUnreadTransitions(sessions) {
   }
 }
 
-window.HermesSessions.parts.sessionState=Object.freeze({saveDraft:_saveComposerDraft,saveDraftNow:_saveComposerDraftNow,restoreDraft:_restoreComposerDraft,clearDraft:_clearComposerDraft,acknowledgeVisit:_acknowledgeSessionVisit,hasUnread:_hasUnreadForSession,selectLiveRecovery:_selectLiveRecoveryInflight,markCompleted:_markSessionCompletedInList});
+export const sessionState=Object.freeze({saveDraft:_saveComposerDraft,saveDraftNow:_saveComposerDraftNow,restoreDraft:_restoreComposerDraft,clearDraft:_clearComposerDraft,acknowledgeVisit:_acknowledgeSessionVisit,hasUnread:_hasUnreadForSession,selectLiveRecovery:_selectLiveRecoveryInflight,markCompleted:_markSessionCompletedInList});
+
+export { ICONS, SESSION_ARCHIVE_SWIPE_THRESHOLD_PX, SESSION_DELETE_SWIPE_THRESHOLD_PX, SESSION_LIST_FLIP_TIMEOUT_MS, SESSION_LIST_INTERACTION_IDLE_MS, SESSION_LONG_PRESS_DELAY_MS, SESSION_REFLOW_TIMEOUT_MS, SESSION_SWIPE_CANCEL_RATIO, SESSION_SWIPE_DURATION_MS, SESSION_SWIPE_REFLOW_LEAD_MS, _SESSION_LIST_BOOT_TIMEOUT_MS, _acknowledgeSessionVisit, _clearComposerDraft, _clearCronSessionCompletionUnreadForInactiveProfiles, _clearSessionCompletionUnread, _clearSessionViewedCount, _forgetObservedStreamingSession, _formatSessionModelWithGateway, _hasUnreadForSession, _inflightHasVisibleLiveState, _isServerIdleSessionRow, _isSessionActivelyViewedForList, _isSessionEffectivelyStreaming, _isSessionLocallyStreaming, _knownSessionProfileCount, _manualTitleRegenerateTimeoutMs, _markPollingCompletionUnreadTransitions, _markSessionCompletedInList, _markSessionCompletionUnread, _markSessionCompletionUnreadIfBackground, _profileMatchesActiveProfile, _purgeStaleInflightEntries, _reconcileActiveSessionIdleStateFromList, _recordSessionProfileCount, _rememberNewChatDraftSession, _rememberRenderedSessionSnapshot, _rememberRenderedStreamingState, _rememberSessionListSource, _renderRuntimeJournalAnchorActivityScene, _restoreComposerDraft, _restoreRememberedNewChatDraftSession, _saveComposerDraft, _saveComposerDraftNow, _selectLiveRecoveryInflight, _serverLiveSnapshotInflight, _sessionEventProfilesMatch, _sessionStreamingById, _sessionVisitHasUnreadState, _setSessionViewedCount };
+
+export const sessionStateBindings=Object.freeze({
+  get _loadSessionGeneration(){ return _loadSessionGeneration; },
+  set _loadSessionGeneration(value){ _loadSessionGeneration=value; },
+  get _loadingSessionId(){ return _loadingSessionId; },
+  set _loadingSessionId(value){ _loadingSessionId=value; },
+  get _pendingCarryForwardSnapshot(){ return _pendingCarryForwardSnapshot; },
+  set _pendingCarryForwardSnapshot(value){ _pendingCarryForwardSnapshot=value; },
+  get _pendingSessionListApplyTimer(){ return _pendingSessionListApplyTimer; },
+  set _pendingSessionListApplyTimer(value){ _pendingSessionListApplyTimer=value; },
+  get _pendingSessionListPayload(){ return _pendingSessionListPayload; },
+  set _pendingSessionListPayload(value){ _pendingSessionListPayload=value; },
+  get _sessionListHasLoadedOnce(){ return _sessionListHasLoadedOnce; },
+  set _sessionListHasLoadedOnce(value){ _sessionListHasLoadedOnce=value; },
+  get _sessionListLastScrollAt(){ return _sessionListLastScrollAt; },
+  set _sessionListLastScrollAt(value){ _sessionListLastScrollAt=value; },
+  get _sessionListLoadError(){ return _sessionListLoadError; },
+  set _sessionListLoadError(value){ _sessionListLoadError=value; },
+  get _sessionListPointerActive(){ return _sessionListPointerActive; },
+  set _sessionListPointerActive(value){ _sessionListPointerActive=value; },
+});

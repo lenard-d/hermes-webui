@@ -1,12 +1,18 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
+import { SESSION_LIST_INTERACTION_IDLE_MS, _SESSION_LIST_BOOT_TIMEOUT_MS, _forgetObservedStreamingSession, _isServerIdleSessionRow, _isSessionEffectivelyStreaming, _isSessionLocallyStreaming, _knownSessionProfileCount, _markPollingCompletionUnreadTransitions, _purgeStaleInflightEntries, _reconcileActiveSessionIdleStateFromList, _recordSessionProfileCount, _rememberSessionListSource, _sessionEventProfilesMatch, _sessionStreamingById, sessionStateBindings } from './state.js';
+import { loadSession } from './lifecycle.js';
+import { _clearSessionSourceTabCounts, _externalImportPayload, _isCliImportRefreshPrefixMatch, _isCliSession, _isExternalSession, _isMessagingSession, _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled, _sessionListQueryString } from './message-loading.js';
+import { _optimisticallyRemovedSessionIds, _sessionActionMenu, _sessionAttentionSoundState, sidebarStateBindings } from './sidebar-state.js';
+import { _pruneLineageReportCacheToVisibleSessions, sessionDiscoveryBindings } from './session-discovery.js';
+import { _activeSessionIdForSidebar } from './sidebar-interactions.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
+
 let _profileSwitchListEmbargo = false;
 function _setProfileSwitchListEmbargo(on){ _profileSwitchListEmbargo = !!on; }
 if(typeof window!=='undefined') window._setProfileSwitchListEmbargo = _setProfileSwitchListEmbargo;
 
 function animateNextSessionListRefresh(options={}){
-  _sessionListRefreshAnimationPending = true;
-  if(options&&options.enterAll) _sessionListEnterAllAnimationPending = true;
+  sidebarStateBindings._sessionListRefreshAnimationPending = true;
+  if(options&&options.enterAll) sidebarStateBindings._sessionListEnterAllAnimationPending = true;
 }
 
 // ── Loading skeletons (#4662 Phase 1) ───────────────────────────────────────
@@ -36,9 +42,9 @@ function showSessionListSkeleton(targetProfile){
   // (#4662 Codex gate). Cancel the queued RAF and drop the data-session-virtual-*
   // window markers; the real render rebuilds them from the new payload. Done once
   // here so it applies to BOTH the content and empty-state skeleton branches.
-  if(typeof _sessionVirtualScrollRaf!=='undefined'&&_sessionVirtualScrollRaf){
-    cancelAnimationFrame(_sessionVirtualScrollRaf);
-    _sessionVirtualScrollRaf=0;
+  if(typeof sidebarStateBindings._sessionVirtualScrollRaf!=='undefined'&&sidebarStateBindings._sessionVirtualScrollRaf){
+    cancelAnimationFrame(sidebarStateBindings._sessionVirtualScrollRaf);
+    sidebarStateBindings._sessionVirtualScrollRaf=0;
   }
   delete list.dataset.sessionVirtualTotal;
   delete list.dataset.sessionVirtualStart;
@@ -58,8 +64,8 @@ function showSessionListSkeleton(targetProfile){
   const knownCount = (typeof targetProfile === 'string' && targetProfile
       && typeof _knownSessionProfileCount === 'function')
     ? _knownSessionProfileCount(targetProfile) : null;
-  const filterActive = (typeof _activeProject !== 'undefined' && _activeProject)
-    || (typeof _sessionSourceFilter !== 'undefined' && _sessionSourceFilter === 'cli');
+  const filterActive = (typeof sidebarStateBindings._activeProject !== 'undefined' && sidebarStateBindings._activeProject)
+    || (typeof sidebarStateBindings._sessionSourceFilter !== 'undefined' && sidebarStateBindings._sessionSourceFilter === 'cli');
   const wrap = document.createElement('div');
   wrap.setAttribute('aria-hidden', 'true');
   if(knownCount === 0 && !filterActive){
@@ -148,7 +154,7 @@ function _mergeOptimisticFirstTurnSessions(fetchedSessions){
   const merged=Array.isArray(fetchedSessions)?[...fetchedSessions]:[];
   const bySid=new Map();
   merged.forEach((s,idx)=>{if(s&&s.session_id) bySid.set(s.session_id,idx);});
-  for(const local of Array.isArray(_allSessions)?_allSessions:[]){
+  for(const local of Array.isArray(sidebarStateBindings._allSessions)?sidebarStateBindings._allSessions:[]){
     if(!_isOptimisticFirstTurnSessionRow(local)) continue;
     const sid=local.session_id;
     const idx=bySid.has(sid)?bySid.get(sid):-1;
@@ -190,24 +196,24 @@ function _isSessionListUserInteracting(){
   const list=$('sessionList');
   const pointerOverList=Boolean(list&&(list.matches(':hover')||list.matches(':focus-within')));
   return Boolean(
-    _sessionListPointerActive ||
+    sessionStateBindings._sessionListPointerActive ||
     pointerOverList ||
-    (_sessionListLastScrollAt && now-_sessionListLastScrollAt<SESSION_LIST_INTERACTION_IDLE_MS)
+    (sessionStateBindings._sessionListLastScrollAt && now-sessionStateBindings._sessionListLastScrollAt<SESSION_LIST_INTERACTION_IDLE_MS)
   );
 }
 
 function _schedulePendingSessionListApply(){
-  if(_pendingSessionListApplyTimer) clearTimeout(_pendingSessionListApplyTimer);
-  _pendingSessionListApplyTimer=setTimeout(()=>{
-    _pendingSessionListApplyTimer=0;
-    if(!_pendingSessionListPayload) return;
+  if(sessionStateBindings._pendingSessionListApplyTimer) clearTimeout(sessionStateBindings._pendingSessionListApplyTimer);
+  sessionStateBindings._pendingSessionListApplyTimer=setTimeout(()=>{
+    sessionStateBindings._pendingSessionListApplyTimer=0;
+    if(!sessionStateBindings._pendingSessionListPayload) return;
     if(_isSessionListUserInteracting()){
       _schedulePendingSessionListApply();
       return;
     }
-    const payload=_pendingSessionListPayload;
-    _pendingSessionListPayload=null;
-    if(payload.gen!==_renderSessionListGen) return;
+    const payload=sessionStateBindings._pendingSessionListPayload;
+    sessionStateBindings._pendingSessionListPayload=null;
+    if(payload.gen!==sidebarStateBindings._renderSessionListGen) return;
     // Profile switch may have bumped unread gen after the list gen check
     // window; still drop completion-marking for the stale pre-switch payload.
     _applySessionListPayload(payload.sessData,payload.projData,{
@@ -232,8 +238,8 @@ function _syncSessionAttentionSoundState(sessions){
     const sig=_sessionAttentionSoundSignature(s);
     if(sig) next.set(s.session_id,sig);
   }
-  if(!_sessionAttentionSoundPrimed){
-    _sessionAttentionSoundPrimed=true;
+  if(!sidebarStateBindings._sessionAttentionSoundPrimed){
+    sidebarStateBindings._sessionAttentionSoundPrimed=true;
     _sessionAttentionSoundState.clear();
     next.forEach((sig,sid)=>_sessionAttentionSoundState.set(sid,sig));
     return;
@@ -268,17 +274,17 @@ function _sessionListRenderSignature(){
   try{
     const search=($('sessionSearch')&&$('sessionSearch').value)||'';
     return JSON.stringify([
-      _allSessions,
-      _sidebarReferenceSessions,
-      _allProjects,
+      sidebarStateBindings._allSessions,
+      sidebarStateBindings._sidebarReferenceSessions,
+      sidebarStateBindings._allProjects,
       _activeSessionIdForSidebar(),
       search,
-      _sessionSourceFilter,
-      !!_sessionSelectMode,
+      sidebarStateBindings._sessionSourceFilter,
+      !!sidebarStateBindings._sessionSelectMode,
       (window._sidebarDensity==='detailed'?'d':'c'),
-      !!_showAllProfiles,
-      _otherProfileCount,_archivedWebuiCount,_archivedCliCount,
-      _serverWebuiSessionCount,_serverCliSessionCount,
+      !!sidebarStateBindings._showAllProfiles,
+      sidebarStateBindings._otherProfileCount,sidebarStateBindings._archivedWebuiCount,sidebarStateBindings._archivedCliCount,
+      sidebarStateBindings._serverWebuiSessionCount,sidebarStateBindings._serverCliSessionCount,
     ]);
   }catch(_){ return null; }
 }
@@ -287,44 +293,44 @@ function _applySessionListPayload(sessData, projData, opts){
   // active profile so the "Show N from other profiles" toggle can render
   // without a second round-trip. Stashed on the module for renderSessionListFromCache.
   const applyOpts = (opts && typeof opts === 'object') ? opts : {};
-  _otherProfileCount = sessData.other_profile_count || 0;
-  _archivedWebuiCount = Number(sessData.archived_webui_count ?? sessData.archived_count ?? 0);
-  _archivedCliCount = Number(sessData.archived_cli_count ?? 0);
-  _serverWebuiSessionCount = Object.prototype.hasOwnProperty.call(sessData, 'webui_session_count')
+  sidebarStateBindings._otherProfileCount = sessData.other_profile_count || 0;
+  sidebarStateBindings._archivedWebuiCount = Number(sessData.archived_webui_count ?? sessData.archived_count ?? 0);
+  sidebarStateBindings._archivedCliCount = Number(sessData.archived_cli_count ?? 0);
+  sidebarStateBindings._serverWebuiSessionCount = Object.prototype.hasOwnProperty.call(sessData, 'webui_session_count')
     ? Number(sessData.webui_session_count)
     : null;
-  _serverCliSessionCount = Object.prototype.hasOwnProperty.call(sessData, 'cli_session_count')
+  sidebarStateBindings._serverCliSessionCount = Object.prototype.hasOwnProperty.call(sessData, 'cli_session_count')
     ? Number(sessData.cli_session_count)
     : null;
-  if (!Number.isFinite(_serverWebuiSessionCount)) _serverWebuiSessionCount = null;
-  if (!Number.isFinite(_serverCliSessionCount)) _serverCliSessionCount = null;
+  if (!Number.isFinite(sidebarStateBindings._serverWebuiSessionCount)) sidebarStateBindings._serverWebuiSessionCount = null;
+  if (!Number.isFinite(sidebarStateBindings._serverCliSessionCount)) sidebarStateBindings._serverCliSessionCount = null;
   // Capture server clock for clock-skew compensation (issue #1144).
   // server_time is epoch seconds from the server's time.time().
   // _serverTimeDelta = client - server, so (Date.now() - _serverTimeDelta)
   // gives an approximation of the current server time.
   if (typeof sessData.server_time === 'number' && sessData.server_time > 0) {
-    _serverTimeDelta = Date.now() - (sessData.server_time * 1000);
+    sessionDiscoveryBindings._serverTimeDelta = Date.now() - (sessData.server_time * 1000);
   }
   if (typeof sessData.server_tz === 'string') {
-    _serverTz = sessData.server_tz;
+    sessionDiscoveryBindings._serverTz = sessData.server_tz;
   }
   const serverSessions=_optimisticallyRemovedSessionIds.size
     ? (sessData.sessions||[]).filter(s=>s&&!_optimisticallyRemovedSessionIds.has(s.session_id))
     : (sessData.sessions||[]);
-  _sidebarReferenceSessions = Array.isArray(sessData.sidebar_reference_sessions)
+  sidebarStateBindings._sidebarReferenceSessions = Array.isArray(sessData.sidebar_reference_sessions)
     ? sessData.sidebar_reference_sessions
     : [];
   _reconcileActiveSessionIdleStateFromList(serverSessions);
-  _allSessions = _mergeOptimisticFirstTurnSessions(serverSessions);
+  sidebarStateBindings._allSessions = _mergeOptimisticFirstTurnSessions(serverSessions);
   // Tag the cache with the scope it was loaded under (active profile +
   // all-profiles flag). If a later /api/sessions fails right after a profile
   // switch, the catch path checks this so it won't re-render the PRIOR
   // profile's rows as if they were current (#4167 review item 3).
-  _allSessionsScope = {
+  sidebarStateBindings._allSessionsScope = {
     profile: (typeof sessData.active_profile === 'string' && sessData.active_profile)
       ? sessData.active_profile
       : (S.activeProfile || 'default'),
-    allProfiles: !!_showAllProfiles,
+    allProfiles: !!sidebarStateBindings._showAllProfiles,
     sidebarSource: _requestedSessionSidebarSource(),
     excludeHidden: _sessionListExcludeHiddenEnabled(),
   };
@@ -335,21 +341,21 @@ function _applySessionListPayload(sessData, projData, opts){
   // subset that could cache a misleading 0 for a profile that has sessions under
   // a different filter). This mirrors the read-side `filterActive` gate in
   // showSessionListSkeleton so the write and read agree on what the count means.
-  const _recordFilterActive = (typeof _activeProject !== 'undefined' && _activeProject)
-    || (typeof _sessionSourceFilter !== 'undefined' && _sessionSourceFilter === 'cli');
-  if (!_showAllProfiles && !_recordFilterActive) {
-    _recordSessionProfileCount(_allSessionsScope.profile, _allSessions.length);
+  const _recordFilterActive = (typeof sidebarStateBindings._activeProject !== 'undefined' && sidebarStateBindings._activeProject)
+    || (typeof sidebarStateBindings._sessionSourceFilter !== 'undefined' && sidebarStateBindings._sessionSourceFilter === 'cli');
+  if (!sidebarStateBindings._showAllProfiles && !_recordFilterActive) {
+    _recordSessionProfileCount(sidebarStateBindings._allSessionsScope.profile, sidebarStateBindings._allSessions.length);
   }
-  _syncSessionAttentionSoundState(_allSessions);
-  _pruneLineageReportCacheToVisibleSessions(_allSessions);
-  _allProjects = projData.projects||[];
+  _syncSessionAttentionSoundState(sidebarStateBindings._allSessions);
+  _pruneLineageReportCacheToVisibleSessions(sidebarStateBindings._allSessions);
+  sidebarStateBindings._allProjects = projData.projects||[];
   // Capture the recovering-from-error state BEFORE clearing it: the error banner
   // DOM was rendered outside the signature path, so if this payload heals with
   // rows identical to the last render, the identical-signature skip below would
   // leave the stale "Could not load conversations" banner on screen. (Codex #5467)
-  const _hadSessionListLoadError = !!_sessionListLoadError;
-  _sessionListLoadError = null;
-  _sessionListHasLoadedOnce = true;
+  const _hadSessionListLoadError = !!sessionStateBindings._sessionListLoadError;
+  sessionStateBindings._sessionListLoadError = null;
+  sessionStateBindings._sessionListHasLoadedOnce = true;
   // Greptile #5975 P1: a /api/sessions request started under profile A can
   // finish after a switch to B already cleared A's cron markers. The list gen
   // check can already have passed (TOCTOU) or a deferred apply can land later.
@@ -358,9 +364,9 @@ function _applySessionListPayload(sessData, projData, opts){
   const expectedUnreadGen = applyOpts.unreadGen;
   const currentUnreadGen = (typeof _cronPollGeneration === 'number') ? _cronPollGeneration : 0;
   if (typeof expectedUnreadGen !== 'number' || expectedUnreadGen === currentUnreadGen) {
-    _markPollingCompletionUnreadTransitions(_allSessions);
+    _markPollingCompletionUnreadTransitions(sidebarStateBindings._allSessions);
   }
-  const isStreaming = _allSessions.some(s => _isSessionEffectivelyStreaming(s));
+  const isStreaming = sidebarStateBindings._allSessions.some(s => _isSessionEffectivelyStreaming(s));
   if (isStreaming) {
     startStreamingPoll();
   } else {
@@ -368,9 +374,9 @@ function _applySessionListPayload(sessData, projData, opts){
   }
   ensureSessionTimeRefreshPoll();
   ensureActiveSessionExternalRefreshPoll();
-  if(!_sessionListFirstRenderAnimated&&Array.isArray(_allSessions)&&_allSessions.length){
+  if(!sidebarStateBindings._sessionListFirstRenderAnimated&&Array.isArray(sidebarStateBindings._allSessions)&&sidebarStateBindings._allSessions.length){
     animateNextSessionListRefresh({enterAll:true});
-    _sessionListFirstRenderAnimated=true;
+    sidebarStateBindings._sessionListFirstRenderAnimated=true;
   }
   ensureSessionEventsSSE();
   // #4671: this payload is the freshly-resolved /api/sessions response (and a superseded
@@ -390,10 +396,10 @@ function _applySessionListPayload(sessData, projData, opts){
   // NEVER skip when recovering from a skeleton or error-banner DOM state: those
   // are rendered outside the signature path, so an identical-signature match
   // would leave the skeleton/error on screen instead of the real list. (Codex #5467)
-  const _canRenderNow = !_renamingSid && !_sessionActionMenu;
+  const _canRenderNow = !sidebarStateBindings._renamingSid && !_sessionActionMenu;
   const _mustForceRender = _hadSessionListSkeleton || _hadSessionListLoadError;
   const _renderSig = _sessionListRenderSignature();
-  if(_canRenderNow && !_mustForceRender && !_sessionListRefreshAnimationPending && _renderSig && _renderSig===_lastSessionListRenderSig){
+  if(_canRenderNow && !_mustForceRender && !sidebarStateBindings._sessionListRefreshAnimationPending && _renderSig && _renderSig===_lastSessionListRenderSig){
     // Preserve the per-refresh INFLIGHT cleanup that renderSessionListFromCache
     // would otherwise perform, then skip only the DOM rebuild.
     if(typeof _purgeStaleInflightEntries==='function') _purgeStaleInflightEntries();
@@ -418,8 +424,8 @@ function _showSessionListLoadError(error){
   // If this error is landing while a retry was in flight, flag the fresh Retry
   // button (rebuilt by the repaint) to reclaim keyboard focus so keyboard users
   // aren't dropped to <body> on a failed retry.
-  const wasRetrying=Boolean(_sessionListLoadError&&_sessionListLoadError.retrying);
-  _sessionListLoadError={
+  const wasRetrying=Boolean(sessionStateBindings._sessionListLoadError&&sessionStateBindings._sessionListLoadError.retrying);
+  sessionStateBindings._sessionListLoadError={
     message:isTimeout
       ? 'Session list is taking longer than expected.'
       : 'Could not load conversations.',
@@ -431,7 +437,7 @@ function _showSessionListLoadError(error){
 }
 
 function _renderSessionListLoadErrorNote(){
-  if(!_sessionListLoadError) return null;
+  if(!sessionStateBindings._sessionListLoadError) return null;
   const note=document.createElement('div');
   note.className='session-list-error session-empty-note';
   // a11y: announce load-error / retry-failure transitions to screen readers
@@ -439,18 +445,18 @@ function _renderSessionListLoadErrorNote(){
   note.setAttribute('role','status');
   note.setAttribute('aria-live','polite');
   const title=document.createElement('div');
-  title.textContent=_sessionListLoadError.message||'Could not load conversations.';
+  title.textContent=sessionStateBindings._sessionListLoadError.message||'Could not load conversations.';
   note.appendChild(title);
-  if(_sessionListLoadError.detail){
+  if(sessionStateBindings._sessionListLoadError.detail){
     const detail=document.createElement('div');
     detail.className='session-list-error-detail';
-    detail.textContent=_sessionListLoadError.detail;
+    detail.textContent=sessionStateBindings._sessionListLoadError.detail;
     note.appendChild(detail);
   }
   const retry=document.createElement('button');
   retry.type='button';
   retry.className='session-list-error-retry';
-  const retrying=Boolean(_sessionListLoadError.retrying);
+  const retrying=Boolean(sessionStateBindings._sessionListLoadError.retrying);
   // Use aria-disabled (not the disabled property) for the pending state so the
   // button can keep keyboard focus across the sidebar rebuild; the click/keydown
   // guards below make it inert while busy.
@@ -463,13 +469,13 @@ function _renderSessionListLoadErrorNote(){
   const bindRetry=()=>{
     retry.onclick=(e)=>{
       e.stopPropagation();
-      if(!_sessionListLoadError||_sessionListLoadError.retrying) return;
+      if(!sessionStateBindings._sessionListLoadError||sessionStateBindings._sessionListLoadError.retrying) return;
       if(retry.getAttribute('aria-disabled')==='true') return;
       setPending();
-      _sessionListLoadError={..._sessionListLoadError,retrying:true};
+      sessionStateBindings._sessionListLoadError={...sessionStateBindings._sessionListLoadError,retrying:true};
       renderSessionListFromCache();
       void renderSessionList({deferWhileInteracting:false}).finally(()=>{
-        if(!retry.parentNode||(_sessionListLoadError&&_sessionListLoadError.retrying)) return;
+        if(!retry.parentNode||(sessionStateBindings._sessionListLoadError&&sessionStateBindings._sessionListLoadError.retrying)) return;
         retry.textContent='Retry';
         retry.removeAttribute('aria-disabled');
         retry.removeAttribute('aria-busy');
@@ -485,8 +491,8 @@ function _renderSessionListLoadErrorNote(){
     bindRetry();
     // On a failure repaint that replaces a pending button, restore keyboard
     // focus to the fresh Retry button so keyboard users aren't dropped to body.
-    if(_sessionListLoadError._retryFailedFocus){
-      delete _sessionListLoadError._retryFailedFocus;
+    if(sessionStateBindings._sessionListLoadError._retryFailedFocus){
+      delete sessionStateBindings._sessionListLoadError._retryFailedFocus;
       const _refocus=()=>{ try{ if(typeof retry.focus==='function') retry.focus(); }catch(_e){} };
       if(typeof requestAnimationFrame==='function') requestAnimationFrame(_refocus); else _refocus();
     }
@@ -497,13 +503,13 @@ function _renderSessionListLoadErrorNote(){
 
 async function _runRenderSessionListRefresh(opts, _gen){
   const deferWhileInteracting=Boolean(opts&&opts.deferWhileInteracting);
-  if(!deferWhileInteracting) _pendingSessionListPayload=null;
+  if(!deferWhileInteracting) sessionStateBindings._pendingSessionListPayload=null;
   // Capture profile-switch unread generation BEFORE the await so a switch
   // mid-flight (which increments _cronPollGeneration) invalidates completion
   // marking for this response even if list gen checks already passed.
   const unreadGen = (typeof _cronPollGeneration === 'number') ? _cronPollGeneration : 0;
   try{
-    if(!($('sessionSearch').value||'').trim()) _contentSearchResults = [];
+    if(!($('sessionSearch').value||'').trim()) sessionDiscoveryBindings._contentSearchResults = [];
     const sessionListQS = _sessionListQueryString();
     // #5394: the sidebar session-list GET is idempotent, so 502/503/504 retry
     // must be unconditional. Previously retries/retryStatuses were boot-gated, so
@@ -516,13 +522,13 @@ async function _runRenderSessionListRefresh(opts, _gen){
       retries:1,
       retryStatuses:[502,503,504],
     };
-    if(!_sessionListHasLoadedOnce){
+    if(!sessionStateBindings._sessionListHasLoadedOnce){
       sessionRequestOpts.timeoutMs=_SESSION_LIST_BOOT_TIMEOUT_MS;
       sessionRequestOpts.retryTimeouts=true;
     }
     const {sessData, projData}=await _loadSidebarSessionListPayload(sessionListQS, sessionRequestOpts);
     // Discard stale response — a newer renderSessionList() call superseded us.
-    if (_gen !== _renderSessionListGen) return;
+    if (_gen !== sidebarStateBindings._renderSessionListGen) return;
     // #4671: while a profile switch is mid-flight, drop ANY payload — even one whose
     // generation still matches — because a render that STARTED after the skeleton showed
     // but before the switch response set the new-profile cookie fetched the OLD profile's
@@ -530,13 +536,13 @@ async function _runRenderSessionListRefresh(opts, _gen){
     // renderSessionList(), so that render's payload is the first allowed to paint.
     if (_profileSwitchListEmbargo) return;
     if(deferWhileInteracting&&_isSessionListUserInteracting()){
-      _pendingSessionListPayload={gen:_gen,sessData,projData,unreadGen};
+      sessionStateBindings._pendingSessionListPayload={gen:_gen,sessData,projData,unreadGen};
       _schedulePendingSessionListApply();
       return;
     }
     _applySessionListPayload(sessData,projData,{unreadGen});
   }catch(e){
-    if (_gen !== _renderSessionListGen) return;
+    if (_gen !== sidebarStateBindings._renderSessionListGen) return;
     // #4671: same embargo guard as the success path — a mid-switch /api/sessions that
     // FAILS must not clear the skeleton flag or render the old-profile cache either. The
     // switch-owned render (after the embargo lifts) is the only one allowed to resolve the
@@ -550,15 +556,15 @@ async function _runRenderSessionListRefresh(opts, _gen){
     // (#4167 review item 3).
     const _curScope = {
       profile: S.activeProfile || 'default',
-      allProfiles: !!_showAllProfiles,
+      allProfiles: !!sidebarStateBindings._showAllProfiles,
       sidebarSource: _requestedSessionSidebarSource(),
       excludeHidden: _sessionListExcludeHiddenEnabled(),
     };
-    const _scopeMatches = _allSessionsScope
-      && _allSessionsScope.profile === _curScope.profile
-      && _allSessionsScope.allProfiles === _curScope.allProfiles
-      && _allSessionsScope.sidebarSource === _curScope.sidebarSource
-      && _allSessionsScope.excludeHidden === _curScope.excludeHidden;
+    const _scopeMatches = sidebarStateBindings._allSessionsScope
+      && sidebarStateBindings._allSessionsScope.profile === _curScope.profile
+      && sidebarStateBindings._allSessionsScope.allProfiles === _curScope.allProfiles
+      && sidebarStateBindings._allSessionsScope.sidebarSource === _curScope.sidebarSource
+      && sidebarStateBindings._allSessionsScope.excludeHidden === _curScope.excludeHidden;
     // #4671: the /api/sessions fetch failed — clear the skeleton flag so this error
     // render (matched cache, or empty rows for a mismatched scope) replaces the
     // up-front profile-switch skeleton instead of stranding it.
@@ -566,9 +572,9 @@ async function _runRenderSessionListRefresh(opts, _gen){
     if (_scopeMatches) {
       renderSessionListFromCache();
     } else {
-      _allSessions = [];
-      _sidebarReferenceSessions = [];
-      _allSessionsScope = _curScope;
+      sidebarStateBindings._allSessions = [];
+      sidebarStateBindings._sidebarReferenceSessions = [];
+      sidebarStateBindings._allSessionsScope = _curScope;
       _clearSessionSourceTabCounts();
       renderSessionListFromCache();
     }
@@ -578,11 +584,11 @@ async function _runRenderSessionListRefresh(opts, _gen){
 async function _loadSidebarSessionListPayload(sessionListQS, sessionRequestOpts){
   const projectPromise = (async() => {
     try{
-      const projectQS = _showAllProfiles ? '?all_profiles=1' : '';
+      const projectQS = sidebarStateBindings._showAllProfiles ? '?all_profiles=1' : '';
       return await api('/api/projects' + projectQS,{timeoutToast:false});
     }catch(projectError){
       console.warn('renderProjectsList',projectError);
-      return {projects:_allProjects||[]};
+      return {projects:sidebarStateBindings._allProjects||[]};
     }
   })();
 
@@ -597,30 +603,30 @@ async function _drainRenderSessionListQueue(initialRequest){
   try{
     while(request){
       await _runRenderSessionListRefresh(request.opts, request.gen);
-      request=_renderSessionListQueuedRequest;
-      _renderSessionListQueuedRequest=null;
+      request=sidebarStateBindings._renderSessionListQueuedRequest;
+      sidebarStateBindings._renderSessionListQueuedRequest=null;
     }
   }finally{
-    _renderSessionListInFlight=null;
-    if(_renderSessionListQueuedRequest){
-      const next=_renderSessionListQueuedRequest;
-      _renderSessionListQueuedRequest=null;
-      _renderSessionListInFlight=_drainRenderSessionListQueue(next);
+    sidebarStateBindings._renderSessionListInFlight=null;
+    if(sidebarStateBindings._renderSessionListQueuedRequest){
+      const next=sidebarStateBindings._renderSessionListQueuedRequest;
+      sidebarStateBindings._renderSessionListQueuedRequest=null;
+      sidebarStateBindings._renderSessionListInFlight=_drainRenderSessionListQueue(next);
     }
   }
 }
 
 async function renderSessionList(opts={}){
-  const request={opts:opts||{},gen:++_renderSessionListGen};
-  if(_renderSessionListInFlight){
-    _renderSessionListQueuedRequest={
-      opts:_mergeRenderSessionListOptions(_renderSessionListQueuedRequest&&_renderSessionListQueuedRequest.opts, request.opts),
+  const request={opts:opts||{},gen:++sidebarStateBindings._renderSessionListGen};
+  if(sidebarStateBindings._renderSessionListInFlight){
+    sidebarStateBindings._renderSessionListQueuedRequest={
+      opts:_mergeRenderSessionListOptions(sidebarStateBindings._renderSessionListQueuedRequest&&sidebarStateBindings._renderSessionListQueuedRequest.opts, request.opts),
       gen:request.gen,
     };
-    return _renderSessionListInFlight;
+    return sidebarStateBindings._renderSessionListInFlight;
   }
-  _renderSessionListInFlight=_drainRenderSessionListQueue(request);
-  return _renderSessionListInFlight;
+  sidebarStateBindings._renderSessionListInFlight=_drainRenderSessionListQueue(request);
+  return sidebarStateBindings._renderSessionListInFlight;
 }
 
 // ── Gateway session SSE (real-time sync for agent sessions) ──
@@ -828,7 +834,7 @@ async function refreshActiveSessionIfExternallyUpdated(reason){
       // is in flight — avoids overwriting _loadingSessionId and silently
       // cancelling an in-progress session switch. All four call paths
       // (idle-reconcile, poll, visibility, focus) funnel through here.
-      if(typeof _loadingSessionId !== 'undefined' && _loadingSessionId && _loadingSessionId !== sid) return 'skipped';
+      if(typeof sessionStateBindings._loadingSessionId !== 'undefined' && sessionStateBindings._loadingSessionId && sessionStateBindings._loadingSessionId !== sid) return 'skipped';
       await loadSession(sid, {force:true, externalRefreshReason:reason||'poll', keepStaleUntilLoaded:_keepStaleUntilLoaded});
       if(typeof renderSessionList==='function') void renderSessionList();
       return 'reloaded';
@@ -1092,7 +1098,7 @@ function _isGatewaySessionForSnapshot(session){
 
 function _isDuplicateGatewaySessionSnapshot(sessions){
   const incoming=(Array.isArray(sessions)?sessions:[]).filter(_isGatewaySessionForSnapshot);
-  const currentGatewaySessions=(Array.isArray(_allSessions)?_allSessions:[]).filter(_isGatewaySessionForSnapshot);
+  const currentGatewaySessions=(Array.isArray(sidebarStateBindings._allSessions)?sidebarStateBindings._allSessions:[]).filter(_isGatewaySessionForSnapshot);
   if(!incoming.length&&!currentGatewaySessions.length) return true;
   return _gatewaySessionSnapshotKey(incoming)===_gatewaySessionSnapshotKey(currentGatewaySessions);
 }
@@ -1228,4 +1234,11 @@ function stopGatewaySSE(){
   _gatewaySSEWarningShown = false;
 }
 
-window.HermesSessions.parts.listUpdates=Object.freeze({showSkeleton:showSessionListSkeleton,applyPayload:_applySessionListPayload,render:renderSessionList,refresh:refreshSessionList,startPolling:startStreamingPoll,stopPolling:stopStreamingPoll,startGateway:startGatewaySSE,stopGateway:stopGatewaySSE});
+export const listUpdates=Object.freeze({showSkeleton:showSessionListSkeleton,applyPayload:_applySessionListPayload,render:renderSessionList,refresh:refreshSessionList,startPolling:startStreamingPoll,stopPolling:stopStreamingPoll,startGateway:startGatewaySSE,stopGateway:stopGatewaySSE});
+
+export { _clearDeferredActiveSessionExternalRefresh, _deferActiveSessionExternalRefresh, _dropStaleOptimisticSessionRow, _flushDeferredActiveSessionExternalRefresh, _renderSessionListLoadErrorNote, _schedulePendingSessionListApply, _setProfileSwitchListEmbargo, animateNextSessionListRefresh, refreshActiveSessionIfExternallyUpdated, refreshSessionList, renderSessionList, showSessionListSkeleton, startGatewaySSE, stopGatewaySSE };
+
+export const sessionListBindings=Object.freeze({
+  get _sessionListSkeletonActive(){ return _sessionListSkeletonActive; },
+  set _sessionListSkeletonActive(value){ _sessionListSkeletonActive=value; },
+});

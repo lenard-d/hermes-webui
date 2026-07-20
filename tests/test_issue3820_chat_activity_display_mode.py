@@ -279,14 +279,8 @@ process.stdout.write(JSON.stringify({{result, mode: chatActivityMode(), finalOnl
 
 def test_chat_activity_display_mode_anchor_scene_preserves_hide_all_mode():
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(ROOT / 'static' / 'assistant_turn_anchors_parts' / 'model.js'), str(ROOT / 'static' / 'assistant_turn_anchors_parts' / 'activity_scene.js'), str(ROOT / 'static' / 'assistant_turn_anchors.js')])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+(async()=>{{
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps((ROOT / 'static' / 'modules' / 'assistant-turn-anchors' / 'index.js').as_uri())});
 const empty = api.projectAssistantTurnAnchorActivityScene(null, {{mode:'hide_all_activity'}});
 const registry = api.createAssistantTurnAnchorRegistry({{session_id:'sid-1', turn_id:'turn-1'}});
 api.applyAssistantTurnAnchorSourceEvents(registry, [
@@ -296,6 +290,7 @@ api.applyAssistantTurnAnchorSourceEvents(registry, [
 const scene = api.projectAssistantTurnAnchorActivityScene(registry, {{mode:'hide_all_activity'}});
 const snapshot = api.createAssistantTurnAnchorRendererSnapshot({{mode:'hide_all_activity', rows:[]}});
 process.stdout.write(JSON.stringify({{emptyMode:empty.mode, sceneMode:scene.mode, snapshotMode:snapshot.mode}}));
+}})();
 """
     result = _run_node_script(script)
 

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _script(path):
     family = {
-        "static/sessions.js": "sessions",
+        "static/modules/sessions/index.js": "sessions",
         "static/commands.js": "commands",
         "static/messages.js": "messages",
         "static/boot.js": "boot",
@@ -29,7 +29,7 @@ def _assert_storage_setitem_guarded(src, needle):
 
 def test_active_session_localstorage_writes_ignore_quota_errors():
     """Session persistence writes are best-effort when the browser quota is full (#2386)."""
-    for path in ["static/sessions.js", "static/commands.js", "static/messages.js"]:
+    for path in ["static/modules/sessions/index.js", "static/commands.js", "static/messages.js"]:
         _assert_storage_setitem_guarded(
             _script(path),
             "localStorage.setItem('hermes-webui-session'",

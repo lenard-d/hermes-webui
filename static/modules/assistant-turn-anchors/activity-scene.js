@@ -1,11 +1,7 @@
 // Activity-scene projection and renderer reconciliation for Assistant Turn Anchors.
 // This factory is intentionally presentation-only: it receives immutable Anchor
 // state and never owns registry identity, replay cursors, or settlement writes.
-(function registerAssistantTurnAnchorScene(root){
-  const parts=root.HermesAssistantTurnAnchorParts||(root.HermesAssistantTurnAnchorParts=Object.create(null));
-  if(parts.createScene) throw new Error('assistant turn anchor scene already registered');
-
-  parts.createScene=function createAssistantTurnAnchorScene(support){
+export function createAssistantTurnAnchorScene(support){
     if(!support||typeof support!=='object') throw new Error('assistant turn anchor scene requires model support');
     const {
       hasOwn:_hasOwn,
@@ -805,5 +801,4 @@
       createAssistantTurnAnchorRendererSnapshot,
       reconcileAssistantTurnAnchorRendererSnapshot,
     });
-  };
-})(typeof window!=='undefined'?window:globalThis);
+}

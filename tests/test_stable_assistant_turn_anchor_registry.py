@@ -1,6 +1,6 @@
 """Slice 3 registry tests for Stable Assistant Turn Anchors (#3926)."""
 from __future__ import annotations
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import family_source, module_family_paths
 
 import json
 import shutil
@@ -8,12 +8,7 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-ANCHORS_JS = REPO / "static" / "assistant_turn_anchors.js"
-ANCHOR_JS_PATHS = (
-    REPO / "static" / "assistant_turn_anchors_parts" / "model.js",
-    REPO / "static" / "assistant_turn_anchors_parts" / "activity_scene.js",
-    ANCHORS_JS,
-)
+ANCHORS_JS = REPO / "static" / "modules" / "assistant-turn-anchors" / "index.js"
 MESSAGES_JS = REPO / "static" / "messages.js"
 STREAM_ANCHOR_SCENE_JS = REPO / "static" / "messages_parts" / "stream_anchor_scene.js"
 UI_JS = REPO / "static" / "ui.js"
@@ -23,7 +18,10 @@ NODE = shutil.which("node")
 
 def _read(path: Path) -> str:
     if path == ANCHORS_JS:
-        return "\n".join(item.read_text(encoding="utf-8") for item in ANCHOR_JS_PATHS)
+        return "\n".join(
+            item.read_text(encoding="utf-8")
+            for item in module_family_paths("assistant-turn-anchors")
+        )
     if path == UI_JS:
         return family_source("ui")
     if path == SESSIONS_JS:
@@ -65,14 +63,7 @@ def _function_body(src: str, name: str) -> str:
 def _registry_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 const registry = api.createAssistantTurnAnchorRegistry({{
   session_id:'sid-1',
   turn_id:'turn-1',
@@ -103,7 +94,7 @@ console.log(JSON.stringify({{
   results:results.map((item)=>({{applied:item.applied, reason:item.reason}})),
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -111,14 +102,7 @@ console.log(JSON.stringify({{
 def _shadow_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 const shadow = api.createAssistantTurnAnchorShadowSnapshot({{
   anchor:{{
     session_id:'sid-shadow',
@@ -153,21 +137,14 @@ console.log(JSON.stringify({{
   ])),
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
 def _activity_scene_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 const registry = api.createAssistantTurnAnchorRegistry({{
   session_id:'sid-scene',
   turn_id:'turn-scene',
@@ -245,7 +222,7 @@ console.log(JSON.stringify({{
   zero,
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -253,14 +230,7 @@ console.log(JSON.stringify({{
 def _activity_scene_reconciliation_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 const registry = api.createAssistantTurnAnchorRegistry({{
   session_id:'sid-reconcile',
   turn_id:'turn-reconcile',
@@ -330,7 +300,7 @@ console.log(JSON.stringify({{
   mixedIds,
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -338,14 +308,7 @@ console.log(JSON.stringify({{
 def _renderer_snapshot_adapter_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 
 function node(attrs, text, children, classes) {{
   const attrMap = attrs || {{}};
@@ -468,7 +431,7 @@ console.log(JSON.stringify({{
   compressionSnapshot,
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -476,14 +439,7 @@ console.log(JSON.stringify({{
 def _final_projection_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 const projected = api.projectAssistantTurnAnchorSettledMessageFinalAnswer({{
   role:'assistant',
   id:'message-final',
@@ -522,7 +478,7 @@ console.log(JSON.stringify({{
   nonAssistant,
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -530,14 +486,7 @@ console.log(JSON.stringify({{
 def _hardening_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 
 const toolRegistry = api.createAssistantTurnAnchorRegistry({{
   session_id:'sid-tool',
@@ -577,7 +526,7 @@ const identityRegistry = api.createAssistantTurnAnchorRegistry({{
   session_id:'sid-freeze',
   turn_id:'turn-freeze',
 }});
-identityRegistry.identity.session_id = 'mutated';
+try {{ identityRegistry.identity.session_id = 'mutated'; }} catch (_err) {{}}
 
 const metadataRegistry = api.createAssistantTurnAnchorRegistry({{
   session_id:'sid-meta',
@@ -630,7 +579,7 @@ console.log(JSON.stringify({{
   metadataRegistry,
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -638,14 +587,7 @@ console.log(JSON.stringify({{
 def _race_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js registry tests"
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
-const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
-const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
-const sandbox = {{window:{{}}}};
-vm.createContext(sandbox);
-vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
-const api = sandbox.window.HermesAssistantTurnAnchors;
+const {{HermesAssistantTurnAnchors:api}} = await import({json.dumps(ANCHORS_JS.as_uri())});
 
 function build(order) {{
   const registry = api.createAssistantTurnAnchorRegistry({{
@@ -696,7 +638,7 @@ console.log(JSON.stringify({{
   settledFirst: build('settled-first'),
 }}));
 """
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 

@@ -1,6 +1,9 @@
-window.HermesSessions=window.HermesSessions||{};
-window.HermesSessions.parts=window.HermesSessions.parts||{};
-// ── Handoff hint logic ──────────────────────────────────────────────────────
+import { _clearSessionCompletionUnread, _clearSessionViewedCount, _forgetObservedStreamingSession, _isSessionActivelyViewedForList, _profileMatchesActiveProfile, _setSessionViewedCount, sessionStateBindings } from './state.js';
+import { loadSession } from './lifecycle.js';
+import { messageTimelineBindings } from './message-timeline.js';
+import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, _selectedSessions, sidebarStateBindings } from './sidebar-state.js';
+import { renderSessionList } from './session-list.js';
+import { renderSessionListFromCache } from './sidebar-renderer.js';
 
 const _HANDOFF_THRESHOLD = 10;  // conversation rounds
 const _HANDOFF_STORAGE_PREFIX = 'handoff:';
@@ -51,7 +54,7 @@ function _isExternalSession(session) {
 
 function _externalImportPayload(session) {
   const payload = {session_id: session.session_id};
-  if (_showAllProfiles && session && typeof session.profile === 'string' && session.profile) {
+  if (sidebarStateBindings._showAllProfiles && session && typeof session.profile === 'string' && session.profile) {
     payload.all_profiles = true;
     payload.profile = session.profile;
   }
@@ -65,15 +68,15 @@ function _sidebarSessionProfileName(session){
 
 async function _ensureSidebarSessionProfile(session){
   const targetProfile=_sidebarSessionProfileName(session);
-  if(!_showAllProfiles||!targetProfile) return false;
+  if(!sidebarStateBindings._showAllProfiles||!targetProfile) return false;
   const activeProfile=S.activeProfile||'default';
   if(_profileMatchesActiveProfile(targetProfile,activeProfile)) return false;
   if(typeof switchToProfile!=='function') return false;
-  _profileSwitchOpeningExistingSession=true;
+  sidebarStateBindings._profileSwitchOpeningExistingSession=true;
   try{
     await switchToProfile(targetProfile);
   }finally{
-    _profileSwitchOpeningExistingSession=false;
+    sidebarStateBindings._profileSwitchOpeningExistingSession=false;
   }
   return _profileMatchesActiveProfile(targetProfile,S.activeProfile||'default');
 }
@@ -140,16 +143,16 @@ function _sessionSourceLabel(filter, count) {
 }
 
 function _clearSessionSourceTabCounts() {
-  _serverWebuiSessionCount = null;
-  _serverCliSessionCount = null;
+  sidebarStateBindings._serverWebuiSessionCount = null;
+  sidebarStateBindings._serverCliSessionCount = null;
 }
 
 function _requestedSessionSidebarSource() {
-  return window._showCliSessions ? _sessionSourceFilter : 'webui';
+  return window._showCliSessions ? sidebarStateBindings._sessionSourceFilter : 'webui';
 }
 
 function _sessionListExcludeHiddenEnabled() {
-  return _activeProject===null || _activeProject===NO_PROJECT_FILTER;
+  return sidebarStateBindings._activeProject===null || sidebarStateBindings._activeProject===NO_PROJECT_FILTER;
 }
 
 function _sessionArchivePagingFilterActive() {
@@ -158,20 +161,20 @@ function _sessionArchivePagingFilterActive() {
     const searchEl=typeof $==='function' ? $('sessionSearch') : null;
     searchActive=Boolean(searchEl&&String(searchEl.value||'').trim());
   }catch(_e){ searchActive=false; }
-  return Boolean(searchActive||_activeProject);
+  return Boolean(searchActive||sidebarStateBindings._activeProject);
 }
 
 function _sessionListQueryString() {
   const qs = new URLSearchParams();
   qs.set('sidebar_source', _requestedSessionSidebarSource());
   if(_sessionListExcludeHiddenEnabled()) qs.set('exclude_hidden','1');
-  if(_showAllProfiles) qs.set('all_profiles','1');
-  if(_showArchived){
+  if(sidebarStateBindings._showAllProfiles) qs.set('all_profiles','1');
+  if(sidebarStateBindings._showArchived){
     qs.set('include_archived','1');
     if(!_sessionArchivePagingFilterActive()){
       const archiveLimit=Math.min(
         SESSION_ARCHIVED_MAX_LOADED_LIMIT,
-        Math.max(SESSION_ARCHIVED_PAGE_SIZE, Number(_archivedRowsLoadedLimit)||SESSION_ARCHIVED_PAGE_SIZE)
+        Math.max(SESSION_ARCHIVED_PAGE_SIZE, Number(sidebarStateBindings._archivedRowsLoadedLimit)||SESSION_ARCHIVED_PAGE_SIZE)
       );
       qs.set('archived_limit', String(archiveLimit));
     }
@@ -180,26 +183,26 @@ function _sessionListQueryString() {
 }
 
 function _sessionSourceTabCount(filter, renderedWebuiSessionCount, renderedCliSessionCount) {
-  const serverCount = filter === 'cli' ? _serverCliSessionCount : _serverWebuiSessionCount;
+  const serverCount = filter === 'cli' ? sidebarStateBindings._serverCliSessionCount : sidebarStateBindings._serverWebuiSessionCount;
   if (Number.isFinite(serverCount)) return serverCount;
   return filter === 'cli' ? renderedCliSessionCount : renderedWebuiSessionCount;
 }
 
 function _setActiveProjectFilter(projectId) {
   const next = projectId === NO_PROJECT_FILTER ? NO_PROJECT_FILTER : (projectId || null);
-  if (_activeProject === next) return;
-  _activeProject = next;
+  if (sidebarStateBindings._activeProject === next) return;
+  sidebarStateBindings._activeProject = next;
   renderSessionListFromCache();
   void renderSessionList({deferWhileInteracting:false});
 }
 
 function _setSessionSourceFilter(filter) {
   const next = filter === 'cli' ? 'cli' : 'webui';
-  if (_sessionSourceFilter === next) return;
-  _sessionSourceFilter = next;
-  _activeProject = null;
+  if (sidebarStateBindings._sessionSourceFilter === next) return;
+  sidebarStateBindings._sessionSourceFilter = next;
+  sidebarStateBindings._activeProject = null;
   _selectedSessions.clear();
-  _sessionSelectMode = false;
+  sidebarStateBindings._sessionSelectMode = false;
   try { localStorage.setItem('hermes-session-source-filter', next); } catch (_e) {}
   renderSessionListFromCache();
   void renderSessionList({deferWhileInteracting:false});
@@ -208,7 +211,7 @@ function _setSessionSourceFilter(filter) {
 function _restoreSessionSourceFilter() {
   try {
     const raw = localStorage.getItem('hermes-session-source-filter');
-    if (raw === 'cli' || raw === 'webui') _sessionSourceFilter = raw;
+    if (raw === 'cli' || raw === 'webui') sidebarStateBindings._sessionSourceFilter = raw;
   } catch (_e) {}
 }
 
@@ -721,7 +724,7 @@ async function _ensureMessagesLoaded(sid, opts) {
   // S.messages in a single frame.
   opts = opts || {};
   const _loadGeneration = Number.isFinite(opts.loadGeneration) ? Number(opts.loadGeneration) : null;
-  const _ownsLoad = () => _loadingSessionId === sid && (_loadGeneration === null || _loadSessionGeneration === _loadGeneration);
+  const _ownsLoad = () => sessionStateBindings._loadingSessionId === sid && (_loadGeneration === null || sessionStateBindings._loadSessionGeneration === _loadGeneration);
   if (!_ownsLoad()) return;
   // Already have messages? (e.g. from INFLIGHT restore path, already set)
   if (!opts.force && S.messages && S.messages.length > 0 && S.messages[0] && S.messages[0].role) {
@@ -756,7 +759,7 @@ async function _ensureMessagesLoaded(sid, opts) {
   // Guard: api() may have redirected (401) and returned undefined.
   if (!data || !data.session) return;
   _messagesTruncated = !!data.session._messages_truncated;
-  _oldestIdx = data.session._messages_offset || 0;
+  messageTimelineBindings._oldestIdx = data.session._messages_offset || 0;
   _msgLimitMax = data.session._msg_limit_max || _MSG_LIMIT_MAX;
   // #3162: `msgs` is reassigned below by the #3018 ephemeral-field carry-forward,
   // so it must be `let`, not `const`. The `const` form threw a TypeError inside
@@ -778,11 +781,11 @@ async function _ensureMessagesLoaded(sid, opts) {
     // #3306: Prefer the pre-clear snapshot stashed by loadSession() on a
     // force-reload of the active session; S.messages was reset to [] there
     // and would otherwise yield an empty carry-forward.
-    const _prev = (Array.isArray(_pendingCarryForwardSnapshot) && _pendingCarryForwardSnapshot.length)
-      ? _pendingCarryForwardSnapshot
+    const _prev = (Array.isArray(sessionStateBindings._pendingCarryForwardSnapshot) && sessionStateBindings._pendingCarryForwardSnapshot.length)
+      ? sessionStateBindings._pendingCarryForwardSnapshot
       : (S.messages || []);
     msgs=window._carryForwardEphemeralTurnFields(_prev, msgs);
-    _pendingCarryForwardSnapshot = null;
+    sessionStateBindings._pendingCarryForwardSnapshot = null;
   }
   if(typeof clearVisibleMessageRowCache==='function') clearVisibleMessageRowCache();
   S.messages = msgs;
@@ -831,4 +834,11 @@ async function _ensureMessagesLoaded(sid, opts) {
   }
 }
 
-window.HermesSessions.parts.sessionMessages=Object.freeze({open:_openSidebarSession,isReadOnly:_isReadOnlySession,isCli:_isCliSession,ensureLoaded:_ensureMessagesLoaded});
+export const sessionMessages=Object.freeze({open:_openSidebarSession,isReadOnly:_isReadOnlySession,isCli:_isCliSession,ensureLoaded:_ensureMessagesLoaded});
+
+export { _INITIAL_MSG_LIMIT, _captureSameSessionForceReloadHint, _checkAndShowHandoffHint, _clearHandoffStorageForSession, _clearSameSessionForceReloadHint, _clearSessionSourceTabCounts, _deferWorkspaceRefreshForSession, _dismissHandoffHint, _ensureMessagesLoaded, _externalImportPayload, _getChannelLabel, _hideHandoffHint, _isBranchableReadOnlySession, _isCliImportRefreshPrefixMatch, _isCliSession, _isExternalSession, _isMessagingSession, _isReadOnlySession, _msgLimitMax, _openSidebarSession, _requestedSessionSidebarSource, _resolveSessionModelForDisplaySoon, _restoreSessionSourceFilter, _sessionArchivePagingFilterActive, _sessionListExcludeHiddenEnabled, _sessionListQueryString, _sessionSourceLabel, _sessionSourceTabCount, _setActiveProjectFilter, _setSessionSourceFilter, _sourceKeyForSession, _syncToolCallsForLoadedMessages };
+
+export const messageLoadingBindings=Object.freeze({
+  get _messagesTruncated(){ return _messagesTruncated; },
+  set _messagesTruncated(value){ _messagesTruncated=value; },
+});

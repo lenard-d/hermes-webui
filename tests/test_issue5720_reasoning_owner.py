@@ -32,18 +32,7 @@ def _run_reasoning_scene(
     env = os.environ.copy()
     env.setdefault(
         "ISSUE5720_ANCHOR_JS_PATHS",
-        json.dumps(
-            [
-                str(ROOT / "static" / "assistant_turn_anchors_parts" / "model.js"),
-                str(
-                    ROOT
-                    / "static"
-                    / "assistant_turn_anchors_parts"
-                    / "activity_scene.js"
-                ),
-                str(ROOT / "static" / "assistant_turn_anchors.js"),
-            ]
-        ),
+        str(ROOT / "static" / "modules" / "assistant-turn-anchors" / "index.js"),
     )
     env.setdefault(
         "ISSUE5720_STREAM_MODULE_JS_PATHS",
@@ -230,12 +219,11 @@ def test_later_deferred_anchor_paint_remains_hidden_in_final_answer_only_mode():
 
 
 _NODE_SCENE = r"""
+(async()=>{
 const fs = require('fs');
+const {pathToFileURL} = require('url');
 const uiSrc = fs.readFileSync(process.env.ISSUE5720_UI_JS, 'utf8');
 const messagesSrc = fs.readFileSync(process.env.ISSUE5720_MESSAGES_JS, 'utf8');
-const anchorsSrc = JSON.parse(process.env.ISSUE5720_ANCHOR_JS_PATHS)
-  .map(path => fs.readFileSync(path, 'utf8'))
-  .join('\n');
 const streamModuleSources = JSON.parse(process.env.ISSUE5720_STREAM_MODULE_JS_PATHS)
   .map(path => fs.readFileSync(path, 'utf8'));
 
@@ -497,7 +485,9 @@ global._rehydrateTransparentLiveRow=()=>{};
 global._sanitizeThinkingDisplayText=value=>String(value||'').trim();
 global._firstValidTimestampSeconds=()=>null;
 
-eval(anchorsSrc);
+window.HermesAssistantTurnAnchors=(await import(
+  pathToFileURL(process.env.ISSUE5720_ANCHOR_JS_PATHS).href
+)).HermesAssistantTurnAnchors;
 for(const source of streamModuleSources) eval(source);
 for(const name of [
   'chatActivityMode','isTransparentStream','isFinalAnswerOnlyMode','isCompactWorklogMode','isSimplifiedToolCalling',
@@ -702,4 +692,5 @@ process.stdout.write(JSON.stringify({
   inflight_reasoning_text:String(INFLIGHT['sid-1']&&INFLIGHT['sid-1'].lastReasoningText||''),
   multi_segment_exact_fallback:multiSegmentExactFallback,
 }));
+})();
 """
