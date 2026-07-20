@@ -2,7 +2,10 @@ from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
-from api.streaming import _persistent_state_changes, _persistent_state_snapshot
+from api.runs.runtime_resolution import (
+    _persistent_state_changes,
+    _persistent_state_snapshot,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")

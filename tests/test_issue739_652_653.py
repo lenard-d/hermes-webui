@@ -10,10 +10,11 @@ from tests.frontend_asset_contract import family_source
 import re
 import pathlib
 
-from api.streaming import _classify_provider_error, _sanitize_messages_for_api
+from api.runs.message_sanitization import _sanitize_messages_for_api
+from api.runs.provider_errors import _classify_provider_error
 
 STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local.py'
-TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming' / 'title_generation.py'
+TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'title_generation.py'
 
 streaming_src = STREAMING.read_text(encoding='utf-8')
 title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')
@@ -38,21 +39,16 @@ class TestQuotaDetection:
 
     def test_quota_type_emitted_as_quota_exhausted(self):
         """The apperror type is 'quota_exhausted', not 'error' or 'rate_limit'."""
-        assert "'quota_exhausted'" in streaming_src or '"quota_exhausted"' in streaming_src
+        assert _classify_provider_error('insufficient credit')['type'] == 'quota_exhausted'
 
     def test_quota_checked_before_rate_limit(self):
         """Quota check must appear before the rate-limit check in the exception path.
         OpenAI billing 429s overlap with rate-limit patterns."""
-        quota_pos = streaming_src.find('_exc_is_quota')
-        rate_pos = streaming_src.find('_exc_is_rate_limit')
-        assert quota_pos != -1, '_exc_is_quota not found in exception path'
-        assert rate_pos != -1, '_exc_is_rate_limit not found in exception path'
-        assert quota_pos < rate_pos, 'Quota check must appear before rate-limit check'
+        assert _classify_provider_error('HTTP 429 more credits')['type'] == 'quota_exhausted'
 
     def test_rate_limit_excludes_quota(self):
         """Rate-limit detection must be guarded so quota errors don't also match."""
-        # The pattern: _exc_is_rate_limit = (not _exc_is_quota) and (...)
-        assert '(not _exc_is_quota)' in streaming_src
+        assert _classify_provider_error('HTTP 429 rate limit')['type'] == 'rate_limit'
 
     def test_js_quota_label_present(self):
         """messages.js renders a 'quota_exhausted' apperror with a distinct label."""

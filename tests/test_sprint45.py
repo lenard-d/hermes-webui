@@ -16,7 +16,7 @@ import os
 
 from tests._pytest_port import BASE, TEST_STATE_DIR
 from tests.frontend_asset_contract import family_source
-from api.streaming.prompts import _webui_ephemeral_system_prompt
+from api.runs.prompts import _webui_ephemeral_system_prompt
 REPO = pathlib.Path(__file__).parent.parent
 # Use HERMES_WEBUI_TEST_STATE_DIR if available (set by conftest for the test process),
 # falling back to the shared isolated TEST_STATE_DIR (temp-rooted, never ~/.hermes).

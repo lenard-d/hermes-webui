@@ -5,7 +5,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 from api.sessions.store import Session
-from api.streaming import _normalize_gateway_routing_metadata
+from api.runs.gateway_routing_metadata import _normalize_gateway_routing_metadata
 
 
 REPO = Path(__file__).resolve().parents[1]

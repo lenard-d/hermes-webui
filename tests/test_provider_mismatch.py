@@ -16,7 +16,7 @@ import pathlib
 import re
 import urllib.request
 from tests.conftest import TEST_STATE_DIR
-from api.streaming import _classify_provider_error
+from api.runs.provider_errors import _classify_provider_error
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 from tests._pytest_port import BASE
