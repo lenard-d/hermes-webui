@@ -1,5 +1,5 @@
 """Tests for #1096 — copy buttons work via Permissions-Policy + fallback."""
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import UI_MODULE_DIR, family_source
 
 import re
 
@@ -12,6 +12,13 @@ def _src(name: str) -> str:
 def _py_src() -> str:
     with open("api/helpers.py", encoding="utf-8") as f:
         return f.read()
+
+
+def _clipboard_src() -> str:
+    return "\n".join(
+        (UI_MODULE_DIR / name).read_text(encoding="utf-8")
+        for name in ("clipboard.js", "message-copy-actions.js")
+    )
 
 
 class TestClipboardPermissions:
@@ -32,13 +39,13 @@ class TestCopyTextFunction:
 
     def test_copyText_uses_clipboard_api(self):
         """_copyText must call navigator.clipboard.writeText."""
-        src = family_source("ui")
+        src = _clipboard_src()
         assert "navigator.clipboard.writeText(text)" in src, \
             "_copyText must use Clipboard API"
 
     def test_copyText_has_fallback(self):
         """_copyText must fall back to execCommand if clipboard API fails."""
-        src = family_source("ui")
+        src = _clipboard_src()
         assert "function _fallbackCopy" in src, \
             "Must have a separate _fallbackCopy function"
         # Clipboard API call must .catch() to fallback
@@ -50,13 +57,13 @@ class TestCopyTextFunction:
 
     def test_fallbackCopy_uses_execCommand(self):
         """_fallbackCopy must use document.execCommand('copy')."""
-        src = family_source("ui")
+        src = _clipboard_src()
         assert "document.execCommand('copy')" in src, \
             "_fallbackCopy must use execCommand('copy')"
 
     def test_fallbackCopy_focuses_textarea(self):
         """_fallbackCopy must explicitly focus textarea before select()."""
-        src = family_source("ui")
+        src = _clipboard_src()
         # Find _fallbackCopy function
         m = re.search(r"function _fallbackCopy", src)
         assert m, "_fallbackCopy function must exist"
@@ -66,7 +73,7 @@ class TestCopyTextFunction:
 
     def test_fallbackCopy_not_offscreen(self):
         """_fallbackCopy textarea must NOT be positioned at -9999px (fails in some browsers)."""
-        src = family_source("ui")
+        src = _clipboard_src()
         m = re.search(r"function _fallbackCopy", src)
         fn = src[m.start():m.start() + 600]
         assert "-9999" not in fn, \
@@ -74,7 +81,7 @@ class TestCopyTextFunction:
 
     def test_copyMsg_copies_raw_text(self):
         """copyMsg must extract text from data-raw-text attribute."""
-        src = family_source("ui")
+        src = _clipboard_src()
         assert "closest('[data-raw-text]')" in src, \
             "copyMsg must find nearest element with data-raw-text"
         assert "dataset.rawText" in src, \
