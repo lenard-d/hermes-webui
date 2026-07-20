@@ -20,7 +20,7 @@ import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 from .path_safety import safe_resolve_ws
 
@@ -531,6 +531,11 @@ def run_git(
     return result
 
 
+def git_command_message(result: subprocess.CompletedProcess[str]) -> str:
+    """Project a Git subprocess result into the user-facing message text."""
+    return (result.stdout or result.stderr or "").strip()
+
+
 # Functional helpers used by the high-level Git workflow.
 GitContext = WorkspaceGitRepository
 
@@ -549,6 +554,18 @@ def _workspace_pathspec(ctx: WorkspaceGitRepository) -> str:
 
 def _repo_rel(ctx: WorkspaceGitRepository, workspace_rel: str) -> str:
     return ctx.repo_relative(workspace_rel)
+
+
+def normalize_workspace_paths(paths: Iterable[str]) -> list[str]:
+    """Normalize and de-duplicate caller paths before repository validation."""
+    cleaned: list[str] = []
+    for path in paths:
+        value = str(path or "").strip()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    if not cleaned:
+        raise GitWorkspaceError("At least one path is required")
+    return cleaned
 
 
 def _workspace_rel(ctx: WorkspaceGitRepository, repo_rel: str) -> str | None:

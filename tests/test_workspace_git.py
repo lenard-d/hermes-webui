@@ -362,7 +362,7 @@ def test_git_status_reports_untracked_files_inside_directories(tmp_path):
 
 
 def test_git_discard_untracked_file_tolerates_concurrent_missing_file(tmp_path, monkeypatch):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_changes as workspace_git
 
     repo = _init_repo(tmp_path / "repo")
     (repo / "tracked.txt").write_text("one\n", encoding="utf-8")
@@ -1080,7 +1080,7 @@ def test_git_discard_untracked_delete_uses_anchored_unlink_after_validation_race
     import os
     import shutil
 
-    from api.workspace import git as workspace_git
+    from api.workspace import git_changes as workspace_git
     from api.workspace import git_repository
     from api.workspace import safe_resolve_ws as real_safe_resolve_ws
 
@@ -1760,7 +1760,7 @@ def test_git_checkout_blocks_worktree_scope_filters_when_destructive_mode_enable
 
 
 def test_git_fetch_and_pull_disable_submodule_recursion(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_remotes as workspace_git
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
     calls = []
@@ -1781,7 +1781,7 @@ def test_git_fetch_and_pull_disable_submodule_recursion(monkeypatch, tmp_path):
 
 
 def test_git_fetch_forces_destructive_hardening_without_flag(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_remotes as workspace_git
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
     captured = {}
@@ -1802,7 +1802,7 @@ def test_git_fetch_forces_destructive_hardening_without_flag(monkeypatch, tmp_pa
 
 
 def test_run_git_force_destructive_hardening_applies_hook_redirect_without_flag(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_repository as workspace_git
 
     captured = {}
     hooks_dir = tmp_path / "hooks"
@@ -1817,14 +1817,14 @@ def test_run_git_force_destructive_hardening_applies_hook_redirect_without_flag(
     monkeypatch.setattr(workspace_git.subprocess, "run", fake_subprocess_run)
     monkeypatch.setattr(workspace_git.tempfile, "mkdtemp", lambda prefix: str(hooks_dir))
 
-    workspace_git._run_git(tmp_path, ["fetch"], force_destructive_hardening=True)
+    workspace_git.run_git(tmp_path, ["fetch"], force_destructive_hardening=True)
 
     assert any(str(arg).startswith("core.hooksPath=") for arg in captured["argv"])
     assert "core.alternateRefsCommand=" in captured["argv"]
 
 
 def test_git_pull_blocks_repo_local_filters_before_run_when_destructive_mode_enabled(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_remotes as workspace_git
     from api.workspace import git_repository
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
@@ -1840,7 +1840,7 @@ def test_git_pull_blocks_repo_local_filters_before_run_when_destructive_mode_ena
 
 
 def test_git_stage_blocks_repo_local_filters_before_run_when_destructive_mode_enabled(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_changes as workspace_git
     from api.workspace import git_repository
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
@@ -1911,7 +1911,7 @@ def test_git_fetch_skips_repo_local_reference_transaction_hook_without_destructi
 
 
 def test_git_checkout_disables_submodule_recursion(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_refs as workspace_git
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
     calls = []
@@ -1935,7 +1935,7 @@ def test_git_checkout_disables_submodule_recursion(monkeypatch, tmp_path):
 
 
 def test_perform_checkout_locked_disables_submodule_recursion_across_modes(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_refs as workspace_git
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
     calls = []
@@ -2004,7 +2004,7 @@ def test_git_stage_skips_included_repo_local_filters_when_destructive_mode_disab
 
 
 def test_selected_temp_index_env_blocks_repo_local_filters_when_destructive_mode_enabled(monkeypatch, tmp_path):
-    from api.workspace import git as workspace_git
+    from api.workspace import git_commits as workspace_git
     from api.workspace import git_repository
 
     ctx = workspace_git.GitContext(tmp_path, tmp_path, "")
@@ -2527,7 +2527,7 @@ def test_run_git_passes_windows_hide_flags(monkeypatch, tmp_path):
     processes don't accumulate visible console windows on Windows (#5692).
     windows_hide_flags() is 0 on non-Windows, so this is a safe no-op there;
     the test asserts the kwarg is wired regardless of platform."""
-    from api.workspace import git as wg
+    from api.workspace import git_repository as wg
     from api.workspace_git import _windows_hide_flags
 
     repo = _init_repo(tmp_path / "repo")
@@ -2542,7 +2542,7 @@ def test_run_git_passes_windows_hide_flags(monkeypatch, tmp_path):
         return real_run(*args, **kwargs)
 
     monkeypatch.setattr(wg.subprocess, "run", fake_run)
-    wg._run_git(repo, ["rev-parse", "HEAD"])
+    wg.run_git(repo, ["rev-parse", "HEAD"])
 
     assert captured.get("creationflags") == _windows_hide_flags(), (
         "_run_git must pass creationflags=_windows_hide_flags() to subprocess.run"
@@ -2553,7 +2553,7 @@ def test_config_names_for_scope_passes_windows_hide_flags(monkeypatch, tmp_path)
     """_config_names_for_scope must also pass creationflags=_windows_hide_flags()
     (#5692) — the git-config probe spawns a console window on Windows too."""
     import re as _re
-    from api.workspace import git as wg
+    from api.workspace import git_repository as wg
     from api.workspace_git import _windows_hide_flags
 
     repo = _init_repo(tmp_path / "repo")

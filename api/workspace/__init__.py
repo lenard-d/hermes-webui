@@ -11,25 +11,22 @@ mutable state with their semantic owners.
 
 from .file_access import dir_signature, list_dir, read_file_content
 from .git import (
-    GitWorkspaceError,
-    WORKSPACE_GIT_DESTRUCTIVE_ENV,
+    git_info_for_workspace,
+    git_status,
+)
+from .git_refs import git_branches, git_checkout, git_stash_and_checkout
+from .git_changes import git_diff, git_discard, git_stage, git_unstage
+from .git_commits import (
     clean_generated_commit_message,
-    git_branches,
-    git_checkout,
     git_commit,
     git_commit_selected,
-    git_diff,
-    git_discard,
-    git_fetch,
-    git_info_for_workspace,
-    git_pull,
-    git_push,
-    git_stage,
-    git_stash_and_checkout,
-    git_status,
-    git_unstage,
     selected_commit_message_prompt,
     staged_commit_message_prompt,
+)
+from .git_remotes import git_fetch, git_pull, git_push
+from .git_repository import (
+    WORKSPACE_GIT_DESTRUCTIVE_ENV,
+    GitWorkspaceError,
     workspace_git_destructive_enabled,
 )
 from .navigation import (

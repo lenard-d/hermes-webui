@@ -7,13 +7,28 @@ legacy imports and owns no state or dispatch.
 # Compatibility re-exports intentionally include historical private helpers.
 # ruff: noqa: F401
 
-from api.workspace.git import (
+from api.workspace.git import DIFF_SIZE_LIMIT, STATUS_FILE_LIMIT, git_status
+from api.workspace.git_refs import (
+    _dirty_worktree,
+    git_branches,
+    git_checkout,
+    git_stash_and_checkout,
+)
+from api.workspace.git_changes import git_diff, git_discard, git_stage, git_unstage
+from api.workspace.git_commits import (
     COMMIT_MESSAGE_DIFF_LIMIT,
     COMMIT_MESSAGE_SYSTEM_PROMPT,
-    DIFF_SIZE_LIMIT,
+    _selected_temp_index_env,
+    clean_generated_commit_message,
+    git_commit,
+    git_commit_selected,
+    selected_commit_message_prompt,
+    staged_commit_message_prompt,
+)
+from api.workspace.git_remotes import git_fetch, git_pull, git_push
+from api.workspace.git_repository import (
     GIT_REMOTE_TIMEOUT,
     GIT_TIMEOUT,
-    STATUS_FILE_LIMIT,
     WORKSPACE_GIT_DESTRUCTIVE_ENV,
     GitContext,
     GitWorkspaceError,
@@ -31,7 +46,6 @@ from api.workspace.git import (
     _destructive_merge_driver_overrides,
     _destructive_remote_command_args,
     _destructive_remote_helper_overrides,
-    _dirty_worktree,
     _filter_names_for_scope,
     _git_mutation_lock,
     _hardened_git_argv,
@@ -39,31 +53,14 @@ from api.workspace.git import (
     _merge_driver_names_for_scope,
     _remote_helper_names_for_scope,
     _repo_rel,
-    _run_git,
+    run_git as _run_git,
     _windows_hide_flags,
     _workspace_pathspec,
     _workspace_rel,
-    clean_generated_commit_message,
-    git_branches,
-    git_checkout,
-    git_commit,
-    git_commit_selected,
-    git_diff,
-    git_discard,
-    git_fetch,
-    git_pull,
-    git_push,
-    git_stage,
-    git_stash_and_checkout,
-    git_status,
-    git_unstage,
     resolve_git_context,
-    safe_resolve_ws,
-    selected_commit_message_prompt,
-    staged_commit_message_prompt,
-    unlink_anchored,
     workspace_git_destructive_enabled,
 )
+from api.workspace.path_safety import safe_resolve_ws, unlink_anchored
 
 __all__ = [
     "COMMIT_MESSAGE_DIFF_LIMIT",

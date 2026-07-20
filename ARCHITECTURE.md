@@ -125,10 +125,14 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         summary.py         Human-readable update-summary formatting and bounded cache
         transaction.py     Install, rollback, restart, and recovery transaction owner
       upload.py            Multipart parser, file upload handler
-      workspace.py         Workspace identity/registry compatibility facade
-      workspace_parts/     Path safety, anchored file access, escape navigation, and git summary
-      workspace_git.py     High-level workspace Git compatibility facade
-      workspace_git_parts/ Repository identity, hardened subprocess, temp resource, and lock owner
+      workspace/           Workspace identity, path safety, anchored access, navigation, and Git owners
+        git.py             Bounded read-only status and header projection
+        git_refs.py        Branch catalog, checkout validation, and stash lifecycle
+        git_changes.py     Diff, stage, unstage, and anchored discard operations
+        git_commits.py     Commit prompts, selected-file temp index, and commit lifecycle
+        git_remotes.py     Fetch, fast-forward pull, and push orchestration
+        git_repository.py  Repository identity, hardened subprocess, temp resources, and mutation lock
+      workspace_git.py     Stateless legacy workspace Git compatibility interface
     static/
       index.html           HTML template
       style.css            Base CSS loaded before ordered domain styles
@@ -394,6 +398,16 @@ larger migration remains incremental:
   `api.routes` import block; the Adapter must be deleted when that block imports
   run execution/helpers from `api.runs` directly and transport/control from
   `api.streaming`. No other caller may extend that compatibility surface.
+- Workspace Git keeps repository identity, environment/config hardening,
+  temporary execution resources, workspace-relative path validation, and the
+  per-repository mutation lock in `api.workspace.git_repository`. The read-only
+  status projection lives in `git`; branch validation, checkout, and WebUI-owned
+  stash restoration live in `git_refs`; diff/index/discard writes live in
+  `git_changes`; commit-message inputs and the selected-file temporary-index
+  transaction live in `git_commits`; and remote synchronization lives in
+  `git_remotes`. `api.workspace` is the stable package Interface, while
+  `api.workspace_git` is a stateless legacy Adapter. Tests patch the owning
+  Module rather than relying on a monolithic compatibility surface.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.

@@ -1,9 +1,22 @@
 """Architecture contract for the workspace package."""
 
+import importlib
 import inspect
 
 from api import workspace
-from api.workspace import file_access, git, navigation, path_safety, registry
+from api.workspace import (
+    file_access,
+    git,
+    git_changes,
+    git_commits,
+    git_remotes,
+    navigation,
+    path_safety,
+    registry,
+)
+
+
+git_refs = importlib.import_module("api.workspace.git_refs")
 
 
 def test_workspace_package_reexports_domain_implementations():
@@ -36,10 +49,33 @@ def test_workspace_package_reexports_domain_implementations():
 
     assert workspace.resolve_trusted_workspace is registry.resolve_trusted_workspace
     assert workspace.git_info_for_workspace is git.git_info_for_workspace
+    for name in ("git_branches", "git_checkout", "git_stash_and_checkout"):
+        assert getattr(workspace, name) is getattr(git_refs, name)
+    for name in ("git_diff", "git_stage", "git_unstage", "git_discard"):
+        assert getattr(workspace, name) is getattr(git_changes, name)
+    for name in (
+        "clean_generated_commit_message",
+        "git_commit",
+        "git_commit_selected",
+        "selected_commit_message_prompt",
+        "staged_commit_message_prompt",
+    ):
+        assert getattr(workspace, name) is getattr(git_commits, name)
+    for name in ("git_fetch", "git_pull", "git_push"):
+        assert getattr(workspace, name) is getattr(git_remotes, name)
 
 
 def test_workspace_internals_use_direct_imports_without_facade_binding():
-    for module in (path_safety, file_access, navigation, git):
+    for module in (
+        path_safety,
+        file_access,
+        navigation,
+        git,
+        git_refs,
+        git_changes,
+        git_commits,
+        git_remotes,
+    ):
         source = inspect.getsource(module)
         assert "workspace_api" not in source
         assert "sys.modules" not in source
