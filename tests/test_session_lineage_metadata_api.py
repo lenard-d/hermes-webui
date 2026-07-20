@@ -5,10 +5,15 @@ import time
 
 import pytest
 
-import api.config as config
-import api.sessions.store as models
 import api.routes as routes
-from api.sessions.store import SESSIONS, Session, all_sessions
+import api.sessions.cache as session_cache
+import api.sessions.records as session_records
+import api.sessions.sidebar as session_sidebar
+import api.sessions.sidebar_projection as sidebar_projection
+import api.sessions.state_db as session_state_db
+import api.runs.runtime_state as runtime_state
+from api.sessions.records import SESSIONS, Session
+from api.sessions.sidebar import all_sessions
 
 
 @pytest.fixture(autouse=True)
@@ -18,26 +23,33 @@ def _isolate(tmp_path, monkeypatch):
     index_file = session_dir / "_index.json"
     state_db = tmp_path / "state.db"
     index_file.write_text("[]", encoding="utf-8")
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: state_db)
-    monkeypatch.setattr(models, "_start_session_index_rebuild_thread", lambda: None)
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_sidebar, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_sidebar, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_state_db, "_active_state_db_path", lambda: state_db)
 
     def uncached_persisted_session_ids():
         return frozenset(
             p.stem
-            for p in models.SESSION_DIR.glob("*.json")
+            for p in session_records.SESSION_DIR.glob("*.json")
             if not p.name.startswith("_")
         )
 
-    monkeypatch.setattr(models, "_persisted_session_ids_snapshot", uncached_persisted_session_ids)
+    monkeypatch.setattr(
+        session_sidebar,
+        "_persisted_session_ids_snapshot",
+        uncached_persisted_session_ids,
+    )
     SESSIONS.clear()
-    for stream_id in config.runtime_active_run_ids():
-        config.finish_runtime_run(stream_id)
+    for stream_id in runtime_state.runtime_active_run_ids():
+        runtime_state.finish_runtime_run(stream_id)
     yield state_db
     SESSIONS.clear()
-    for stream_id in config.runtime_active_run_ids():
-        config.finish_runtime_run(stream_id)
+    for stream_id in runtime_state.runtime_active_run_ids():
+        runtime_state.finish_runtime_run(stream_id)
 
 
 def _ensure_state_db(path):
@@ -242,7 +254,9 @@ def test_child_of_hidden_compression_segment_exposes_parent_lineage_root(_isolat
         assert child.get("parent_session_id") == "lineage_api_tip"
         assert child.get("_parent_lineage_root_id") == "lineage_api_root"
         assert child.get("_parent_lineage_tip_id") == "lineage_api_tip"
-        serialized = routes._sidebar_session_response_item(child, redact_enabled=False)
+        serialized = sidebar_projection._sidebar_session_response_item(
+            child, redact_enabled=False
+        )
         assert serialized.get("_parent_lineage_tip_id") == "lineage_api_tip"
         assert "_lineage_root_id" not in child
     finally:
@@ -368,10 +382,6 @@ def test_sessions_route_keeps_state_db_webui_row_with_stale_cli_json_when_cli_hi
             source="webui",
             started_at=t0,
         )
-
-        monkeypatch.setattr(routes, "all_sessions", models.all_sessions)
-        monkeypatch.setattr(routes, "_enrich_sidebar_lineage_metadata", models._enrich_sidebar_lineage_metadata)
-        monkeypatch.setattr(routes, "_reconcile_stale_stream_state_for_session_rows", lambda _sessions: False)
 
         payload = routes._build_session_list_cache_payload(
             active_profile="default",
@@ -661,10 +671,6 @@ def test_sessions_route_preserves_visible_child_lineage_when_archived_parent_fil
             parent="lineage_api_archived_parent",
             started_at=t0 + 6,
         )
-
-        monkeypatch.setattr(routes, "all_sessions", models.all_sessions)
-        monkeypatch.setattr(routes, "_enrich_sidebar_lineage_metadata", models._enrich_sidebar_lineage_metadata)
-        monkeypatch.setattr(routes, "_reconcile_stale_stream_state_for_session_rows", lambda _sessions: False)
 
         default_payload = routes._build_session_list_cache_payload(
             active_profile="default",

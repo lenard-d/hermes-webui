@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_messages_zero_skips_effective_model_resolution():
-    src = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (ROOT / "api" / "http" / "routes" / "session_queries.py").read_text(
+        encoding="utf-8"
+    )
 
     assert re.search(
         r"effective_model\s*=\s*\(\s*"
