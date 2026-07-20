@@ -7,14 +7,14 @@ from tests.frontend_asset_contract import family_source
 import io
 import json
 from collections import OrderedDict
-from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import api.sessions.store as models
 import api.routes as routes
+from api.http.routes import session_mutations
 
 
-ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 SESSIONS_JS = family_source("sessions")
 
 
@@ -37,29 +37,78 @@ class _FakeHandler:
         return json.loads(self.wfile.getvalue().decode("utf-8"))
 
 
-def test_import_cli_handler_queues_default_titles_after_persisting_import():
-    handler_idx = ROUTES_PY.index("def _handle_session_import_cli")
-    next_handler_idx = ROUTES_PY.index("def _handle_session_import(", handler_idx)
-    block = ROUTES_PY[handler_idx:next_handler_idx]
-    queue_idx = block.index("_queue_generated_title_for_imported_session(")
-    publish_idx = block.index('publish_session_list_changed(\n        "session_import_cli",')
-    response_idx = block.index("return j(", queue_idx)
-    assert publish_idx < queue_idx < response_idx
-    queue_window = block[queue_idx:queue_idx + 400]
-    assert '"title": cli_title' in queue_window
-    assert '"read_only": cli_read_only' in queue_window
+def test_import_cli_handler_queues_default_titles_after_persisting_import(monkeypatch):
+    events = []
+    queued = []
+
+    class ImportedSession:
+        session_id = "cli_import_title"
+        profile = "default"
+
+        def compact(self):
+            return {"session_id": self.session_id, "title": "CLI Session"}
+
+    imported = ImportedSession()
+    cli_meta = {
+        "title": "CLI Session",
+        "source_tag": "cli",
+        "raw_source": "cli",
+        "session_source": "external_agent",
+        "source_label": "CLI",
+        "read_only": False,
+    }
+    monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, _sid: None))
+    monkeypatch.setattr(routes, "_resolve_cli_import_metadata", lambda *_args, **_kwargs: cli_meta)
+    monkeypatch.setattr(
+        routes,
+        "get_cli_session_messages",
+        lambda *_args, **_kwargs: [{"role": "user", "content": "name this"}],
+    )
+    monkeypatch.setattr(routes, "_is_subagent_child_session_id", lambda _sid: False)
+    monkeypatch.setattr(routes, "is_cron_session", lambda *_args: False)
+    monkeypatch.setattr(
+        routes,
+        "import_cli_session",
+        lambda *_args, **_kwargs: events.append("persist") or imported,
+    )
+    monkeypatch.setattr(
+        routes,
+        "publish_session_list_changed",
+        lambda *_args, **_kwargs: events.append("publish"),
+    )
+
+    def queue_title(session, metadata):
+        events.append("queue")
+        queued.append((session, metadata))
+
+    monkeypatch.setattr(routes, "_queue_generated_title_for_imported_session", queue_title)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, **_kwargs: events.append("respond") or payload,
+    )
+
+    result = routes._handle_session_import_cli(object(), {"session_id": imported.session_id})
+
+    assert events == ["persist", "publish", "queue", "respond"]
+    assert result["imported"] is True
+    assert queued == [(imported, cli_meta)]
 
 
-def test_import_cli_queue_helper_is_guarded_and_runs_in_background():
-    helper_idx = ROUTES_PY.index("def _queue_generated_title_for_imported_session")
-    next_helper_idx = ROUTES_PY.index("def _on_session_list_changed", helper_idx)
-    block = ROUTES_PY[helper_idx:next_helper_idx]
-    assert "cli_meta.get(\"read_only\")" in block
-    assert "not _looks_like_default_cli_title(cli_meta)" in block
-    assert "if not _looks_like_default_cli_title(current_meta):" in block
-    assert "generate_session_title_for_session(current)" in block
-    assert "require_default_title=True" in block
-    assert "threading.Thread(target=_run, daemon=True" in block
+def test_import_cli_queue_helper_skips_read_only_sources(monkeypatch):
+    thread_starts = []
+    monkeypatch.setattr(
+        routes.threading,
+        "Thread",
+        lambda **_kwargs: thread_starts.append(True),
+    )
+
+    routes._queue_generated_title_for_imported_session(
+        SimpleNamespace(session_id="readonly-import"),
+        {"title": "CLI Session", "source_tag": "cli", "read_only": True},
+    )
+
+    assert thread_starts == []
 
 
 def test_import_cli_queue_helper_generates_title_once_for_placeholder_session(monkeypatch):
@@ -211,12 +260,52 @@ def test_generated_title_persist_reloads_latest_session_before_saving(tmp_path, 
     assert stale_snapshot.title == "Better imported title"
 
 
-def test_regenerate_endpoint_only_blocks_read_only_imported_sessions():
-    endpoint_idx = ROUTES_PY.index('"/api/session/title/regenerate"')
-    next_endpoint_idx = ROUTES_PY.index('"/api/personality/set"', endpoint_idx)
-    block = ROUTES_PY[endpoint_idx:next_endpoint_idx]
-    assert "_get_or_materialize_session(sid)" in block
-    assert "except PermissionError:" in block
+def test_regenerate_endpoint_accepts_writable_imported_sessions():
+    persisted = []
+    responses = []
+
+    class WritableImport:
+        session_id = "writable-import"
+        title = "CLI Session"
+        source_tag = "cli"
+        session_source = "external_agent"
+        read_only = False
+
+        def compact(self):
+            return {"session_id": self.session_id, "title": self.title}
+
+    session = WritableImport()
+    context = dict(routes.__dict__)
+    context.update(
+        {
+            "_get_or_materialize_session": lambda sid: session,
+            "generate_session_title_for_session": lambda *_args, **_kwargs: (
+                "Useful imported title",
+                "llm",
+                "raw",
+            ),
+            "_persist_generated_session_title": lambda current, title, **_kwargs: (
+                persisted.append((current.session_id, title)),
+                setattr(current, "title", title),
+            )[-1],
+            "bad": lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("writable imported session was rejected")
+            ),
+            "j": lambda _handler, payload, **_kwargs: responses.append(payload) or True,
+        }
+    )
+
+    result = session_mutations.handle_post(
+        object(),
+        urlparse("/api/session/title/regenerate"),
+        {"session_id": session.session_id},
+        None,
+        context,
+    )
+
+    assert result is True
+    assert persisted == [(session.session_id, "Useful imported title")]
+    assert responses[0]["title"] == "Useful imported title"
 
 
 def test_sessions_ui_keeps_regenerate_action_for_writable_imports():
