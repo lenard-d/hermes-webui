@@ -11,7 +11,7 @@ from pathlib import Path
 from api.config import SETTINGS_FILE, _get_config_path
 from api.profiles import _profiles_match, get_active_hermes_home
 from .cache import get_session
-from .external import (
+from .state_db import (
     get_state_db_session_message_keys_before_timestamp,
     get_state_db_session_message_prefix_summary,
     get_state_db_session_summary,

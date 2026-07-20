@@ -9,7 +9,7 @@ from api.clarify import pending_count as clarify_pending_count
 from api.helpers import _redact_text
 from api.route_approvals import pending_count as approval_pending_count
 from .detail_projection import _numeric_count
-from .external import gateway_session_identity, load_gateway_session_identity_map
+from .gateway_identity import gateway_session_identity, load_gateway_session_identity_map
 from .materialization import _lookup_cli_session_metadata
 from .records import SESSION_DIR, Session
 from .sidebar import (

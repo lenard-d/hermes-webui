@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import api.sessions.external as M
+import api.sessions.external_sidebar as M
 
 
 def _set_active_streams(monkeypatch, ids):
@@ -62,7 +62,7 @@ def test_cache_key_stable_across_message_writes_while_streaming(monkeypatch, tmp
     monkeypatch.setattr(M, "_default_claude_code_projects_dir", lambda: tmp_path / "projects")
     # Simulate the volatile fingerprint advancing on each streamed message.
     fp = {"v": 0}
-    monkeypatch.setattr(M, "_sqlite_file_stat_cache_key", lambda p: ("fp", fp["v"]))
+    monkeypatch.setattr(M, "state_db_cache_key", lambda p: ("fp", fp["v"]))
 
     # Active stream -> key should be frozen (independent of fp).
     _set_active_streams(monkeypatch, ["live-stream-1"])

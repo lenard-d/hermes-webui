@@ -19,7 +19,7 @@ def test_content_fingerprint_advances_on_commit():
     """The cache key's content fingerprint must change after any commit, even
     when mtime/size would not reliably change (the WAL-collision flake source).
     """
-    from api.sessions.store import _sqlite_file_stat_cache_key, _sqlite_content_fingerprint
+    from api.sessions.state_db import state_db_cache_key, state_db_content_fingerprint
 
     d = tempfile.mkdtemp()
     p = Path(d) / "state.db"
@@ -29,15 +29,15 @@ def test_content_fingerprint_advances_on_commit():
     conn.execute("CREATE TABLE messages(id INTEGER PRIMARY KEY, session_id TEXT)")
     conn.commit()
 
-    fp_before = _sqlite_content_fingerprint(p)
-    key_before = _sqlite_file_stat_cache_key(p)
+    fp_before = state_db_content_fingerprint(p)
+    key_before = state_db_cache_key(p)
 
     conn.execute("INSERT INTO sessions VALUES ('gw_new_001', 'weixin', 1)")
     conn.execute("INSERT INTO messages (session_id) VALUES ('gw_new_001')")
     conn.commit()
 
-    fp_after = _sqlite_content_fingerprint(p)
-    key_after = _sqlite_file_stat_cache_key(p)
+    fp_after = state_db_content_fingerprint(p)
+    key_after = state_db_cache_key(p)
     conn.close()
 
     assert fp_before != fp_after, (
@@ -52,7 +52,7 @@ def test_content_fingerprint_detects_message_only_change():
     """An in-place session row update or message-only insert must also change the
     fingerprint (sessions COUNT/MAX alone could miss a same-rowid REPLACE).
     """
-    from api.sessions.store import _sqlite_content_fingerprint
+    from api.sessions.state_db import state_db_content_fingerprint
 
     d = tempfile.mkdtemp()
     p = Path(d) / "state.db"
@@ -63,11 +63,11 @@ def test_content_fingerprint_detects_message_only_change():
     conn.execute("INSERT INTO sessions VALUES ('s1', 'weixin', 1)")
     conn.commit()
 
-    fp_before = _sqlite_content_fingerprint(p)
+    fp_before = state_db_content_fingerprint(p)
     # Add a message to the existing session (sessions table unchanged).
     conn.execute("INSERT INTO messages (session_id) VALUES ('s1')")
     conn.commit()
-    fp_after = _sqlite_content_fingerprint(p)
+    fp_after = state_db_content_fingerprint(p)
     conn.close()
 
     assert fp_before != fp_after, (
@@ -80,9 +80,9 @@ def test_content_fingerprint_safe_on_missing_or_empty_db():
     """The fingerprint must not raise on a missing path or a db without the
     expected tables — it returns None / zeroed parts so the stat fallback applies.
     """
-    from api.sessions.store import _sqlite_content_fingerprint
+    from api.sessions.state_db import state_db_content_fingerprint
 
-    assert _sqlite_content_fingerprint(Path("/nonexistent/state.db")) is None
+    assert state_db_content_fingerprint(Path("/nonexistent/state.db")) is None
 
     d = tempfile.mkdtemp()
     p = Path(d) / "empty.db"
@@ -92,5 +92,5 @@ def test_content_fingerprint_safe_on_missing_or_empty_db():
     conn.close()
     # No sessions/messages tables → None parts (MAX(rowid) on a missing table),
     # no exception. Shape is a 2-tuple of (sessions_max_rowid, messages_max_rowid).
-    fp = _sqlite_content_fingerprint(p)
+    fp = state_db_content_fingerprint(p)
     assert fp == (None, None)

@@ -346,7 +346,7 @@ from api.turn_journal import append_turn_journal_event_for_stream  # noqa: F401
 from api.runs import TurnExecution  # noqa: F401
 from api.usage import prompt_cache_hit_percent  # noqa: F401
 from api.sessions.cache import _evict_sessions_over_cap
-from api.sessions.external import get_state_db_session_messages
+from api.sessions.state_db import get_state_db_session_messages
 from api.sessions.operations import mark_session_title_generated, session_has_manual_title
 from api.sessions.process_wakeup import (
     clear_process_wakeup_pause,

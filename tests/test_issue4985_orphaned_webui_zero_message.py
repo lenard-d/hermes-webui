@@ -783,7 +783,7 @@ def _real_pipeline(tmp_path, monkeypatch):
     ``SESSIONS`` so no stale in-memory session leaks across tests.
     """
     import api.sessions.store as models
-    import api.sessions.external as session_external
+    import api.sessions.external_sidebar as session_external
     import api.sessions.records as session_records
     import api.sessions.sidebar as session_sidebar
     from api import profiles

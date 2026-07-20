@@ -41,7 +41,10 @@ from .records import (
     _sidecar_stat_signature,
     is_safe_session_id,
 )
-from .external import get_state_db_session_messages, get_state_db_session_summary
+from .state_db import (  # noqa: F401 - compatibility re-exports
+    get_state_db_session_messages,
+    get_state_db_session_summary,
+)
 from .message_identity import _message_content_text
 from .pending_recovery import (
     _repair_stale_pending,

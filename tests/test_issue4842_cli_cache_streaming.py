@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 
-import api.sessions.external as models
+import api.sessions.external_sidebar as models
 import api.profiles as profiles
 
 
@@ -28,7 +28,7 @@ def test_cli_cache_key_stays_frozen_during_streaming(monkeypatch, tmp_path):
     fp = {"value": 0}
     monkeypatch.setattr(
         models,
-        "_sqlite_file_stat_cache_key",
+        "state_db_cache_key",
         lambda _p: ("fp", fp["value"]),
     )
 

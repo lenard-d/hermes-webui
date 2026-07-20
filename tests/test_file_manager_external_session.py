@@ -145,7 +145,7 @@ def test_get_session_for_file_ops_webui_passthrough(state_db_module, monkeypatch
 
     monkeypatch.setattr(cache_module, "get_session", fake_get_session)
     monkeypatch.setattr(state_db_module, "state_db_has_session", fake_has)
-    monkeypatch.setattr(profiles_module, "_profiles_match", fake_profiles_match)
+    monkeypatch.setattr(profiles_module, "profiles_match", fake_profiles_match)
     monkeypatch.setattr(profiles_module, "get_active_profile_name", lambda: "default")
     result = state_db_module.get_session_for_file_ops("webui-sid")
     assert result is sentinel
@@ -177,7 +177,7 @@ def test_get_session_for_file_ops_rejects_foreign_profile(
 
     monkeypatch.setattr(cache_module, "get_session", fake_get_session)
     monkeypatch.setattr(state_db_module, "state_db_has_session", fake_has)
-    monkeypatch.setattr(profiles_module, "_profiles_match", fake_profiles_match)
+    monkeypatch.setattr(profiles_module, "profiles_match", fake_profiles_match)
     monkeypatch.setattr(profiles_module, "get_active_profile_name", lambda: "default")
 
     with caplog.at_level(logging.DEBUG, logger=state_db_module.logger.name):

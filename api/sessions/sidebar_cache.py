@@ -8,7 +8,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from api.config import LOCK, SESSION_DIR, SESSIONS, SETTINGS_FILE
-from api.sessions.external import _sqlite_content_fingerprint
+from .state_db import state_db_content_fingerprint
 from api.sessions.records import _active_stream_ids
 from api.sessions.state_db import _active_state_db_path
 from api.profiles import profiles_match as _profiles_match
@@ -280,7 +280,7 @@ def _session_list_cache_state_db_fingerprint_impl(state_db_path: Path | None):
     if state_db_path is None:
         return None
     try:
-        return _sqlite_content_fingerprint(state_db_path)
+        return state_db_content_fingerprint(state_db_path)
     except Exception:
         return None
 

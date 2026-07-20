@@ -19,7 +19,6 @@ from pathlib import Path
 
 import api.agent_sessions as agent_sessions
 import api.sessions.store as models
-import api.sessions.external as session_external
 import api.sessions.state_db as session_state_db
 from api.agent_sessions import open_state_db_readonly
 
@@ -75,7 +74,7 @@ def _record_connects(monkeypatch):
 
 
 def _point_models_at(monkeypatch, db):
-    for module in (models, session_external, session_state_db):
+    for module in (models, session_state_db):
         monkeypatch.setattr(module, "_active_state_db_path", lambda: db, raising=False)
         monkeypatch.setattr(module, "_agent_state_db_path", lambda *, profile=None: db, raising=False)
 

@@ -1715,9 +1715,10 @@ def test_session_load_exposes_multihop_continuation_for_repeated_compression(cle
 def test_messaging_projection_hides_stale_gateway_internal_segments(monkeypatch):
     """Active Gateway identity should hide old reset rows and internal child segments."""
     from api import routes
+    from api.sessions import sidebar_projection
 
     monkeypatch.setattr(
-        routes,
+        sidebar_projection,
         "_load_gateway_session_identity_map",
         lambda: {
             "weixin_current_sid": {
@@ -1729,6 +1730,12 @@ def test_messaging_projection_hides_stale_gateway_internal_segments(monkeypatch)
                 "user_id": "user_1",
             },
         },
+    )
+    identity_map = sidebar_projection._load_gateway_session_identity_map()
+    monkeypatch.setattr(
+        sidebar_projection,
+        "_lookup_gateway_session_identity",
+        lambda sid: identity_map.get(sid, {}),
     )
     sessions = [
         {
@@ -1783,9 +1790,10 @@ def test_messaging_projection_hides_stale_gateway_internal_segments(monkeypatch)
 def test_messaging_projection_keeps_distinct_active_gateway_conversations(monkeypatch):
     """Telegram DM and group chats must not collapse just because source matches."""
     from api import routes
+    from api.sessions import sidebar_projection
 
     monkeypatch.setattr(
-        routes,
+        sidebar_projection,
         "_load_gateway_session_identity_map",
         lambda: {
             "telegram_dm_sid": {
@@ -1805,6 +1813,12 @@ def test_messaging_projection_keeps_distinct_active_gateway_conversations(monkey
                 "user_id": "user_1",
             },
         },
+    )
+    identity_map = sidebar_projection._load_gateway_session_identity_map()
+    monkeypatch.setattr(
+        sidebar_projection,
+        "_lookup_gateway_session_identity",
+        lambda sid: identity_map.get(sid, {}),
     )
     sessions = [
         {

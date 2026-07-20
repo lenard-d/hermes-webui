@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 import api.routes as routes
 import api.sessions.cleanup as session_cleanup
-import api.sessions.external as session_external
+import api.sessions.materialization as session_materialization
+import api.sessions.state_db as session_external
 import api.sessions.records as session_records
 from api.sessions.records import SESSIONS, Session
 
@@ -157,6 +158,9 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
     state_db = tmp_path / "state.db"
     _make_state_db(state_db, sid)
     monkeypatch.setattr(session_external, "_active_state_db_path", lambda: state_db)
+    monkeypatch.setattr(
+        session_materialization, "_active_state_db_path", lambda: state_db
+    )
     session = Session(session_id=sid, title="Telegram chat")
     session.save()
     assert (session_dir / f"{sid}.json").exists()
@@ -168,6 +172,11 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
         "session_source": "messaging",
     }
     monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda value: cli_meta)
+    monkeypatch.setattr(
+        session_materialization,
+        "_lookup_cli_session_metadata",
+        lambda value: cli_meta,
+    )
     monkeypatch.setattr(routes, "_is_messaging_session_id", lambda value: True)
     delete_calls = []
     monkeypatch.setattr(

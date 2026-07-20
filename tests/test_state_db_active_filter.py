@@ -1,6 +1,6 @@
 import sqlite3
 
-import api.sessions.external as models
+import api.sessions.state_db as models
 from api.sessions.store import Session, get_state_db_session_messages, reconciled_state_db_messages_for_session
 
 

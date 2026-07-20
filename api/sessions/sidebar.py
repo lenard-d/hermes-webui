@@ -11,7 +11,7 @@ from pathlib import Path
 from api.agent_sessions import normalize_agent_session_source
 from api.config import HOME, LOCK, SESSIONS, SESSION_DIR, SESSION_INDEX_FILE
 from api.workspace import get_last_workspace
-from .external import get_cli_sessions
+from .external_sidebar import get_cli_sessions  # noqa: F401 - compatibility re-export
 from .state_db import (
     _active_state_db_path,
     _apply_sidebar_state_db_overrides,

@@ -9,7 +9,7 @@ import time
 
 import api.config as _cfg
 from api.config import LOCK, SESSIONS, SESSION_DIR, SESSION_INDEX_FILE, session_agent_lock as _get_session_agent_lock
-from .external import get_state_db_session_messages, get_state_db_session_summary
+from .state_db import get_state_db_session_messages, get_state_db_session_summary
 from .process_wakeup import _get_profile_home
 from .reconciliation import reconciled_state_db_messages_for_session
 from .records import (

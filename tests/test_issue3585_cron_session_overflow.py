@@ -12,7 +12,7 @@ import sqlite3
 import time
 from unittest import mock
 
-from api.sessions import external
+from api.sessions import external_sidebar as external
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 

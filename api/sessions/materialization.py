@@ -11,7 +11,8 @@ from pathlib import Path
 from api.profiles import _profiles_match
 from api.workspace import get_last_workspace
 from .cache import cache_full_session, get_session
-from .external import gateway_session_identity, get_cli_sessions
+from .external_sidebar import get_cli_sessions
+from .gateway_identity import gateway_session_identity
 from .reconciliation import get_cli_session_messages
 from .records import (
     DEFAULT_WORKSPACE,

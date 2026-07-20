@@ -372,13 +372,12 @@ def isolated_state_db(tmp_path, monkeypatch):
     index_path.write_text("[]", encoding="utf-8")
     import api.routes as _routes
     import api.sessions.cache as _cache
-    import api.sessions.external as _external
+    import api.sessions.external_sidebar as _external
     import api.sessions.records as _records
     import api.sessions.state_db as _state_db
     import api.sessions.store as _models
 
     monkeypatch.setattr(_state_db, "_active_state_db_path", lambda: db)
-    monkeypatch.setattr(_external, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_models, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(materialization, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(materialization, "SESSION_INDEX_FILE", index_path)

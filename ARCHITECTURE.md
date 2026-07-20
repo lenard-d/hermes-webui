@@ -84,6 +84,11 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       models_parts/        Importable session, persistence, projection, CLI, and state.db domains
       profiles/            Profile compatibility package plus catalog, management,
                            runtime-environment, and cron-scope owners
+      sessions/            Durable session records, recovery, projection, and foreign-session owners
+        claude_code.py     Bounded read-only Claude Code JSONL discovery and parse cache
+        external_sidebar.py Profile-aware CLI/cron/webhook projection and single-flight cache
+        gateway_identity.py Gateway registry identity projection and stat-keyed cache
+        state_db.py        Read-only Agent state queries, transcript readers, and cache fingerprints
       providers/           Provider compatibility package plus credential, cost-history,
                            and account/quota owners
         account_usage.py   Stable quota interface and compatibility facade
@@ -345,6 +350,17 @@ larger migration remains incremental:
   `record_recovery.py` owns recovered message/context projections; and
   `record_projection.py` builds compact sidebar records. These owners receive
   the active sidecar paths explicitly where profile or test isolation matters.
+- Foreign-session reads are organized by their authoritative store.
+  `api/sessions/gateway_identity.py` owns Gateway registry path resolution and
+  cached identity lookup; `api/sessions/claude_code.py` owns defensive JSONL
+  discovery and transcript parsing; `api/sessions/external_sidebar.py` owns
+  the profile-aware CLI/cron/webhook sidebar projection, sidecar metadata
+  overlay, and generation-checked single-flight cache. Agent SQLite transcript
+  reads, prefix proofs, summaries, and commit fingerprints live with the
+  existing `api/sessions/state_db.py` owner. `api/sessions/external.py` is a
+  stateless compatibility Interface only; mutable cache state is not duplicated
+  there. Callers and tests use the owning Module when they need an internal
+  seam.
 - `api/session_sources.py` owns which foreign source-identity fields may enter
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining
@@ -1032,6 +1048,9 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         providers/            Provider entrypoint plus credential, cost, quota-dispatch,
                               safe-projection, profile-environment, and probe-runtime owners
         profiles/             Profile entrypoint, catalog, management, runtime, and cron scopes
+        sessions/             Records, recovery, projection, and foreign-session store owners
+          {claude_code,external_sidebar,gateway_identity,state_db}.py
+                              Claude JSONL, external sidebar, Gateway identity, and SQLite owners
         updates/              Stable update interface plus semantic implementation modules
           {repository,policy,summary,transaction}.py
                               Repository, selection policy, and atomic update transaction

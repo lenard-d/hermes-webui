@@ -6,6 +6,7 @@ import sqlite3
 from types import SimpleNamespace
 
 import api.sessions.store as models
+import api.sessions.state_db as session_state_db
 import api.routes as routes
 
 
@@ -180,7 +181,7 @@ def test_cli_continuation_session_opens_nonempty(monkeypatch, tmp_path):
     conn.commit()
     conn.close()
 
-    monkeypatch.setattr(models, '_active_state_db_path', lambda: db_path)
+    monkeypatch.setattr(session_state_db, '_active_state_db_path', lambda: db_path)
 
     messages = models.get_cli_session_messages('child-session')
 

@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import api.agent_ops.session_discovery as session_discovery
-import api.sessions.external as external_sessions
+import api.sessions.external_sidebar as external_sessions
 import api.profiles as profiles
 import api.routes as routes
 

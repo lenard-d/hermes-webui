@@ -10,7 +10,9 @@ import api.config as config
 import api.models as legacy_models
 import api.sessions as sessions
 import api.sessions.cache as session_cache
+import api.sessions.claude_code as claude_code
 import api.sessions.external as session_external
+import api.sessions.external_sidebar as external_sidebar
 import api.sessions.records as session_records
 import api.sessions.store as store
 
@@ -24,10 +26,12 @@ def test_session_package_keeps_config_store_and_lock_identity():
 
 
 def test_session_cache_objects_have_one_semantic_owner():
-    assert session_external._CLI_SESSIONS_CACHE is session_external.get_cli_sessions.__globals__["_CLI_SESSIONS_CACHE"]
-    assert session_external._CLAUDE_CODE_PARSE_CACHE is session_external.get_claude_code_sessions.__globals__["_CLAUDE_CODE_PARSE_CACHE"]
-    assert session_external._SIDECAR_METADATA_CACHE is session_external._state_projection_sidecar_metadata.__globals__["_SIDECAR_METADATA_CACHE"]
-    assert store._CLI_SESSIONS_CACHE is session_external._CLI_SESSIONS_CACHE
+    assert external_sidebar._CLI_SESSIONS_CACHE is external_sidebar.get_cli_sessions.__globals__["_CLI_SESSIONS_CACHE"]
+    assert claude_code._CLAUDE_CODE_PARSE_CACHE is claude_code.get_claude_code_sessions.__globals__["_CLAUDE_CODE_PARSE_CACHE"]
+    assert external_sidebar._SIDECAR_METADATA_CACHE is external_sidebar._state_projection_sidecar_metadata.__globals__["_SIDECAR_METADATA_CACHE"]
+    assert session_external._CLI_SESSIONS_CACHE is external_sidebar._CLI_SESSIONS_CACHE
+    assert session_external._CLAUDE_CODE_PARSE_CACHE is claude_code._CLAUDE_CODE_PARSE_CACHE
+    assert store._CLI_SESSIONS_CACHE is external_sidebar._CLI_SESSIONS_CACHE
 
 
 def test_package_interface_points_at_semantic_owners():

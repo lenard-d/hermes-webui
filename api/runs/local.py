@@ -42,7 +42,7 @@ from api.model_context import (
     _should_accept_session_context_length_refresh,
 )
 from api.sessions.cache import _evict_sessions_over_cap, get_session
-from api.sessions.external import get_state_db_session_messages
+from api.sessions.state_db import get_state_db_session_messages
 from api.sessions.process_wakeup import (
     clear_process_wakeup_pause,
     record_process_wakeup_provider_unavailable_pause,

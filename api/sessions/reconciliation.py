@@ -14,11 +14,11 @@ from pathlib import Path
 from api.compression_anchor import is_context_compression_marker
 from api.config import HOME
 from api.agent_sessions import open_state_db_readonly
-from .external import (
+from .claude_code import (  # noqa: F401 - compatibility re-exports
     CLAUDE_CODE_SOURCE,
     get_claude_code_session_messages,
-    get_state_db_session_messages,
 )
+from .state_db import get_state_db_session_messages  # noqa: F401 - compatibility re-export
 from .message_identity import (
     _build_visible_duplicate_lookup,
     _has_visible_duplicate,
