@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import time
+from contextlib import contextmanager
 from urllib.parse import urlparse
 
 import api.routes as routes
@@ -211,8 +212,15 @@ def test_chat_start_body_profile_cannot_retag_visible_empty_session_without_acti
 def test_attachment_upload_foreign_profile_session_returns_404_before_write(monkeypatch):
     handler = _FakeHandler()
     foreign = _SimpleSession("upload_foreign", profile="other")
+
+    @contextmanager
+    def session_owner(sid, *, session=None):
+        assert sid == "upload_foreign"
+        assert session is None
+        yield foreign
+
     monkeypatch.setattr(upload, "parse_multipart", lambda *_args: ({"session_id": "upload_foreign"}, {"file": ("note.txt", b"x")}))
-    monkeypatch.setattr(upload, "get_session", lambda sid: foreign)
+    monkeypatch.setattr(upload, "session_write_owner", session_owner)
     monkeypatch.setattr(upload, "_get_active_profile_name", lambda: "default")
     monkeypatch.setattr(
         upload,
@@ -229,8 +237,15 @@ def test_attachment_upload_foreign_profile_session_returns_404_before_write(monk
 def test_archive_upload_extract_foreign_profile_session_returns_404_before_extract(monkeypatch):
     handler = _FakeHandler()
     foreign = _SimpleSession("extract_foreign", profile="other")
+
+    @contextmanager
+    def session_owner(sid, *, session=None):
+        assert sid == "extract_foreign"
+        assert session is None
+        yield foreign
+
     monkeypatch.setattr(upload, "parse_multipart", lambda *_args: ({"session_id": "extract_foreign"}, {"file": ("archive.zip", b"zip")}))
-    monkeypatch.setattr(upload, "get_session", lambda sid: foreign)
+    monkeypatch.setattr(upload, "session_write_owner", session_owner)
     monkeypatch.setattr(upload, "_get_active_profile_name", lambda: "default")
     monkeypatch.setattr(
         upload,
