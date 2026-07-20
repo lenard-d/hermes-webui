@@ -32,10 +32,10 @@ import re
 import sys
 
 import pytest
+from tests.i18n_split_loader import source_shaped_i18n
 
 
 REPO = Path(__file__).resolve().parent.parent
-I18N_PATH = REPO / "static" / "i18n.js"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ def _load_login_locale() -> dict:
 
 def _i18n_top_level_locale_keys() -> list[str]:
     """Return the ordered list of top-level locale keys defined in static/i18n.js LOCALES."""
-    src = I18N_PATH.read_text(encoding="utf-8")
+    src = source_shaped_i18n()
     # Find `const LOCALES = {`
     m = re.search(r"const\s+LOCALES\s*=\s*\{", src)
     assert m, "LOCALES object not found in static/i18n.js"
@@ -165,7 +165,7 @@ def _i18n_top_level_locale_keys() -> list[str]:
 
 def _i18n_locale_block(loc: str) -> str:
     """Return the body of a specific top-level locale block in i18n.js."""
-    src = I18N_PATH.read_text(encoding="utf-8")
+    src = source_shaped_i18n()
     if "-" in loc:
         head = re.compile(rf"^  '{re.escape(loc)}':\s*\{{", re.M)
     else:

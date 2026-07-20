@@ -1,0 +1,213 @@
+
+/* ── Logs panel (#1455) ───────────────────────────────────────────────────── */
+main.main.showing-logs > #mainLogs{display:flex;}
+.logs-control-panel{display:flex;flex-direction:column;gap:8px;padding:12px;overflow-y:auto;}
+.logs-control-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+.logs-control-panel select{width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 9px;font-size:12px;}
+.logs-check-row{display:flex;align-items:center;gap:8px;color:var(--text);font-size:12px;line-height:1.4;}
+.logs-check-row input{accent-color:var(--accent);}
+.logs-copy{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+.logs-copy:hover{background:var(--hover-bg);border-color:var(--border2);}
+.logs-copy.compact{padding:6px 10px;white-space:nowrap;}
+.logs-status{font-size:12px;color:var(--muted);margin-top:3px;font-family:'SF Mono',ui-monospace,monospace;}
+.logs-main-body{padding:18px 24px;}
+.logs-content{max-width:1200px;}
+.logs-output{min-height:320px;max-height:calc(100vh - 170px);overflow:auto;background:var(--code-bg);border:1px solid var(--border);border-radius:12px;padding:12px 0;font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px;line-height:1.55;color:var(--pre-text);white-space:pre;}
+.logs-output.wrap{white-space:pre-wrap;overflow-wrap:anywhere;}
+.log-line{padding:0 14px;min-height:1.55em;border-left:3px solid transparent;}
+.log-line:hover{background:rgba(255,255,255,.04);}
+.log-line-error{color:var(--error,#ef4444);border-left-color:var(--error,#ef4444);background:color-mix(in srgb,var(--error,#ef4444) 8%,transparent);}
+.log-line-warning{color:#f59e0b;border-left-color:#f59e0b;background:rgba(245,158,11,.08);}
+.log-line-info{color:var(--pre-text);}
+.log-line-debug{color:var(--muted);opacity:.75;}
+.logs-empty,.logs-hint{margin:8px 14px;padding:12px;border:1px solid var(--border);border-radius:8px;color:var(--muted);background:var(--surface);white-space:normal;font-family:var(--font-ui,system-ui,sans-serif);font-size:12px;}
+.logs-hint.warn{color:#f59e0b;border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08);}
+
+/* OpenWebUI-style streaming word fade (opt-in via Settings → Preferences).
+   Opacity-only fade with JS-paced word/paragraph reveal. */
+.stream-fade-active .stream-fade-word{display:inline;}
+.stream-fade-word.is-new{animation:stream-fade-word-in var(--stream-fade-ms,620ms) cubic-bezier(.16,.84,.32,1) both;will-change:opacity;}
+@keyframes stream-fade-word-in{0%{opacity:0;}35%{opacity:.18;}70%{opacity:.72;}100%{opacity:1;}}
+@media (prefers-reduced-motion: reduce){.stream-fade-word.is-new{animation:none;will-change:auto;}}
+[data-live-assistant="1"]:last-child .msg-body.stream-fade-active > :last-child::after,
+[data-live-assistant="1"]:last-child .msg-body.stream-fade-active:not(:has(> *))::after{display:none;content:none;}
+
+/* ── RTL chat layout (salvaged from PR #1721 by @malulian) ────────────────────
+ * Triggered by .chat-content-rtl on <html>. Affects ONLY the chat messages
+ * area and composer input, not the sidebar, workspace panel, settings panel,
+ * or any other UI element. Direction objection from design review (PR #1721
+ * comment by @aronprins, May 13 2026) honored: no composer button — the
+ * toggle lives in Settings → Preferences only.
+ *
+ * Code blocks, inline code, and pre-formatted blocks stay LTR even when RTL
+ * is active — Arabic/Hebrew users still write English code, command lines,
+ * URLs, and JSON the same way English users do. Flipping those would render
+ * code mirrored (e.g. `()fn()` instead of `fn()`) which is the salvage's
+ * critical bug fix vs the original PR #1721 implementation.
+ */
+.chat-content-rtl .msg-row{
+  direction:rtl;
+  text-align:right;
+  unicode-bidi:plaintext;
+}
+.chat-content-rtl .msg-body{
+  text-align:start;
+}
+.chat-content-rtl .msg-body th,
+.chat-content-rtl .csv-table th,
+.chat-content-rtl .csv-table td{
+  text-align:right;
+}
+.chat-content-rtl .tool-call-group-summary{
+  text-align:right;
+}
+.chat-content-rtl textarea#msg,
+.chat-content-rtl #msg{
+  direction:rtl;
+  text-align:right;
+  unicode-bidi:plaintext;
+}
+/* Force code/pre/tt back to LTR — Arabic users still write English code. */
+.chat-content-rtl .msg-body pre,
+.chat-content-rtl .msg-body code,
+.chat-content-rtl .msg-body kbd,
+.chat-content-rtl .msg-body samp,
+.chat-content-rtl .msg-body tt,
+.chat-content-rtl .msg-body .hljs,
+.chat-content-rtl .msg-body .code-block,
+.chat-content-rtl .msg-body .code-block *,
+.chat-content-rtl .msg-body pre *{
+  direction:ltr;
+  text-align:left;
+  unicode-bidi:isolate;
+}
+/* Force LTR for content classes that render English-by-design even in chat:
+   KaTeX equations (math is LTR-only in standard notation), diff hunks
+   (file paths + line numbers), CSV tables (column order must stay
+   left-to-right), and skill file paths. */
+.chat-content-rtl .msg-body .katex,
+.chat-content-rtl .msg-body .katex-block,
+.chat-content-rtl .msg-body .katex-display,
+.chat-content-rtl .msg-body .katex-html,
+.chat-content-rtl .msg-body .katex-inline,
+.chat-content-rtl .msg-body .diff-block,
+.chat-content-rtl .msg-body .diff-block *,
+.chat-content-rtl .msg-body .csv-table-wrap,
+.chat-content-rtl .msg-body .csv-table,
+.chat-content-rtl .msg-body .csv-table *,
+.chat-content-rtl .msg-body .skill-file-path{
+  direction:ltr;
+  text-align:left;
+  unicode-bidi:isolate;
+}
+/* Tool-call content (commands, paths, JSON) stays LTR. */
+.chat-content-rtl .tool-call-group-body,
+.chat-content-rtl .tool-call-group-body *,
+.chat-content-rtl .tool-result,
+.chat-content-rtl .tool-result *{
+  direction:ltr;
+  text-align:left;
+  unicode-bidi:isolate;
+}
+
+/* Cap composer width on very wide displays so the chip-cluster gap stays bounded */
+@media (min-width:1600px) {
+  .composer-box{max-width:1600px;margin:0 auto;}
+}
+
+#composerMobileCtxBadge { display: none !important; }
+
+/* Interim progress note collapse (#2403) */
+.interim-collapsed { display: none; }
+.interim-collapse-toggle {
+  cursor: pointer;
+  color: var(--accent-color, #4a9eff);
+  font-size: 0.85em;
+  margin: 4px 0;
+  display: block;
+}
+.interim-collapse-toggle:hover { text-decoration: underline; }
+
+/* ── Conversation Outline Panel (#2124) ─────────────────────────────────── */
+#outlineToggleBtn{
+  position:absolute;bottom:60px;right:20px;z-index:12;
+  width:38px;height:38px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--border2);
+  color:var(--text);cursor:pointer;
+  display:none;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+  font-size:16px;line-height:1;
+  transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+html[data-conversation-outline="enabled"] #outlineToggleBtn:not([hidden]){display:flex;}
+#outlineToggleBtn:hover{background:var(--accent-bg);border-color:var(--accent-bg-strong);color:var(--accent-text);}
+#outlinePanelWrapper{
+  position:fixed;right:calc(var(--outline-workspace-offset, 0px) + 20px);bottom:170px;width:320px;
+  max-height:50vh;z-index:9998;
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.22);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+/* The id selector's display:flex outranks the UA [hidden]{display:none}, so the
+   hidden attribute alone won't hide the panel — restore it explicitly. */
+#outlinePanelWrapper[hidden]{display:none;}
+.outline-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px 8px;border-bottom:1px solid var(--border2);
+  font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.04em;flex-shrink:0;
+}
+.outline-close-btn{
+  background:none;border:none;cursor:pointer;
+  color:var(--muted);font-size:16px;line-height:1;padding:0 2px;
+}
+.outline-close-btn:hover{color:var(--text);}
+#outlinePanel{overflow-y:auto;flex:1;}
+.outline-entry{
+  display:flex;align-items:baseline;gap:8px;
+  width:100%;padding:7px 12px;
+  background:none;border:none;border-bottom:1px solid var(--border-subtle);
+  cursor:pointer;text-align:left;color:var(--text);
+  transition:background .12s ease;
+}
+.outline-entry:last-child{border-bottom:none;}
+.outline-entry:hover{background:var(--accent-bg);}
+.outline-entry-num{
+  font-size:11px;font-weight:600;color:var(--muted);
+  min-width:18px;flex-shrink:0;
+}
+.outline-entry-text{font-size:13px;line-height:1.4;word-break:break-word;}
+.outline-empty{
+  padding:16px 12px;font-size:13px;color:var(--muted);text-align:center;
+}
+/* Flash animation when jumping to a message */
+@keyframes outline-flash{
+  0%{background:var(--accent-bg-strong);}
+  100%{background:transparent;}
+}
+.outline-jump-flash{animation:outline-flash 1.2s ease-out forwards;}
+@media(max-width:900px){
+  #outlineToggleBtn,#outlinePanelWrapper{display:none!important;}
+}
+
+/* Settings search */
+#settingsMenu { overflow: visible; min-height: 0; }
+#settingsMenu .settings-menu-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+#settingsMenu .settings-search { position: relative; }
+.settings-search-results { position: absolute; top: 100%; left: 0; right: 0; z-index: 200; background: var(--dropdown-bg, var(--bg)); border: 1px solid var(--border2); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); overflow: hidden; margin-top: 2px; }
+.settings-search-result { display: flex; align-items: center; gap: 4px; width: 100%; padding: 7px 12px; background: none; border: none; text-align: left; cursor: pointer; font-size: 12px; color: var(--text); transition: background 0.1s; }
+.settings-search-result:hover { background: var(--hover-bg); }
+.settings-search-section { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.settings-search-arrow { color: var(--muted); font-size: 11px; }
+.settings-search-label { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-search-empty { padding: 10px 12px; font-size: 12px; color: var(--muted); }
+/* Settings field highlight (mirrors msg-question-highlight / _highlightQuestionRow pattern) */
+.settings-field-highlight { animation: settings-field-pulse 1.6s ease-out; }
+@keyframes settings-field-pulse { 0% { box-shadow: 0 0 0 0 var(--focus-ring); } 35% { box-shadow: 0 0 0 4px var(--focus-ring); } 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); } }

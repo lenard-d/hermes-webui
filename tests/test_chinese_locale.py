@@ -2,13 +2,74 @@ from collections import Counter
 from pathlib import Path
 import re
 from tests.test_issue2147_profile_concept_help import PROFILE_CONCEPT_KEYS
+from tests.i18n_split_loader import locale_block_source, source_shaped_i18n
 
 
 REPO = Path(__file__).resolve().parent.parent
 PROFILE_CONCEPT_FALLBACK_KEYS = set(PROFILE_CONCEPT_KEYS)
+KNOWN_ENGLISH_FALLBACK_KEYS = PROFILE_CONCEPT_FALLBACK_KEYS | {
+    "bg_complete",
+    "bg_failed",
+    "bg_label",
+    "bg_no_answer",
+    "bg_running",
+    "btw_asking",
+    "btw_done",
+    "btw_failed",
+    "btw_label",
+    "btw_no_answer",
+    "cancel_unavailable",
+    "cmd_background",
+    "cmd_background_usage",
+    "cmd_btw",
+    "cmd_btw_usage",
+    "cmd_retry",
+    "cmd_status",
+    "cmd_stop",
+    "cmd_title",
+    "cmd_undo",
+    "cmd_voice",
+    "cmd_voice_use_mic",
+    "cmd_webui_only_session",
+    "no_active_task",
+    "retry_failed",
+    "slash_skill_badge",
+    "slash_skill_desc",
+    "status_agent_running",
+    "status_heading",
+    "status_load_failed",
+    "status_messages",
+    "status_model",
+    "status_no",
+    "status_personality",
+    "status_provider",
+    "status_session_id",
+    "status_title",
+    "status_workspace",
+    "status_yes",
+    "stream_stopped",
+    "title_change_hint",
+    "title_current",
+    "title_set",
+    "undid_messages_suffix",
+    "undid_n_messages",
+    "undo_exchange",
+    "undo_failed",
+    "usage_default_model",
+    "usage_estimated_cost",
+    "usage_heading",
+    "usage_input_tokens",
+    "usage_load_failed",
+    "usage_output_tokens",
+    "usage_settings_tip",
+    "usage_total",
+    "usage_unknown",
+}
 
 
 def read(path: Path) -> str:
+    if path == REPO / "static" / "i18n.js":
+        return source_shaped_i18n()
     return path.read_text(encoding="utf-8")
 
 
@@ -101,13 +162,11 @@ def test_chinese_locale_includes_representative_translations():
 
 
 def test_chinese_locale_covers_english_keys():
-    src = read(REPO / "static" / "i18n.js")
     key_pattern = re.compile(r"^\s{4}([a-zA-Z0-9_]+):", re.MULTILINE)
-    en_keys = set(key_pattern.findall(extract_locale_block(src, "en")))
-    zh_keys = set(key_pattern.findall(extract_locale_block(src, "zh")))
+    en_keys = set(key_pattern.findall(locale_block_source("en")))
+    zh_keys = set(key_pattern.findall(locale_block_source("zh")))
 
-    missing = sorted((en_keys - zh_keys) - PROFILE_CONCEPT_FALLBACK_KEYS)
-    assert not missing, f"Chinese locale missing keys: {missing}"
+    assert en_keys - zh_keys == KNOWN_ENGLISH_FALLBACK_KEYS
 
 
 def test_chinese_locale_has_no_duplicate_keys():

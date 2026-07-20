@@ -1,0 +1,343 @@
+
+/* ── Kanban native board (read-only MVP) ── */
+.kanban-filter-stack{display:flex;flex-direction:column;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);}
+.kanban-filter-stack select{width:100%;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;}
+.kanban-check{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;}
+.kanban-summary{padding:8px 12px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--border);}
+.kanban-list{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;}
+.kanban-list-item{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);text-align:left;cursor:pointer;}
+.kanban-list-item:hover{border-color:var(--accent);background:var(--hover);}
+.kanban-list-status{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.kanban-list-title{font-size:13px;font-weight:600;line-height:1.35;}
+.kanban-board-wrap{flex:1;min-height:0;overflow:auto;padding:16px;background:var(--bg);}
+.kanban-board{display:flex;gap:12px;min-height:100%;overflow-x:auto;padding-bottom:8px;}
+.kanban-column{display:flex;flex-direction:column;min-width:260px;max-width:320px;flex:1;background:var(--panel);border:1px solid var(--border);border-radius:10px;min-height:240px;}
+.kanban-column-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--text);}
+.kanban-count{font-size:11px;color:var(--muted);background:var(--input-bg);border:1px solid var(--border);border-radius:999px;padding:1px 7px;}
+.kanban-column-body{display:flex;flex-direction:column;gap:8px;padding:10px;min-height:0;max-height:min(68vh,720px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;}
+.kanban-card{border:1px solid var(--border);border-radius:9px;background:var(--bg);padding:10px;cursor:pointer;box-shadow:var(--shadow-sm);}
+.kanban-card:hover,.kanban-card.selected{border-color:var(--accent);}
+.kanban-card-title{font-size:13px;font-weight:650;color:var(--text);line-height:1.35;margin-bottom:6px;}
+.kanban-card-body{font-size:12px;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px;}
+.kanban-meta{font-size:11px;color:var(--muted);line-height:1.35;}
+.kanban-readonly{font-size:11px;color:var(--muted);margin-top:6px;}
+
+/* Multi-board switcher in the main panel header.
+   Renders next to the "Board" title as `Default ▾` when at least one
+   non-default board exists, opens a click-anchored menu listing all
+   boards, current first, with per-status total badges. */
+.main-view-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.kanban-board-switcher{position:relative;display:inline-block;}
+.kanban-board-switcher[hidden]{display:none;}
+.kanban-board-switcher-toggle{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px;
+  border:1px solid var(--border);
+  background:var(--input-bg);
+  color:var(--text);
+  border-radius:8px;
+  font:inherit;font-size:12px;font-weight:550;
+  cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;
+}
+.kanban-board-switcher-toggle:hover{border-color:var(--accent);color:var(--accent);}
+.kanban-board-switcher-toggle[aria-expanded="true"]{border-color:var(--accent);}
+.kanban-board-switcher-icon{font-size:14px;line-height:1;display:inline-block;min-width:14px;text-align:center;}
+.kanban-board-switcher-name{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.kanban-board-switcher-menu{
+  position:absolute;top:calc(100% + 4px);left:0;
+  min-width:240px;max-width:320px;
+  background:linear-gradient(180deg,rgba(21,31,45,.98),rgba(13,20,31,.98));
+  border:1px solid var(--accent-bg-strong, var(--border));
+  border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);
+  padding:6px;
+  z-index:150;
+  max-height:60vh;
+  overflow-y:auto;
+}
+:root:not(.dark) .kanban-board-switcher-menu{
+  background:linear-gradient(180deg,#fff,#f5f0e8);
+  border-color:rgba(0,0,0,.18);
+}
+.kanban-board-switcher-menu[hidden]{display:none;}
+.kanban-board-switcher-item{
+  display:flex;align-items:center;gap:10px;width:100%;
+  padding:8px 10px;border:0;background:transparent;color:var(--text);
+  border-radius:6px;cursor:pointer;text-align:left;font:inherit;font-size:12px;
+  transition:background .15s;
+}
+.kanban-board-switcher-item:hover,
+.kanban-board-switcher-item:focus{background:var(--accent-bg);outline:none;}
+.kanban-board-switcher-item.is-current{font-weight:650;}
+.kanban-board-switcher-item-icon{
+  display:block;
+  font-size:14px;line-height:1.15;
+  flex:0 1 auto;
+  min-width:18px;max-width:7.5rem;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  text-align:center;
+}
+.kanban-board-switcher-item-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.kanban-board-switcher-item-count{
+  flex-shrink:0;font-size:10px;color:var(--muted);
+  padding:2px 6px;border-radius:8px;background:var(--input-bg);
+}
+.kanban-board-switcher-item.is-current .kanban-board-switcher-item-count{
+  background:var(--accent-bg);color:var(--accent-text);
+}
+.kanban-board-switcher-divider{height:1px;background:var(--border);margin:6px 0;}
+.kanban-board-switcher-action{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:8px 10px;border:0;background:transparent;color:var(--muted);
+  border-radius:6px;cursor:pointer;text-align:left;font:inherit;font-size:11px;
+  transition:background .15s,color .15s;
+}
+.kanban-board-switcher-action:hover{background:var(--accent-bg);color:var(--accent-text);}
+.kanban-board-switcher-action.danger:hover{background:rgba(255,95,95,.12);color:var(--danger);}
+.kanban-board-switcher-action svg{width:14px;height:14px;flex-shrink:0;}
+
+/* Modal forms for create/rename board — use the same visual language as
+   the app-dialog overlay (linear-gradient panel, accent border) so it
+   feels native to the WebUI rather than a one-off bridge UI. */
+.kanban-modal-overlay{
+  position:fixed;inset:0;background:rgba(7,12,19,.62);backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;
+  z-index:1100;padding:24px;
+}
+.kanban-modal-overlay[hidden]{display:none;}
+.kanban-modal{
+  width:min(460px,100%);
+  background:linear-gradient(180deg,rgba(21,31,45,.98),rgba(13,20,31,.98));
+  border:1px solid var(--accent-bg-strong, var(--border));
+  border-radius:18px;
+  box-shadow:0 18px 60px rgba(0,0,0,.45);
+  padding:18px 18px 16px;
+  color:var(--text);
+  box-sizing:border-box;
+}
+:root:not(.dark) .kanban-modal{
+  background:linear-gradient(180deg,#fff,#f5f0e8);
+  border-color:rgba(0,0,0,.18);
+}
+.kanban-modal h3{margin:0 0 14px;font-size:15px;font-weight:650;color:var(--text);}
+.kanban-modal-row{margin-bottom:10px;}
+.kanban-modal-row label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;}
+.kanban-modal-row input[type="text"],
+.kanban-modal-row input[type="number"],
+.kanban-modal-row input[type="color"],
+.kanban-modal-row select,
+.kanban-modal-row textarea{
+  width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);padding:8px 10px;font:inherit;font-size:13px;box-sizing:border-box;
+}
+/* Native select chevron — make sure the dropdown reads as a dropdown, not as
+   a flat text input. Custom SVG arrow + appearance:none for cross-browser
+   consistency in dark theme. */
+.kanban-modal-row select{
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;
+  padding-right:32px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2390a0b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 8px center;
+  background-size:16px;
+}
+.kanban-modal-row select:focus{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFD700' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+.kanban-modal-row input:focus,
+.kanban-modal-row select:focus,
+.kanban-modal-row textarea:focus{
+  outline:none;border-color:var(--accent, #FFD700);
+}
+.kanban-modal-row textarea{min-height:60px;resize:vertical;}
+.kanban-modal-row input[type="color"]{height:36px;padding:2px;cursor:pointer;}
+.kanban-modal-row-inline{display:flex;gap:10px;}
+.kanban-modal-row-inline > *{flex:1;min-width:0;}
+.kanban-modal-hint{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;}
+.kanban-status-original-hint{
+  display:block;
+  margin-top:4px;
+  font-size:11px;
+  color:var(--muted);
+}
+.kanban-modal-hint code{background:var(--input-bg);padding:1px 5px;border-radius:4px;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:var(--text);}
+.kanban-modal-hint em{color:var(--text);font-style:normal;font-weight:600;}
+.kanban-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+.kanban-modal-error{
+  color:var(--danger,var(--error,#f87171));
+  font-size:12px;font-weight:500;margin-top:8px;min-height:14px;
+}
+.kanban-modal-error:not(:empty){
+  padding:8px 10px;border-radius:8px;
+  background:color-mix(in srgb,var(--danger,var(--error,#f87171)) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--danger,var(--error,#f87171)) 35%,transparent);
+}
+.kanban-empty{padding:12px;color:var(--muted);font-size:12px;text-align:center;border:1px dashed var(--border);border-radius:8px;}
+
+.kanban-new-task-row{display:flex;gap:6px;align-items:center;}
+.kanban-new-task-row input{flex:1;min-width:0;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 8px;font:inherit;font-size:12px;}
+.kanban-task-preview{padding:12px 16px;border-bottom:1px solid var(--border);background:var(--panel);}
+.kanban-task-preview-header{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.kanban-back-btn{flex-shrink:0;font-size:11px;padding:4px 8px;}
+.kanban-edit-btn{flex-shrink:0;font-size:11px;padding:4px 10px;margin-left:auto;}
+.kanban-task-preview-title{flex:1;font-size:14px;font-weight:650;color:var(--text);margin-bottom:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Run dispatcher button: visually distinct from the dry-run preview ▶ button
+   sitting next to it so users can tell at a glance which one actually spawns
+   workers.  Uses the accent border + tinted background but keeps the
+   panel-head sizing so it doesn't stand out as inconsistent.  See PR for
+   #1968 / kanban edit+run gap fix. */
+.kanban-run-dispatch-btn{
+  border-color:color-mix(in srgb,var(--accent,#FFD700) 60%,var(--border));
+  background:color-mix(in srgb,var(--accent,#FFD700) 14%,transparent);
+  color:var(--accent,#FFD700);
+}
+.kanban-run-dispatch-btn:hover{
+  background:color-mix(in srgb,var(--accent,#FFD700) 24%,transparent);
+}
+.kanban-view-toggle{
+  color:var(--muted);
+}
+.kanban-view-toggle[aria-pressed="true"]{
+  border-color:color-mix(in srgb,var(--accent,#FFD700) 58%,var(--border));
+  background:color-mix(in srgb,var(--accent,#FFD700) 13%,transparent);
+  color:var(--accent,#FFD700);
+}
+.kanban-view-toggle[aria-pressed="true"]:hover{
+  background:color-mix(in srgb,var(--accent,#FFD700) 22%,transparent);
+}
+.kanban-task-preview-body{font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:6px;}
+.kanban-status-actions{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px;}
+.kanban-status-actions .btn{font-size:11px;padding:4px 8px;}
+/* Generic styled buttons used throughout the Kanban panel. The Kanban PR
+   stack standardised on `.btn` / `.btn.secondary` class names but never
+   shipped the matching CSS, so without these rules buttons fall back to
+   the browser's default beveled appearance which clashes with the dark
+   theme. Scoped to kanban-* parent containers so the rules cannot affect
+   any other panel that happens to use those class names later. */
+.kanban-pane .btn,
+.kanban-bulk-bar .btn,
+.kanban-new-task-row .btn,
+.kanban-task-preview .btn,
+.kanban-comment-form .btn,
+.kanban-modal .btn{
+  border:1px solid var(--border);
+  background:var(--input-bg);
+  color:var(--text);
+  border-radius:6px;
+  padding:6px 12px;
+  font:inherit;
+  font-size:12px;
+  cursor:pointer;
+  transition:border-color .15s,background .15s,color .15s;
+}
+.kanban-pane .btn:hover,
+.kanban-bulk-bar .btn:hover,
+.kanban-new-task-row .btn:hover,
+.kanban-task-preview .btn:hover,
+.kanban-comment-form .btn:hover,
+.kanban-modal .btn:hover{border-color:var(--accent);color:var(--accent);}
+.kanban-pane .btn:disabled,
+.kanban-bulk-bar .btn:disabled,
+.kanban-new-task-row .btn:disabled,
+.kanban-task-preview .btn:disabled,
+.kanban-comment-form .btn:disabled,
+.kanban-modal .btn:disabled{opacity:.5;cursor:default;}
+.kanban-pane .btn.secondary,
+.kanban-bulk-bar .btn.secondary,
+.kanban-new-task-row .btn.secondary,
+.kanban-task-preview .btn.secondary,
+.kanban-comment-form .btn.secondary,
+.kanban-modal .btn.secondary{background:transparent;}
+.kanban-pane .btn.danger,
+.kanban-task-preview .btn.danger,
+.kanban-modal .btn.danger{color:var(--danger);border-color:rgba(255,95,95,.4);}
+.kanban-pane .btn.danger:hover,
+.kanban-task-preview .btn.danger:hover,
+.kanban-modal .btn.danger:hover{background:rgba(255,95,95,.1);color:var(--danger);}
+/* Primary CTA inside the kanban modal — accent-tinted to make Save vs.
+   Cancel visually distinct (was nearly identical before). */
+.kanban-modal .btn.primary{
+  border-color:var(--accent, #FFD700);
+  background:var(--accent-bg, rgba(255,215,0,.12));
+  color:var(--accent-text, var(--accent, #FFD700));
+  font-weight:600;
+}
+.kanban-modal .btn.primary:hover{
+  background:var(--accent-bg-strong, rgba(255,215,0,.22));
+  border-color:var(--accent, #FFD700);
+  color:var(--accent-text, var(--accent, #FFD700));
+}
+.kanban-comment-form{display:flex;gap:8px;align-items:flex-end;margin-top:12px;}
+.kanban-comment-form textarea{flex:1;min-height:42px;resize:vertical;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font:inherit;font-size:12px;}
+
+.kanban-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;}
+.kanban-detail-section{border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:10px;min-width:0;}
+.kanban-detail-section h3{font-size:12px;font-weight:650;color:var(--text);margin:0 0 8px;}
+.kanban-detail-row{padding:8px 0;border-top:1px solid var(--border);}
+.kanban-detail-row:first-of-type{border-top:0;padding-top:0;}
+.kanban-detail-row-main{font-size:12px;color:var(--text);line-height:1.45;}.kanban-detail-row-main .hermes-kanban-md p:last-child{margin-bottom:0;}
+.kanban-detail-row-meta{font-size:10px;color:var(--muted);margin-top:4px;}
+.kanban-detail-pre{font-size:11px;line-height:1.4;white-space:pre-wrap;word-break:break-word;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;padding:6px;margin:6px 0 0;color:var(--muted);}
+.kanban-detail-empty{font-size:12px;color:var(--muted);}
+.kanban-detail-links-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:var(--muted);}
+.kanban-detail-links-grid code{display:inline-block;margin:4px 4px 0 0;padding:2px 5px;border-radius:5px;background:var(--input-bg);border:1px solid var(--border);color:var(--text);}
+/* Dependency add control — match the dark modal-input styling so the field
+   doesn't render as a bare white browser-default box in the Links panel. */
+.kanban-detail-links-controls{display:flex;gap:8px;align-items:center;margin-top:10px;}
+.kanban-detail-links-input{
+  flex:1;min-width:0;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);padding:8px 10px;font:inherit;font-size:13px;box-sizing:border-box;
+}
+.kanban-detail-links-input:focus{outline:none;border-color:var(--accent, #FFD700);}
+.kanban-detail-links-input::placeholder{color:var(--muted);}
+.kanban-detail-links-controls .btn{white-space:nowrap;flex:0 0 auto;}
+
+.kanban-stats{font-size:12px;color:var(--muted);padding:2px 0}
+.kanban-stats-grid{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.kanban-stat-cell{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--input-bg);padding:2px 7px;}
+.kanban-stat-cell.total{color:var(--text);}
+.kanban-bulk-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.kanban-bulk-bar select{flex:1;min-width:96px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px}
+
+.kanban-profile-lanes{display:flex;flex-direction:column;gap:18px;min-width:100%}
+.kanban-profile-lane{border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02);padding:10px}
+.kanban-profile-lane-head{display:flex;justify-content:space-between;align-items:center;color:var(--text);font-size:13px;font-weight:600;margin-bottom:8px}
+.kanban-profile-lane-unassigned .kanban-profile-lane-head{border-bottom:1px solid color-mix(in srgb,var(--warning,#f5c542) 45%,var(--border));padding-bottom:6px}
+.kanban-board-in-lane{min-height:0;overflow-x:auto}
+.kanban-card-topline{display:flex;gap:6px;align-items:center;margin-bottom:4px;font-size:10px;color:var(--muted)}
+.kanban-card-id{font-family:var(--mono);opacity:.8}
+.kanban-badge{border:1px solid var(--border);border-radius:999px;padding:1px 6px;font-size:10px;color:var(--muted)}
+.kanban-badge.priority{color:var(--accent)}
+.kanban-badge.tenant{color:var(--text)}
+.kanban-card-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
+.kanban-card-assignee{color:var(--accent)}
+.kanban-card-unassigned{opacity:.75}
+.kanban-card-actions{display:flex;gap:4px;margin-top:8px;opacity:.85;flex-wrap:wrap}
+.kanban-card-action{border:1px solid var(--border);background:var(--input-bg);color:var(--text);border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer}
+.kanban-card-action.danger{color:var(--danger)}
+.kanban-card-stale-amber{border-color:rgba(245,197,66,.55)}
+.kanban-card-stale-red{border-color:rgba(255,95,95,.65)}
+.kanban-column.drop-target{outline:2px solid var(--accent);outline-offset:-2px}
+.hermes-kanban-md p{margin:0 0 4px}.hermes-kanban-md code{font-family:var(--mono);font-size:.95em}.hermes-kanban-md h1,.hermes-kanban-md h2,.hermes-kanban-md h3,.hermes-kanban-md h4,.hermes-kanban-md h5,.hermes-kanban-md h6{margin:10px 0 4px;font-weight:650;color:var(--text)}.hermes-kanban-md h1{font-size:15px}.hermes-kanban-md h2{font-size:14px}.hermes-kanban-md h3{font-size:13px}.hermes-kanban-md h4,.hermes-kanban-md h5,.hermes-kanban-md h6{font-size:12px}.hermes-kanban-md ul,.hermes-kanban-md ol{margin:4px 0;padding-left:20px}.hermes-kanban-md li{margin:2px 0}.hermes-kanban-md li.checked{opacity:.6}.hermes-kanban-md li input[type=checkbox]{margin:0 4px 0 0;vertical-align:middle}.hermes-kanban-md table{border-collapse:collapse;margin:6px 0;font-size:11px;width:100%}.hermes-kanban-md td{border:1px solid var(--border);padding:4px 6px;vertical-align:top}.hermes-kanban-md blockquote{margin:4px 0;padding:2px 8px;border-left:3px solid var(--accent);color:var(--muted);font-size:12px}.hermes-kanban-md pre{background:var(--input-bg);border:1px solid var(--border);border-radius:6px;padding:8px;margin:6px 0;overflow-x:auto;font-size:11px;line-height:1.4;color:var(--text)}.hermes-kanban-md hr{border:none;border-top:1px solid var(--border);margin:8px 0}
+
+@media (max-width: 640px){
+  .kanban-board{scroll-snap-type:x mandatory;}
+  .kanban-column{min-width:82vw;scroll-snap-align:start;}
+  .kanban-task-preview-header{align-items:flex-start;flex-direction:column;}
+  .kanban-comment-form{flex-direction:column;align-items:stretch;}
+  .kanban-stats-grid{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;}
+  /* Multi-board: keep the switcher row tight on narrow screens, and
+     widen the dropdown menu so its action labels don't truncate. */
+  .main-view-title-row{gap:6px;}
+  .kanban-board-switcher-toggle{padding:3px 8px;font-size:11px;}
+  .kanban-board-switcher-name{max-width:140px;}
+  .kanban-board-switcher-menu{
+    min-width:min(280px, calc(100vw - 24px));
+    max-width:calc(100vw - 24px);
+  }
+  /* Modal scales to viewport width on phones with reasonable padding. */
+  .kanban-modal-overlay{padding:12px;}
+  .kanban-modal{padding:16px 16px 14px;border-radius:14px;}
+  .kanban-modal-row-inline{flex-direction:column;gap:0;}
+}

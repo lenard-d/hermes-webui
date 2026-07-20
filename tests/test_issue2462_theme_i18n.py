@@ -1,22 +1,12 @@
 """Regression coverage for #2462 stale /theme i18n help strings."""
 
-from pathlib import Path
 import re
 
-ROOT = Path(__file__).resolve().parents[1]
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+from tests.i18n_split_loader import locale_block_source
 
 
 def _locale_block(locale: str) -> str:
-    # Locale keys are mostly bare identifiers, but zh-Hant is quoted. Match the
-    # requested block up to the next top-level locale block or the LOCALES close.
-    match = re.search(
-        rf"\n\s*['\"]?{re.escape(locale)}['\"]?:\s*\{{(?P<body>.*?)(?=\n\s*['\"]?[a-z][\w-]*['\"]?:\s*\{{|\n\}};)",
-        I18N_JS,
-        re.S,
-    )
-    assert match, f"locale block {locale!r} not found"
-    return match.group("body")
+    return locale_block_source(locale)
 
 
 def _literal_value(block: str, key: str) -> str:

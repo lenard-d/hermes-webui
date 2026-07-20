@@ -1,0 +1,694 @@
+
+/* ── Provider model tags ── */
+.provider-card-models{
+  margin-bottom:10px;
+  display:flex;flex-direction:column;gap:6px;
+}
+.provider-card-model-tags{
+  display:flex;flex-wrap:wrap;gap:4px;
+}
+.provider-card-model-tag{
+  display:inline-block;
+  padding:2px 8px;
+  font-size:10.5px;font-family:ui-monospace,SFMono-Regular,\"SF Mono\",Menlo,Consolas,monospace;
+  color:var(--muted);
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:5px;
+  line-height:1.5;
+  user-select:all;
+}
+/* "+N more" disclosure pill — appended when a provider's catalog is trimmed
+   for UI scannability (#1567 — Nous Portal large-tier accounts ship 100s of
+   models). Visually distinct from a real model tag so users don't think it's
+   a model id; muted dashed border, italic, no user-select. */
+.provider-card-model-tag-more{
+  font-style:italic;
+  border-style:dashed;
+  user-select:none;
+  cursor:help;
+}
+
+/* ── Session pin indicator (inline, only when pinned) ── */
+.session-pin-indicator{
+  flex-shrink:0;
+  width:10px;
+  height:10px;
+  color:var(--accent);
+  line-height:1;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.session-pin-indicator svg{width:10px;height:10px;}
+
+/* ── Fork lineage indicator (inline, subtle until row focus/hover) ── */
+.session-branch-indicator,
+.session-worktree-indicator{
+  flex-shrink:0;
+  width:12px;
+  height:12px;
+  color:var(--muted);
+  line-height:1;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  opacity:.35;
+  pointer-events:none;
+  transition:opacity .15s ease,color .15s ease;
+}
+.session-branch-indicator svg,
+.session-worktree-indicator svg{width:12px;height:12px;}
+.session-item:hover .session-branch-indicator,
+.session-item:hover .session-worktree-indicator,
+.session-item:focus-within .session-branch-indicator,
+.session-item:focus-within .session-worktree-indicator,
+.session-item.menu-open .session-branch-indicator{
+  opacity:.85;
+  color:var(--text);
+}
+.session-item.menu-open .session-worktree-indicator{
+  opacity:.85;
+  color:var(--text);
+}
+.session-item.active .session-branch-indicator,
+.session-item.active .session-worktree-indicator{color:var(--accent-text);}
+
+/* ── Cron alert badge ── */
+.cron-badge{position:absolute;top:2px;right:2px;background:#e53e3e;color:#fff;font-size:9px;font-weight:700;min-width:14px;height:14px;line-height:14px;text-align:center;border-radius:7px;padding:0 3px;}
+.cron-new-dot{width:7px;height:7px;border-radius:50%;background:var(--success,#22c55e);flex-shrink:0;animation:cron-dot-pulse 2s ease-in-out infinite;}
+.cron-agent-badge{flex-shrink:0;font-size:12px;line-height:1;}
+.cron-script-badge{flex-shrink:0;font-size:12px;line-height:1;opacity:.92;}
+.cron-script-job-banner{margin-bottom:12px;}
+.cron-script-job-banner .detail-alert-title{font-weight:600;color:rgba(245,158,11,.98);}
+.detail-script{background:var(--sidebar);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;white-space:pre-wrap;line-height:1.55;color:var(--text);font-family:'SF Mono',ui-monospace,monospace;word-break:break-word;}
+.detail-hint{font-size:11px;color:var(--muted);line-height:1.5;}
+.cron-script-card .detail-hint,.cron-script-card-hint{margin-top:8px;}
+.detail-badge.cron-mode-badge.script{background:rgba(148,163,184,.14);color:var(--text-secondary);}
+.detail-badge.cron-mode-badge.agent{background:rgba(99,179,237,.14);color:#90cdf4;}
+@keyframes cron-dot-pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.has-new-run{border-color:var(--success,#22c55e)!important;box-shadow:0 0 0 1px var(--success,#22c55e);}
+
+/* ── Background error banner ── */
+/* ── Archived sessions ── */
+.session-item.archived{opacity:.5;}
+.session-item.archived .session-title{font-style:italic;}
+
+/* ── Subagent session tree (#494) ── */
+.session-lineage-count{display:inline-flex;align-items:center;justify-content:center;height:16px;font-size:10px;font-weight:600;padding:0 6px;border-radius:999px;background:rgba(148,163,184,.14);color:var(--muted);margin-left:6px;flex-shrink:0;user-select:none;cursor:default;}
+.session-lineage-count.expandable{cursor:pointer;}
+.session-lineage-count.expandable:hover{background:rgba(148,163,184,.24);color:var(--text);}
+.session-item.active .session-lineage-count{color:var(--accent-text);background:rgba(255,255,255,.14);}
+.session-lineage-segments{display:flex;flex-direction:column;gap:3px;margin-top:6px;margin-left:12px;padding-left:8px;border-left:1px dashed rgba(148,163,184,.22);}
+.session-lineage-segment{appearance:none;border:0;background:transparent;color:var(--muted);font:inherit;font-size:11px;text-align:left;padding:3px 4px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.session-lineage-segment:hover,.session-lineage-segment.active{background:rgba(148,163,184,.12);color:var(--text);}
+.session-child-count{display:inline-flex;align-items:center;justify-content:center;height:16px;font-size:10px;font-weight:600;padding:0 6px;border-radius:999px;background:rgba(99,179,237,.16);color:#63b3ed;margin-left:6px;flex-shrink:0;user-select:none;cursor:pointer;}
+.session-child-count:hover{background:rgba(99,179,237,.26);color:#90cdf4;}
+.session-child-sessions{display:flex;flex-direction:column;gap:3px;margin-top:6px;margin-left:12px;padding-left:8px;border-left:1px solid var(--border,rgba(255,255,255,.1));}
+.session-child-session{appearance:none;border:0;background:transparent;color:var(--muted);font:inherit;font-size:11px;text-align:left;padding:3px 4px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.session-child-session:hover,.session-child-session.active{background:rgba(255,255,255,.06);color:var(--text);}
+.session-child-session-fork{position:relative;display:flex;align-items:center;gap:4px;padding:2px 4px 2px 0;overflow:visible;white-space:normal;touch-action:pan-y;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transform:translate3d(var(--session-swipe-offset,0),0,0);transition:background .15s,color .15s,transform .5s cubic-bezier(.22,.61,.36,1),box-shadow .15s ease;}
+.session-child-session-fork .session-child-session-main{appearance:none;border:0;background:transparent;color:inherit;font:inherit;font-size:11px;text-align:left;padding:3px 4px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0;}
+.session-child-session-fork:hover .session-child-session-main,.session-child-session-fork.active .session-child-session-main,.session-child-session-fork .session-child-session-main.active{background:rgba(255,255,255,.06);color:var(--text);}
+.session-child-session-fork.streaming .session-child-session-main{color:var(--accent);}
+.session-child-session-fork .session-actions{position:static;transform:none;opacity:1;pointer-events:auto;flex:0 0 auto;}
+.session-child-session-fork .session-child-session-state{position:static;transform:none;flex:0 0 auto;width:14px;height:14px;margin-right:2px;color:var(--accent);}
+.session-child-session-fork .session-actions-trigger{width:22px;height:22px;}
+.session-child-session-fork .session-swipe-affordance{top:1px;bottom:1px;}
+.session-child-session-fork .session-child-session-main,.session-child-session-fork .session-actions{z-index:1;}
+.session-child-session-fork.swiping-right{background:color-mix(in srgb,var(--warning) 16%,var(--surface));box-shadow:0 0 0 1px color-mix(in srgb,var(--warning) 48%,transparent);}
+.session-child-session-fork.swiping-left{background:color-mix(in srgb,var(--error) 14%,var(--surface));box-shadow:0 0 0 1px color-mix(in srgb,var(--error) 48%,transparent);}
+.session-child-session-fork.swiping-right .session-swipe-affordance-right,.session-child-session-fork.swiping-left .session-swipe-affordance-left{opacity:var(--session-swipe-progress,0);}
+.session-child-session-fork.dragging{transition:background .15s,color .15s,box-shadow .15s ease;will-change:transform;}
+.session-child-session-fork.swipe-committed,.session-child-session-fork.swipe-removing{transition:background .15s,color .15s,transform .5s cubic-bezier(.22,.61,.36,1),box-shadow .15s ease;will-change:transform;}
+.session-child-session-fork.swipe-removing{overflow:hidden;}
+.session-child-session-fork.swipe-committed .session-swipe-affordance{transition:opacity .18s ease,transform .18s ease;}
+.session-tree-children{margin-left:16px;border-left:1px solid var(--border,rgba(255,255,255,.1));padding-left:4px;}
+.session-tree-child.session-item{font-size:12px;opacity:.85;border-radius:6px;padding:6px 8px;}
+.session-tree-child.session-item:hover{opacity:1;}
+.session-tree-child.session-item.active{opacity:1;}
+.session-tree-child.session-item .session-meta{font-size:10px;}
+.session-tree-caret{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;font-size:10px;cursor:pointer;color:var(--muted);flex-shrink:0;transition:transform .15s;user-select:none;border-radius:3px;margin-right:2px;}
+.session-tree-caret:hover{color:var(--text);background:rgba(255,255,255,.06);}
+.session-tree-caret.collapsed{transform:none;}
+.session-tree-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;font-size:9px;font-weight:700;padding:0 4px;border-radius:8px;background:rgba(99,179,237,.2);color:#63b3ed;margin-left:auto;flex-shrink:0;user-select:none;}
+
+/* ── Session tags ── */
+.session-tag{display:inline-block;font-size:9px;font-weight:600;padding:1px 5px;margin-left:4px;border-radius:3px;background:rgba(99,179,237,.2);color:#63b3ed;cursor:pointer;vertical-align:middle;}
+.session-tag:hover{background:rgba(99,179,237,.35);}
+
+/* ── File rename input ── */
+.file-rename-input{background:rgba(255,255,255,.08);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:12px;padding:1px 4px;width:100%;outline:none;min-width:0;}
+
+/* ── Message timestamps ── */
+.msg-time{font-size:10px;color:var(--muted);opacity:.6;margin-left:6px;}
+.msg-role:hover .msg-time{opacity:1;}
+
+/* ── Mermaid diagrams ── */
+.mermaid-block{background:var(--code-bg);border-radius:8px;padding:16px;margin:8px 0;overflow-x:auto;}
+.mermaid-rendered{background:transparent;padding:8px 0;}
+.mermaid-rendered svg{max-width:100%;height:auto;cursor:default;}
+
+/* ── Session projects ── */
+.session-source-tabs{display:flex;gap:4px;padding:4px 10px 8px;flex-shrink:0;}
+.session-source-tab{flex:1;min-width:0;border:1px solid var(--border2);border-radius:10px;background:var(--input-bg);color:var(--muted);font-size:10px;font-weight:700;line-height:1.2;padding:5px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .15s,color .15s,border-color .15s;}
+.session-source-tab:hover{background:rgba(255,255,255,.08);color:var(--text);}
+.session-source-tab.active{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent-bg);}
+.session-empty-note{padding:20px 14px;color:var(--muted);font-size:12px;text-align:center;opacity:.7;}
+.session-list-error{margin:4px 10px 8px;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text);display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;opacity:1;}
+.session-list-error>div:first-child{font-size:12px;font-weight:600;line-height:1.35;word-break:break-word;}
+.session-list-error-detail{font-size:11px;line-height:1.35;color:var(--muted);word-break:break-word;}
+.session-list-error-retry{margin-top:4px;align-self:flex-start;display:inline-flex;align-items:center;justify-content:center;min-width:0;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:11px;font-weight:600;line-height:1.2;cursor:pointer;transition:background .15s,border-color .15s,color .15s,opacity .15s;}
+.session-list-error-retry:hover:not(:disabled):not([aria-busy="true"]):not([aria-disabled="true"]){background:var(--hover-bg);border-color:var(--accent-bg-strong);color:var(--text);}
+.session-list-error-retry:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;}
+.session-list-error-retry:disabled,.session-list-error-retry[aria-busy="true"],.session-list-error-retry[aria-disabled="true"]{background:var(--surface);border-color:var(--border2);color:var(--muted);cursor:wait;opacity:1;}
+.project-bar{display:flex;gap:4px;padding:4px 10px 8px;flex-wrap:wrap;align-items:center;flex-shrink:0;}
+.project-chip{font-size:10px;font-weight:600;padding:3px 8px;border-radius:12px;cursor:pointer;border:1px solid var(--border2);background:var(--input-bg);color:var(--muted);transition:all .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;}
+.project-chip:hover{background:rgba(255,255,255,.08);color:var(--text);}
+.project-chip.active{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent-bg);}
+.project-chip.long-pressing{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent-bg-strong);transform:scale(1.05);}
+.project-chip-quick-create{
+  border:1px solid transparent;
+  border-radius:999px;
+  min-width:16px;
+  min-height:16px;
+  padding:0 4px;
+  font-size:11px;
+  line-height:1;
+  font-weight:700;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--muted);
+  background:transparent;
+  opacity:0;
+  transition:opacity .15s,color .15s,background .15s,border-color .15s,transform .12s;
+}
+.project-chip:hover .project-chip-quick-create,
+.project-chip:focus-within .project-chip-quick-create{
+  opacity:1;
+  color:var(--text);
+  border-color:var(--border2);
+}
+.project-chip-quick-create:hover{
+  opacity:1;
+  color:var(--blue);
+  border-color:var(--blue);
+  background:rgba(255,255,255,.08);
+}
+@media (hover:none) and (pointer:coarse){
+  .project-chip-quick-create{
+    opacity:.72;
+    min-width:18px;
+    min-height:18px;
+    padding:0 6px;
+  }
+  .project-chip:hover .project-chip-quick-create,
+  .project-chip:focus-within .project-chip-quick-create{
+    opacity:1;
+  }
+}
+/* "Unassigned" filter chip — dashed border distinguishes it from real
+   project chips so it reads as a meta-filter ("things without a project")
+   rather than another project. Keeps full color treatment in the active
+   state so it's still obviously selected. */
+.project-chip.no-project{border-style:dashed;}
+.project-chip .color-dot{width:6px;height:6px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.project-create-btn{font-size:10px;padding:3px 6px;border-radius:12px;cursor:pointer;border:1px dashed var(--border2);background:none;color:var(--muted);opacity:.6;transition:all .15s;}
+.project-create-btn:hover{opacity:1;border-color:var(--blue);color:var(--blue);}
+.project-create-input{font-size:10px;padding:3px 8px;border-radius:12px;border:1px solid var(--accent-bg);background:var(--surface);color:var(--text);outline:none;min-width:40px;max-width:180px;width:auto;font-family:inherit;box-shadow:0 0 0 2px var(--accent-bg);}
+.project-picker{position:absolute;right:0;top:100%;background:var(--sidebar);border:1px solid var(--border2);border-radius:8px;padding:4px;z-index:30;min-width:160px;max-width:220px;width:max-content;box-shadow:0 4px 16px rgba(0,0,0,.3);}
+.batch-action-bar .batch-project-picker{position:static;right:auto;top:auto;min-width:100%;max-width:none;width:100%;box-shadow:none;margin-top:2px;background:var(--input-bg);}
+.project-picker-item{padding:5px 10px;font-size:11px;border-radius:6px;cursor:pointer;color:var(--muted);transition:all .1s;display:flex;align-items:center;gap:6px;}
+.project-picker-item:hover{background:rgba(255,255,255,.08);color:var(--text);}
+.project-picker-item.active{color:var(--blue);}
+.project-picker-create{color:var(--blue);opacity:.7;border-top:1px solid var(--border2);margin-top:2px;padding-top:6px;}
+.project-picker-create:hover{opacity:1;background:var(--accent-bg);}
+/* Lives as a flex sibling in .session-title-row (between title and time);
+   the row's gap:6px handles spacing, no margin/vertical-align needed. */
+.session-project-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;}
+
+/* ── Saved prompts popup ── */
+.saved-prompts-popup{position:absolute;bottom:calc(100% + 8px);left:0;min-width:280px;max-width:380px;max-height:320px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:200;flex-direction:column;gap:2px;padding:6px;}
+.saved-prompt-row{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;}
+.saved-prompt-row:hover{background:var(--hover-bg);}
+.saved-prompt-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.saved-prompt-delete{flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px;border-radius:4px;display:flex;align-items:center;justify-content:center;}
+.saved-prompt-delete:hover{color:var(--danger,#f56565);background:rgba(245,101,101,.12);}
+.saved-prompt-add-row{padding:6px 4px 2px;border-top:1px solid var(--border);margin-top:4px;}
+.saved-prompt-save-btn{width:100%;padding:6px 10px;border-radius:6px;background:var(--accent-bg);border:1px solid var(--accent-bg-strong);color:var(--accent-text);font-size:12px;font-weight:600;cursor:pointer;text-align:center;}
+.saved-prompt-save-btn:hover{background:var(--accent-bg-strong);}
+.saved-prompts-empty,.saved-prompts-loading{padding:12px 10px;font-size:12px;color:var(--muted);text-align:center;}
+
+/* ── Code copy button ── */
+.code-copy-btn{background:var(--hover-bg);border:1px solid var(--border2);border-radius:4px;color:var(--muted);font-size:11px;cursor:pointer;padding:2px 6px;transition:all .15s;line-height:1.3;}
+.code-copy-btn:hover{background:rgba(255,255,255,.12);color:var(--text);}
+
+/* ── Tool card expand/collapse toggle ── */
+.tool-cards-toggle{margin:4px 0 2px 40px;display:flex;gap:8px;}
+.tool-cards-toggle button{background:none;border:none;color:var(--blue);font-size:10px;cursor:pointer;opacity:.6;padding:0;}
+.tool-cards-toggle button:hover{opacity:1;text-decoration:underline;}
+
+/* ── Thinking/reasoning card: structural sub-selectors. ──
+   The canonical visual rules (background, border, padding, max-height,
+   etc.) live in the consolidated block further down (around line 1320).
+   Only sub-element selectors that the consolidated block doesn't cover
+   (label, toggle, rotate animation) are kept here. ── */
+.thinking-card-label{font-weight:600;letter-spacing:.02em;}
+.thinking-card-btn-row{margin-left:auto;display:inline-flex;align-items:center;gap:6px;}
+.thinking-copy-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--accent-text);opacity:.72;cursor:pointer;transition:background .15s,color .15s,opacity .15s;}
+.thinking-copy-btn:hover,.thinking-copy-btn:focus-visible{background:var(--accent-bg-strong);opacity:1;outline:none;}
+.thinking-card-toggle{font-size:10px;display:inline-flex;align-items:center;justify-content:center;transform-origin:center;transition:transform .18s ease;will-change:transform;}
+.thinking-card.open .thinking-card-toggle{transform:rotate(90deg);}
+
+.bg-error-banner{background:rgba(229,62,62,.15);border:1px solid rgba(229,62,62,.3);color:#fca5a5;padding:8px 16px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:0;}
+
+/* ── CLI / Agent session items in sidebar ── */
+.session-item.cli-session {
+  padding-right: 6px;
+}
+/* Source chip (pill) in the sidebar title row */
+.session-source-chip {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--accent-text);
+  opacity: .65;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.12);
+  background: color-mix(in srgb, var(--accent-text) 12%, transparent);
+  flex-shrink: 0;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.session-item:not(.read-only-session):hover .session-source-chip {
+  display: none;
+}
+.session-item.read-only-session:hover .session-source-chip {
+  opacity: .85;
+}
+.session-item.menu-open .session-source-chip {
+  display: none;
+}
+/* Source-specific colors for gateway sessions */
+.session-item.cli-session[data-source-key="telegram"] { border-left-color: rgba(0, 136, 204, 0.55); }
+.session-source-chip[data-source-key="telegram"] { color: rgba(0, 136, 204, 0.85); background: rgba(0, 136, 204, 0.12); }
+.session-item.cli-session[data-source-key="discord"] { border-left-color: #5865F2; }
+.session-source-chip[data-source-key="discord"] { color: #5865F2; background: rgba(88, 101, 242, 0.12); }
+.session-item.cli-session[data-source-key="slack"] { border-left-color: #4A154B; }
+.session-source-chip[data-source-key="slack"] { color: #4A154B; background: rgba(74, 21, 75, 0.12); }
+.session-item.cli-session[data-source-key="claude_code"] { border-left-color: rgba(217, 119, 6, 0.65); }
+.session-source-chip[data-source-key="claude_code"] { color: rgba(217, 119, 6, 0.85); background: rgba(217, 119, 6, 0.12); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Messages redesign — additive overrides for the transcript area.
+   Fixes the issues catalogued in docs/ui-ux/index.html:
+     • single indent rail (one var, one column)
+     • quieter thinking card (was louder than the answer)
+     • user-message bubble so user vs. assistant reads at a glance
+     • persistent affordances (timestamps, actions, usage always visible)
+     • unified widths (body + tool cards share one max)
+     • tamed inline-code colour (no longer outshouts links)
+     • streaming cursor at end of live assistant body
+     • [data-error="1"] marker for error bubbles
+     • .msg-date-sep for day-change separators
+     • tighter type scale (11/12/13/14/16 — no more 10/10.5/12.5)
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  --msg-rail: 0;
+  --msg-max: 780px;
+  --user-bubble-bg: var(--accent);
+  --user-bubble-border: var(--accent-hover);
+  --user-bubble-text: #fff;
+  --user-bubble-placeholder: rgba(255,255,255,.7);
+  --user-selection-bg: rgba(0,0,0,.22);
+  --user-selection-text: #fff;
+}
+/* Dark mode: keep user bubbles dark; skin remains a tint via border/fill. */
+:root.dark {
+  --user-bubble-bg: var(--accent-bg-strong);
+  --user-bubble-border: var(--accent-bg-strong);
+  --user-bubble-text: var(--text);
+  --user-bubble-placeholder: var(--muted);
+  --user-selection-bg: rgba(255,255,255,.18);
+  --user-selection-text: var(--text);
+}
+
+/* Inline code: stop shouting orange; inherit strong text colour instead */
+.msg-body code { color: var(--strong); background: var(--code-inline-bg); font-size: var(--message-code-font-size); }
+
+/* ── Unified indent rail — every child of a turn lines up on --msg-rail ── */
+.msg-row { padding: 12px 0; }
+
+/* On touch devices (iOS/Android PWA), skip layout/paint for off-screen rows
+   so streaming performance doesn't degrade as the chat grows. WKWebView is
+   especially sensitive: every scrollHeight read forces a full-document re-layout.
+   Scoped to pointer:coarse to preserve find-in-page on desktop.
+
+   contain-intrinsic-size: auto 1px keeps off-screen rows in the accessibility
+   tree (VoiceOver) via content-visibility:auto, while the 1px estimate is small
+   enough to avoid scrollHeight recalculation jumps that kill flick-scroll
+   momentum on iOS. */
+@media (pointer: coarse) {
+  /* #5637: content-visibility:auto is kept ONLY for user rows. Assistant rows can
+     contain very tall content (multi-thousand-px tool-result / long-answer rows),
+     and a flat `contain-intrinsic-size` cannot reserve their real off-screen
+     height: `1px` (or any single small value) collapses the reserved height of
+     every off-screen assistant row, so scrollHeight lurches down by tens of
+     thousands of px on a long transcript, the browser force-clamps scrollTop, and
+     the viewport jumps to the top (the mobile scroll jump-back). A value large
+     enough to reserve tall rows would reintroduce the scrollHeight churn the 1px
+     was chosen to avoid — so instead we gate content-visibility off for the tall
+     row class (assistant) and keep it for the short, size-predictable user rows,
+     which is where most of the off-screen-skip win comes from anyway. This mirrors
+     the existing "some rows must stay fully rendered" opt-out pattern for
+     #liveAssistantTurn below. */
+  .msg-row[data-role="user"] { content-visibility: auto; contain-intrinsic-size: auto 96px; contain: layout style; }
+  .msg-row { contain: layout style; }
+  /* Keep the LIVE streaming turn fully rendered while a response streams. The
+     live turn is always id="liveAssistantTurn" (assigned on every render path:
+     Compact Worklog, Transparent Stream, restored-live, etc.), but ONLY the
+     Transparent Stream path also stamps data-live-assistant-turn="1" — so we
+     target the STABLE #liveAssistantTurn id to cover EVERY mode, plus the
+     data-* attribute/segment forms as belt-and-suspenders. Without the id
+     selector, a normal (non-Transparent-Stream) live turn on touch could be
+     content-visibility:auto-skipped and blank out mid-stream. Keeping it visible
+     also keeps its measured height growing so the new-message scroll cue still
+     appears while a reader is scrolled up during streaming.
+     (A child .assistant-segment carrying the un-suffixed data-live-assistant
+     cannot opt a skipped ancestor subtree back in, so we target the turn row.) */
+  #liveAssistantTurn,
+  .msg-row[data-live-assistant-turn],
+  .msg-row[data-live-assistant],
+  .assistant-segment[data-live-assistant] { content-visibility: visible; }
+  /* NOTE: deliberately NOT setting overflow-anchor:none here — it is inert on iOS
+     WebKit and on Android it re-opens the #4856 / #5338 mobile jump-to-top
+     regression the scroll-anchor work fought hard to close. */
+}
+.msg-body { padding-left: var(--msg-rail); padding-top: 8px; max-width: var(--msg-max); }
+.msg-body code,
+.msg-body pre,
+.msg-body table { font-family: 'SF Mono', ui-monospace, monospace; }
+.msg-body:empty { display: none; }
+.assistant-turn { width: 100%; }
+.assistant-turn-blocks { display: flex; flex-direction: column; }
+.status-card{margin:8px 0 8px var(--msg-rail);max-width:min(var(--msg-max),760px);border:1px solid var(--border-subtle);background:var(--surface-subtle);border-radius:var(--radius-card);box-shadow:0 10px 24px rgba(0,0,0,.05);overflow:hidden;}
+.status-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border-subtle);background:linear-gradient(180deg,var(--surface-subtle-hover),var(--surface-subtle));}
+.status-card-title-wrap{min-width:0;}
+.status-card-title{font-weight:650;color:var(--text);font-size:14px;letter-spacing:.01em;}
+.status-card-subtitle{font-size:12px;color:var(--muted);margin-top:3px;}
+.status-card-session-copy{display:inline-flex;align-items:center;gap:7px;min-height:28px;padding:5px 9px;border:1px solid var(--border-subtle);border-radius:999px;background:var(--surface);color:var(--muted);font-size:12px;font-family:var(--font-mono);cursor:pointer;max-width:230px;}
+.status-card-session-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.status-card-session-copy:hover,.status-card-session-copy.copied{color:var(--accent-text);border-color:var(--accent-bg-strong);background:var(--accent-bg);}
+.status-card-grid{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:0;border-top:0;}
+.status-card-row{display:contents;}
+.status-card-label,.status-card-value{padding:9px 16px;border-top:1px solid var(--border-subtle);font-size:13px;line-height:1.4;}
+.status-card-row:first-child .status-card-label,.status-card-row:first-child .status-card-value{border-top:0;}
+.status-card-label{color:var(--muted);font-weight:550;background:rgba(0,0,0,.015);}
+.status-card-value{color:var(--text);word-break:break-word;font-family:var(--font-mono);}
+@media (max-width:700px){.status-card{margin-left:0;}.status-card-head{flex-direction:column;}.status-card-session-copy{max-width:100%;}.status-card-grid{grid-template-columns:1fr;}.status-card-label{padding-bottom:2px;border-top:1px solid var(--border-subtle);}.status-card-value{padding-top:2px;border-top:0;}}
+.compression-recovery-card{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 4px;padding:14px 16px;border:1px solid var(--border-subtle);border-radius:var(--radius-card);background:var(--surface-subtle);box-shadow:0 8px 20px rgba(0,0,0,.04);}
+.compression-recovery-copy{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.compression-recovery-title{color:var(--text);font-size:14px;font-weight:650;line-height:1.35;}
+.compression-recovery-summary{color:var(--muted);font-size:12px;line-height:1.45;}
+.compression-recovery-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:32px;padding:6px 11px;border:1px solid var(--accent-bg-strong);border-radius:7px;background:var(--accent-bg);color:var(--accent-text);font:inherit;font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer;}
+.compression-recovery-action:hover{background:var(--accent-bg-strong);color:var(--accent-text);}
+.compression-recovery-action:disabled{opacity:.65;cursor:progress;}
+.compression-recovery-card[data-compression-recovery-consumed="1"]{opacity:.6;}
+.compression-recovery-card[data-compression-recovery-consumed="1"] .compression-recovery-action{opacity:.55;cursor:default;pointer-events:none;}
+@media (max-width:700px){.compression-recovery-card{flex-direction:column;align-items:stretch;margin-left:0;}.compression-recovery-action{width:100%;}}
+.assistant-segment-anchor { display: none; }
+
+/* ── Classic conversation layout: user right, half-width; assistant left ── */
+.msg-row[data-role="user"] { align-self: flex-end; max-width: 60%; }
+@media (max-width: 900px) { .msg-row[data-role="user"] { max-width: 78%; } }
+@media (max-width: 600px) { .msg-row[data-role="user"] { max-width: 90%; } }
+/* Hide the entire "empty tool-anchor" assistant row (content='' with
+   tool_calls). renderMessages keeps it in the DOM so tool cards can anchor
+   to it, but visually it adds a ghost "Hermes" header above the tool cards.
+   With the row hidden the transition from live → settled on 'done' is
+   seamless. */
+.msg-row[data-role="assistant"]:has(> .msg-body:empty) { padding: 0; margin: 0; }
+.msg-row[data-role="assistant"]:has(> .msg-body:empty) .msg-role,
+.msg-row[data-role="assistant"]:has(> .msg-body:empty) .msg-files { display: none; }
+.msg-files { padding-left: var(--msg-rail); }
+.msg-usage { padding-left: var(--msg-rail); opacity: 1; margin-top: 6px; font-size: 11px; }
+.tool-card { margin-left: var(--msg-rail); max-width: var(--msg-max); }
+.thinking-card { margin-left: var(--msg-rail); max-width: var(--msg-max); }
+.agent-activity-group .tool-card,
+.agent-activity-group .thinking-card { margin-left: 0; max-width: none; }
+.agent-activity-thinking { margin: 2px 0; }
+.tool-cards-toggle { margin-left: var(--msg-rail); }
+.msg-row[data-editing="1"] { width: 100%; }
+.msg-row[data-editing="1"] .msg-edit-area,
+.msg-row[data-editing="1"] .msg-edit-bar { margin-left: var(--msg-rail); }
+
+/* Quieter, always-visible role header (smaller avatar, always-visible timestamp) */
+.msg-role { font-size: 11px; font-weight: 500; margin-bottom: 6px; opacity: .8; letter-spacing: 0; }
+.msg-role:hover { opacity: 1; }
+.msg-role-name { font-size: 12px; }
+.role-icon { width: 20px; height: 20px; font-size: 9px; }
+.msg-tps-inline {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+.msg-time { opacity: .65; font-size: 10px; }
+.msg-role:hover .msg-time { opacity: 1; }
+
+/* Persistent action toolbar: subtle at rest, full on hover */
+.msg-actions { opacity: .25; }
+.msg-row:hover .msg-actions { opacity: 1; }
+.assistant-turn:hover .msg-actions { opacity: 1; }
+
+/* ── User message: right-aligned bubble; no avatar/label — position identifies sender ── */
+.msg-row[data-role="user"] .msg-body {
+  background: var(--user-bubble-bg);
+  border: 1px solid var(--user-bubble-border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin-left: 0;
+  padding-left: 14px;
+  max-width: none;
+  color: var(--user-bubble-text);
+  overflow-wrap: anywhere;
+}
+.msg-row[data-role="user"] .msg-body::selection,
+.msg-row[data-role="user"] .msg-body *::selection {
+  background: var(--user-selection-bg);
+  color: var(--user-selection-text);
+}
+.msg-row[data-role="user"] .msg-body::-moz-selection,
+.msg-row[data-role="user"] .msg-body *::-moz-selection {
+  background: var(--user-selection-bg);
+  color: var(--user-selection-text);
+}
+.msg-row[data-role="user"] .msg-body code { color: var(--user-bubble-text); background: rgba(0,0,0,.1); }
+.msg-row[data-role="user"] .msg-body a { color: var(--user-bubble-text); text-decoration: underline; }
+.msg-row[data-role="user"] .msg-files { padding-left: 0; margin-left: 0; justify-content: flex-end; }
+.msg-row[data-role="user"][data-editing="1"] .msg-edit-area { background: var(--user-bubble-bg); border-color: var(--user-bubble-border); color: var(--user-bubble-text); box-shadow: 0 0 0 3px var(--focus-ring); }
+.msg-row[data-role="user"][data-editing="1"] .msg-edit-area::placeholder { color: var(--user-bubble-placeholder); }
+
+/* Turn boundary: right alignment already separates user turns — keep only vertical spacing */
+.msg-row + .msg-row[data-role="user"] {
+  border-top: none;
+  margin-top: 10px;
+  padding-top: 12px;
+}
+
+/* ── Message footer: actions (and user timestamp) sit below the bubble ── */
+.msg-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* #4724-followup: wrap to a second line on narrow screens (mobile / split panes)
+     instead of overflowing the row. A long model name + duration + token/cost stats
+     can exceed the width; without wrap the per-message action buttons get pushed off
+     the right edge and become unreachable on mobile. Wrapping keeps every stat fully
+     readable (no ellipsis) and the buttons on-screen; on desktop where it already fits,
+     wrap never triggers so nothing changes. */
+  flex-wrap: wrap;
+  row-gap: 2px;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.msg-foot .msg-actions { opacity: 1; margin-left: 0; flex: 0 0 auto; }
+.msg-foot .msg-time { font-size: 10.5px; opacity: .75; flex: 0 0 auto; }
+.session-jump-btn--inline {
+  position: static;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  z-index: auto;
+  min-width: 32px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.msg-question-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  min-width: 32px;
+  margin-left: auto;
+  padding: 0 11px;
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  transition: color .12s, border-color .12s, background .12s, transform .12s;
+}
+.msg-question-jump-btn:hover,
+.msg-question-jump-btn:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--hover-bg);
+  transform: translateY(-1px);
+  outline: none;
+}
+.msg-question-highlight .msg-body {
+  animation: question-highlight-pulse 1.6s ease-out;
+}
+@keyframes question-highlight-pulse {
+  0% { box-shadow: 0 0 0 0 var(--focus-ring); }
+  35% { box-shadow: 0 0 0 5px var(--focus-ring); }
+  100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+}
+@media (max-width: 600px) {
+  .msg-question-jump-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0;
+    border-radius: 50%;
+    gap: 0;
+  }
+  .msg-question-jump-btn span:last-child { display: none; }
+}
+.msg-foot-with-usage {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.msg-usage-inline,
+.msg-duration-inline,
+.msg-gateway-inline,
+.gateway-failover-inline,
+.msg-model-warning-inline {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: .7;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.gateway-failover-inline {
+  color: var(--accent);
+  opacity: .9;
+}
+.msg-model-warning-inline {
+  color: var(--error);
+  opacity: .95;
+  font-weight: 600;
+}
+.msg-foot-with-usage .msg-time,
+.msg-foot-with-usage .msg-actions {
+  opacity: 0;
+  transition: opacity .15s;
+}
+.msg-foot-with-usage .msg-time {
+  margin-left: 4px;
+}
+.msg-foot-with-usage .msg-actions {
+  margin-left: 2px;
+}
+
+/* User footer: visible only on row hover (bubble identifies sender without needing persistent chrome) */
+.msg-row[data-role="user"] .msg-foot {
+  opacity: 0;
+  transition: opacity .15s;
+  padding-right: 2px;
+}
+.msg-row[data-role="user"]:hover .msg-foot,
+.msg-row[data-role="user"]:focus-within .msg-foot { opacity: 1; }
+
+/* Assistant footer: left-aligned under the body rail, subtle at rest */
+.msg-row[data-role="assistant"] .msg-foot,
+.assistant-turn .msg-foot {
+  justify-content: flex-start;
+  padding-left: var(--msg-rail);
+  max-width: var(--msg-max);
+  opacity: 0;
+  transition: opacity .15s;
+}
+.msg-row[data-role="assistant"]:hover .msg-foot,
+.assistant-turn:hover .msg-foot,
+.assistant-turn:focus-within .msg-foot { opacity: 1; }
+/* Desktop/tablet keeps the per-turn jump affordance discoverable without
+   exposing the quieter timestamp/action chrome until hover or keyboard focus. */
+@media (min-width: 641px) {
+  .msg-row[data-role="assistant"] .msg-foot:has(.msg-question-jump-btn),
+  .assistant-turn .msg-foot:has(.msg-question-jump-btn) {
+    opacity: 1;
+  }
+  .msg-row[data-role="assistant"] .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .msg-row[data-role="assistant"] .msg-foot:has(.msg-question-jump-btn) .msg-actions,
+  .assistant-turn .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .assistant-turn .msg-foot:has(.msg-question-jump-btn) .msg-actions {
+    opacity: 0;
+    transition: opacity .15s;
+  }
+  .msg-row[data-role="assistant"] .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .msg-row[data-role="assistant"] .msg-foot:has(.msg-question-jump-btn) .msg-actions,
+  .assistant-turn .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .assistant-turn .msg-foot:has(.msg-question-jump-btn) .msg-actions {
+    pointer-events: none;
+  }
+  .msg-row[data-role="assistant"]:hover .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .msg-row[data-role="assistant"]:hover .msg-foot:has(.msg-question-jump-btn) .msg-actions,
+  .msg-row[data-role="assistant"]:focus-within .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .msg-row[data-role="assistant"]:focus-within .msg-foot:has(.msg-question-jump-btn) .msg-actions,
+  .assistant-turn:hover .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .assistant-turn:hover .msg-foot:has(.msg-question-jump-btn) .msg-actions,
+  .assistant-turn:focus-within .msg-foot:has(.msg-question-jump-btn) .msg-time,
+  .assistant-turn:focus-within .msg-foot:has(.msg-question-jump-btn) .msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.assistant-turn .msg-foot-with-usage,
+.msg-row[data-role="assistant"] .msg-foot-with-usage {
+  opacity: 1;
+}
+.assistant-turn:hover .msg-foot-with-usage .msg-time,
+.assistant-turn:hover .msg-foot-with-usage .msg-actions,
+.assistant-turn:focus-within .msg-foot-with-usage .msg-time,
+.assistant-turn:focus-within .msg-foot-with-usage .msg-actions,
+.msg-row[data-role="assistant"]:hover .msg-foot-with-usage .msg-time,
+.msg-row[data-role="assistant"]:hover .msg-foot-with-usage .msg-actions {
+  opacity: 1;
+}
+
+/* Hide footer while editing to keep the edit bar the only footer-level affordance */
+.msg-row[data-editing="1"] .msg-foot { display: none; }
+
+/* Empty tool-anchor rows: hide footer alongside role/files so the row stays invisible */
+.msg-row[data-role="assistant"]:has(.msg-body:empty) .msg-foot { display: none; }

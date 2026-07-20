@@ -9,9 +9,10 @@ instead of rebuilding thinking/worklog chrome from scratch.
 """
 
 from pathlib import Path
+from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_SRC = SESSIONS_SOURCE
 UI_SRC = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
 
 
@@ -32,8 +33,17 @@ def _function_body(src: str, signature: str) -> str:
     raise AssertionError(f"could not extract function body for {signature}")
 
 
+def _load_session_flow_body() -> str:
+    return "\n".join(
+        (
+            _function_body(SESSIONS_SRC, "async function loadSession("),
+            _function_body(SESSIONS_SRC, "async function _restoreLoadedSession("),
+        )
+    )
+
+
 def test_loadSession_clears_busy_before_async_message_load_when_server_idle():
-    body = _function_body(SESSIONS_SRC, "async function loadSession(")
+    body = _load_session_flow_body()
 
     idle_reset = body.find("if(!activeStreamId){")
     assert idle_reset != -1, "loadSession must gate idle cleanup on missing active_stream_id"
@@ -50,7 +60,7 @@ def test_loadSession_clears_busy_before_async_message_load_when_server_idle():
 
 
 def test_loadSession_snapshots_live_turn_before_wiping_message_pane():
-    body = _function_body(SESSIONS_SRC, "async function loadSession(")
+    body = _load_session_flow_body()
 
     snap_pos = body.find("snapshotLiveTurnHtmlForSession(currentSid)")
     # Anchor on the actual loading-placeholder marker (unique), not the
@@ -63,7 +73,7 @@ def test_loadSession_snapshots_live_turn_before_wiping_message_pane():
 
 
 def test_loadSession_restores_live_turn_on_active_stream_return_path():
-    body = _function_body(SESSIONS_SRC, "async function loadSession(")
+    body = _load_session_flow_body()
 
     # The restore that actually fires on switch-back is the Phase 2a path: after
     # loadInflightState() rehydrates INFLIGHT for an active stream, the streaming

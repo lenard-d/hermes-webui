@@ -1,0 +1,836 @@
+
+/* ── Transparent Stream event rows ── */
+/* Inline rhythm: transparent stream events are transcript metadata inside an
+   assistant turn, not first-class cards. Keep them inspectable but visually
+   below assistant prose unless hovered, focused, or expanded. */
+.transparent-event-controls{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin:0 0 2px var(--msg-rail);
+  max-width:var(--msg-max);
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.3;
+}
+.transparent-event-controls-label{font-weight:600;color:var(--muted);}
+.transparent-event-action,
+.transparent-event-control{
+  cursor:pointer;
+  color:var(--muted);
+  opacity:.78;
+  text-decoration:underline;
+  text-decoration-color:transparent;
+  text-underline-offset:3px;
+}
+.transparent-event-action:hover,
+.transparent-event-control:hover{color:var(--text);opacity:1;text-decoration-color:currentColor;}
+.transparent-event-row{
+  margin:0 0 1px var(--msg-rail);
+  max-width:var(--msg-max);
+  width:calc(100% - var(--msg-rail));
+  border:1px solid transparent;
+  border-left:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  overflow:hidden;
+  box-shadow:none;
+  transition:background .18s ease,border-color .18s ease,opacity .22s ease;
+}
+.transparent-event-row[data-event-type="thinking"]{
+  background:transparent;
+  border-color:transparent;
+  border-left-color:transparent;
+}
+.transparent-event-row[data-expanded="1"]{
+  border-color:var(--border-subtle);
+  background:color-mix(in srgb,var(--surface-subtle) 62%,transparent);
+  box-shadow:none;
+}
+.transparent-event-row:hover,
+.transparent-event-row:focus-within{
+  border-color:var(--border-subtle);
+  background:color-mix(in srgb,var(--surface-subtle) 48%,transparent);
+}
+/* Transparent Stream: both tool AND thinking inner cards must reset to a flat,
+   transparent row. The thinking-card previously kept its base accent-bg/border/
+   radius/msg-rail chrome (it was the heaviest object in the stream — Frank's
+   complaint, trifecta V1). The scoped !important also beats the per-skin
+   `:root[data-skin] .tool-card{...!important}` rules (graphite/sienna/catppuccin/
+   hepburn/neon/verdigris) that otherwise re-card every row (trifecta V3). */
+.transparent-event-row .tool-card,
+.transparent-event-row .tool-card:hover,
+.transparent-event-row .tool-card-running,
+.transparent-event-row .thinking-card,
+.transparent-event-row .thinking-card:hover,
+:root[data-skin] .transparent-event-row .tool-card,
+:root[data-skin] .transparent-event-row .tool-card:hover,
+:root[data-skin] .transparent-event-row .tool-card-running,
+:root[data-skin] .transparent-event-row .thinking-card,
+:root[data-skin] .transparent-event-row .thinking-card:hover{
+  border:0!important;
+  border-left:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  margin:0!important;
+  max-width:none!important;
+  overflow:visible;
+}
+.transparent-event-row .tool-card-header,
+.transparent-event-row .thinking-card-header{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  gap:5px;
+  min-height:19px;
+  padding:1px 4px 1px 7px;
+  margin-left:0;
+  border-radius:0;
+  overflow:hidden;
+  color:var(--muted);
+  transition:background .18s ease,color .18s ease;
+  overflow:hidden;
+}
+.transparent-event-row .tool-card-header:hover,
+.transparent-event-row .thinking-card-header:hover{background:var(--hover-bg);color:var(--text);}
+.transparent-event-row .tool-card-icon,
+.transparent-event-row .thinking-card-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:14px;height:14px;
+  flex-shrink:0;
+  opacity:.7;
+}
+.transparent-event-row .tool-card-icon{order:1;}
+.transparent-event-row .tool-card-icon svg,
+.transparent-event-row .thinking-card-icon svg{width:11px;height:11px;}
+.transparent-event-row .tool-card-name{
+  font-weight:600;
+  color:var(--muted);
+  opacity:.86;
+  font-size:11.5px;
+  order:2;
+  flex-shrink:0;
+  max-width:40%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.transparent-event-row .tool-card-title,
+.transparent-event-row .tool-card-preview{
+  display:inline;
+  min-width:0;
+  flex:1 1 auto;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--muted);
+  opacity:.74;
+  font-size:11.5px;
+  order:3;
+}
+.transparent-event-time{
+  flex-shrink:0;
+  order:4;
+  color:var(--muted);
+  font-variant-numeric:tabular-nums;
+  opacity:.55;
+  white-space:nowrap;
+  font-size:10px;
+}
+/* Narrow viewports: the ~50px of fixed time-label chrome squeezes the collapsed
+   row's flexible preview (the most informative part) toward zero. Hide the label
+   under ~420px; the full timing is still available in Compact/expanded review and
+   via the title tooltip on wider screens. (#5739 Fable UX fix.) */
+@media (max-width:420px){
+  .transparent-event-time{ display:none; }
+}
+.transparent-event-row .thinking-card-label{
+  display:inline;
+  flex:0 0 auto;
+  color:var(--muted);
+  opacity:.88;
+  font-size:11.5px;
+  font-weight:600;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.transparent-event-thinking-preview{
+  display:inline;
+  flex:1 1 auto;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--muted);
+  opacity:.6;
+  font-size:.85em;
+}
+.transparent-event-status{
+  flex-shrink:0;
+  order:5;
+  color:var(--muted);
+  opacity:.64;
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:.02em;
+  padding:1px 5px;
+  border-radius:6px;
+  background:transparent;
+}
+.transparent-event-row .thinking-card-btn-row{
+  order:10;
+  flex-shrink:0;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+/* Failed / running / interrupted must be legible — a failure in a long trace was
+   previously invisible (only a muted .64 badge), a regression vs the old card's
+   accent. (Trifecta finding V2.) */
+.transparent-event-status[data-status="failed"]{color:var(--error,#e5484d);opacity:1;font-weight:600;}
+.transparent-event-status[data-status="running"]{color:var(--accent-text);opacity:.95;font-weight:600;}
+.transparent-event-status[data-status="interrupted"]{color:var(--warning,var(--muted));opacity:.95;font-weight:600;}
+.transparent-event-row[data-event-status="Failed"]{
+  border-left-color:color-mix(in srgb,var(--error,#e5484d) 55%,transparent)!important;
+}
+.transparent-event-row[data-event-status="Failed"]:hover,
+.transparent-event-row[data-event-status="Failed"][data-expanded="1"]{
+  border-left-color:color-mix(in srgb,var(--error,#e5484d) 70%,transparent)!important;
+}
+.transparent-event-copy{
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  opacity:.28;
+  padding:1px 2px;
+  cursor:pointer;
+  flex-shrink:0;
+  order:9;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:4px;
+  transition:opacity .18s ease,color .18s ease;
+}
+.transparent-event-copy:hover,
+.transparent-event-copy:focus-visible{opacity:1;color:var(--text);background:transparent;}
+.transparent-event-row .tool-card-toggle,
+.transparent-event-row .thinking-card-toggle{
+  order:10;
+  flex-shrink:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:14px;height:14px;
+  opacity:.34;
+  transition:opacity .18s ease,transform .22s ease;
+}
+.transparent-event-row:hover .transparent-event-copy,
+.transparent-event-row:focus-within .transparent-event-copy,
+.transparent-event-row:hover .tool-card-toggle,
+.transparent-event-row:focus-within .tool-card-toggle,
+.transparent-event-row:hover .thinking-card-toggle,
+.transparent-event-row:focus-within .thinking-card-toggle{opacity:.76;}
+.transparent-event-row .tool-card:hover .tool-card-toggle,
+.transparent-event-row .thinking-card:hover .thinking-card-toggle{opacity:1;}
+.transparent-event-row .tool-card.open .tool-card-toggle,
+.transparent-event-row .thinking-card.open .thinking-card-toggle{transform:rotate(90deg);opacity:.9;}
+.transparent-event-progress{
+  position:relative;
+  height:1px;
+  background:transparent;
+  border-radius:0 0 6px 6px;
+  overflow:hidden;
+  margin:0 -1px -1px -1px;
+}
+.transparent-event-progress::before{
+  content:"";
+  position:absolute;left:0;top:0;bottom:0;
+  width:0%;
+  background:color-mix(in srgb,var(--muted) 42%,transparent);
+  box-shadow:none;
+  opacity:0;
+  border-radius:inherit;
+  transition:width .35s cubic-bezier(.4,0,.2,1);
+}
+.transparent-event-progress[data-progress-running="1"]::before{opacity:.55;animation:transparent-progress-shimmer 1.6s ease-in-out infinite;}
+.transparent-event-progress[data-progress-percent]::before{width:var(--transparent-progress-percent,0%);}
+.transparent-event-progress::after{
+  content:none;
+}
+@keyframes transparent-progress-shimmer{
+  0%{left:0;right:100%;}
+  100%{left:100%;right:0;}
+}
+.transparent-event-row + .transparent-event-row::before{
+  content:none;
+}
+.transparent-detail-modes{
+  display:flex;
+  gap:10px;
+  padding:4px 8px 0;
+  color:var(--muted);
+  font-size:10.5px;
+}
+.transparent-detail-mode{cursor:pointer;opacity:.72;padding:2px 4px 3px;transition:opacity .18s ease,color .18s ease,box-shadow .18s ease;}
+.transparent-detail-mode.active{color:var(--text);opacity:1;font-weight:600;box-shadow:inset 0 -1px 0 var(--accent);}
+.transparent-event-row .tool-card-detail,
+.transparent-event-row .thinking-card-body{
+  display:block;
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  padding:0;
+  margin:0;
+  border-top:1px solid transparent;
+  background:transparent;
+  transform:translateY(-1px);
+  transition:max-height .28s cubic-bezier(.4,0,.2,1),opacity .2s ease,transform .24s ease,border-top-color .2s ease,padding .22s ease;
+}
+.transparent-event-row .tool-card.open .tool-card-detail,
+.transparent-event-row .thinking-card.open .thinking-card-body{
+  max-height:520px;
+  opacity:1;
+  transform:translateY(0);
+  border-top-color:var(--border-subtle);
+  padding:1px 0 3px;
+  overflow:auto;
+}
+.transparent-event-row .thinking-card.open .thinking-card-body{
+  border-top-color:transparent;
+  padding:0 0 3px;
+  scrollbar-gutter:stable;
+}
+.transparent-event-row .tool-card-detail > *,
+.transparent-event-row .thinking-card-body > *{min-height:0;}
+.transparent-event-row .tool-card-args,
+.transparent-event-row .tool-card-result{padding:4px 7px 4px 9px;}
+.transparent-event-row .tool-card-detail[data-transparent-detail-mode="output"] .tool-card-args{display:none;}
+.transparent-event-row .tool-card-args{margin-bottom:0;}
+/* Compact inline args: key beside value (not stacked), no per-pair rules — the
+   stacked column layout made offset=735 consume two ruled lines and read like a
+   form. Restores the old .tool-card-args density. (Trifecta V4/V5.) */
+.transparent-event-row .tool-arg-pair{display:flex;flex-direction:row;align-items:baseline;gap:8px;padding:1px 0;border-bottom:0;}
+.transparent-event-row .tool-arg-key{flex:0 0 auto;min-width:54px;color:var(--muted);font-size:10px;font-family:var(--font-mono);letter-spacing:.01em;opacity:.85;}
+.transparent-event-row .tool-arg-val{flex:1 1 auto;min-width:0;font-family:var(--font-mono);font-size:var(--message-code-font-size);color:var(--text);line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+/* Flatten the output box into a quiet left-rail instead of a second bordered
+   card, so args + output read as ONE expanded zone, not two disjoint cards.
+   max-height:none kills the nested scrollbar — the detail's own scroll owns it. */
+.transparent-event-row .tool-card-result pre{
+  background:transparent;
+  border:0;
+  border-left:2px solid var(--border-subtle);
+  border-radius:0;
+  padding:2px 0 2px 9px;
+  margin:0;
+  max-height:none;
+  color:var(--muted);
+  line-height:1.5;
+}
+.transparent-event-row .thinking-card-body pre{
+  background:transparent;
+  border:0;
+  border-radius:0;
+  margin-top:0;
+  padding:0 8px 6px 27px;
+  color:var(--muted);
+  line-height:1.5;
+}
+@media(max-width:600px){
+  .transparent-event-controls,
+  .transparent-event-row{margin-left:0;width:100%;max-width:none;}
+  /* Larger header tap targets on mobile (the 19px desktop header is a poor
+     touch target). (Trifecta finding V10.) */
+  .transparent-event-row .tool-card-header,
+  .transparent-event-row .thinking-card-header{min-height:30px;padding:5px 8px;}
+  .transparent-detail-mode{padding:4px 6px 5px;}
+}
+/* ── Old-event fading (transparent mode: medium → low) ─────────────── */
+/* ── Old-event fading (transparent mode, LIVE turn only — gated in JS) ───── */
+.transparent-event-row[data-transparent-fade="1"]{opacity:.86;}
+.transparent-event-row[data-transparent-fade="2"]{opacity:.76;}
+.transparent-event-row[data-transparent-fade="3"]{opacity:.68;}
+.transparent-event-row[data-transparent-fade="4"]{opacity:.6;}
+.transparent-event-row[data-transparent-fade="5"]{opacity:.54;}
+.transparent-event-row[data-transparent-fade]{transition:opacity .22s ease;}
+.transparent-event-row[data-transparent-fade]:hover{opacity:1;}
+
+/* ── Collapsible Hermes chat name tag ───────── */
+.assistant-turn[data-transparent-turn-collapsed="1"] .transparent-event-row,
+.assistant-turn[data-transparent-turn-collapsed="1"] .transparent-event-controls,
+.assistant-turn[data-transparent-turn-collapsed="1"] .transparent-earlier-steps{
+  display:none;
+}
+.assistant-turn .msg-role.assistant{cursor:pointer;user-select:none;}
+.assistant-turn .msg-role.assistant .transparent-turn-chevron{
+  display:inline-block;margin-left:6px;opacity:.6;
+  transition:transform .2s ease;
+}
+.assistant-turn[data-transparent-turn-collapsed="1"] .msg-role.assistant .transparent-turn-chevron{
+  transform:rotate(-90deg);
+}
+
+/* ── Turn footer (transparent mode: elapsed · tokens · TTFT · status) ─ */
+/* Mirrors the live run-status line for settled turns in transparent
+   mode. Shows duration, first-token time, token usage, and final
+   status. Lives OUTSIDE assistant-turn-blocks so it stays visible even
+   when the event rows are collapsed. Tight offset and small font to
+   keep the visual rhythm with the event cards above it. */
+.transparent-turn-footer{
+  display:flex;align-items:center;flex-wrap:wrap;gap:6px;
+  margin:2px 0 2px var(--msg-rail);
+  max-width:var(--msg-max);
+  font-size:11.5px;color:var(--muted);line-height:1.3;
+  font-variant-numeric:tabular-nums;
+  padding:2px 4px;
+}
+.transparent-turn-footer .lf-time{color:var(--text);}
+.transparent-turn-footer .lf-sep{opacity:.4;}
+.transparent-turn-footer .lf-status{color:var(--muted);opacity:.85;}
+.transparent-turn-footer .lf-ttft{color:var(--accent);opacity:.9;}
+.transparent-turn-footer .lf-tokens{font-variant-numeric:tabular-nums;}
+
+/* ── Manual compression cards (transient transcript-local feedback) ── */
+.live-compression-cards{
+  display:none;
+  max-width:800px;
+  width:100%;
+  margin:0 auto;
+  padding:0 24px;
+}
+/* LiveFooter: inline stream spark · elapsed · tokens · status */
+.live-run-status{display:flex;align-items:center;gap:8px;padding-left:0;margin:2px 0 6px;margin-left:var(--msg-rail);max-width:var(--msg-max);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1;}
+.live-footer{display:flex;align-items:center;gap:8px;padding-left:var(--worklog-rail);margin:2px 0 6px;margin-left:0;max-width:var(--msg-max);font-size:13px;color:var(--muted);}
+.live-run-status[hidden]{display:none;}
+.lf-spark{color:var(--accent);font-size:13px;display:inline-block;animation:lfspin 1.7s linear infinite;line-height:1;}
+@keyframes lfspin{to{transform:rotate(360deg);}}
+.live-run-status-text{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.lf-time{color:var(--text);font-variant-numeric:tabular-nums;}
+.lf-sep{opacity:.4;}
+.lf-tokens{font-variant-numeric:tabular-nums;}
+.lf-status{color:var(--muted);opacity:.85;}
+@media(max-width:600px){
+  .live-run-status{padding-left:0;font-size:12px;}
+  .live-footer{padding-left:var(--worklog-rail);font-size:12px;}
+}
+.compression-block{
+  display:flex;
+  flex-direction:column;
+  width:100%;
+}
+.compression-turn{
+  width:100%;
+}
+.compression-turn-blocks{
+  display:flex;
+  flex-direction:column;
+}
+
+.compression-card-row{
+  margin:0;
+  padding:0;
+}
+.compression-card-row + .compression-card-row{
+  margin-top:4px;
+}
+.tool-card-compress-command{
+  background:rgba(201,168,76,.02);
+  border-color:rgba(201,168,76,.16);
+}
+.tool-card-compress-command .tool-card-name{
+  color:var(--gold);
+  font-weight:600;
+}
+.tool-card-compress-running{
+  background:rgba(124,185,255,.04);
+  border-color:rgba(124,185,255,.24);
+}
+.tool-card-compress-running .tool-card-name{
+  color:var(--blue);
+}
+.tool-card-compress-error{
+  background:rgba(248,113,113,.05);
+  border-color:rgba(248,113,113,.28);
+}
+.tool-card-compress-error .tool-card-name{
+  color:#fca5a5;
+}
+.tool-card-compress-complete{
+  background:rgba(78,201,132,.05);
+  border-color:rgba(78,201,132,.18);
+}
+.tool-card-compress-complete .tool-card-name{
+  color:#4ec984;
+}
+.auto-compression-divider-row{
+  padding:3px 0 4px;
+}
+.auto-compression-divider{
+  display:flex;
+  align-items:center;
+  gap:0;
+  color:var(--muted);
+  opacity:.58;
+  user-select:none;
+  pointer-events:none;
+}
+.auto-compression-inline-row{
+  margin:0;
+}
+.auto-compression-inline{
+  justify-content:flex-start;
+}
+.auto-compression-divider-line{
+  display:none;
+}
+.auto-compression-divider-label{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:6px;
+  color:var(--muted);
+  font-size:calc(var(--message-body-font-size) * .86);
+  font-weight:400!important;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.auto-compression-divider-label svg{
+  width:13px;
+  height:13px;
+  opacity:.64;
+}
+.auto-compression-divider-done{
+  opacity:.6;
+}
+.auto-compression-divider-done .auto-compression-divider-label{
+  color:var(--muted);
+}
+.tool-card-compress-reference{
+  background:rgba(124,185,255,.04);
+  border-color:rgba(124,185,255,.18);
+}
+.tool-card-compress-reference:hover{
+  border-color:rgba(124,185,255,.28);
+}
+.tool-card-compress-reference .tool-card-name{
+  color:var(--blue);
+}
+.tool-card-handoff-summary{
+  background:rgba(124,185,255,.04);
+  border-color:rgba(124,185,255,.18);
+}
+.tool-card-handoff-summary .tool-card-name{
+  color:var(--blue);
+}
+.tool-card-handoff-summary .tool-card-preview{
+  margin-left:10px;
+}
+.handoff-summary-fallback-note{
+  margin:10px 0 0;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.5;
+  font-style:normal;
+}
+.handoff-summary-body{
+  color:var(--text);
+  font-size:var(--font-size-sm);
+  line-height:1.65;
+}
+.handoff-summary-body p{
+  margin:0 0 8px;
+}
+.handoff-summary-body p:last-child{
+  margin-bottom:0;
+}
+.handoff-summary-body ul,
+.handoff-summary-body ol{
+  margin:4px 0 4px 20px;
+}
+.handoff-summary-body li{
+  margin:3px 0;
+}
+.handoff-summary-body strong{
+  color:var(--strong);
+}
+.handoff-summary-body code{
+  font-family:'SF Mono',ui-monospace,monospace;
+  font-size:.92em;
+  background:var(--code-inline-bg);
+  color:var(--code-text);
+  padding:1px 5px;
+  border-radius:4px;
+}
+
+.compression-row{
+  margin:0 0 4px;
+  padding:0;
+}
+.compression-card{
+  margin-left:var(--msg-rail);
+  max-width:var(--msg-max);
+  border-radius:8px;
+  overflow:hidden;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.08);
+}
+.compression-card-header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:5px 10px;
+  user-select:none;
+}
+.compression-card-icon{
+  font-size:13px;
+  flex-shrink:0;
+  opacity:.82;
+}
+.compression-card-bubbles{
+  display:inline-flex;
+  gap:3px;
+  align-items:center;
+  flex-shrink:0;
+}
+.compression-card-bubbles span{
+  width:5px;
+  height:5px;
+  border-radius:50%;
+  background:var(--blue);
+  opacity:.45;
+  animation:compressionPulse 1.05s ease-in-out infinite;
+}
+.compression-card-bubbles span:nth-child(2){animation-delay:.14s;}
+.compression-card-bubbles span:nth-child(3){animation-delay:.28s;}
+@keyframes compressionPulse{
+  0%,80%,100%{transform:translateY(0);opacity:.35;}
+  40%{transform:translateY(-1px);opacity:1;}
+}
+.compression-card-label{
+  font-size:11px;
+  font-weight:700;
+  font-family:'SF Mono',ui-monospace,monospace;
+  letter-spacing:.03em;
+  color:var(--muted);
+  flex-shrink:0;
+}
+.compression-card-command{
+  font-size:11px;
+  color:var(--text);
+  font-family:'SF Mono',ui-monospace,monospace;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  flex:1;
+}
+.compression-card-body{
+  padding:0 12px 8px 40px;
+  font-size:11px;
+  line-height:1.55;
+  color:var(--muted);
+}
+.compression-card-body .compression-note{
+  display:block;
+  margin-top:2px;
+  opacity:.82;
+}
+.compression-card-command-row{
+  border-color:rgba(201,168,76,.22);
+  background:rgba(201,168,76,.04);
+}
+.compression-card-command-row .compression-card-label{color:var(--gold);}
+.compression-card-running-row{
+  border-color:rgba(124,185,255,.24);
+  background:rgba(124,185,255,.04);
+}
+.compression-card-running-row .compression-card-label{color:var(--blue);}
+.compression-card-error-row{
+  border-color:rgba(248,113,113,.28);
+  background:rgba(248,113,113,.05);
+}
+.compression-card-error-row .compression-card-label{color:#fca5a5;}
+.compression-card-focus{
+  margin-top:3px;
+  opacity:.85;
+}
+.compression-card-focus .compression-card-focus-label{
+  color:var(--muted);
+  font-family:'SF Mono',ui-monospace,monospace;
+}
+.compression-card-error-body{
+  color:#fecaca;
+}
+.compression-reference-row{
+  margin-top:0;
+}
+.compression-reference-card{
+  margin-left:var(--msg-rail);
+  max-width:var(--msg-max);
+  border-radius:8px;
+  overflow:hidden;
+  background:rgba(124,185,255,.04);
+  border:1px solid rgba(124,185,255,.18);
+  transition:border-color .15s, background .15s;
+}
+.compression-reference-card:hover{border-color:rgba(124,185,255,.28);}
+.compression-reference-header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:5px 10px;
+  cursor:pointer;
+  user-select:none;
+}
+.compression-reference-icon{
+  font-size:13px;
+  flex-shrink:0;
+  opacity:.82;
+  color:var(--blue);
+}
+.compression-reference-label,
+.compression-reference-kind{
+  font-size:11px;
+  font-weight:700;
+  font-family:'SF Mono',ui-monospace,monospace;
+  letter-spacing:.03em;
+  flex-shrink:0;
+  white-space:nowrap;
+}
+.compression-reference-label{color:var(--blue);}
+.compression-reference-kind{color:var(--gold);}
+.compression-reference-preview{
+  font-size:11px;
+  color:var(--muted);
+  opacity:.72;
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.compression-reference-toggle{
+  font-size:10px;
+  color:var(--muted);
+  opacity:.55;
+  flex-shrink:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transform-origin:center;
+  transition:transform .18s ease;
+}
+.compression-reference-card.open .compression-reference-toggle{
+  transform:rotate(90deg);
+}
+.compression-reference-copy{
+  flex-shrink:0;
+  opacity:.65;
+}
+.compression-reference-body{
+  display:block;
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  padding:0 12px;
+  transition:max-height .22s ease, opacity .18s ease, padding .22s ease, border-top-color .22s ease;
+  border-top:1px solid transparent;
+}
+.compression-reference-card.open .compression-reference-body{
+  max-height:none;
+  overflow:visible;
+  opacity:1;
+  padding:8px 12px 10px;
+  border-top-color:rgba(124,185,255,.1);
+}
+.compression-reference-body pre{
+  margin:0;
+  font-family:'SF Mono',ui-monospace,monospace;
+  font-size:11px;
+  line-height:1.55;
+  white-space:pre-wrap;
+  word-break:break-word;
+  color:var(--muted);
+}
+
+.compression-complete-card{
+  background:rgba(78,201,132,.05);
+  border:1px solid rgba(78,201,132,.18);
+  border-radius:8px;
+  padding:0;
+  margin-left:var(--msg-rail);
+  max-width:var(--msg-max);
+  transition:border-color .15s, background .15s;
+}
+.compression-complete-card:hover{
+  border-color:rgba(78,201,132,.3);
+  background:rgba(78,201,132,.07);
+}
+.compression-complete-header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:5px 10px;
+  cursor:pointer;
+  user-select:none;
+  color:#4ec984;
+  font-size:12px;
+  font-weight:600;
+  opacity:.88;
+}
+.compression-complete-header:hover{opacity:1;}
+.compression-complete-icon{opacity:.78;flex-shrink:0;}
+.compression-complete-label{
+  font-size:11px;
+  font-weight:700;
+  font-family:'SF Mono',ui-monospace,monospace;
+  letter-spacing:.03em;
+  flex-shrink:0;
+}
+.compression-complete-title{
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--text);
+  font-family:'SF Mono',ui-monospace,monospace;
+  font-size:11px;
+}
+.compression-complete-toggle{
+  margin-left:auto;
+  font-size:10px;
+  color:var(--muted);
+  opacity:.55;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transform-origin:center;
+  transition:transform .18s ease;
+}
+.compression-complete-card.open .compression-complete-toggle{
+  transform:rotate(90deg);
+}
+.compression-complete-body{
+  max-height:0;
+  opacity:0;
+  overflow:hidden;
+  padding:0 12px;
+  border-top:1px solid transparent;
+  transition:max-height .22s ease, opacity .18s ease, padding .22s ease, border-top-color .22s ease;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.55;
+}
+.compression-complete-card.open .compression-complete-body{
+  max-height:220px;
+  opacity:1;
+  padding:8px 12px;
+  border-top-color:rgba(78,201,132,.12);
+}

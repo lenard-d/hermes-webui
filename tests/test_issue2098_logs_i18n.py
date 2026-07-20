@@ -1,8 +1,5 @@
 import re
-from pathlib import Path
-
-
-I18N_PATH = Path(__file__).resolve().parent.parent / "static" / "i18n.js"
+from tests.i18n_split_loader import locale_block_source
 
 
 LOGS_FILTER_KEYS = {
@@ -66,43 +63,7 @@ LOGS_FILTER_KEYS = {
 
 
 def _i18n_locale_block(locale: str) -> str:
-    src = I18N_PATH.read_text(encoding="utf-8")
-    if "-" in locale:
-        head = re.compile(rf"^  '{re.escape(locale)}':\s*\{{", re.M)
-    else:
-        head = re.compile(rf"^  {re.escape(locale)}:\s*\{{", re.M)
-    match = head.search(src)
-    assert match, f"locale {locale!r} not found"
-    body_start = match.end()
-    depth = 1
-    i = body_start
-    while i < len(src) and depth > 0:
-        ch = src[i]
-        if ch == "/" and i + 1 < len(src) and src[i + 1] == "/":
-            newline = src.find("\n", i)
-            i = len(src) if newline < 0 else newline + 1
-            continue
-        if ch in ("'", '"'):
-            quote = ch
-            i += 1
-            while i < len(src) and src[i] != quote:
-                i += 2 if src[i] == "\\" else 1
-            i += 1
-            continue
-        if ch == "`":
-            i += 1
-            while i < len(src) and src[i] != "`":
-                i += 2 if src[i] == "\\" else 1
-            i += 1
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return src[body_start:i]
-        i += 1
-    raise AssertionError(f"locale {locale!r} block never closed")
+    return locale_block_source(locale)
 
 
 def _string_value(block: str, key: str) -> str:

@@ -23,6 +23,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 ROUTES_SRC = (Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
 
@@ -180,7 +181,7 @@ def test_delete_guards_each_session_save():
 
 # ── Frontend: the '+ New project and move' shortcut guards the new 503 ──
 
-SESSIONS_JS = (Path(__file__).parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = SESSIONS_SOURCE
 
 
 def test_new_project_and_move_shortcut_guards_503():

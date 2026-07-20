@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+from tests.i18n_split_loader import source_shaped_i18n
 from tests.test_issue2147_profile_concept_help import PROFILE_CONCEPT_KEYS
 
 
@@ -8,6 +9,8 @@ PROFILE_CONCEPT_FALLBACK_KEYS = set(PROFILE_CONCEPT_KEYS)
 
 
 def read(path: Path) -> str:
+    if path == REPO / "static" / "i18n.js":
+        return source_shaped_i18n()
     return path.read_text(encoding="utf-8")
 
 

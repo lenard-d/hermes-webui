@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "parts": [
+    "001-skins-core.css",
+    "002-skins-geist-neon-light.css",
+    "003-shell-navigation.css",
+    "004-chat-workspace-responsive.css",
+    "005-menus-actions-activity.css",
+    "006-streaming-compression.css",
+    "007-settings.css",
+    "008-sessions-transcript.css",
+    "009-message-main-insights.css",
+    "010-kanban.css",
+    "011-logs-rtl-outline.css"
+  ]
+}

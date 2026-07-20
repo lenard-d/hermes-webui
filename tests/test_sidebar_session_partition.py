@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = SESSIONS_SOURCE
 
 
 def _function_block(name: str) -> str:

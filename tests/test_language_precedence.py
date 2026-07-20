@@ -4,11 +4,14 @@ import re
 import subprocess
 import textwrap
 
+from tests.frontend_asset_contract import family_source
+from tests.i18n_split_loader import i18n_script_paths, source_shaped_i18n
+
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = source_shaped_i18n()
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def _run_i18n_case(script_expr: str) -> dict:
@@ -17,7 +20,7 @@ def _run_i18n_case(script_expr: str) -> dict:
         f"""
         const fs = require('fs');
         const vm = require('vm');
-        const src = fs.readFileSync({json.dumps(str(REPO_ROOT / "static" / "i18n.js"))}, 'utf8');
+        const paths = {json.dumps([str(path) for path in i18n_script_paths()])};
         const storage = {{}};
         const ctx = {{
           localStorage: {{
@@ -29,8 +32,11 @@ def _run_i18n_case(script_expr: str) -> dict:
             querySelectorAll: () => [],
           }},
         }};
+        ctx.window = ctx;
         vm.createContext(ctx);
-        vm.runInContext(src, ctx);
+        for (const path of paths) {{
+          vm.runInContext(fs.readFileSync(path, 'utf8'), ctx, {{filename: path}});
+        }}
         const out = vm.runInContext({json.dumps(wrapped_expr)}, ctx);
         process.stdout.write(JSON.stringify(out));
         """

@@ -23,9 +23,10 @@ presence of the resize helper at both call sites.
 """
 
 import pathlib
+from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO = pathlib.Path(__file__).parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = SESSIONS_SOURCE
 STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
 
 
