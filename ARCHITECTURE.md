@@ -70,7 +70,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         environment.py     Profile-scoped thread environment and restoration invariant
         gateway_capabilities.py Gateway capability probing and bounded cache
         media_types.py     Shared file-size and MIME/extension policy
-        model_catalog.py   Complete model discovery/catalog lifecycle; intentionally kept cohesive
+        model_catalog.py   Public model-catalog interface and cache publication coordinator
+        catalog_live.py    Network-capable provider discovery and uncached catalog assembly
+        catalog_static.py  Network-free catalog assembly from local config and auth
+        catalog_sources.py Credential-pool, CLI, and local-file model sources
+        catalog_normalization.py Canonical model-id matching and deduplication policy
+        catalog_provenance.py Atomic snapshot/fingerprint publication and rebuild coordination
         model_resolution.py Selected model/provider routing and connection resolution
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
         model_cache.py     Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation

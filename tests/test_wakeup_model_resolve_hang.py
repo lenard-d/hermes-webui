@@ -213,6 +213,15 @@ def test_chat_start_survives_slow_provider_probe(monkeypatch):
         assert k in result, f"fallback catalog missing {k!r}"
     assert isinstance(result["groups"], list)
 
+    # The detached rebuild is part of the behavior under test. Let it finish
+    # publishing before monkeypatch restores the cache adapters, otherwise its
+    # delayed write can leak into the next test's profile/fingerprint state.
+    with cfg._cache_build_cv:
+        assert cfg._cache_build_cv.wait_for(
+            lambda: not cfg._cache_build_in_progress,
+            timeout=2.0,
+        ), "detached catalog rebuild did not release publication ownership"
+
 
 def test_minimal_static_catalog_is_network_free(monkeypatch):
     """The fallback catalog builder must never reach the live provider probe.

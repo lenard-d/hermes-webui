@@ -139,6 +139,11 @@ api/
     settings.py
     model_catalog.py
     model_cache.py
+    catalog_live.py
+    catalog_static.py
+    catalog_sources.py
+    catalog_normalization.py
+    catalog_provenance.py
 
   profiles/
   providers/
@@ -157,6 +162,14 @@ This is a responsibility map, not a demand for one file per listed name. Two
 closely coupled responsibilities may share an implementation file when doing so
 improves locality. A package may also use additional private modules without
 making them part of its interface.
+
+The model-catalog migration now follows this shape: `model_catalog.py` preserves
+the established public interface while coordinating cache admission and
+publication; live discovery, network-free fallback assembly, source adapters,
+normalization, and atomic provenance publication have independent owners. The
+live discovery pass remains a larger cohesive implementation because provider
+detection and final group assembly share one build context; it must not be split
+into numbered fragments or pass-through layers merely to satisfy a line target.
 
 ## Standard Python package pattern
 

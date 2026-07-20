@@ -68,20 +68,20 @@ class TestRootWorkspaceUnblocked:
 class TestCustomProvidersVisibility:
 
     def test_has_custom_providers_variable_present(self):
-        src = read("api/config/model_catalog.py")
+        src = read("api/config/catalog_live.py")
         assert "_has_custom_providers" in src, (
             "_has_custom_providers variable must exist in get_available_models()"
         )
 
     def test_discard_custom_conditional_on_no_custom_providers(self):
-        src = read("api/config/model_catalog.py")
+        src = read("api/config/catalog_live.py")
         assert "not _has_custom_providers" in src, (
             "detected_providers.discard('custom') must be gated on "
             "'not _has_custom_providers'"
         )
 
     def test_custom_providers_isinstance_check(self):
-        src = read("api/config/model_catalog.py")
+        src = read("api/config/catalog_live.py")
         assert "isinstance(_custom_providers_cfg, list)" in src, (
             "_has_custom_providers must check isinstance(..., list)"
         )

@@ -102,7 +102,7 @@ class TestActiveProviderNormalization:
 
     def test_normalization_code_present(self):
         """The catalog must resolve active_provider before building groups."""
-        src = read("api/config/model_catalog.py")
+        src = read("api/config/catalog_live.py")
         assert "_resolve_configured_provider_id(" in src, (
             "the catalog must normalize active_provider through the shared resolver"
         )
@@ -556,12 +556,12 @@ class TestKnownProvidersUnaffected:
     """Normalization must not break providers whose names are already canonical."""
 
     def test_openrouter_unaffected(self):
-        src = read("api/config/model_catalog.py")
+        src = read("api/config/catalog_live.py")
         # _PROVIDER_ALIASES lookup: 'openrouter' -> 'openrouter' (no change)
         assert "openrouter" in src, "openrouter must still exist in config"
 
     def test_anthropic_unaffected(self):
-        src = read("api/config/model_catalog.py")
+        src = read("api/config/catalog_live.py")
         assert "anthropic" in src
 
     def test_custom_unaffected(self):

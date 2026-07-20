@@ -22,15 +22,14 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from api.config.catalog_normalization import normalize_catalog_model_id
+from api.config.catalog_sources import _get_label_for_model
 
 def _family_path_arg(family: str) -> str:
     return json.dumps([str(path) for path in family_asset_paths(family)])
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
-CONFIG_PY = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
-    encoding="utf-8"
-)
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -117,43 +116,13 @@ def _norm_keys(driver_path, ids):
 
 
 def _backend_norm():
-    """Extract and exec the backend _norm_model_id function."""
-    start_marker = "def _norm_model_id(model_id: str) -> str:"
-    end_marker = "def _build_configured_model_badges"
-    s = CONFIG_PY.find(start_marker)
-    e = CONFIG_PY.find(end_marker, s)
-    assert s != -1 and e != -1
-    body = CONFIG_PY[s:e]
-    lines = body.splitlines()
-    indent = None
-    for ln in lines:
-        if ln.strip():
-            indent = len(ln) - len(ln.lstrip())
-            break
-    dedented = "\n".join(ln[indent:] if len(ln) >= indent else ln for ln in lines)
-    ns = {}
-    exec(dedented, ns)
-    return ns["_norm_model_id"]
+    """Return the backend catalog normalization owner."""
+    return normalize_catalog_model_id
 
 
 def _backend_label(model_id):
-    """Extract and exec the backend _get_label_for_model function."""
-    start_marker = "def _get_label_for_model(model_id: str, existing_groups: list) -> str:"
-    # Find the end by looking for the next top-level def
-    s = CONFIG_PY.find(start_marker)
-    assert s != -1
-    # Find the next unindented def after the start
-    rest = CONFIG_PY[s + len(start_marker):]
-    lines = rest.splitlines()
-    end_offset = 0
-    for i, ln in enumerate(lines):
-        if i > 0 and ln.startswith("def "):
-            end_offset = sum(len(l) + 1 for l in lines[:i])
-            break
-    body = CONFIG_PY[s:s + len(start_marker) + end_offset]
-    ns = {}
-    exec(body, ns)
-    return ns["_get_label_for_model"](model_id, [])
+    """Exercise the backend label owner through its real interface."""
+    return _get_label_for_model(model_id, [])
 
 
 # ═══════════════════════════════════════════════════════════════════════════

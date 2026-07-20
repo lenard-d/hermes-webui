@@ -141,7 +141,7 @@ class TestIssue909InjectedModelLabel:
             Path(__file__).resolve().parent.parent
             / "api"
             / "config"
-            / "model_catalog.py"
+            / "catalog_live.py"
         ).read_text()
         # The raw label-building pattern should be replaced by the helper
         assert "_get_label_for_model" in config_src, (

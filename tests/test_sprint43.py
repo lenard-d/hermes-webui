@@ -18,7 +18,7 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 GATEWAY_WATCHER_PY = (
     REPO_ROOT / "api" / "agent_ops" / "session_watcher.py"
 ).read_text(encoding="utf-8")
-CONFIG_PY = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
+CONFIG_PY = (REPO_ROOT / "api" / "config" / "catalog_live.py").read_text(
     encoding="utf-8"
 )
 BOOTSTRAP_PY = (REPO_ROOT / "bootstrap.py").read_text(encoding="utf-8")
@@ -122,7 +122,7 @@ class TestBareExceptLogging(unittest.TestCase):
 
     MODULES_REQUIRING_LOGGER = [
         ("api/auth/cookies_password.py", AUTH_PY),
-        ("api/config/model_catalog.py", CONFIG_PY),
+        ("api/config/catalog_live.py", CONFIG_PY),
         ("api/agent_ops/session_watcher.py", GATEWAY_WATCHER_PY),
         ("api/profiles/__init__.py", PROFILES_PY),
         ("api/runs/local.py", RUN_LOCAL_PY),

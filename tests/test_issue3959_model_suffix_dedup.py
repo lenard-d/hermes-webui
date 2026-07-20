@@ -8,52 +8,23 @@ The normalizer was using parts[-1] (last colon segment) which collapsed all
 from tests.frontend_asset_contract import family_source
 
 import shutil
-from pathlib import Path
 
 import pytest
+from api.config.catalog_normalization import normalize_catalog_model_id
 
-REPO_ROOT = Path(__file__).parent.parent
-CONFIG_PY = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
-    encoding="utf-8"
-)
 UI_JS = family_source("ui")
 
 NODE = shutil.which("node")
 
 
-def _exec_nested_fn(start_marker: str, end_marker: str, fn_name: str):
-    s = CONFIG_PY.find(start_marker)
-    e = CONFIG_PY.find(end_marker, s)
-    assert s != -1 and e != -1
-    body = CONFIG_PY[s:e]
-    lines = body.splitlines()
-    indent = None
-    for ln in lines:
-        if ln.strip():
-            indent = len(ln) - len(ln.lstrip())
-            break
-    dedented = "\n".join(ln[indent:] if len(ln) >= indent else ln for ln in lines)
-    ns = {}
-    exec(dedented, ns)
-    return ns[fn_name]
-
-
 def _exec_norm():
-    """Re-execute the _norm_model_id closure body via a synthetic def."""
-    return _exec_nested_fn(
-        "def _norm_model_id(model_id: str) -> str:",
-        "def _build_configured_model_badges",
-        "_norm_model_id",
-    )
+    """Return the canonical backend catalog normalizer."""
+    return normalize_catalog_model_id
 
 
 def _exec_static_norm():
-    """Re-execute the _norm_static_model_id helper via a synthetic def."""
-    return _exec_nested_fn(
-        "def _norm_static_model_id(model_id: str) -> str:",
-        "norm_lookup: dict[str, list[str]] = {}",
-        "_norm_static_model_id",
-    )
+    """Static and live catalogs intentionally share one normalization owner."""
+    return normalize_catalog_model_id
 
 
 def test_colon_suffix_model_preserves_suffix():

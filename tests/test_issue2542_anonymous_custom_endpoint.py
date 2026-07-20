@@ -9,7 +9,7 @@ a model ID manually (#2542).
 import re
 
 REPO = __file__.rsplit("/", 2)[-3] if "/" in __file__ else "."
-CONFIG_PY = open(f"{REPO}/api/config/model_catalog.py").read() if REPO != "." else ""
+CONFIG_PY = open(f"{REPO}/api/config/catalog_live.py").read() if REPO != "." else ""
 
 
 def test_custom_anonymous_endpoint_empty_models_fallback_in_get_available_models():

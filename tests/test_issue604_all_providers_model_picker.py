@@ -5,7 +5,7 @@ from api.config.static_catalog import PROVIDER_MODELS
 
 
 def _src() -> str:
-    with open("api/config/model_catalog.py") as f:
+    with open("api/config/catalog_live.py") as f:
         return f.read()
 
 
@@ -33,7 +33,7 @@ class TestProviderDetectionEnvVars:
     def test_all_provider_env_vars_map_to_known_providers(self):
         """Every detected_provider.add() call should reference a known provider."""
         src = _src()
-        fn = re.search(r'def _build_available_models_uncached', src)
+        fn = re.search(r'def build_available_models_uncached', src)
         fn_block = src[fn.start():fn.start() + 10000]
         adds = re.findall(r'detected_providers\.add\("([^"]+)"\)', fn_block)
         unknown = [p for p in adds if p not in _PROVIDER_MODELS_KEYS and p not in self._SPECIAL_PROVIDERS]

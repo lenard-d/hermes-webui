@@ -194,7 +194,9 @@ def test_get_models_grouped_unconfigured_providers_get_independent_dicts(monkeyp
     # call at the assignment site, AND by running an integration check
     # of the loop pattern.
     import inspect
-    src = inspect.getsource(cfg_mod.get_available_models)
+    from api.config import catalog_live
+
+    src = inspect.getsource(catalog_live.build_available_models_uncached)
     assert "copy.deepcopy(auto_detected_models)" in src, (
         "api/config.py must wrap auto_detected_models in copy.deepcopy() at "
         "the unconfigured-provider fall-through (line ~2078) so dedup mutation "

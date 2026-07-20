@@ -62,7 +62,9 @@ class TestOpenaiApiEnvDetection:
 
     def test_openai_api_key_detects_openai_api_not_bare_openai(self):
         import inspect
-        src = inspect.getsource(cfg.get_available_models)
+        from api.config import catalog_live
+
+        src = inspect.getsource(catalog_live.build_available_models_uncached)
         # The env-detection branch for OPENAI_API_KEY must add "openai-api".
         assert 'detected_providers.add("openai-api")' in src
         # And must NOT add a bare "openai" (no such slug in the agent registry).
