@@ -1,11 +1,14 @@
 import json
 import sqlite3
 from collections import OrderedDict
+from importlib import import_module
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+
+from api.sessions import session_detail_projection
 
 pytestmark = pytest.mark.requires_agent_modules
 
@@ -501,15 +504,13 @@ def test_state_db_reader_since_timestamp_keeps_null_timestamp_rows(monkeypatch, 
 
 
 def test_limited_display_with_precomputed_sidecar_keeps_empty_state_db_guard(monkeypatch, tmp_path):
-    import api.routes as routes
-
     sid = "webui_reconcile_empty_state_guard"
     sidecar_messages = [
         {"role": "user", "content": "sidecar only", "timestamp": 10.0},
     ]
     session = _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages)
 
-    messages = routes._limited_webui_messages_for_display_with_sidecar(
+    messages = session_detail_projection.merge_limited_messages(
         session,
         list(sidecar_messages),
         [],
@@ -539,11 +540,11 @@ def test_msg_limit_session_load_reads_only_recent_state_db_tail(monkeypatch, tmp
 
     real_reader = routes.get_state_db_session_messages
     full_state_messages = real_reader(sid)
-    full_all_messages = routes._limited_webui_messages_for_display(
+    full_all_messages = session_detail_projection.limited_messages(
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = routes._message_window_for_display(
+    expected_window, expected_offset = session_detail_projection.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -597,11 +598,11 @@ def test_msg_limit_session_load_falls_back_with_null_state_db_timestamp(monkeypa
 
     real_reader = routes.get_state_db_session_messages
     full_state_messages = real_reader(sid)
-    full_all_messages = routes._limited_webui_messages_for_display(
+    full_all_messages = session_detail_projection.limited_messages(
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = routes._message_window_for_display(
+    expected_window, expected_offset = session_detail_projection.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -630,24 +631,26 @@ def test_msg_limit_session_load_falls_back_with_null_state_db_timestamp(monkeypa
 
 
 def test_limited_state_db_prefix_missing_db_skips_visible_key_normalization(monkeypatch, tmp_path):
-    import api.sessions.store as models
-    import api.routes as routes
+    detail_projection_module = import_module("api.sessions.detail_projection")
 
     sid = "webui_reconcile_prefix_missing_db"
     sidecar_messages = _large_timestamped_sidecar_messages(10_000)
     session = _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages)
     visible_key_calls = 0
-    real_visible_key = routes._session_message_visible_key
+    real_visible_key = detail_projection_module._session_message_visible_key
 
     def counted_visible_key(message):
         nonlocal visible_key_calls
         visible_key_calls += 1
         return real_visible_key(message)
 
-    monkeypatch.setattr(routes, "_session_message_visible_key", counted_visible_key)
-    monkeypatch.setattr(models, "_session_message_visible_key", counted_visible_key)
+    monkeypatch.setattr(
+        detail_projection_module,
+        "_session_message_visible_key",
+        counted_visible_key,
+    )
 
-    floor, returned_sidecar = routes._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = session_detail_projection.limited_state_db_floor(
         session,
         30,
     )
@@ -658,25 +661,27 @@ def test_limited_state_db_prefix_missing_db_skips_visible_key_normalization(monk
 
 
 def test_limited_state_db_prefix_count_mismatch_skips_visible_key_normalization(monkeypatch, tmp_path):
-    import api.sessions.store as models
-    import api.routes as routes
+    detail_projection_module = import_module("api.sessions.detail_projection")
 
     sid = "webui_reconcile_prefix_count_mismatch"
     sidecar_messages = _large_timestamped_sidecar_messages()
     session = _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages)
     _make_state_db(tmp_path / "state.db", sid, sidecar_messages[:10])
     visible_key_calls = 0
-    real_visible_key = routes._session_message_visible_key
+    real_visible_key = detail_projection_module._session_message_visible_key
 
     def counted_visible_key(message):
         nonlocal visible_key_calls
         visible_key_calls += 1
         return real_visible_key(message)
 
-    monkeypatch.setattr(routes, "_session_message_visible_key", counted_visible_key)
-    monkeypatch.setattr(models, "_session_message_visible_key", counted_visible_key)
+    monkeypatch.setattr(
+        detail_projection_module,
+        "_session_message_visible_key",
+        counted_visible_key,
+    )
 
-    floor, returned_sidecar = routes._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = session_detail_projection.limited_state_db_floor(
         session,
         30,
     )
@@ -848,7 +853,7 @@ def test_limited_state_db_prefix_missing_sidecar_timestamp_preserves_full_fallba
     monkeypatch,
     tmp_path,
 ):
-    import api.routes as routes
+    detail_projection_module = import_module("api.sessions.detail_projection")
 
     sid = "webui_reconcile_prefix_missing_sidecar_timestamp"
     sidecar_messages = _large_timestamped_sidecar_messages()
@@ -859,13 +864,12 @@ def test_limited_state_db_prefix_missing_sidecar_timestamp_preserves_full_fallba
         raise AssertionError("missing sidecar timestamps must fall back before state.db preflight")
 
     monkeypatch.setattr(
-        routes,
+        detail_projection_module,
         "get_state_db_session_message_prefix_summary",
         unexpected_prefix_summary,
-        raising=False,
     )
 
-    floor, returned_sidecar = routes._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = session_detail_projection.limited_state_db_floor(
         session,
         30,
     )
@@ -898,11 +902,11 @@ def test_msg_limit_session_load_bails_when_older_state_db_row_changes_offsets(mo
 
     real_reader = routes.get_state_db_session_messages
     full_state_messages = real_reader(sid)
-    full_all_messages = routes._limited_webui_messages_for_display(
+    full_all_messages = session_detail_projection.limited_messages(
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = routes._message_window_for_display(
+    expected_window, expected_offset = session_detail_projection.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -951,11 +955,11 @@ def test_msg_limit_session_load_bails_when_older_state_db_user_changes_offsets(m
 
     real_reader = routes.get_state_db_session_messages
     full_state_messages = real_reader(sid)
-    full_all_messages = routes._limited_webui_messages_for_display(
+    full_all_messages = session_detail_projection.limited_messages(
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = routes._message_window_for_display(
+    expected_window, expected_offset = session_detail_projection.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -1004,11 +1008,11 @@ def test_msg_limit_session_load_bails_when_prefloor_key_counts_mask_offset_chang
 
     real_reader = routes.get_state_db_session_messages
     full_state_messages = real_reader(sid)
-    full_all_messages = routes._limited_webui_messages_for_display(
+    full_all_messages = session_detail_projection.limited_messages(
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = routes._message_window_for_display(
+    expected_window, expected_offset = session_detail_projection.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -1067,11 +1071,11 @@ def test_msg_limit_session_load_bails_when_prefloor_tool_calls_mask_offset_chang
 
     real_reader = routes.get_state_db_session_messages
     full_state_messages = real_reader(sid)
-    full_all_messages = routes._limited_webui_messages_for_display(
+    full_all_messages = session_detail_projection.limited_messages(
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = routes._message_window_for_display(
+    expected_window, expected_offset = session_detail_projection.message_window(
         full_all_messages,
         msg_limit=30,
     )

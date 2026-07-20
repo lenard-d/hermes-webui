@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3 as _sqlite
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 
 from api.profiles import _profiles_match
@@ -481,3 +482,91 @@ def _publish_materialized_session(session, *, persist: bool = True):
                 session.session_id,
             )
     return session
+
+
+@dataclass(frozen=True)
+class BranchSourceResolution:
+    """Domain result for resolving a session that may be branched in WebUI."""
+
+    session: Session | None
+    refusal: str | None = None
+
+
+def resolve_branch_source(session_id: str) -> BranchSourceResolution:
+    """Resolve a branch source without leaking ownership policy to HTTP."""
+    if _session_is_subagent_view_only(session_id):
+        return BranchSourceResolution(None, "subagent_view_only")
+    try:
+        source = get_session(session_id)
+    except KeyError:
+        source, reason = _claim_or_synthesize_cli_session(session_id)
+        if source is None:
+            return BranchSourceResolution(None, "not_found")
+        source_kind = str(
+            getattr(source, "source_tag", None)
+            or getattr(source, "raw_source", None)
+            or getattr(source, "source", None)
+            or ""
+        ).strip().lower()
+        if reason == "not_claimable" and source_kind != "cron":
+            return BranchSourceResolution(None, "foreign_view_only")
+        if reason == "not_claimable":
+            source._branch_source_readonly = True
+            return BranchSourceResolution(source)
+    if getattr(source, "read_only", False):
+        source_kind = str(
+            getattr(source, "source_tag", None)
+            or getattr(source, "raw_source", None)
+            or getattr(source, "source", None)
+            or ""
+        ).strip().lower()
+        if source_kind != "cron":
+            return BranchSourceResolution(None, "foreign_view_only")
+        source._branch_source_readonly = True
+    return BranchSourceResolution(source)
+
+
+class ForeignSessionAccess:
+    """Deep interface for foreign-session ownership and materialization."""
+
+    @staticmethod
+    def metadata(session_id: str, *, all_profiles: bool = False) -> dict:
+        if all_profiles:
+            return _lookup_cli_session_metadata(session_id, all_profiles=True)
+        return _lookup_cli_session_metadata(session_id)
+
+    @staticmethod
+    def resolve_import_metadata(
+        session_id: str,
+        *,
+        requested_profile=None,
+        allow_all_profiles: bool = False,
+    ) -> dict:
+        return _resolve_cli_import_metadata(
+            session_id,
+            requested_profile=requested_profile,
+            allow_all_profiles=allow_all_profiles,
+        )
+
+    @staticmethod
+    def claim(session_id: str, metadata: dict | None = None):
+        return _claim_or_synthesize_cli_session(session_id, metadata)
+
+    @staticmethod
+    def is_subagent_child(session_id: str) -> bool:
+        return _is_subagent_child_session_id(session_id)
+
+    @staticmethod
+    def is_view_only(session_id: str) -> bool:
+        return _session_is_subagent_view_only(session_id)
+
+    @staticmethod
+    def publish(session: Session, *, persist: bool = True) -> Session:
+        return _publish_materialized_session(session, persist=persist)
+
+    @staticmethod
+    def resolve_branch_source(session_id: str) -> BranchSourceResolution:
+        return resolve_branch_source(session_id)
+
+
+foreign_session_access = ForeignSessionAccess()

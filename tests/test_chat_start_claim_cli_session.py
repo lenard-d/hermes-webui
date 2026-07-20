@@ -24,8 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 import api.routes as routes
-from api.routes_parts import session_projection
-from api.sessions import materialization
+from api.sessions import foreign_session_access, materialization
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,10 +47,7 @@ def _route_handler_block(src: str, handler: str) -> str:
 
 
 def test_helper_is_defined():
-    assert routes._claim_or_synthesize_cli_session is materialization._claim_or_synthesize_cli_session, (
-        "shared foreign-session synthesiser must be defined; this helper "
-        "closes the GET/POST asymmetry for CLI/TUI/Desktop sessions"
-    )
+    assert callable(foreign_session_access.claim)
 
 
 def test_helper_accepts_pass_through_cli_meta():
@@ -59,15 +55,13 @@ def test_helper_accepts_pass_through_cli_meta():
     helper must accept it via the cli_meta kwarg to avoid a redundant
     lookup.  Regression for Greptile review note 2026-06-09."""
     import inspect
-    import api.routes as _routes
-    sig = inspect.signature(_routes._claim_or_synthesize_cli_session)
-    assert "cli_meta" in sig.parameters, (
-        "_claim_or_synthesize_cli_session must accept a pass-through "
-        "cli_meta kwarg so the GET path can avoid a second "
-        "_lookup_cli_session_metadata call"
+    sig = inspect.signature(foreign_session_access.claim)
+    assert "metadata" in sig.parameters, (
+        "the foreign-session interface must accept preloaded metadata "
+        "so the GET path can avoid a second external lookup"
     )
-    assert sig.parameters["cli_meta"].default is None, (
-        "cli_meta must default to None so existing callers (POST path, "
+    assert sig.parameters["metadata"].default is None, (
+        "metadata must default to None so existing callers (POST path, "
         "tests) keep working without a keyword argument"
     )
 
@@ -114,10 +108,7 @@ def test_chat_start_sanitises_500_error():
 
 
 def test_classifier_helper_is_defined():
-    assert routes._session_index_marks_was_webui is materialization._session_index_marks_was_webui, (
-        "WebUI-vs-foreign classifier must be extracted so GET and POST can "
-        "share the #2782 deleted-WebUI-session 404 contract"
-    )
+    assert callable(foreign_session_access.claim)
 
 
 def test_chat_start_no_longer_bare_404_on_keyerror():
@@ -134,14 +125,14 @@ def test_chat_start_no_longer_bare_404_on_keyerror():
     arm = m.group(1)
     # Must NOT be the old one-liner anymore.
     assert 'return bad(handler, "Session not found", 404)' not in arm.split(
-        "_claim_or_synthesize_cli_session"
+        "foreign_session_access.claim"
     )[0], (
         "the bare 404-on-KeyError branch is still in place before the new "
         "synthesiser is consulted — a TUI/Desktop session would still 404"
     )
     # Must call the new helper.
-    assert "_claim_or_synthesize_cli_session" in arm, (
-        "_handle_chat_start must delegate to _claim_or_synthesize_cli_session "
+    assert "foreign_session_access.claim" in arm, (
+        "_handle_chat_start must delegate to foreign_session_access.claim "
         "on KeyError so a foreign session can be claimed writeable"
     )
     # Must persist the sidecar so subsequent GETs find it.
@@ -162,7 +153,7 @@ def test_get_session_route_uses_shared_synthesiser():
     )
     assert block, "could not locate /api/session GET block"
     text = block.group(0)
-    assert "_claim_or_synthesize_cli_session" in text, (
+    assert "foreign_session_access.claim" in text, (
         "GET /api/session must also delegate to the shared synthesiser so "
         "the two endpoints cannot drift on foreign-session semantics"
     )
@@ -332,7 +323,7 @@ def _response_json(handler: _FakePostHandler) -> dict:
 @pytest.fixture
 def routes_module():
     class OwnerAwareRoutesHarness:
-        _modules = (materialization, session_projection, routes)
+        _modules = (materialization, routes)
 
         def __getattr__(self, name):
             for module in self._modules:
@@ -978,7 +969,11 @@ def test_import_cli_reads_read_only_from_persisted_session(monkeypatch):
 
     monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, _sid: existing))
     monkeypatch.setattr(routes, "_session_visible_to_active_profile", lambda *_args: True)
-    monkeypatch.setattr(routes, "_resolve_cli_import_metadata", lambda *_args, **_kwargs: {"read_only": False})
+    monkeypatch.setattr(
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda *_args, **_kwargs: {"read_only": False},
+    )
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda *_args, **_kwargs: list(existing.messages))
     monkeypatch.setattr(routes, "edit_session", edit_session)
     monkeypatch.setattr(

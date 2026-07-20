@@ -22,6 +22,7 @@ import urllib.request
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 from tests._pytest_port import BASE
+from api.sessions import session_sidebar_projection
 
 
 def get(path, *, profile=None):
@@ -1109,7 +1110,7 @@ def test_empty_active_gateway_session_does_not_hide_messaging_history(monkeypatc
         }
     ]
 
-    kept = routes._keep_latest_messaging_session_per_source(rows)
+    kept = session_sidebar_projection.keep_latest_messaging(rows)
 
     assert [row["session_id"] for row in kept] == ["discord_previous_history"]
 
@@ -1156,8 +1157,8 @@ def test_previous_messaging_setting_keeps_reset_history(monkeypatch):
         },
     ]
 
-    hidden = routes._keep_latest_messaging_session_per_source(rows)
-    visible = routes._keep_latest_messaging_session_per_source(
+    hidden = session_sidebar_projection.keep_latest_messaging(rows)
+    visible = session_sidebar_projection.keep_latest_messaging(
         rows,
         show_previous_messaging_sessions=True,
     )
@@ -1620,7 +1621,7 @@ def test_messaging_projection_keeps_no_identity_continuation_when_gateway_source
             },
         ]
 
-        kept = routes._keep_latest_messaging_session_per_source(sessions)
+        kept = session_sidebar_projection.keep_latest_messaging(sessions)
         ids = {session.get("session_id") for session in kept}
 
         assert ids == {active_sid, continuation_sid}
@@ -1777,7 +1778,7 @@ def test_messaging_projection_hides_stale_gateway_internal_segments(monkeypatch)
         },
     ]
 
-    kept = routes._keep_latest_messaging_session_per_source(sessions)
+    kept = session_sidebar_projection.keep_latest_messaging(sessions)
     ids = {session.get("session_id") for session in kept}
 
     assert "weixin_current_sid" in ids
@@ -1837,7 +1838,7 @@ def test_messaging_projection_keeps_distinct_active_gateway_conversations(monkey
         },
     ]
 
-    kept = routes._keep_latest_messaging_session_per_source(sessions)
+    kept = session_sidebar_projection.keep_latest_messaging(sessions)
     ids = {session.get("session_id") for session in kept}
 
     assert ids == {"telegram_dm_sid", "telegram_group_sid"}
@@ -1859,7 +1860,7 @@ def test_messaging_projection_does_not_aggressively_hide_without_gateway_metadat
         },
     ]
 
-    kept = routes._keep_latest_messaging_session_per_source(sessions)
+    kept = session_sidebar_projection.keep_latest_messaging(sessions)
 
     assert [session.get("session_id") for session in kept] == ["weixin_reset_sid"]
 

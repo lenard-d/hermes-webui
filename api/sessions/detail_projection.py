@@ -810,9 +810,6 @@ def _clear_session_detail_tail_cache() -> None:
         _SESSION_DETAIL_TAIL_CACHE_BYTES = 0
 
 
-_COMPRESSION_RECOVERY_START_LOCK = threading.Lock()
-
-
 def _pre_compression_continuation_session_id(session) -> str | None:
     """Return the newest visible descendant for a hidden compression snapshot.
 
@@ -981,3 +978,117 @@ def _pre_compression_continuation_session_id(session) -> str | None:
 
     rows.extend(_child_rows_from_sidecars(memory_seen_ids))
     return _resolve_from_rows(rows)
+
+
+class SessionDetailProjection:
+    """Deep interface for reconciled and bounded session detail payloads."""
+
+    max_message_limit = _MAX_MSG_LIMIT
+
+    @staticmethod
+    def numeric_count(value) -> int:
+        return _numeric_count(value)
+
+    @staticmethod
+    def parse_message_limit(raw):
+        return _parse_msg_limit(raw)
+
+    @staticmethod
+    def state_db_backstop(session, msg_before) -> int | None:
+        return _state_db_backstop_limit_for_display(session, msg_before)
+
+    @staticmethod
+    def limited_state_db_floor(session, msg_limit, *, msg_before=None):
+        return _state_db_since_timestamp_for_limited_display(
+            session,
+            msg_limit,
+            msg_before=msg_before,
+        )
+
+    @staticmethod
+    def merge_session_messages(session, external_messages=None) -> list:
+        return _merged_session_messages_for_display(session, external_messages)
+
+    @staticmethod
+    def merge_limited_messages(session, sidecar_messages, state_db_messages) -> list:
+        return _limited_webui_messages_for_display_with_sidecar(
+            session,
+            sidecar_messages,
+            state_db_messages,
+        )
+
+    @staticmethod
+    def limited_messages(session, state_db_messages) -> list:
+        return _limited_webui_messages_for_display(session, state_db_messages)
+
+    @staticmethod
+    def merge_lineage_messages(session, messages=None) -> list:
+        return _merged_webui_lineage_messages_for_display(session, messages)
+
+    @staticmethod
+    def sidecar_lineage_messages(session) -> list:
+        return _webui_sidecar_lineage_messages_for_display(session)
+
+    @staticmethod
+    def message_summary(messages) -> dict:
+        return _message_summary(messages)
+
+    @staticmethod
+    def metadata_summary(session_id: str, profile: str | None = None) -> dict:
+        return _metadata_only_message_summary(session_id, profile=profile)
+
+    @staticmethod
+    def message_window(
+        messages,
+        msg_limit=None,
+        msg_before=None,
+        expand_renderable=False,
+    ):
+        return _message_window_for_display(
+            messages,
+            msg_limit,
+            msg_before,
+            expand_renderable,
+        )
+
+    @staticmethod
+    def bounded_messages(messages) -> list:
+        return _messages_for_limited_payload(messages)
+
+    @staticmethod
+    def window_tool_calls(tool_calls, start_idx: int, message_count: int) -> list:
+        return _tool_calls_for_message_window(tool_calls, start_idx, message_count)
+
+    @staticmethod
+    def cached_tail(session, *, msg_limit: int, expand_renderable: bool):
+        if not _session_detail_tail_cache_eligible(session):
+            return None, None
+        key = _session_detail_tail_cache_key(
+            session,
+            msg_limit=msg_limit,
+            expand_renderable=expand_renderable,
+        )
+        return key, _session_detail_tail_cache_get(key)
+
+    @staticmethod
+    def tail_cache_eligible(session) -> bool:
+        return _session_detail_tail_cache_eligible(session)
+
+    @staticmethod
+    def tail_cache_key(session, *, msg_limit: int, expand_renderable: bool):
+        return _session_detail_tail_cache_key(
+            session,
+            msg_limit=msg_limit,
+            expand_renderable=expand_renderable,
+        )
+
+    @staticmethod
+    def store_cached_tail(key, payload) -> None:
+        _session_detail_tail_cache_set(key, payload)
+
+    @staticmethod
+    def continuation_session_id(session) -> str | None:
+        return _pre_compression_continuation_session_id(session)
+
+
+session_detail_projection = SessionDetailProjection()

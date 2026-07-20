@@ -1,11 +1,12 @@
 import json
 
 from api.sessions import records
-from api import streaming
+from api.runs.compression_snapshot import _preserve_pre_compression_snapshot
 
 
 class FakeSession:
-    def __init__(self):
+    def __init__(self, session_dir):
+        self._session_dir = session_dir
         self.session_id = "new_session"
         self.parent_session_id = "original_parent"
         self.pre_compression_snapshot = False
@@ -16,6 +17,10 @@ class FakeSession:
         self.pending_started_at = 123.0
         self.messages = [{"role": "user", "content": "current prompt"}]
         self.saved_payload = None
+
+    @property
+    def path(self):
+        return self._session_dir / f"{self.session_id}.json"
 
     def save(self, *, touch_updated_at=True, skip_index=False):
         self.saved_payload = {
@@ -30,16 +35,14 @@ class FakeSession:
             "touch_updated_at": touch_updated_at,
             "skip_index": skip_index,
         }
-        path = streaming.SESSION_DIR / f"{self.session_id}.json"
-        path.write_text(json.dumps(self.saved_payload), encoding="utf-8")
+        self.path.write_text(json.dumps(self.saved_payload), encoding="utf-8")
 
 
 def test_preserve_pre_compression_snapshot_clears_runtime_fields_while_restoring_continuation_state(tmp_path, monkeypatch):
-    monkeypatch.setattr(streaming, "SESSION_DIR", tmp_path)
     (tmp_path / "old_session.json").write_text(json.dumps({"messages": []}), encoding="utf-8")
-    session = FakeSession()
+    session = FakeSession(tmp_path)
 
-    streaming._preserve_pre_compression_snapshot(session, "old_session")
+    _preserve_pre_compression_snapshot(session, "old_session")
 
     assert session.saved_payload == {
         "session_id": "old_session",
@@ -71,7 +74,6 @@ def test_preserve_pre_compression_snapshot_clears_runtime_fields_while_restoring
 
 
 def test_preserve_pre_compression_snapshot_load_and_mark_branch_clears_runtime_fields(tmp_path, monkeypatch):
-    monkeypatch.setattr(streaming, "SESSION_DIR", tmp_path)
     monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
     old_payload = {
         "session_id": "old_session",
@@ -89,10 +91,10 @@ def test_preserve_pre_compression_snapshot_load_and_mark_branch_clears_runtime_f
         "pending_started_at": 12345,
     }
     (tmp_path / "old_session.json").write_text(json.dumps(old_payload), encoding="utf-8")
-    session = FakeSession()
+    session = FakeSession(tmp_path)
     session.messages = [{"role": "user", "content": "current prompt"}]
 
-    streaming._preserve_pre_compression_snapshot(session, "old_session")
+    _preserve_pre_compression_snapshot(session, "old_session")
 
     saved = json.loads((tmp_path / "old_session.json").read_text(encoding="utf-8"))
     assert saved["messages"] == old_payload["messages"]
@@ -106,12 +108,11 @@ def test_preserve_pre_compression_snapshot_load_and_mark_branch_clears_runtime_f
 
 def test_preserve_pre_compression_snapshot_does_not_leave_continuation_marked_as_snapshot(tmp_path, monkeypatch):
     """A continuation loaded from an old snapshot must not remain hidden."""
-    monkeypatch.setattr(streaming, "SESSION_DIR", tmp_path)
     (tmp_path / "old_session.json").write_text(json.dumps({"messages": []}), encoding="utf-8")
-    session = FakeSession()
+    session = FakeSession(tmp_path)
     session.pre_compression_snapshot = True
 
-    streaming._preserve_pre_compression_snapshot(session, "old_session")
+    _preserve_pre_compression_snapshot(session, "old_session")
     # The helper archives the parent and restores the incoming object state.
     # The streaming compression path must clear this before saving the child.
     assert session.pre_compression_snapshot is True

@@ -6,9 +6,11 @@ ROUTES = "\n".join(
     Path(path).read_text(encoding="utf-8")
     for path in (
         "api/routes.py",
-        "api/routes_parts/session_projection.py",
         "api/routes_parts/chat_runs.py",
         "api/routes_parts/stream_transport.py",
+        "api/http/routes/session_creation_mutations.py",
+        "api/http/routes/session_mutations.py",
+        "api/http/routes/session_organization_mutations.py",
     )
 )
 CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")

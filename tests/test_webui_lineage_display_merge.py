@@ -1,6 +1,9 @@
+import importlib
 from types import SimpleNamespace
 
-import api.routes as routes
+from api.sessions import session_detail_projection
+
+detail_owner = importlib.import_module("api.sessions.detail_projection")
 
 
 def _msg(role, content, ts):
@@ -30,9 +33,9 @@ def test_webui_lineage_display_merge_includes_parent_only_rows(monkeypatch):
         truncation_watermark=None,
     )
 
-    monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: parent)
+    monkeypatch.setattr(detail_owner, "get_session", lambda sid, metadata_only=False: parent)
 
-    merged = routes._merged_webui_lineage_messages_for_display(tip, tip.messages)
+    merged = session_detail_projection.merge_lineage_messages(tip, tip.messages)
 
     assert [m["content"] for m in merged] == [
         "first prompt",
@@ -66,9 +69,9 @@ def test_webui_lineage_display_merge_preserves_duplicate_turn_duration(monkeypat
         truncation_watermark=None,
     )
 
-    monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: parent)
+    monkeypatch.setattr(detail_owner, "get_session", lambda sid, metadata_only=False: parent)
 
-    merged = routes._merged_webui_lineage_messages_for_display(tip, tip.messages)
+    merged = session_detail_projection.merge_lineage_messages(tip, tip.messages)
 
     assert len(merged) == 1
     assert merged[0]["content"] == "final answer"
@@ -96,9 +99,9 @@ def test_webui_lineage_display_keeps_cumulative_child_tail_without_timestamps(mo
         truncation_watermark=None,
     )
 
-    monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: parent)
+    monkeypatch.setattr(detail_owner, "get_session", lambda sid, metadata_only=False: parent)
 
-    merged = routes._merged_webui_lineage_messages_for_display(tip, tip.messages)
+    merged = session_detail_projection.merge_lineage_messages(tip, tip.messages)
 
     assert [m["content"] for m in merged] == [
         "first prompt",
@@ -122,8 +125,8 @@ def test_webui_lineage_display_merge_skips_explicit_forks(monkeypatch):
         truncation_watermark=None,
     )
 
-    monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: parent)
+    monkeypatch.setattr(detail_owner, "get_session", lambda sid, metadata_only=False: parent)
 
-    merged = routes._merged_webui_lineage_messages_for_display(fork, fork.messages)
+    merged = session_detail_projection.merge_lineage_messages(fork, fork.messages)
 
     assert [m["content"] for m in merged] == ["fork starts here"]

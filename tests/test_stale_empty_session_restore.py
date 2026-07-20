@@ -26,6 +26,9 @@ from unittest.mock import patch
 from urllib.parse import urlparse
 import re
 
+from api.sessions import foreign_session_access
+import api.sessions.materialization as session_materialization
+
 
 REPO = Path(__file__).parent.parent
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
@@ -200,7 +203,9 @@ def _invoke_api_session_keyerror(*, index_json, cli_messages):
     parsed = urlparse("/api/session?session_id=gone_001&messages=0&resolve_model=0")
     with patch("api.routes.get_session", side_effect=KeyError("gone_001")), \
          patch("api.routes.SESSION_INDEX_FILE", _FakeIndexFile()), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={}), \
+         patch.object(session_materialization, "SESSION_INDEX_FILE", _FakeIndexFile()), \
+         patch.object(session_materialization, "get_cli_session_messages", return_value=cli_messages), \
+         patch.object(foreign_session_access, "metadata", return_value={}), \
          patch("api.routes.get_cli_session_messages", return_value=cli_messages), \
          patch("api.routes.j", side_effect=fake_j), \
          patch("api.routes.bad", side_effect=fake_bad):

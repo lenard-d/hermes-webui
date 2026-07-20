@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import api.routes as routes
+from api.sessions import session_detail_projection
 from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parents[1]
@@ -42,7 +42,7 @@ def test_messaging_merge_helper_matches_session_get_coordinate_space():
         {"role": "assistant", "content": "cli later", "timestamp": 4},
     ]
 
-    merged = routes._merged_session_messages_for_display(session, cli_messages)
+    merged = session_detail_projection.merge_session_messages(session, cli_messages)
 
     assert [m["content"] for m in merged] == [
         "cli earlier",
@@ -64,7 +64,7 @@ def test_messaging_merge_helper_dedupes_equivalent_timestamp_formats():
         {"role": "assistant", "content": "same answer", "timestamp": 11},
     ]
 
-    merged = routes._merged_session_messages_for_display(session, cli_messages)
+    merged = session_detail_projection.merge_session_messages(session, cli_messages)
 
     assert [m["content"] for m in merged] == ["hi", "same answer"]
 
@@ -91,7 +91,7 @@ def test_messaging_merge_preserves_longer_sidecar_order_when_timestamps_collapse
         {"role": "assistant", "content": "second answer", "timestamp": 101.4},
     ]
 
-    merged = routes._merged_session_messages_for_display(session, cli_messages)
+    merged = session_detail_projection.merge_session_messages(session, cli_messages)
 
     assert [m["content"] for m in merged] == [
         "prior answer",
@@ -104,16 +104,16 @@ def test_messaging_merge_preserves_longer_sidecar_order_when_timestamps_collapse
 
 def test_branch_handler_uses_merged_messaging_messages_for_keep_count():
     branch_idx = SESSION_MUTATIONS_PY.index('parsed.path == "/api/session/branch":')
-    block = SESSION_MUTATIONS_PY[branch_idx : branch_idx + 2600]
+    block = SESSION_MUTATIONS_PY[branch_idx : branch_idx + 3600]
 
-    assert "_merged_session_messages_for_display(source, cli_messages)" in block
+    assert "session_detail_projection.merge_session_messages(" in block
     assert "get_cli_session_messages(source.session_id)" in block
     assert "source_messages = source.messages or []" not in block
 
 
 def test_branch_handler_best_effort_saves_source_before_fork_slice():
     branch_idx = SESSION_MUTATIONS_PY.index('parsed.path == "/api/session/branch":')
-    block = SESSION_MUTATIONS_PY[branch_idx : branch_idx + 2600]
+    block = SESSION_MUTATIONS_PY[branch_idx : branch_idx + 3600]
 
     assert "source.save()" in block
     assert block.index("source.save()") < block.index("source_messages =")

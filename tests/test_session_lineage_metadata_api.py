@@ -9,9 +9,9 @@ import api.routes as routes
 import api.sessions.cache as session_cache
 import api.sessions.records as session_records
 import api.sessions.sidebar as session_sidebar
-import api.sessions.sidebar_projection as sidebar_projection
 import api.sessions.state_db as session_state_db
 import api.runs.runtime_state as runtime_state
+from api.sessions import session_sidebar_projection
 from api.sessions.records import SESSIONS, Session
 from api.sessions.sidebar import all_sessions
 
@@ -254,7 +254,7 @@ def test_child_of_hidden_compression_segment_exposes_parent_lineage_root(_isolat
         assert child.get("parent_session_id") == "lineage_api_tip"
         assert child.get("_parent_lineage_root_id") == "lineage_api_root"
         assert child.get("_parent_lineage_tip_id") == "lineage_api_tip"
-        serialized = sidebar_projection._sidebar_session_response_item(
+        serialized = session_sidebar_projection.response_item(
             child, redact_enabled=False
         )
         assert serialized.get("_parent_lineage_tip_id") == "lineage_api_tip"

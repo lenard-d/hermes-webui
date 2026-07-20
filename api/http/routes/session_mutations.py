@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.sessions import (
+    foreign_session_access,
+    is_messaging_session_record,
+    requires_external_metadata_lookup,
+    session_detail_projection,
+    session_sidebar_projection as sidebar_projection,
+)
 
 
 def handle_post(handler, parsed, body, diag, ctx: RouteContext):
@@ -24,22 +31,14 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     _handle_terminal_input = ctx["_handle_terminal_input"]
     _handle_terminal_resize = ctx["_handle_terminal_resize"]
     _handle_terminal_start = ctx["_handle_terminal_start"]
-    _is_messaging_session_id = ctx["_is_messaging_session_id"]
-    _is_messaging_session_record = ctx["_is_messaging_session_record"]
-    _load_branch_source_or_refuse = ctx["_load_branch_source_or_refuse"]
-    _lookup_cli_session_metadata = ctx["_lookup_cli_session_metadata"]
-    _merged_session_messages_for_display = ctx["_merged_session_messages_for_display"]
     _persist_generated_session_title = ctx["_persist_generated_session_title"]
-    _publish_materialized_session = ctx["_publish_materialized_session"]
     _publish_session_list_changed = ctx["_publish_session_list_changed"]
     _resolve_context_length_for_session_model = ctx[
         "_resolve_context_length_for_session_model"
     ]
     _sanitize_error = ctx["_sanitize_error"]
-    _session_is_subagent_view_only = ctx["_session_is_subagent_view_only"]
     _session_visible_to_active_profile = ctx["_session_visible_to_active_profile"]
     _session_model_state_from_request = ctx["_session_model_state_from_request"]
-    _session_requires_cli_metadata_lookup = ctx["_session_requires_cli_metadata_lookup"]
     _sync_session_title_to_insights = ctx["_sync_session_title_to_insights"]
     _validate_session_toolsets_shape = ctx["_validate_session_toolsets_shape"]
     _worktree_retained_payload_for_session_id = ctx[
@@ -144,7 +143,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         if "name" not in body:
             return bad(handler, "Missing required field: name")
         sid = body["session_id"]
-        if _session_is_subagent_view_only(sid):
+        if foreign_session_access.is_view_only(sid):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",
@@ -197,7 +196,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         except ValueError as e:
             return bad(handler, str(e))
         sid = body["session_id"]
-        if _session_is_subagent_view_only(sid):
+        if foreign_session_access.is_view_only(sid):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",
@@ -233,7 +232,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         except ValueError as e:
             return bad(handler, str(e))
         sid = body["session_id"]
-        if _session_is_subagent_view_only(sid):
+        if foreign_session_access.is_view_only(sid):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot store a draft from WebUI",
@@ -393,7 +392,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             return bad(handler, "session_id is required")
         if not is_safe_session_id(sid):
             return bad(handler, "Invalid session_id", 400)
-        cli_meta_for_delete = _lookup_cli_session_metadata(sid)
+        cli_meta_for_delete = foreign_session_access.metadata(sid)
         if cli_meta_for_delete.get("read_only"):
             return bad(
                 handler, "Read-only imported sessions cannot be deleted from WebUI", 400
@@ -401,13 +400,13 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         # A delegated subagent child (#5307) is view-only and owned by the
         # delegate runner. Deleting it here would call delete_cli_session() and
         # erase the child's state.db transcript — refuse it.
-        if _session_is_subagent_view_only(sid):
+        if foreign_session_access.is_view_only(sid):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be deleted from WebUI",
                 400,
             )
-        is_messaging_session = _is_messaging_session_id(sid)
+        is_messaging_session = sidebar_projection.is_messaging_session(sid)
         worktree_retained = _worktree_retained_payload_for_session_id(sid)
         try:
             event_profile = getattr(
@@ -448,7 +447,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             require(body, "session_id")
         except ValueError as e:
             return bad(handler, str(e))
-        if _session_is_subagent_view_only(body["session_id"]):
+        if foreign_session_access.is_view_only(body["session_id"]):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",
@@ -554,7 +553,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             require(body, "session_id")
         except ValueError as e:
             return bad(handler, str(e))
-        if _session_is_subagent_view_only(body["session_id"]):
+        if foreign_session_access.is_view_only(body["session_id"]):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",
@@ -613,7 +612,24 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         # (Opus pre-release follow-up.)
         if not isinstance(body["session_id"], str):
             return bad(handler, "session_id must be a string")
-        source = _load_branch_source_or_refuse(handler, body["session_id"])
+        branch_source = foreign_session_access.resolve_branch_source(
+            body["session_id"]
+        )
+        if branch_source.refusal == "subagent_view_only":
+            return bad(
+                handler,
+                "Subagent sessions are view-only and cannot be branched from WebUI",
+                400,
+            )
+        if branch_source.refusal == "foreign_view_only":
+            return bad(
+                handler,
+                "Read-only sessions cannot be branched from WebUI",
+                403,
+            )
+        if branch_source.refusal:
+            return bad(handler, "Session not found", 404)
+        source = branch_source.session
         if source is None:
             return True
 
@@ -643,18 +659,18 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         except Exception:
             pass
         cli_meta = (
-            _lookup_cli_session_metadata(source.session_id)
-            if _session_requires_cli_metadata_lookup(source)
+            foreign_session_access.metadata(source.session_id)
+            if requires_external_metadata_lookup(source)
             else {}
         )
-        is_messaging_session = _is_messaging_session_record(
+        is_messaging_session = is_messaging_session_record(
             source
-        ) or _is_messaging_session_record(cli_meta)
+        ) or is_messaging_session_record(cli_meta)
         cli_messages = (
             get_cli_session_messages(source.session_id) if is_messaging_session else []
         )
         source_messages = (
-            _merged_session_messages_for_display(source, cli_messages)
+            session_detail_projection.merge_session_messages(source, cli_messages)
             if is_messaging_session and cli_messages
             else list(source.messages or [])
         )
@@ -705,7 +721,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         )
         # Empty branches intentionally match new_session's memory-only contract;
         # non-empty branches must persist before becoming cache-visible.
-        _publish_materialized_session(branch, persist=bool(forked_messages))
+        foreign_session_access.publish(branch, persist=bool(forked_messages))
         if forked_messages:
             publish_session_list_changed(
                 "session_branch",
@@ -739,7 +755,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             require(body, "session_id")
         except ValueError as e:
             return bad(handler, str(e))
-        if _session_is_subagent_view_only(body["session_id"]):
+        if foreign_session_access.is_view_only(body["session_id"]):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",
@@ -760,7 +776,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             require(body, "session_id")
         except ValueError as e:
             return bad(handler, str(e))
-        if _session_is_subagent_view_only(body["session_id"]):
+        if foreign_session_access.is_view_only(body["session_id"]):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",

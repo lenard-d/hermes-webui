@@ -411,6 +411,7 @@ from api.profiles import (  # noqa: F401, E402  (re-export)
     get_active_profile_name,
     get_active_profile_name as _get_active_profile_name,
     get_active_hermes_home,
+    is_valid_profile_id,
     list_profiles_api,
     profile_scope_for_detached_worker,
 )
@@ -862,13 +863,13 @@ def _prune_orphaned_webui_zero_message_sessions(rows, *, diag_stage=None):
     # ¬worktree_path) row before our prune block runs.
     _webui_orphan_probe_rows = [
         s for s in rows
-        if _session_source_is_webui(s)
+        if sidebar_projection.source_is_webui(s)
         and not s.get("active_stream_id")
         and not s.get("has_pending_user_message")
         and not s.get("worktree_path")
         and (
             s.get("title", "Untitled") != "Untitled"
-            or _numeric_count(s.get("message_count")) > 0
+            or session_detail_projection.numeric_count(s.get("message_count")) > 0
         )
     ]
     if not _webui_orphan_probe_rows:
@@ -1031,14 +1032,14 @@ def _build_session_list_cache_payload(
         """
         if not isinstance(session, dict):
             return False
-        if _numeric_count(session.get("message_count")) > 0:
+        if session_detail_projection.numeric_count(session.get("message_count")) > 0:
             return True
 
         attention = session.get("attention")
         if not (isinstance(attention, dict) and attention.get("kind")):
-            attention = _session_attention_summary(str(session.get("session_id") or ""))
+            attention = sidebar_projection.attention(str(session.get("session_id") or ""))
         if isinstance(attention, dict) and attention.get("kind"):
-            if _numeric_count(attention.get("count")) > 0:
+            if session_detail_projection.numeric_count(attention.get("count")) > 0:
                 return True
 
         return bool(
@@ -1066,7 +1067,7 @@ def _build_session_list_cache_payload(
     show_previous_messaging_sessions = bool(show_previous_messaging_sessions)
     show_cron_sessions = bool(show_cron_sessions)
     show_webhook_sessions = bool(show_webhook_sessions)
-    webui_sessions = [_normalize_sidebar_source_flags(s) for s in webui_sessions]
+    webui_sessions = [sidebar_projection.normalize_source_flags(s) for s in webui_sessions]
     if show_cli_sessions:
         diag_stage("get_cli_sessions")
         if _callable_accepts_kwarg(get_cli_sessions, "include_claude_code"):
@@ -1113,8 +1114,8 @@ def _build_session_list_cache_payload(
             _sid = s.get("session_id")
             if (
                 _sid
-                and (is_cli_session_row(s) or _is_api_server_sidecar_row(s))
-                and not _session_source_is_webui(s)
+                and (is_cli_session_row(s) or sidebar_projection.is_api_server_sidecar(s))
+                and not sidebar_projection.source_is_webui(s)
                 and _sid not in cli_by_id
             ):
                 _orphan_probe_rows.append(s)
@@ -1192,22 +1193,22 @@ def _build_session_list_cache_payload(
             meta = cli_by_id.get(s.get("session_id"))
             if not meta:
                 continue
-            if _is_messaging_session_record(meta):
-                s.update(_merge_cli_sidebar_metadata(s, meta))
+            if is_messaging_session_record(meta):
+                s.update(sidebar_projection.merge_external_metadata(s, meta))
                 if s.get("session_id") != meta.get("session_id"):
                     s["session_id"] = meta.get("session_id")
             else:
                 for key in ("source_tag", "raw_source", "session_source", "source_label"):
                     if not s.get(key) and meta.get(key):
                         s[key] = meta[key]
-        webui_sessions = [_normalize_sidebar_source_flags(s) for s in webui_sessions]
+        webui_sessions = [sidebar_projection.normalize_source_flags(s) for s in webui_sessions]
         # Apply the same CLI visibility semantics to imported local copies so
         # low-value imported artifacts do not leak into the sidebar.
         webui_sessions = [s for s in webui_sessions if is_cli_session_row_visible(s)]
         represented_webui_ids = set()
         for s in webui_sessions:
-            represented_webui_ids.update(_session_lineage_ids(s))
-        deduped_cli = _dedupe_cli_sidebar_sessions_for_api(
+            represented_webui_ids.update(sidebar_projection.lineage_ids(s))
+        deduped_cli = sidebar_projection.dedupe_external_rows(
             cli,
             represented_webui_ids,
             show_cron_sessions=show_cron_sessions,
@@ -1215,7 +1216,7 @@ def _build_session_list_cache_payload(
         )
     else:
         diag_stage("filter_webui_sessions")
-        webui_sessions = [s for s in webui_sessions if not _is_cli_session_for_settings(s)]
+        webui_sessions = [s for s in webui_sessions if not sidebar_projection.is_cli_session(s)]
         # #4985 second pass — see _prune_orphaned_webui_zero_message_sessions
         # for the gate predicate and the post-#1171-survivor rationale. The
         # prune MUST run here too: established installs have
@@ -1257,18 +1258,24 @@ def _build_session_list_cache_payload(
         scoped = [s for s in merged if _profiles_match(s.get("profile"), active_profile)]
         other_profile_count = 0 if _is_isolated_profile_mode() else len(merged) - len(scoped)
     diag_stage("messaging_dedupe")
-    archived_scoped = _keep_latest_messaging_session_per_source(
+    archived_scoped = sidebar_projection.keep_latest_messaging(
         list(scoped),
         show_previous_messaging_sessions=show_previous_messaging_sessions,
     )
-    visible_scoped = _keep_latest_messaging_session_per_source(
+    visible_scoped = sidebar_projection.keep_latest_messaging(
         [s for s in scoped if not s.get("archived")],
         show_previous_messaging_sessions=show_previous_messaging_sessions,
     )
     if show_cli_sessions:
         diag_stage("cli_cap")
-        archived_scoped = _cap_recent_cli_sessions(archived_scoped, cli_cap=CLI_VISIBLE_SESSION_CAP)
-        visible_scoped = _cap_recent_cli_sessions(visible_scoped, cli_cap=CLI_VISIBLE_SESSION_CAP)
+        archived_scoped = sidebar_projection.cap_recent_cli(
+            archived_scoped,
+            cli_cap=sidebar_projection.cli_visible_session_cap,
+        )
+        visible_scoped = sidebar_projection.cap_recent_cli(
+            visible_scoped,
+            cli_cap=sidebar_projection.cli_visible_session_cap,
+        )
     if visible_only:
         archived_scoped = [
             s for s in archived_scoped if _session_has_server_visible_messages(s)
@@ -1281,28 +1288,28 @@ def _build_session_list_cache_payload(
         visible_scoped = [s for s in visible_scoped if not s.get("default_hidden")]
     archived_webui_count = sum(
         1 for s in archived_scoped
-        if s.get("archived") and not _is_cli_session_for_settings(s)
+        if s.get("archived") and not sidebar_projection.is_cli_session(s)
     )
     archived_cli_count = sum(
         1 for s in archived_scoped
-        if s.get("archived") and _is_cli_session_for_settings(s)
+        if s.get("archived") and sidebar_projection.is_cli_session(s)
     )
     archived_count = archived_webui_count + archived_cli_count
     def _filter_sidebar_source(rows: list[dict]) -> list[dict]:
         if sidebar_source == "webui":
-            return [s for s in rows if not _is_cli_session_for_settings(s)]
+            return [s for s in rows if not sidebar_projection.is_cli_session(s)]
         if sidebar_source == "cli":
-            return [s for s in rows if _is_cli_session_for_settings(s)]
+            return [s for s in rows if sidebar_projection.is_cli_session(s)]
         return list(rows)
 
     full_scoped_all_sources = archived_scoped if include_archived else visible_scoped
     webui_session_count = sum(
         1 for s in full_scoped_all_sources
-        if not _is_cli_session_for_settings(s)
+        if not sidebar_projection.is_cli_session(s)
     )
     cli_session_count = sum(
         1 for s in full_scoped_all_sources
-        if _is_cli_session_for_settings(s)
+        if sidebar_projection.is_cli_session(s)
     )
     visible_scoped_filtered = _filter_sidebar_source(visible_scoped)
     archived_scoped_filtered = _filter_sidebar_source(archived_scoped)
@@ -1351,7 +1358,7 @@ def _build_session_list_cache_payload(
             # a delegated child can't surface as a writable/CLI sidebar row.
             if not _is_sa and not _r.get("read_only"):
                 _sid = str(_r.get("session_id") or "").strip()
-                if _sid and _is_subagent_child_session_id(_sid):
+                if _sid and foreign_session_access.is_subagent_child(_sid):
                     _is_sa = True
             if _is_sa:
                 _r["read_only"] = True
@@ -1405,11 +1412,11 @@ def _session_list_payload_to_response(payload: dict) -> dict:
     except Exception:
         _redact_enabled = True  # fail safe: redact when settings are unreadable
     for s in runtime_rows:
-        item = _sidebar_session_response_item(s, redact_enabled=_redact_enabled) if isinstance(s, dict) else {}
+        item = sidebar_projection.response_item(s, redact_enabled=_redact_enabled) if isinstance(s, dict) else {}
         safe_merged.append(item)
     safe_reference = []
     for s in payload.get("sidebar_reference_sessions", []) or []:
-        item = _sidebar_session_response_item(s, redact_enabled=_redact_enabled) if isinstance(s, dict) else {}
+        item = sidebar_projection.response_item(s, redact_enabled=_redact_enabled) if isinstance(s, dict) else {}
         if item:
             item["_sidebar_reference_only"] = True
         safe_reference.append(item)
@@ -1888,7 +1895,7 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
         # missing-sidecar subagent guard below on the happy path.
         if (
             (getattr(s, "source_tag", "") or getattr(s, "raw_source", "") or "").strip().lower() == "subagent"
-            or _is_subagent_child_session_id(sid)
+            or foreign_session_access.is_subagent_child(sid)
         ):
             raise PermissionError("read-only subagent child session")
         if refresh_cli_messages and getattr(s, "is_cli_session", False):
@@ -1911,7 +1918,7 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
         pass
 
     # Fallback: try to materialize from CLI/agent session metadata
-    cli_meta = _lookup_cli_session_metadata(sid)
+    cli_meta = foreign_session_access.metadata(sid)
 
     # Delegated subagent children (#5307) are view-only: their transcript lives
     # in state.db and ownership belongs to the delegate runner, not WebUI. They
@@ -1923,7 +1930,7 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
     _mat_source_tag = (
         (cli_meta or {}).get("source_tag") or (cli_meta or {}).get("raw_source") or ""
     ).strip().lower()
-    if _mat_source_tag == "subagent" or _is_subagent_child_session_id(sid):
+    if _mat_source_tag == "subagent" or foreign_session_access.is_subagent_child(sid):
         raise PermissionError("read-only subagent child session")
 
     if not cli_meta:
@@ -1934,10 +1941,10 @@ def _get_or_materialize_session(sid: str, *, refresh_cli_messages: bool = False)
     # record — agent rows normalize messaging sources without setting read_only,
     # and state.db (not a WebUI sidecar) is the source of truth for them, so
     # materializing a writable sidecar would fork the title/state.
-    if cli_meta.get("read_only") or _is_messaging_session_record(cli_meta):
+    if cli_meta.get("read_only") or is_messaging_session_record(cli_meta):
         raise PermissionError("read-only imported session")
 
-    if _is_messaging_session_record(cli_meta):
+    if is_messaging_session_record(cli_meta):
         # Messaging sessions: lightweight Session with no messages (state.db is source of truth)
         s = Session(
             session_id=sid,
@@ -1991,14 +1998,17 @@ def _share_snapshot_messages_for_session(session, *, cli_meta: dict | None = Non
         return current_messages
     profile = getattr(session, "profile", None)
     is_messaging = (
-        _is_messaging_session_record(session)
-        or _is_messaging_session_record(cli_meta)
+        is_messaging_session_record(session)
+        or is_messaging_session_record(cli_meta)
     )
     if is_messaging or not current_messages:
         cli_messages = get_cli_session_messages(sid, profile=profile)
         if cli_messages:
             if is_messaging:
-                return _merged_session_messages_for_display(session, cli_messages)
+                return session_detail_projection.merge_session_messages(
+                    session,
+                    cli_messages,
+                )
             return list(cli_messages)
     return current_messages
 
@@ -2088,8 +2098,8 @@ def _resolve_share_session_pair(sid: str, handler):
     try:
         stored_session = get_session(sid)
         cli_meta = (
-            _lookup_cli_session_metadata(sid)
-            if _session_requires_cli_metadata_lookup(stored_session)
+            foreign_session_access.metadata(sid)
+            if requires_external_metadata_lookup(stored_session)
             else {}
         )
         effective_profile = (
@@ -2107,11 +2117,11 @@ def _resolve_share_session_pair(sid: str, handler):
         )
         return snapshot_session, stored_session, cli_meta or {}
     except KeyError:
-        cli_meta = _lookup_cli_session_metadata(sid) or {}
+        cli_meta = foreign_session_access.metadata(sid) or {}
         effective_profile = cli_meta.get("profile") or None
         if not _session_visible_to_active_profile(effective_profile, handler):
             raise KeyError(sid) from None
-        synth, reason = _claim_or_synthesize_cli_session(sid, cli_meta=cli_meta)
+        synth, reason = foreign_session_access.claim(sid, cli_meta)
         if reason == "was_webui" or synth is None:
             raise KeyError(sid) from None
         return synth, None, cli_meta
@@ -2269,96 +2279,14 @@ _ContextLengthLookupInputs.__module__ = __name__
 del _session_models_routes_part
 
 
-from api.routes_parts import session_projection as _session_projection_routes_part
-from api.routes_parts.session_projection import (
-    _lookup_gateway_session_identity,
-    _lookup_cli_session_metadata,
-    _session_index_marks_was_webui,
-    _session_deleted_tombstone_marks_was_webui,
-    _state_db_session_source,
-    _is_subagent_child_session_id,
-    _session_is_subagent_view_only,
-    _is_claimable_cli_source,
-    _claim_or_synthesize_cli_session,
-    _request_wants_all_profiles_import,
-    _normalize_import_profile_value,
-    _load_branch_source_or_refuse,
-    _resolve_cli_import_metadata,
-    _messaging_session_identity,
-    _is_pre_compression_snapshot_id,
-    _is_pre_compression_continuation_row,
-    _session_messaging_raw_source,
-    _has_durable_messaging_identity,
-    _numeric_count,
-    _should_hide_stale_messaging_session,
-    _is_messaging_session_record,
-    _messages_include_tool_metadata,
-    _tool_calls_for_message_window,
-    _message_counts_as_renderable_for_window,
-    _tool_call_ids_in_messages,
-    _tool_result_matches_call_ids,
-    _message_window_for_display,
-    _LIMITED_TOOL_CONTENT_MAX_CHARS,
-    _MAX_MSG_LIMIT,
-    _parse_msg_limit,
-    _SIDECAR_BYTE_TAIL_THRESHOLD,
-    _STATE_DB_DISPLAY_ROW_BACKSTOP,
-    _state_db_backstop_limit_for_display,
-    _LIMITED_TOOL_CONTENT_NOTICE,
-    _tool_message_for_limited_payload,
-    _messages_for_limited_payload,
-    _limited_webui_messages_for_display,
-    _limited_webui_messages_for_display_with_sidecar,
-    _sidecar_file_exceeds_threshold,
-    _state_db_since_timestamp_for_limited_display,
-    _messages_start_with_visible_prefix,
-    _webui_sidecar_lineage_messages_for_display,
-    _merged_session_messages_for_display,
-    _merged_webui_lineage_messages_for_display,
-    _message_summary,
-    _metadata_only_message_summary,
-    _session_requires_cli_metadata_lookup,
-    _is_messaging_session_id,
-    _session_sort_timestamp,
-    _is_cli_session_for_settings,
-    _normalize_sidebar_source_flags,
-    _reconcile_session_detail_source_flags,
-    _session_source_is_webui,
-    _normalized_source_marker,
-    _is_api_server_sidecar_row,
-    _session_lineage_ids,
-    _is_duplicate_webui_state_projection,
-    _dedupe_cli_sidebar_sessions_for_api,
-    CLI_VISIBLE_SESSION_CAP,
-    _cap_recent_cli_sessions,
-    _merge_cli_sidebar_metadata,
-    _messaging_source_key,
-    _keep_latest_messaging_session_per_source,
-    _publish_materialized_session,
-    _SESSION_DETAIL_TAIL_CACHE_VERSION,
-    _SESSION_DETAIL_TAIL_CACHE_MAX_ENTRIES,
-    _SESSION_DETAIL_TAIL_CACHE_MAX_BYTES,
-    _SESSION_DETAIL_TAIL_CACHE_MAX_ENTRY_BYTES,
-    _SESSION_DETAIL_TAIL_CACHE,
-    _SESSION_DETAIL_TAIL_CACHE_BYTES,
-    _SESSION_DETAIL_TAIL_CACHE_LOCK,
-    _session_detail_tail_path_stamp,
-    _session_detail_tail_source_stamp,
-    _session_detail_tail_cache_eligible,
-    _session_detail_tail_cache_key,
-    _session_detail_tail_cache_get,
-    _session_detail_tail_cache_set,
-    _clear_session_detail_tail_cache,
-    _COMPRESSION_RECOVERY_START_LOCK,
-    _pre_compression_continuation_session_id,
-    _session_attention_summary,
-    _SIDEBAR_SESSION_RESPONSE_FIELDS,
-    _sidebar_session_response_item,
-    _redact_sidebar_title_fields,
+from api.sessions import (
+    foreign_session_access,
+    is_messaging_session_record,
+    requires_external_metadata_lookup,
+    session_detail_projection,
+    session_sidebar_projection as sidebar_projection,
+    start_or_get_focused_continuation,
 )
-
-_install_routes_part(globals(), _session_projection_routes_part)
-del _session_projection_routes_part
 
 
 from api.sessions.store import (
@@ -2949,7 +2877,7 @@ def _handle_sessions_search(handler, parsed):
             item = dict(s)
             if isinstance(item.get("title"), str):
                 item["title"] = _redact_text(item["title"], _enabled=_search_redact_enabled)
-            _redact_sidebar_title_fields(item, _search_redact_enabled)
+            sidebar_projection.redact_titles(item, _search_redact_enabled)
             safe_sessions.append(item)
         return j(handler, {
             "sessions": safe_sessions,
@@ -2963,7 +2891,7 @@ def _handle_sessions_search(handler, parsed):
             item = dict(s, match_type="title")
             if isinstance(item.get("title"), str):
                 item["title"] = _redact_text(item["title"], _enabled=_search_redact_enabled)
-            _redact_sidebar_title_fields(item, _search_redact_enabled)
+            sidebar_projection.redact_titles(item, _search_redact_enabled)
             results.append(item)
             continue
         if content_search:
@@ -2979,7 +2907,7 @@ def _handle_sessions_search(handler, parsed):
                             item["match_preview"] = _redact_text(preview, _enabled=_search_redact_enabled)
                         if isinstance(item.get("title"), str):
                             item["title"] = _redact_text(item["title"], _enabled=_search_redact_enabled)
-                        _redact_sidebar_title_fields(item, _search_redact_enabled)
+                        sidebar_projection.redact_titles(item, _search_redact_enabled)
                         results.append(item)
                         break
             except (KeyError, Exception):
@@ -4290,6 +4218,28 @@ def _is_messages_refresh_prefix_match(existing_messages: list, fresh_messages: l
     return True
 
 
+def _request_wants_all_profiles_import(body) -> bool:
+    """Return whether an import request explicitly allows cross-profile lookup."""
+    if not isinstance(body, dict):
+        return False
+    if body.get("all_profiles") is True:
+        return True
+    scope = str(body.get("profile_scope") or "").strip().lower()
+    return scope in {"all", "all_profiles"}
+
+
+def _normalize_import_profile_value(value):
+    """Return a validated profile id or None for an omitted profile."""
+    if value is None:
+        return None
+    profile = str(value).strip()
+    if not profile:
+        return None
+    if not is_valid_profile_id(profile):
+        raise ValueError("Invalid profile")
+    return profile
+
+
 def _handle_session_import_cli(handler, body):
     """Import a single CLI session into the WebUI store."""
     try:
@@ -4323,7 +4273,7 @@ def _handle_session_import_cli(handler, body):
         elif not _session_visible_to_active_profile(existing_profile, handler):
             return bad(handler, "Session not found in CLI store", 404)
         refresh_profile = requested_profile or existing_profile
-        cli_meta = _resolve_cli_import_metadata(
+        cli_meta = foreign_session_access.resolve_import_metadata(
             sid,
             requested_profile=refresh_profile,
             allow_all_profiles=allow_all_profiles,
@@ -4371,7 +4321,7 @@ def _handle_session_import_cli(handler, body):
                     _existing_is_sa = (
                         (existing.source_tag or existing.raw_source or "").strip().lower() == "subagent"
                         or (cli_meta.get("source_tag") or cli_meta.get("raw_source") or "").strip().lower() == "subagent"
-                        or _is_subagent_child_session_id(sid)
+                        or foreign_session_access.is_subagent_child(sid)
                     )
                     updates = {
                         "is_cli_session": (False if _existing_is_sa else True),
@@ -4393,7 +4343,7 @@ def _handle_session_import_cli(handler, body):
                 else:
                     _existing_is_sa = (
                         (existing.source_tag or existing.raw_source or "").strip().lower() == "subagent"
-                        or _is_subagent_child_session_id(sid)
+                        or foreign_session_access.is_subagent_child(sid)
                     )
         except KeyError:
             return bad(handler, "Session not found in CLI store", 404)
@@ -4423,7 +4373,7 @@ def _handle_session_import_cli(handler, body):
         )
 
     # Fetch messages from CLI store
-    cli_meta = _resolve_cli_import_metadata(
+    cli_meta = foreign_session_access.resolve_import_metadata(
         sid,
         requested_profile=requested_profile,
         allow_all_profiles=allow_all_profiles,
@@ -4456,7 +4406,7 @@ def _handle_session_import_cli(handler, body):
     # that belongs to the delegate runner. Treat them like an explicitly
     # read-only source (return the read-only stub payload, do not import), and
     # keep them out of the _isExternalSession frontend gates (is_cli_session=False).
-    _sa_child = _is_subagent_child_session_id(sid)
+    _sa_child = foreign_session_access.is_subagent_child(sid)
     # Also treat a resolved-metadata subagent source as view-only: with
     # all_profiles=true, cli_meta is resolved from the requested (possibly
     # non-active) profile, so the active-profile state.db check (_sa_child)
@@ -4578,7 +4528,7 @@ def _handle_session_import(handler, body):
         profile=get_active_profile_name(),
     )
     s.pinned = body.get("pinned", False)
-    _publish_materialized_session(s, persist=True)
+    foreign_session_access.publish(s, persist=True)
     publish_session_list_changed("session_import")
     return j(handler, {"ok": True, "session": s.compact() | {"messages": s.messages}})
 

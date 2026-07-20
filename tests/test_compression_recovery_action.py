@@ -4,7 +4,7 @@ import io
 import json
 from pathlib import Path
 
-from api.sessions import records
+from api.sessions import records, session_detail_projection
 from api import routes
 from api.compression_recovery import (
     compression_recovery_payload_for_session,
@@ -260,7 +260,7 @@ def test_recovery_child_does_not_merge_parent_transcript(monkeypatch, tmp_path):
     child = records.SESSIONS[child_id]
 
     assert child.messages == []
-    assert routes._merged_webui_lineage_messages_for_display(child) == []
+    assert session_detail_projection.merge_lineage_messages(child) == []
 
 
 def test_recovery_start_reuses_existing_focused_session(monkeypatch, tmp_path):

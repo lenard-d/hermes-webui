@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 
 import pytest
 
+from api.sessions import foreign_session_access
 from tests._pytest_port import BASE
 
 
@@ -362,7 +363,7 @@ def test_get_session_rejects_session_from_inactive_profile():
     with patch("api.routes._get_active_profile_name", return_value="default"), \
          patch("api.routes.get_session", return_value=_ProfileScopedSession()), \
          patch("api.routes._clear_stale_stream_state", return_value=False), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={}), \
+         patch.object(foreign_session_access, "metadata", return_value={}), \
          patch("api.routes.get_state_db_session_messages", return_value=[]), \
          patch("api.routes.bad", side_effect=fake_bad), \
          patch("api.routes.j", side_effect=fake_j):
@@ -444,7 +445,7 @@ def test_get_session_rejects_cli_session_from_inactive_profile():
     with patch("api.routes._get_active_profile_name", return_value="default"), \
          patch("api.routes.get_session", side_effect=KeyError), \
          patch("api.routes.SESSION_INDEX_FILE", SimpleNamespace(exists=lambda: False)), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={"profile": "other"}), \
+         patch.object(foreign_session_access, "metadata", return_value={"profile": "other"}), \
          patch("api.routes.get_cli_session_messages", return_value=[{"role": "user", "content": "foreign profile secret"}]), \
          patch("api.routes.bad", side_effect=fake_bad), \
          patch("api.routes.j", side_effect=fake_j):
@@ -480,7 +481,7 @@ def test_missing_session_under_nondefault_profile_still_404_primary_branch():
     parsed = urlparse("/api/session?session_id=ghost_001&messages=0&resolve_model=0")
     with patch("api.routes._get_active_profile_name", return_value="research"), \
          patch("api.routes.get_session", return_value=_ProfileScopedSession(session_id="ghost_001", profile=None)), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={}), \
+         patch.object(foreign_session_access, "metadata", return_value={}), \
          patch("api.routes.bad", side_effect=fake_bad), \
          patch("api.routes.j", side_effect=fake_j):
         routes.handle_get(SimpleNamespace(headers={"Cookie": "hermes_profile=research"}), parsed)
@@ -511,7 +512,7 @@ def test_missing_session_under_nondefault_profile_still_404_cli_branch():
     with patch("api.routes._get_active_profile_name", return_value="research"), \
          patch("api.routes.get_session", side_effect=KeyError), \
          patch("api.routes.SESSION_INDEX_FILE", SimpleNamespace(exists=lambda: False)), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={}), \
+         patch.object(foreign_session_access, "metadata", return_value={}), \
          patch("api.routes.bad", side_effect=fake_bad), \
          patch("api.routes.j", side_effect=fake_j):
         routes.handle_get(SimpleNamespace(headers={"Cookie": "hermes_profile=research"}), parsed)

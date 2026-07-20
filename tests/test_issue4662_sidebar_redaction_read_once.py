@@ -3,6 +3,7 @@ setting ONCE per response, not once per row. Regression guard for the per-row
 settings.json reload that dominated /api/sessions response_write on large lists.
 """
 import api.routes as routes
+from api.sessions import session_sidebar_projection as sidebar_projection
 
 
 def test_sidebar_payload_reads_redaction_setting_once(monkeypatch):
@@ -103,15 +104,15 @@ def test_redact_sidebar_title_fields_helper():
         "parent_title": f"c {secret}",
         "session_id": "s1",
     }
-    routes._redact_sidebar_title_fields(item, True)
+    sidebar_projection.redact_titles(item, True)
     for field in ("display_title", "_state_db_title", "parent_title"):
         assert secret not in item[field], f"{field} not redacted"
     # Disabled → pass through unchanged.
     item2 = {"display_title": f"a {secret}"}
-    routes._redact_sidebar_title_fields(item2, False)
+    sidebar_projection.redact_titles(item2, False)
     assert item2["display_title"] == f"a {secret}"
     # Missing / non-str fields must not raise.
-    routes._redact_sidebar_title_fields({"display_title": None, "parent_title": 42}, True)
+    sidebar_projection.redact_titles({"display_title": None, "parent_title": 42}, True)
 
 
 def test_sessions_search_branches_redact_derived_titles():
@@ -121,8 +122,8 @@ def test_sessions_search_branches_redact_derived_titles():
     import inspect
     src = inspect.getsource(routes._handle_sessions_search)
     # 3 response branches (empty-query list, title-match, content-match) each build
-    # an `item` and must pass it through _redact_sidebar_title_fields.
-    assert src.count("_redact_sidebar_title_fields(item") >= 3, (
+    # an `item` and must pass it through the public sidebar projection.
+    assert src.count("sidebar_projection.redact_titles(item") >= 3, (
         "a /api/sessions/search branch builds a row without redacting the derived "
         "title fields (display_title/_state_db_title/parent_title)"
     )

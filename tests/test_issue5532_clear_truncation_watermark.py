@@ -28,6 +28,8 @@ cleared transcript) and pass with the fix.
 from __future__ import annotations
 
 import json
+
+from api.sessions import session_detail_projection
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -241,7 +243,9 @@ def test_clear_detaches_compression_snapshot_parent(monkeypatch, tmp_path):
     child.save()
 
     # Sanity: before clear, the display stitch DOES surface the parent snapshot.
-    pre = routes._webui_sidecar_lineage_messages_for_display(Session.load("issue5532child"))
+    pre = session_detail_projection.sidecar_lineage_messages(
+        Session.load("issue5532child")
+    )
     assert any(m.get("content") == "first" for m in pre), (
         "precondition: compressed continuation should stitch the parent snapshot"
     )
@@ -257,7 +261,7 @@ def test_clear_detaches_compression_snapshot_parent(monkeypatch, tmp_path):
     assert getattr(loaded, "compression_anchor_message_key", None) is None
     assert getattr(loaded, "compression_anchor_summary", None) is None
     # The load-time display path must return EMPTY — no resurrected parent rows.
-    display = routes._webui_sidecar_lineage_messages_for_display(loaded)
+    display = session_detail_projection.sidecar_lineage_messages(loaded)
     assert display == [], f"cleared compressed continuation must not resurrect parent; got {display}"
 
 

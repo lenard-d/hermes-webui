@@ -3,47 +3,30 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.sessions import (
+    foreign_session_access,
+    is_messaging_session_record,
+    requires_external_metadata_lookup,
+    session_detail_projection,
+    session_sidebar_projection as sidebar_projection,
+)
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
     RequestDiagnostics = ctx["RequestDiagnostics"]
     SESSION_DIR = ctx["SESSION_DIR"]
-    _MAX_MSG_LIMIT = ctx["_MAX_MSG_LIMIT"]
     _active_state_db_path = ctx["_active_state_db_path"]
     _active_stream_ids = ctx["_active_stream_ids"]
     _all_profiles_enabled = ctx["_all_profiles_enabled"]
     _build_session_list_cache_payload = ctx["_build_session_list_cache_payload"]
-    _claim_or_synthesize_cli_session = ctx["_claim_or_synthesize_cli_session"]
     _clear_stale_stream_state = ctx["_clear_stale_stream_state"]
     _get_cached_session_list_payload = ctx["_get_cached_session_list_payload"]
     _handle_session_compress_status = ctx["_handle_session_compress_status"]
     _hydrate_anchor_activity_scenes = ctx["_hydrate_anchor_activity_scenes"]
     _is_isolated_profile_mode = ctx["_is_isolated_profile_mode"]
-    _is_messaging_session_record = ctx["_is_messaging_session_record"]
-    _is_subagent_child_session_id = ctx["_is_subagent_child_session_id"]
-    _limited_webui_messages_for_display_with_sidecar = ctx[
-        "_limited_webui_messages_for_display_with_sidecar"
-    ]
-    _lookup_cli_session_metadata = ctx["_lookup_cli_session_metadata"]
-    _merge_cli_sidebar_metadata = ctx["_merge_cli_sidebar_metadata"]
-    _merged_session_messages_for_display = ctx["_merged_session_messages_for_display"]
-    _merged_webui_lineage_messages_for_display = ctx[
-        "_merged_webui_lineage_messages_for_display"
-    ]
-    _message_summary = ctx["_message_summary"]
-    _message_window_for_display = ctx["_message_window_for_display"]
-    _messages_for_limited_payload = ctx["_messages_for_limited_payload"]
-    _metadata_only_message_summary = ctx["_metadata_only_message_summary"]
-    _parse_msg_limit = ctx["_parse_msg_limit"]
-    _pre_compression_continuation_session_id = ctx[
-        "_pre_compression_continuation_session_id"
-    ]
     _profiles_match = ctx["_profiles_match"]
     _query_flag = ctx["_query_flag"]
     _query_positive_int = ctx["_query_positive_int"]
-    _reconcile_session_detail_source_flags = ctx[
-        "_reconcile_session_detail_source_flags"
-    ]
     _rescale_threshold_tokens_for_context_window = ctx[
         "_rescale_threshold_tokens_for_context_window"
     ]
@@ -59,29 +42,15 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _run_journal_live_snapshot = ctx["_run_journal_live_snapshot"]
     _run_journal_status_payload = ctx["_run_journal_status_payload"]
     _session_context_length_lookup_state = ctx["_session_context_length_lookup_state"]
-    _session_detail_tail_cache_eligible = ctx["_session_detail_tail_cache_eligible"]
-    _session_detail_tail_cache_get = ctx["_session_detail_tail_cache_get"]
-    _session_detail_tail_cache_key = ctx["_session_detail_tail_cache_key"]
-    _session_detail_tail_cache_set = ctx["_session_detail_tail_cache_set"]
     _session_list_cache_key = ctx["_session_list_cache_key"]
     _session_list_payload_to_response = ctx["_session_list_payload_to_response"]
     _session_model_identity_matches = ctx["_session_model_identity_matches"]
-    _session_requires_cli_metadata_lookup = ctx["_session_requires_cli_metadata_lookup"]
-    _session_source_is_webui = ctx["_session_source_is_webui"]
     _session_visible_to_active_profile = ctx["_session_visible_to_active_profile"]
     _stream_id_visible_to_request_profile = ctx[
         "_stream_id_visible_to_request_profile"
     ]
     _should_accept_session_context_length_refresh = ctx[
         "_should_accept_session_context_length_refresh"
-    ]
-    _state_db_backstop_limit_for_display = ctx["_state_db_backstop_limit_for_display"]
-    _state_db_since_timestamp_for_limited_display = ctx[
-        "_state_db_since_timestamp_for_limited_display"
-    ]
-    _tool_calls_for_message_window = ctx["_tool_calls_for_message_window"]
-    _webui_sidecar_lineage_messages_for_display = ctx[
-        "_webui_sidecar_lineage_messages_for_display"
     ]
     attach_todo_state = ctx["attach_todo_state"]
     bad = ctx["bad"]
@@ -150,7 +119,9 @@ def handle_get(handler, parsed, ctx: RouteContext):
         # case (the client sees there are more rows than returned). Parsing +
         # clamping live in _parse_msg_limit so the expression has direct test
         # coverage; None means the bare no-msg_limit path (full transcript).
-        msg_limit = _parse_msg_limit(query.get("msg_limit", [None])[0])
+        msg_limit = session_detail_projection.parse_message_limit(
+            query.get("msg_limit", [None])[0]
+        )
         # ?msg_before=N — 0-based index into the full message array.
         # Returns messages before this index (for scroll-to-top lazy loading).
         # Combined with msg_limit for paging.
@@ -207,13 +178,12 @@ def handle_get(handler, parsed, ctx: RouteContext):
             original_stream_id = getattr(s, "active_stream_id", None)
             _clear_stale_stream_state(s)
             if _detail_cache_candidate:
-                _detail_cache_key = _session_detail_tail_cache_key(
-                    s,
-                    msg_limit=msg_limit,
-                    expand_renderable=expand_renderable,
-                )
-                _cached_detail_payload = _session_detail_tail_cache_get(
-                    _detail_cache_key
+                _detail_cache_key, _cached_detail_payload = (
+                    session_detail_projection.cached_tail(
+                        s,
+                        msg_limit=msg_limit,
+                        expand_renderable=expand_renderable,
+                    )
                 )
                 if _cached_detail_payload is not None:
                     if _diag:
@@ -227,16 +197,16 @@ def handle_get(handler, parsed, ctx: RouteContext):
                     _session_profile = getattr(s, "profile", None) or None
                 # A full cached object may have changed while the metadata-only
                 # read was in flight. Re-evaluate eligibility before storing.
-                if not _session_detail_tail_cache_eligible(s):
+                if not session_detail_projection.tail_cache_eligible(s):
                     _detail_cache_key = None
             cli_meta = (
-                _lookup_cli_session_metadata(sid)
-                if _session_requires_cli_metadata_lookup(s)
+                foreign_session_access.metadata(sid)
+                if requires_external_metadata_lookup(s)
                 else {}
             )
-            is_messaging_session = _is_messaging_session_record(
+            is_messaging_session = is_messaging_session_record(
                 s
-            ) or _is_messaging_session_record(cli_meta)
+            ) or is_messaging_session_record(cli_meta)
             cli_messages = []
             state_db_messages = []
             metadata_summary = None
@@ -249,7 +219,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                     (
                         state_db_since_timestamp,
                         limited_sidecar_messages,
-                    ) = _state_db_since_timestamp_for_limited_display(
+                    ) = session_detail_projection.limited_state_db_floor(
                         s,
                         msg_limit,
                         msg_before=msg_before,
@@ -264,7 +234,10 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 # merge — see _state_db_backstop_limit_for_display. Compressed
                 # sessions and msg_before paging need their full prefix rows for
                 # correct reconciliation, so those stay uncapped.
-                _backstop = _state_db_backstop_limit_for_display(s, msg_before)
+                _backstop = session_detail_projection.state_db_backstop(
+                    s,
+                    msg_before,
+                )
                 if _backstop is not None:
                     _state_db_reader_kwargs["limit"] = _backstop
                 state_db_messages = get_state_db_session_messages(
@@ -277,7 +250,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 # state.db rows do not make sidebar polling think the
                 # transcript is always newer. Helper threads profile= to
                 # honor #2827's TLS-vs-thread fix.
-                metadata_summary = _metadata_only_message_summary(
+                metadata_summary = session_detail_projection.metadata_summary(
                     sid, profile=_session_profile
                 )
             _t2 = _time.monotonic()
@@ -305,27 +278,36 @@ def handle_get(handler, parsed, ctx: RouteContext):
                     # canonical per-segment transcript. When both sources carry
                     # different slices of the same stitched conversation, merge
                     # them chronologically and dedupe exact repeats.
-                    _all_msgs = _merged_session_messages_for_display(s, cli_messages)
+                    _all_msgs = session_detail_projection.merge_session_messages(
+                        s,
+                        cli_messages,
+                    )
                 elif msg_limit is not None:
-                    _all_msgs = _limited_webui_messages_for_display_with_sidecar(
+                    _all_msgs = session_detail_projection.merge_limited_messages(
                         s,
                         limited_sidecar_messages,
                         state_db_messages,
                     )
                 else:
                     _all_msgs = merge_session_messages_append_only(
-                        _webui_sidecar_lineage_messages_for_display(s),
+                        session_detail_projection.sidecar_lineage_messages(s),
                         state_db_messages,
                         truncation_watermark=getattr(s, "truncation_watermark", None),
                         truncation_boundary=getattr(s, "truncation_boundary", None),
                     )
-                    _all_msgs = _merged_webui_lineage_messages_for_display(s, _all_msgs)
+                    _all_msgs = session_detail_projection.merge_lineage_messages(
+                        s,
+                        _all_msgs,
+                    )
             else:
                 if is_messaging_session and cli_messages:
-                    _all_msgs = _merged_session_messages_for_display(s, cli_messages)
+                    _all_msgs = session_detail_projection.merge_session_messages(
+                        s,
+                        cli_messages,
+                    )
                 else:
                     if metadata_summary is None:
-                        metadata_summary = _message_summary(
+                        metadata_summary = session_detail_projection.message_summary(
                             getattr(s, "messages", []) or []
                         )
                     _summary_message_count = metadata_summary["message_count"]
@@ -333,7 +315,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                     _all_msgs = []
             if not load_messages:
                 if metadata_summary is None:
-                    metadata_summary = _message_summary(_all_msgs)
+                    metadata_summary = session_detail_projection.message_summary(_all_msgs)
                     _summary_message_count = metadata_summary["message_count"]
                     _summary_last_message_at = metadata_summary["last_message_at"]
                 if _summary_message_count == 0:
@@ -352,14 +334,16 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 _summary_message_count = None
                 _summary_last_message_at = None
             if load_messages:
-                _truncated_msgs, _messages_offset = _message_window_for_display(
+                _truncated_msgs, _messages_offset = session_detail_projection.message_window(
                     _all_msgs,
                     msg_limit=msg_limit,
                     msg_before=msg_before,
                     expand_renderable=expand_renderable,
                 )
                 if msg_limit is not None:
-                    _truncated_msgs = _messages_for_limited_payload(_truncated_msgs)
+                    _truncated_msgs = session_detail_projection.bounded_messages(
+                        _truncated_msgs
+                    )
                 _truncated_msgs = _hydrate_anchor_activity_scenes(
                     _truncated_msgs,
                     getattr(s, "anchor_activity_scenes", None),
@@ -441,7 +425,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             # in the session-level list).  The browser-side
             # _syncToolCallsForLoadedMessages handles deduplication by tid.
             if _windowed_messages:
-                _session_tool_calls = _tool_calls_for_message_window(
+                _session_tool_calls = session_detail_projection.window_tool_calls(
                     _session_tool_calls,
                     _messages_offset,
                     len(_truncated_msgs),
@@ -537,13 +521,13 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 )
             # #2980: surface the visible continuation for a hidden pre-compression
             # snapshot so a mobile reload mid-compression can recover to it.
-            continuation_sid = _pre_compression_continuation_session_id(s)
+            continuation_sid = session_detail_projection.continuation_session_id(s)
             if continuation_sid:
                 raw["continuation_session_id"] = continuation_sid
-            if cli_meta and _session_source_is_webui(cli_meta):
-                raw = _reconcile_session_detail_source_flags(raw, cli_meta)
-            elif cli_meta and _is_messaging_session_record(cli_meta):
-                raw = _merge_cli_sidebar_metadata(raw, cli_meta)
+            if cli_meta and sidebar_projection.source_is_webui(cli_meta):
+                raw = sidebar_projection.reconcile_detail_source_flags(raw, cli_meta)
+            elif cli_meta and is_messaging_session_record(cli_meta):
+                raw = sidebar_projection.merge_external_metadata(raw, cli_meta)
                 # ``message_count`` in /api/session is the display coordinate
                 # space used for pagination and the header badge. Messaging
                 # state.db metadata can include raw duplicate transport rows that
@@ -559,7 +543,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             )
             raw["_messages_truncated"] = _truncated
             raw["_messages_offset"] = _messages_offset
-            raw["_msg_limit_max"] = _MAX_MSG_LIMIT
+            raw["_msg_limit_max"] = session_detail_projection.max_message_limit
             _t4 = _time.monotonic()
             if _diag:
                 _diag.stage("t4_after_compact_and_merge")
@@ -580,7 +564,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 .strip()
                 .lower()
                 == "subagent"
-            ) or _is_subagent_child_session_id(sid):
+            ) or foreign_session_access.is_subagent_child(sid):
                 raw["is_cli_session"] = False
                 raw["read_only"] = True
             redact = redact_session_data(raw)
@@ -589,7 +573,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 _diag.stage("t5_after_redact")
             _response_payload = {"session": redact}
             if _detail_cache_key is not None:
-                _fresh_detail_cache_key = _session_detail_tail_cache_key(
+                _fresh_detail_cache_key = session_detail_projection.tail_cache_key(
                     s,
                     msg_limit=msg_limit,
                     expand_renderable=expand_renderable,
@@ -598,7 +582,10 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 # snapshots. Store it only when no authoritative input changed
                 # during reconciliation/redaction (TOCTOU stale-cache guard).
                 if _fresh_detail_cache_key == _detail_cache_key:
-                    _session_detail_tail_cache_set(_detail_cache_key, _response_payload)
+                    session_detail_projection.store_cached_tail(
+                        _detail_cache_key,
+                        _response_payload,
+                    )
             resp = j(handler, _response_payload)
             _t6 = _time.monotonic()
             if _diag:
@@ -649,7 +636,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             # _session_index_marks_was_webui) and the #4911 source ownership
             # gate (via _is_claimable_cli_source) so the two endpoints can't
             # drift on foreign-session semantics.
-            cli_meta = _lookup_cli_session_metadata(sid)
+            cli_meta = foreign_session_access.metadata(sid)
             _session_profile = (cli_meta or {}).get("profile") or None
             if not _session_visible_to_active_profile(_session_profile, handler):
                 if _session_profile:
@@ -671,9 +658,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 # otherwise emit a useless 409 with profile=null and skip the
                 # frontend self-heal + spin the SSE reconnect against a dead sid.
                 return bad(handler, "Session not found", 404)
-            synth, reason = _claim_or_synthesize_cli_session(
-                sid, cli_meta=cli_meta or {}
-            )
+            synth, reason = foreign_session_access.claim(sid, cli_meta or {})
             if reason == "was_webui":
                 # Deleted WebUI session: 404 so the client self-heals
                 # (clears stale /session/<id> URL and localStorage, #2782).
@@ -728,7 +713,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 "tool_calls": [],
             }
             attach_todo_state(sess, msgs)
-            sess = _merge_cli_sidebar_metadata(sess, cli_meta)
+            sess = sidebar_projection.merge_external_metadata(sess, cli_meta)
             return j(handler, {"session": redact_session_data(sess)})
 
     if parsed.path == "/api/session/lineage/report":

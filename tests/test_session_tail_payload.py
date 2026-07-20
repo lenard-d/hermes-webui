@@ -2,6 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+from api.sessions import foreign_session_access, session_detail_projection
+
 
 class _FakeSession:
     def __init__(self, messages):
@@ -59,7 +61,7 @@ def _invoke(session, query=None):
     parsed = urlparse(f"/api/session?{query}")
     with patch("api.routes.get_session", return_value=session), \
          patch("api.routes._clear_stale_stream_state", return_value=False), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={}), \
+         patch.object(foreign_session_access, "metadata", return_value={}), \
          patch("api.routes.get_state_db_session_messages", return_value=[]), \
          patch("api.routes.redact_session_data", side_effect=lambda raw: raw), \
          patch("api.routes.j", side_effect=fake_j):
@@ -155,8 +157,9 @@ def test_msg_limit_tail_does_not_run_heavy_webui_lineage_merge():
     session.parent_session_id = "parent"
     session.session_source = "webui"
 
-    with patch(
-        "api.routes._merged_webui_lineage_messages_for_display",
+    with patch.object(
+        session_detail_projection,
+        "merge_lineage_messages",
         side_effect=AssertionError("limited loads must not merge parent sidecars"),
     ), patch(
         "api.routes.Session.load",

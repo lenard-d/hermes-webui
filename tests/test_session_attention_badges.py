@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import api.profiles as profiles
 import api.routes as routes
+from api.sessions import session_sidebar_projection as sidebar_projection
 
 
 class _FakeHandler:
@@ -62,7 +63,7 @@ def test_attention_summary_purges_stale_gateway_mirror():
             routes._gateway_queues[sid].pop(0)
             assert routes._pending[sid]
 
-        assert routes._session_attention_summary(sid) is None
+        assert sidebar_projection.attention(sid) is None
         with routes._lock:
             assert sid not in routes._pending
     finally:
@@ -82,7 +83,7 @@ def test_attention_summary_keeps_live_gateway_mirror():
             routes._gateway_queues[sid] = [SimpleNamespace(data=dict(approval))]
         routes.submit_gateway_pending_mirror(sid, approval)
 
-        assert routes._session_attention_summary(sid) == {
+        assert sidebar_projection.attention(sid) == {
             "kind": "approval",
             "count": 1,
             "severity": "critical",
@@ -105,7 +106,7 @@ def test_attention_summary_prefers_pending_approvals_over_clarify_questions():
             "choices_offered": ["A", "B", "C"],
         })
 
-        summary = routes._session_attention_summary(sid)
+        summary = sidebar_projection.attention(sid)
 
         assert summary == {
             "kind": "approval",
@@ -129,7 +130,7 @@ def test_attention_summary_reports_clarify_when_no_approval_is_pending():
             "choices_offered": ["slow", "fast"],
         })
 
-        summary = routes._session_attention_summary(sid)
+        summary = sidebar_projection.attention(sid)
 
         assert summary == {
             "kind": "clarify",

@@ -19,7 +19,14 @@ import io
 import json
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse
+
+from api.sessions import (
+    foreign_session_access,
+    session_detail_projection,
+    session_sidebar_projection as sidebar_projection,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
@@ -57,9 +64,7 @@ def _extract_handler(name: str) -> str:
 def test_import_cli_initializes_model_from_lookup_with_unknown_fallback():
     """The metadata lookup path must still provide an explicit unknown model fallback."""
     handler = _extract_handler("_handle_session_import_cli")
-    lookup_idx = handler.find('cli_meta = _resolve_cli_import_metadata(')
-    if lookup_idx == -1:
-        lookup_idx = handler.find('cli_meta = _lookup_cli_session_metadata(sid)')
+    lookup_idx = handler.find('cli_meta = foreign_session_access.resolve_import_metadata(')
     model_idx = handler.find('model = cli_meta.get("model", "unknown") if cli_meta else "unknown"')
     assert lookup_idx != -1, "Expected metadata lookup in _handle_session_import_cli"
     assert model_idx != -1, (
@@ -130,7 +135,17 @@ def test_session_import_cli_refresh_matches_messages_despite_timestamp_type_diff
     monkeypatch.setattr(routes, "bad", lambda _handler, msg, status=400: {"ok": False, "error": msg, "status": status})
     monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: payload)
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda sid, profile=None: fresh if sid == session_id else [])
-    monkeypatch.setattr(routes, "get_cli_sessions", lambda source_filter=None, all_profiles=False: [{"session_id": session_id, "source_tag": "weixin", "raw_source": "weixin", "session_source": "messaging", "source_label": "WeChat"}])
+    monkeypatch.setattr(
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda sid, **_kwargs: {
+            "session_id": sid,
+            "source_tag": "weixin",
+            "raw_source": "weixin",
+            "session_source": "messaging",
+            "source_label": "WeChat",
+        },
+    )
 
     response = routes._handle_session_import_cli(object(), {"session_id": session_id})
 
@@ -183,7 +198,17 @@ def test_session_import_cli_refresh_rejects_prefix_if_non_timing_content_diverge
     monkeypatch.setattr(routes, "bad", lambda _handler, msg, status=400: {"ok": False, "error": msg, "status": status})
     monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: payload)
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda sid, profile=None: fresh if sid == session_id else [])
-    monkeypatch.setattr(routes, "get_cli_sessions", lambda source_filter=None, all_profiles=False: [{"session_id": session_id, "source_tag": "telegram", "raw_source": "telegram", "session_source": "messaging", "source_label": "Telegram"}])
+    monkeypatch.setattr(
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda sid, **_kwargs: {
+            "session_id": sid,
+            "source_tag": "telegram",
+            "raw_source": "telegram",
+            "session_source": "messaging",
+            "source_label": "Telegram",
+        },
+    )
 
     response = routes._handle_session_import_cli(object(), {"session_id": session_id})
 
@@ -244,17 +269,17 @@ def test_session_import_cli_refresh_mutates_the_repository_current_session(monke
         lambda sid, profile=None: cli_messages if sid == session_id else [],
     )
     monkeypatch.setattr(
-        routes,
-        "get_cli_sessions",
-        lambda source_filter=None, all_profiles=False: [
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda sid, **_kwargs: (
             {
-                "session_id": session_id,
+                "session_id": sid,
                 "source_tag": "cli",
                 "raw_source": "cli",
                 "session_source": "cli",
                 "source_label": "CLI",
             }
-        ],
+        ),
     )
 
     @contextmanager
@@ -308,16 +333,16 @@ def test_session_import_cli_preserves_parent_metadata_on_existing_import(monkeyp
     monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: payload)
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda sid, profile=None: existing.messages if sid == session_id else [])
     monkeypatch.setattr(
-        routes,
-        "get_cli_sessions",
-        lambda source_filter=None, all_profiles=False: [{
-            "session_id": session_id,
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda sid, **_kwargs: {
+            "session_id": sid,
             "source_tag": "telegram",
             "raw_source": "telegram",
             "session_source": "messaging",
             "source_label": "Telegram",
             "parent_session_id": parent_id,
-        }],
+        },
     )
 
     response = routes._handle_session_import_cli(object(), {"session_id": session_id})
@@ -342,10 +367,10 @@ def test_read_only_import_payload_includes_parent_session_id(monkeypatch):
     monkeypatch.setattr(routes, "j", lambda _handler, payload, status=200, extra_headers=None: payload)
     monkeypatch.setattr(routes, "get_cli_session_messages", lambda sid, profile=None: messages if sid == session_id else [])
     monkeypatch.setattr(
-        routes,
-        "get_cli_sessions",
-        lambda source_filter=None, all_profiles=False: [{
-            "session_id": session_id,
+        foreign_session_access,
+        "resolve_import_metadata",
+        lambda sid, **_kwargs: {
+            "session_id": sid,
             "title": "Read-only child",
             "model": "test-model",
             "created_at": 1.0,
@@ -356,7 +381,7 @@ def test_read_only_import_payload_includes_parent_session_id(monkeypatch):
             "source_label": "Discord",
             "parent_session_id": parent_id,
             "read_only": True,
-        }],
+        },
     )
 
     response = routes._handle_session_import_cli(object(), {"session_id": session_id})
@@ -368,9 +393,7 @@ def test_read_only_import_payload_includes_parent_session_id(monkeypatch):
 
 def test_merge_cli_sidebar_metadata_keeps_larger_sidecar_message_count():
     """Sidebar metadata merge should not shrink repaired aggregate sidecar counts."""
-    import api.routes as routes
-
-    merged = routes._merge_cli_sidebar_metadata(
+    merged = sidebar_projection.merge_external_metadata(
         {"session_id": "sid", "message_count": 535, "title": "Recovered"},
         {"session_id": "sid", "message_count": 407, "source_tag": "discord"},
     )
@@ -380,8 +403,6 @@ def test_merge_cli_sidebar_metadata_keeps_larger_sidecar_message_count():
 
 def test_webui_state_projection_dedupes_by_lineage_root():
     """WebUI-origin state.db projections should not be additive non-WebUI rows."""
-    import api.routes as routes
-
     represented = {"root_sid"}
     state_projection = {
         "session_id": "tip_sid",
@@ -392,13 +413,16 @@ def test_webui_state_projection_dedupes_by_lineage_root():
         "_lineage_tip_id": "tip_sid",
     }
 
-    assert routes._is_duplicate_webui_state_projection(state_projection, represented) is True
+    assert sidebar_projection.dedupe_external_rows(
+        [state_projection],
+        represented,
+        show_cron_sessions=False,
+        show_webhook_sessions=False,
+    ) == []
 
 
 def test_external_state_projection_not_deduped_by_webui_source_guard():
     """The WebUI-source guard must not hide real external conversations."""
-    import api.routes as routes
-
     represented = {"root_sid"}
     external_projection = {
         "session_id": "tip_sid",
@@ -409,7 +433,12 @@ def test_external_state_projection_not_deduped_by_webui_source_guard():
         "_lineage_tip_id": "tip_sid",
     }
 
-    assert routes._is_duplicate_webui_state_projection(external_projection, represented) is False
+    assert sidebar_projection.dedupe_external_rows(
+        [external_projection],
+        represented,
+        show_cron_sessions=False,
+        show_webhook_sessions=False,
+    ) == [external_projection]
 
 
 def test_sessions_endpoint_suppresses_duplicate_webui_state_projection(monkeypatch):
@@ -475,12 +504,17 @@ def test_sessions_endpoint_suppresses_duplicate_webui_state_projection(monkeypat
 
 def test_messaging_session_loader_prefers_longer_sidecar_transcript():
     """Pin the /api/session invariant that repaired sidecars can be longer than state.db segments."""
-    handler = _extract_handler("handle_get")
-    old = "if is_messaging_session and cli_messages:\n                    _all_msgs = cli_messages"
-    assert old not in handler
-    assert "_all_msgs = _merged_session_messages_for_display(s, cli_messages)" in handler
-    src = (REPO / "api" / "routes_parts" / "session_projection.py").read_text(
-        encoding="utf-8"
+    sidecar_messages = [
+        {"role": "user", "content": "first", "timestamp": 1.0},
+        {"role": "assistant", "content": "second", "timestamp": 2.0},
+    ]
+    session = SimpleNamespace(
+        session_id="sidecar-longer",
+        messages=sidecar_messages,
+        parent_session_id=None,
     )
-    assert "sidecar_messages = _webui_sidecar_lineage_messages_for_display(session)" in src
-    assert "len(sidecar_messages) > len(cli_messages)" in src
+
+    assert session_detail_projection.merge_session_messages(
+        session,
+        [{"role": "user", "content": "first", "timestamp": 1.0}],
+    ) == sidecar_messages

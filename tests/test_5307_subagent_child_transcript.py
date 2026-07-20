@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 import api.routes as routes
-from api.sessions import materialization
+from api.sessions import foreign_session_access, materialization
 
 from tests.frontend_asset_contract import family_source
 
@@ -148,24 +148,16 @@ def isolated_state_db(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_subagent_child_helpers_defined_in_session_projection():
-    assert routes._is_subagent_child_session_id is materialization._is_subagent_child_session_id, (
-        "session_projection.py must define _is_subagent_child_session_id to distinguish "
-        "delegated subagent children from deleted WebUI sessions (#5307)"
-    )
-    assert routes._state_db_session_source is materialization._state_db_session_source, (
-        "session_projection.py must define _state_db_session_source "
-        "(cheap state.db source lookup)"
-    )
+def test_subagent_child_helpers_are_owned_by_materialization():
+    assert callable(foreign_session_access.is_subagent_child)
+    assert callable(foreign_session_access.is_view_only)
 
 
 def test_was_webui_gate_excludes_subagent_children():
     """The was_webui 404 gate must be guarded by
     ``not _is_subagent_child_session_id(sid)`` so subagent children fall
     through to state.db transcript recovery instead of 404ing."""
-    assert routes._claim_or_synthesize_cli_session is materialization._claim_or_synthesize_cli_session, (
-        "all was_webui predicates must share the subagent-child exclusion (#5307)"
-    )
+    assert callable(foreign_session_access.claim)
 
 
 def test_sessions_js_open_handlers_keep_isexternalsession_contract():
@@ -208,7 +200,7 @@ def test_subagent_child_indexed_as_webui_recovers_readonly_not_404(
         ],
     )
 
-    sess, reason = routes_module._claim_or_synthesize_cli_session("subagent-child-1")
+    sess, reason = foreign_session_access.claim("subagent-child-1")
     assert reason == "not_claimable", (
         f"subagent child must recover view-only (not_claimable), not 404 or "
         f"become writable; got reason={reason!r}"
@@ -241,7 +233,7 @@ def test_deleted_webui_session_still_returns_was_webui(
         ],
     )
 
-    sess, reason = routes_module._claim_or_synthesize_cli_session("webui-orphan")
+    sess, reason = foreign_session_access.claim("webui-orphan")
     assert sess is None
     assert reason == "was_webui", (
         "a deleted WebUI session with no state.db row must keep the #2782 404"
@@ -254,9 +246,9 @@ def test_state_db_source_helper_reads_subagent(routes_module, isolated_state_db)
     _make_state_db(
         isolated_state_db["db"], "sa-1", source="subagent", message_count=1,
     )
-    assert routes_module._state_db_session_source("sa-1") == "subagent"
-    assert routes_module._is_subagent_child_session_id("sa-1") is True
-    assert routes_module._is_subagent_child_session_id("does-not-exist") is False
+    assert materialization._state_db_session_source("sa-1") == "subagent"
+    assert foreign_session_access.is_subagent_child("sa-1") is True
+    assert foreign_session_access.is_subagent_child("does-not-exist") is False
 
 
 def test_import_cli_endpoint_does_not_materialize_subagent_child():
@@ -267,7 +259,7 @@ def test_import_cli_endpoint_does_not_materialize_subagent_child():
     import inspect
 
     block = inspect.getsource(routes._handle_session_import_cli)
-    assert "_is_subagent_child_session_id(sid)" in block, (
+    assert "foreign_session_access.is_subagent_child(sid)" in block, (
         "import_cli handler must detect subagent children"
     )
     assert "_read_only_view" in block, (
@@ -343,12 +335,12 @@ def test_subagent_view_only_guard_helper(routes_module, isolated_state_db):
     _make_state_db(
         isolated_state_db["db"], "sa-guard-1", source="subagent", message_count=1,
     )
-    assert routes_module._session_is_subagent_view_only("sa-guard-1") is True
+    assert foreign_session_access.is_view_only("sa-guard-1") is True
     _make_state_db(
         isolated_state_db["db"], "tui-guard-1", source="tui", message_count=1,
     )
     # a non-subagent id with no matching sidecar is not flagged
-    assert routes_module._session_is_subagent_view_only("nope-nope") is False
+    assert foreign_session_access.is_view_only("nope-nope") is False
 
 
 def test_mutation_routes_guard_subagent_source_in_source():
@@ -368,7 +360,7 @@ def test_mutation_routes_guard_subagent_source_in_source():
         idx = src.index(f'parsed.path == "{route}"')
         nxt = src.find('parsed.path == "/api/session', idx + 10)
         block = src[idx:] if nxt < 0 else src[idx:nxt]
-        assert "_session_is_subagent_view_only(" in block, (
+        assert "foreign_session_access.is_view_only(" in block, (
             f"{route} must guard against subagent children before mutating"
         )
     # list coercion present

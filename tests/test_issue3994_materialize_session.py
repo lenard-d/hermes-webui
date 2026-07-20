@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
+from api.sessions import foreign_session_access
+
 
 def test_materialize_returns_in_store_session_directly():
     """When get_session() succeeds, the helper returns it (after full-load) untouched."""
@@ -29,7 +31,7 @@ def test_materialize_missing_everywhere_raises_keyerror():
     import api.routes as routes
 
     with patch("api.routes.get_session", side_effect=KeyError("s1")), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={}):
+         patch.object(foreign_session_access, "metadata", return_value={}):
         with pytest.raises(KeyError):
             routes._get_or_materialize_session("s1")
 
@@ -40,7 +42,11 @@ def test_materialize_readonly_session_raises_permissionerror():
     import api.routes as routes
 
     with patch("api.routes.get_session", side_effect=KeyError("ro1")), \
-         patch("api.routes._lookup_cli_session_metadata", return_value={"read_only": True, "source_tag": "claude_code"}):
+         patch.object(
+             foreign_session_access,
+             "metadata",
+             return_value={"read_only": True, "source_tag": "claude_code"},
+         ):
         with pytest.raises(PermissionError):
             routes._get_or_materialize_session("ro1")
 
@@ -59,8 +65,7 @@ def test_materialize_cli_session_imports_full_history():
     }
     imported = SimpleNamespace(session_id="cli1", profile="default", messages=[{"role": "user", "content": "hi"}])
     with patch("api.routes.get_session", side_effect=KeyError("cli1")), \
-         patch("api.routes._lookup_cli_session_metadata", return_value=cli_meta), \
-         patch("api.routes._is_messaging_session_record", return_value=False), \
+         patch.object(foreign_session_access, "metadata", return_value=cli_meta), \
          patch("api.routes.get_cli_session_messages", return_value=[{"role": "user", "content": "hi"}]), \
          patch("api.routes.title_from", return_value="CLI chat"), \
          patch("api.routes.import_cli_session", return_value=imported) as mock_import:
@@ -106,7 +111,7 @@ def test_materialize_rejects_messaging_cli_meta_without_readonly_flag():
 
     cli_meta = {"title": "tg chat", "model": "gpt-test", "source_tag": "telegram", "session_source": "messaging"}
     with patch("api.routes.get_session", side_effect=KeyError("msg1")), \
-         patch("api.routes._lookup_cli_session_metadata", return_value=cli_meta), \
+         patch.object(foreign_session_access, "metadata", return_value=cli_meta), \
          patch("api.routes.import_cli_session") as mock_import, \
          patch("api.routes.Session") as MockSession:
         with pytest.raises(PermissionError):

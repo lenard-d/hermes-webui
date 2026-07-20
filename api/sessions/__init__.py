@@ -5,6 +5,9 @@ the owning module (for example ``api.sessions.recovery``) instead of depending
 on a broad compatibility facade.
 """
 
+from importlib import import_module
+from typing import Any
+
 from .channels import (
     SESSION_CHANNELS,
     SESSION_CHANNELS_LOCK,
@@ -44,6 +47,7 @@ from .repository import (
 )
 from .cache import get_session, new_session
 from .anchor_scene import AnchorSceneMessageNotFound, persist_anchor_activity_scene
+from .compression_recovery_projection import start_or_get_focused_continuation
 from .external import clear_cli_sessions_cache
 from .pending_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 from .process_wakeup import clear_process_wakeup_pause
@@ -56,6 +60,7 @@ from .records import (
     model_explicit_pick_signature,
 )
 from .sidebar import all_sessions
+from .sources import is_messaging_session_record, requires_external_metadata_lookup
 from .state_db import _active_state_db_path, get_session_for_file_ops
 
 REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
@@ -64,6 +69,33 @@ REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
 def active_state_db_path():
     """Return the active profile's Hermes state database path."""
     return _active_state_db_path()
+
+
+_LAZY_PUBLIC = {
+    "foreign_session_access": (
+        ".materialization",
+        "foreign_session_access",
+    ),
+    "session_detail_projection": (
+        ".detail_projection",
+        "session_detail_projection",
+    ),
+    "session_sidebar_projection": (
+        ".sidebar_projection",
+        "sidebar_projection",
+    ),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Load specialized session operations without widening import cycles."""
+    try:
+        module_name, attribute = _LAZY_PUBLIC[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+    value = getattr(import_module(module_name, __name__), attribute)
+    globals()[name] = value
+    return value
 
 
 def commit_session_memory(
@@ -128,7 +160,9 @@ __all__ = [
     "get_session",
     "get_session_for_file_ops",
     "get_session_channel",
+    "foreign_session_access",
     "is_safe_session_id",
+    "is_messaging_session_record",
     "load_projects",
     "mark_turn_completed",
     "merge_session_messages_append_only",
@@ -140,12 +174,16 @@ __all__ = [
     "register_agent",
     "register_background_commit_thread",
     "repair_safe_session_recovery",
+    "requires_external_metadata_lookup",
     "retry_last",
     "session_status",
+    "session_detail_projection",
     "session_usage",
     "session_write_owner",
     "should_emit_session_updated",
     "subscribe_to_session_channel",
+    "start_or_get_focused_continuation",
+    "session_sidebar_projection",
     "title_from",
     "truncate_context_for_display_keep",
     "truncate_session_at_keep",

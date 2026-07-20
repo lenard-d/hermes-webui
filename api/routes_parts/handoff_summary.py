@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from api.sessions import (
+    foreign_session_access,
+    session_sidebar_projection as sidebar_projection,
+)
+
 if TYPE_CHECKING:
     from api.runs.agent_runtime import (
         AgentRuntimeChangedError,
@@ -18,8 +23,6 @@ if TYPE_CHECKING:
     )
     from api.helpers import _sanitize_error, bad, j, require
     from api.routes import (
-        _is_messaging_session_id,
-        _session_is_subagent_view_only,
         logger,
     )
     from api.sessions.repository import edit_session
@@ -210,7 +213,7 @@ def _persist_handoff_summary_to_state_db(sid: str, message: dict) -> bool:
 def _persist_handoff_summary(sid: str, summary: str, channel: str | None, rounds: int | None, fallback: bool = False) -> dict:
     """Persist a handoff summary marker across local/session backends."""
     marker = _build_handoff_summary_tool_message(sid, summary, channel, rounds, fallback)
-    is_messaging_session = _is_messaging_session_id(sid)
+    is_messaging_session = sidebar_projection.is_messaging_session(sid)
     if is_messaging_session:
         _persist_handoff_summary_to_state_db(sid, marker)
         _persist_handoff_summary_locally(sid, marker)
@@ -250,7 +253,7 @@ def _handle_handoff_summary(handler, body):
 
     from api.sessions.store import get_cli_session_messages, count_conversation_rounds, CONVERSATION_ROUND_THRESHOLD
 
-    if _session_is_subagent_view_only(sid):
+    if foreign_session_access.is_view_only(sid):
         return bad(handler, "Subagent sessions are view-only and cannot be summarized from WebUI", 400)
     rounds = count_conversation_rounds(sid, since=since)
     if rounds < CONVERSATION_ROUND_THRESHOLD:

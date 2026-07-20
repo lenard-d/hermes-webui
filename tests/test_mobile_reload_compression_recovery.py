@@ -5,6 +5,8 @@ from tests.frontend_asset_contract import family_source
 import json
 from pathlib import Path
 
+from api.sessions import session_detail_projection
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS = ROOT / "static" / "sessions.js"
@@ -108,7 +110,7 @@ def test_continuation_lookup_is_profile_scoped(tmp_path, monkeypatch):
         fake[s.session_id] = s
     continuation_owner = _patch_continuation_owner(monkeypatch, tmp_path, sessions=fake)
 
-    result = continuation_owner._pre_compression_continuation_session_id(snapshot)
+    result = session_detail_projection.continuation_session_id(snapshot)
     assert result == "cont00000001", (
         f"expected same-profile continuation, got {result!r}"
     )
@@ -117,7 +119,7 @@ def test_continuation_lookup_is_profile_scoped(tmp_path, monkeypatch):
     fake2 = collections.OrderedDict()
     fake2[foreign_child.session_id] = foreign_child
     monkeypatch.setattr(continuation_owner, "SESSIONS", fake2)
-    assert continuation_owner._pre_compression_continuation_session_id(snapshot) is None
+    assert session_detail_projection.continuation_session_id(snapshot) is None
 
 
 def test_continuation_lookup_uses_index_without_scanning_sidecars(
@@ -170,10 +172,7 @@ def test_continuation_lookup_uses_index_without_scanning_sidecars(
         ),
     )
 
-    assert (
-        continuation_owner._pre_compression_continuation_session_id(snapshot)
-        == "childindex01"
-    )
+    assert session_detail_projection.continuation_session_id(snapshot) == "childindex01"
 
 
 def test_empty_indexed_continuation_lookup_falls_back_to_sidecars(
@@ -210,10 +209,7 @@ def test_empty_indexed_continuation_lookup_falls_back_to_sidecars(
         ),
     )
 
-    assert (
-        continuation_owner._pre_compression_continuation_session_id(snapshot)
-        == "childempty01"
-    )
+    assert session_detail_projection.continuation_session_id(snapshot) == "childempty01"
     assert loaded == ["childempty01"]
 
 
@@ -266,10 +262,7 @@ def test_stale_index_with_existing_candidate_falls_back_to_newer_sidecar(
         monkeypatch, tmp_path, index_file=index_file
     )
 
-    assert (
-        continuation_owner._pre_compression_continuation_session_id(snapshot)
-        == "newstale001"
-    )
+    assert session_detail_projection.continuation_session_id(snapshot) == "newstale001"
 
 
 def test_stale_index_multihop_falls_back_to_missing_descendant_sidecar(
@@ -337,10 +330,7 @@ def test_stale_index_multihop_falls_back_to_missing_descendant_sidecar(
         monkeypatch, tmp_path, index_file=index_file
     )
 
-    assert (
-        continuation_owner._pre_compression_continuation_session_id(snapshot)
-        == "newstale002"
-    )
+    assert session_detail_projection.continuation_session_id(snapshot) == "newstale002"
 
 
 def test_indexed_continuation_lookup_follows_snapshot_hops_without_scanning(
@@ -396,10 +386,7 @@ def test_indexed_continuation_lookup_follows_snapshot_hops_without_scanning(
         ),
     )
 
-    assert (
-        continuation_owner._pre_compression_continuation_session_id(snapshot)
-        == "finalindex1"
-    )
+    assert session_detail_projection.continuation_session_id(snapshot) == "finalindex1"
 
 
 def test_indexed_continuation_lookup_keeps_profile_scope(tmp_path, monkeypatch):
@@ -443,4 +430,4 @@ def test_indexed_continuation_lookup_keeps_profile_scope(tmp_path, monkeypatch):
         monkeypatch, tmp_path, index_file=index_file
     )
 
-    assert continuation_owner._pre_compression_continuation_session_id(snapshot) is None
+    assert session_detail_projection.continuation_session_id(snapshot) is None

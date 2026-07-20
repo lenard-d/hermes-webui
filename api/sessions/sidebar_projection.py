@@ -33,12 +33,19 @@ def _lookup_gateway_session_identity(session_id: str) -> dict:
 def _load_gateway_session_identity_map() -> dict[str, dict]:
     return load_gateway_session_identity_map()
 
-def _messaging_session_identity(session: dict, raw_source: str) -> str:
+def _messaging_session_identity(
+    session: dict,
+    raw_source: str,
+    *,
+    gateway_metadata: dict | None = None,
+) -> str:
     sid = _safe_first(session.get("session_id"))
     if sid and _is_pre_compression_continuation_row(session):
         return f"{raw_source}|session_id:{sid}"
 
-    metadata = _lookup_gateway_session_identity(session.get("session_id"))
+    metadata = gateway_metadata
+    if metadata is None:
+        metadata = _lookup_gateway_session_identity(session.get("session_id"))
     session_key = _safe_first(
         metadata.get("session_key"),
         session.get("session_key"),
@@ -431,11 +438,19 @@ def _merge_cli_sidebar_metadata(ui_session: dict, cli_meta: dict) -> dict:
     return merged
 
 
-def _messaging_source_key(session: dict) -> str | None:
+def _messaging_source_key(
+    session: dict,
+    *,
+    gateway_metadata: dict | None = None,
+) -> str | None:
     raw = _session_messaging_raw_source(session)
     if not _is_known_messaging_source(raw):
         return None
-    return _messaging_session_identity(session, raw)
+    return _messaging_session_identity(
+        session,
+        raw,
+        gateway_metadata=gateway_metadata,
+    )
 
 
 def _keep_latest_messaging_session_per_source(
@@ -466,7 +481,11 @@ def _keep_latest_messaging_session_per_source(
     best_by_source: dict[str, dict] = {}
     kept: list[dict] = []
     for session in sessions:
-        key = _messaging_source_key(session)
+        session_id = _safe_first(session.get("session_id"))
+        key = _messaging_source_key(
+            session,
+            gateway_metadata=gateway_metadata.get(session_id) if session_id else None,
+        )
         if not key:
             kept.append(session)
             continue
@@ -610,3 +629,90 @@ def _redact_sidebar_title_fields(item: dict, redact_enabled: bool | None = None)
         value = item.get(field)
         if isinstance(value, str):
             item[field] = _redact_text(value, _enabled=redact_enabled)
+
+
+class SidebarProjection:
+    """Deep interface for bounded, source-aware sidebar projections."""
+
+    cli_visible_session_cap = CLI_VISIBLE_SESSION_CAP
+
+    @staticmethod
+    def normalize_source_flags(session: dict) -> dict:
+        return _normalize_sidebar_source_flags(session)
+
+    @staticmethod
+    def is_cli_session(session: dict) -> bool:
+        return _is_cli_session_for_settings(session)
+
+    @staticmethod
+    def is_api_server_sidecar(session: dict) -> bool:
+        return _is_api_server_sidecar_row(session)
+
+    @staticmethod
+    def source_is_webui(session: dict) -> bool:
+        return _session_source_is_webui(session)
+
+    @staticmethod
+    def lineage_ids(session: dict) -> set[str]:
+        return _session_lineage_ids(session)
+
+    @staticmethod
+    def merge_external_metadata(session: dict, metadata: dict) -> dict:
+        return _merge_cli_sidebar_metadata(session, metadata)
+
+    @staticmethod
+    def dedupe_external_rows(
+        sessions: list[dict],
+        represented_webui_ids: set[str],
+        *,
+        show_cron_sessions: bool,
+        show_webhook_sessions: bool,
+    ) -> list[dict]:
+        return _dedupe_cli_sidebar_sessions_for_api(
+            sessions,
+            represented_webui_ids,
+            show_cron_sessions=show_cron_sessions,
+            show_webhook_sessions=show_webhook_sessions,
+        )
+
+    @staticmethod
+    def keep_latest_messaging(
+        sessions: list[dict],
+        *,
+        show_previous_messaging_sessions: bool = False,
+    ) -> list[dict]:
+        return _keep_latest_messaging_session_per_source(
+            sessions,
+            show_previous_messaging_sessions=show_previous_messaging_sessions,
+        )
+
+    @staticmethod
+    def cap_recent_cli(sessions: list[dict], *, cli_cap: int) -> list[dict]:
+        return _cap_recent_cli_sessions(sessions, cli_cap=cli_cap)
+
+    @staticmethod
+    def attention(session_id: str) -> dict | None:
+        return _session_attention_summary(session_id)
+
+    @staticmethod
+    def response_item(
+        session: dict,
+        *,
+        redact_enabled: bool | None = None,
+    ) -> dict:
+        return _sidebar_session_response_item(session, redact_enabled=redact_enabled)
+
+    @staticmethod
+    def redact_titles(item: dict, redact_enabled: bool | None = None) -> None:
+        _redact_sidebar_title_fields(item, redact_enabled)
+
+    @staticmethod
+    def reconcile_detail_source_flags(session: dict, metadata: dict) -> dict:
+        return _reconcile_session_detail_source_flags(session, metadata)
+
+    @staticmethod
+    def is_messaging_session(session_id: str) -> bool:
+        return _is_messaging_session_id(session_id)
+
+
+sidebar_projection = SidebarProjection()

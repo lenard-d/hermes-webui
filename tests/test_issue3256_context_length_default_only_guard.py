@@ -17,6 +17,8 @@ from pathlib import Path as _Path
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
+from api.sessions import session_detail_projection
+
 
 def _install_fake_get_model_context_length(monkeypatch, recorder, *, default_context=1_000_000):
     """Install a fake get_model_context_length into a stand-in agent.model_metadata."""
@@ -221,6 +223,13 @@ def _stub_route_session(*, context_length=1_000_000, threshold_tokens=500_000, m
     s.input_tokens = 100_000
     s.output_tokens = 0
     s.read_only = False
+    s.is_cli_session = False
+    s.session_source = None
+    s.source_tag = None
+    s.raw_source = None
+    s.source = None
+    s.source_label = None
+    s.platform = None
     s._loaded_metadata_only = False
     s.compact.return_value = {
         "session_id": s.session_id,
@@ -279,12 +288,10 @@ def test_session_reload_preserves_large_persisted_window_when_recompute_hits_256
          patch("api.routes._resolve_effective_session_model_provider_for_display", return_value="deepseek"), \
          patch("api.routes._session_visible_to_active_profile", return_value=True), \
          patch("api.routes._clear_stale_stream_state", return_value=None), \
-         patch("api.routes._session_requires_cli_metadata_lookup", return_value=False), \
-         patch("api.routes._is_messaging_session_record", return_value=False), \
          patch("api.routes.get_state_db_session_messages", return_value=[]), \
-         patch("api.routes._webui_sidecar_lineage_messages_for_display", return_value=[]), \
+         patch.object(session_detail_projection, "sidecar_lineage_messages", return_value=[]), \
          patch("api.routes.merge_session_messages_append_only", return_value=[]), \
-         patch("api.routes._merged_webui_lineage_messages_for_display", return_value=[]), \
+         patch.object(session_detail_projection, "merge_lineage_messages", return_value=[]), \
          patch("api.routes._active_stream_ids", return_value=set()):
         assert routes.handle_get(handler, parsed) is True
 
@@ -349,12 +356,10 @@ def test_session_reload_preserves_large_window_for_slash_qualified_model(monkeyp
          patch("api.routes._resolve_effective_session_model_provider_for_display", return_value="deepseek"), \
          patch("api.routes._session_visible_to_active_profile", return_value=True), \
          patch("api.routes._clear_stale_stream_state", return_value=None), \
-         patch("api.routes._session_requires_cli_metadata_lookup", return_value=False), \
-         patch("api.routes._is_messaging_session_record", return_value=False), \
          patch("api.routes.get_state_db_session_messages", return_value=[]), \
-         patch("api.routes._webui_sidecar_lineage_messages_for_display", return_value=[]), \
+         patch.object(session_detail_projection, "sidecar_lineage_messages", return_value=[]), \
          patch("api.routes.merge_session_messages_append_only", return_value=[]), \
-         patch("api.routes._merged_webui_lineage_messages_for_display", return_value=[]), \
+         patch.object(session_detail_projection, "merge_lineage_messages", return_value=[]), \
          patch("api.routes._active_stream_ids", return_value=set()):
         assert routes.handle_get(handler, parsed) is True
 
@@ -430,12 +435,10 @@ def test_session_reload_accepts_real_256k_when_effective_model_changes(monkeypat
          patch("api.routes._resolve_effective_session_model_provider_for_display", return_value="deepseek"), \
          patch("api.routes._session_visible_to_active_profile", return_value=True), \
          patch("api.routes._clear_stale_stream_state", return_value=None), \
-         patch("api.routes._session_requires_cli_metadata_lookup", return_value=False), \
-         patch("api.routes._is_messaging_session_record", return_value=False), \
          patch("api.routes.get_state_db_session_messages", return_value=[]), \
-         patch("api.routes._webui_sidecar_lineage_messages_for_display", return_value=[]), \
+         patch.object(session_detail_projection, "sidecar_lineage_messages", return_value=[]), \
          patch("api.routes.merge_session_messages_append_only", return_value=[]), \
-         patch("api.routes._merged_webui_lineage_messages_for_display", return_value=[]), \
+         patch.object(session_detail_projection, "merge_lineage_messages", return_value=[]), \
          patch("api.routes._active_stream_ids", return_value=set()):
         assert routes.handle_get(handler, parsed) is True
 

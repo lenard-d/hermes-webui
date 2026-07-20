@@ -7,6 +7,7 @@ import api.sessions.cleanup as session_cleanup
 import api.sessions.materialization as session_materialization
 import api.sessions.state_db as session_external
 import api.sessions.records as session_records
+from api.sessions import foreign_session_access, session_sidebar_projection
 from api.sessions.records import SESSIONS, Session
 
 
@@ -171,13 +172,16 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
         "raw_source": "telegram",
         "session_source": "messaging",
     }
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda value: cli_meta)
     monkeypatch.setattr(
-        session_materialization,
-        "_lookup_cli_session_metadata",
+        foreign_session_access,
+        "metadata",
         lambda value: cli_meta,
     )
-    monkeypatch.setattr(routes, "_is_messaging_session_id", lambda value: True)
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "is_messaging_session",
+        lambda value: True,
+    )
     delete_calls = []
     monkeypatch.setattr(
         session_cleanup,
@@ -186,7 +190,7 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
     )
 
     assert routes.handle_post(object(), SimpleNamespace(path="/api/session/delete")) is True
-    sess, reason = routes._claim_or_synthesize_cli_session(sid)
+    sess, reason = foreign_session_access.claim(sid)
 
     assert captured["status"] == 200
     assert captured["payload"]["ok"] is True

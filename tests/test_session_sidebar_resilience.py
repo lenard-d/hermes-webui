@@ -6,7 +6,12 @@ bulky session-detail fields in /api/sessions rows.
 """
 from tests.frontend_asset_contract import family_source
 
+from importlib import import_module
 from pathlib import Path
+
+from api.sessions import session_sidebar_projection as sidebar_projection
+
+sidebar_projection_module = import_module("api.sessions.sidebar_projection")
 
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -100,9 +105,11 @@ def test_sessions_api_always_retries_transient_upstream_statuses_and_boot_keeps_
 
 
 def test_sessions_sidebar_response_item_drops_bulky_detail_fields(monkeypatch):
-    from api import routes
-
-    monkeypatch.setattr(routes, "_session_attention_summary", lambda sid: {"kind": "none"})
+    monkeypatch.setattr(
+        sidebar_projection_module,
+        "_session_attention_summary",
+        lambda sid: {"kind": "none"},
+    )
     row = {
         "session_id": "sid-heavy",
         "title": "Visible title",
@@ -125,7 +132,7 @@ def test_sessions_sidebar_response_item_drops_bulky_detail_fields(monkeypatch):
         "messages": [{"role": "user", "content": "not for sidebar"}],
     }
 
-    item = routes._sidebar_session_response_item(row, redact_enabled=False)
+    item = sidebar_projection.response_item(row, redact_enabled=False)
 
     assert item["session_id"] == "sid-heavy"
     assert item["title"] == "Visible title"
@@ -150,17 +157,23 @@ def test_sessions_sidebar_response_item_drops_bulky_detail_fields(monkeypatch):
 
 
 def test_sidebar_allowlist_preserves_fields_consumed_by_frontend():
-    from api import routes
+    item = sidebar_projection.response_item(
+        {
+            "session_id": "sid-fields",
+            "display_title": "Display title",
+            "_state_db_title": "State title",
+            "has_pending_user_message": True,
+            "worktree_branch": "feature/sidebar",
+            "pending_user_message": "private pending text",
+        },
+        redact_enabled=False,
+    )
 
-    required = {
-        "display_title",
-        "_state_db_title",
-        "has_pending_user_message",
-        "worktree_branch",
-    }
-
-    assert required <= routes._SIDEBAR_SESSION_RESPONSE_FIELDS
-    assert "pending_user_message" not in routes._SIDEBAR_SESSION_RESPONSE_FIELDS
+    assert item["display_title"] == "Display title"
+    assert item["_state_db_title"] == "State title"
+    assert item["has_pending_user_message"] is True
+    assert item["worktree_branch"] == "feature/sidebar"
+    assert "pending_user_message" not in item
 
 
 def test_session_list_error_path_uses_same_generation_guard_as_success_path():

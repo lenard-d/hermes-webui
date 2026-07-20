@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.sessions import foreign_session_access
 
 
 def handle_post(handler, parsed, body, diag, ctx: RouteContext):
@@ -10,11 +11,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     _handle_session_compression_recovery_start = ctx[
         "_handle_session_compression_recovery_start"
     ]
-    _publish_materialized_session = ctx["_publish_materialized_session"]
     _session_id_visible_to_request_profile = ctx[
         "_session_id_visible_to_request_profile"
     ]
-    _session_is_subagent_view_only = ctx["_session_is_subagent_view_only"]
     _session_model_state_from_request = ctx["_session_model_state_from_request"]
     _validate_session_toolsets_shape = ctx["_validate_session_toolsets_shape"]
     _worktree_default_from_config = ctx["_worktree_default_from_config"]
@@ -188,7 +187,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             sid = body.get("session_id")
             if not sid:
                 return bad(handler, "session_id is required")
-            if _session_is_subagent_view_only(sid):
+            if foreign_session_access.is_view_only(sid):
                 return bad(
                     handler,
                     "Subagent sessions are view-only and cannot be duplicated from WebUI",
@@ -273,7 +272,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             # accidentally avoided this because `/api/session/rename` calls `s.save()`.
             # Without this explicit save, the duplicate is in-memory only — if the user
             # refreshes before sending a turn, the duplicate vanishes.
-            _publish_materialized_session(copied_session, persist=True)
+            foreign_session_access.publish(copied_session, persist=True)
             publish_session_list_changed(
                 "session_duplicate",
                 profile=getattr(copied_session, "profile", None),

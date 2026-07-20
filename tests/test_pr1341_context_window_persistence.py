@@ -20,10 +20,13 @@ import inspect
 import json
 import re
 from pathlib import Path
+from unittest.mock import patch
+from urllib.parse import urlparse
+
+from api.sessions import session_detail_projection
 
 ROOT = Path(__file__).resolve().parent.parent
 STREAMING = ROOT / "api" / "runs" / "local.py"
-ROUTES = ROOT / "api" / "routes.py"
 
 
 def test_streaming_persists_context_fields_on_session_before_save():
@@ -136,13 +139,42 @@ def test_session_compact_exposes_context_fields():
 
 
 def test_routes_session_get_returns_context_fields():
-    """GET /api/session response must include the three fields."""
-    src = ROUTES.read_text(encoding="utf-8")
-    # The session-detail response builder uses getattr(s, ..., 0) or 0 pattern.
-    # Look for the three keys in the same response shape.
-    assert '"context_length"' in src, "GET /api/session response must include context_length"
-    assert '"threshold_tokens"' in src, "GET /api/session response must include threshold_tokens"
-    assert '"last_prompt_tokens"' in src, "GET /api/session response must include last_prompt_tokens"
+    """GET /api/session serializes the persisted context-window values."""
+    from api import routes
+    from api.sessions.store import Session
+
+    session = Session(
+        session_id="context-route",
+        context_length=200000,
+        threshold_tokens=180000,
+        last_prompt_tokens=45123,
+    )
+    captured = {}
+
+    def capture_json(_handler, data, status=200):
+        captured["data"] = data
+        captured["status"] = status
+        return True
+
+    parsed = urlparse(
+        "/api/session?session_id=context-route&messages=0&resolve_model=0"
+    )
+    with (
+        patch("api.routes.get_session", return_value=session),
+        patch("api.routes.j", side_effect=capture_json),
+        patch("api.routes._session_visible_to_active_profile", return_value=True),
+        patch("api.routes._clear_stale_stream_state", return_value=None),
+        patch.object(session_detail_projection, "sidecar_lineage_messages", return_value=[]),
+        patch.object(session_detail_projection, "merge_lineage_messages", return_value=[]),
+        patch("api.routes._active_stream_ids", return_value=set()),
+    ):
+        assert routes.handle_get(object(), parsed) is True
+
+    response = captured["data"]["session"]
+    assert captured["status"] == 200
+    assert response["context_length"] == 200000
+    assert response["threshold_tokens"] == 180000
+    assert response["last_prompt_tokens"] == 45123
 
 
 def test_session_round_trip_persists_context_fields(tmp_path, monkeypatch):

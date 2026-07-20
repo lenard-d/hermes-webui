@@ -12,6 +12,8 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
+from api.sessions import foreign_session_access
+
 if TYPE_CHECKING:
     from api.runs.agent_runtime import (
         AgentRuntimeChangedError,
@@ -28,7 +30,7 @@ if TYPE_CHECKING:
         require,
     )
     from api.sessions.store import get_session
-    from api.routes import _session_is_subagent_view_only, logger
+    from api.routes import logger
 
 
 _MANUAL_COMPRESSION_JOBS: dict[str, dict] = {}
@@ -333,7 +335,7 @@ def _handle_session_compress(handler, body):
     sid = str(body.get("session_id") or "").strip()
     if not sid:
         return bad(handler, "session_id is required")
-    if _session_is_subagent_view_only(sid):
+    if foreign_session_access.is_view_only(sid):
         return bad(handler, "Subagent sessions are view-only and cannot be compressed from WebUI", 400)
 
     # Cap focus_topic to 500 chars — matches the defensive input-size pattern

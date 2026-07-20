@@ -6,6 +6,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pytest
+from api.sessions import foreign_session_access
 
 
 pytestmark = pytest.mark.requires_agent_modules
@@ -173,7 +174,7 @@ def test_first_webui_followup_receives_immediate_cli_assistant_context(monkeypat
         workspace=str(tmp_path),
     )
 
-    session, reason = routes._claim_or_synthesize_cli_session(sid)
+    session, reason = foreign_session_access.claim(sid)
 
     assert reason == "materialized"
     assert session is not None
@@ -302,7 +303,7 @@ def test_regular_cli_sessions_remain_writable_after_fix(monkeypatch, tmp_path):
         workspace=str(tmp_path),
     )
 
-    session, reason = routes._claim_or_synthesize_cli_session(sid)
+    session, reason = foreign_session_access.claim(sid)
 
     assert reason == "materialized"
     assert session is not None

@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import importlib
 import sqlite3
 from types import SimpleNamespace
 
 import api.sessions.store as models
 import api.sessions.state_db as session_state_db
 import api.routes as routes
+from api.sessions import (
+    foreign_session_access,
+    session_detail_projection,
+    session_sidebar_projection,
+)
+
+detail_owner = importlib.import_module("api.sessions.detail_projection")
 
 
 
@@ -25,6 +33,7 @@ def test_session_endpoint_merges_sidecar_and_lineage_messages_for_cli_sessions(m
             self.last_prompt_tokens = 0
             self.model = "openai/gpt-5"
             self.session_id = "tip"
+            self.session_source = "messaging"
 
         def compact(self):
             return {"session_id": "tip", "title": "Tip", "model": "openai/gpt-5"}
@@ -33,8 +42,11 @@ def test_session_endpoint_merges_sidecar_and_lineage_messages_for_cli_sessions(m
 
     monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: DummySession())
     monkeypatch.setattr(routes, "_clear_stale_stream_state", lambda s: None)
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda sid: {"session_source": "messaging"})
-    monkeypatch.setattr(routes, "_is_messaging_session_record", lambda s: True)
+    monkeypatch.setattr(
+        foreign_session_access,
+        "metadata",
+        lambda sid: {"session_source": "messaging"},
+    )
     monkeypatch.setattr(
         routes,
         "get_cli_session_messages",
@@ -45,7 +57,11 @@ def test_session_endpoint_merges_sidecar_and_lineage_messages_for_cli_sessions(m
     )
     monkeypatch.setattr(routes, "_resolve_effective_session_model_for_display", lambda s: getattr(s, "model", None))
     monkeypatch.setattr(routes, "_resolve_effective_session_model_provider_for_display", lambda s: None)
-    monkeypatch.setattr(routes, "_merge_cli_sidebar_metadata", lambda raw, meta: raw)
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "merge_external_metadata",
+        lambda raw, meta: raw,
+    )
     monkeypatch.setattr(routes, "redact_session_data", lambda raw: raw)
     monkeypatch.setattr(routes, "j", lambda handler, payload, status=200: captured.setdefault("payload", payload))
 
@@ -87,6 +103,7 @@ def test_session_endpoint_preserves_distinct_messages_with_different_ids(monkeyp
             self.last_prompt_tokens = 0
             self.model = "openai/gpt-5"
             self.session_id = "tip"
+            self.session_source = "messaging"
 
         def compact(self):
             return {"session_id": "tip", "title": "Tip", "model": "openai/gpt-5"}
@@ -95,8 +112,11 @@ def test_session_endpoint_preserves_distinct_messages_with_different_ids(monkeyp
 
     monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: DummySession())
     monkeypatch.setattr(routes, "_clear_stale_stream_state", lambda s: None)
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda sid: {"session_source": "messaging"})
-    monkeypatch.setattr(routes, "_is_messaging_session_record", lambda s: True)
+    monkeypatch.setattr(
+        foreign_session_access,
+        "metadata",
+        lambda sid: {"session_source": "messaging"},
+    )
     monkeypatch.setattr(
         routes,
         "get_cli_session_messages",
@@ -112,7 +132,11 @@ def test_session_endpoint_preserves_distinct_messages_with_different_ids(monkeyp
     )
     monkeypatch.setattr(routes, "_resolve_effective_session_model_for_display", lambda s: getattr(s, "model", None))
     monkeypatch.setattr(routes, "_resolve_effective_session_model_provider_for_display", lambda s: None)
-    monkeypatch.setattr(routes, "_merge_cli_sidebar_metadata", lambda raw, meta: raw)
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "merge_external_metadata",
+        lambda raw, meta: raw,
+    )
     monkeypatch.setattr(routes, "redact_session_data", lambda raw: raw)
     monkeypatch.setattr(routes, "j", lambda handler, payload, status=200: captured.setdefault("payload", payload))
 
@@ -219,19 +243,28 @@ def test_webui_continuation_session_opens_with_snapshot_parent_messages(monkeypa
         last_prompt_tokens=0,
         model="openai/gpt-5",
         profile="default",
+        session_source="webui",
     )
     child.compact = lambda: {"session_id": "child-webui", "title": "Child", "model": "openai/gpt-5"}
 
     captured = {}
     monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: child)
     monkeypatch.setattr(routes, "_clear_stale_stream_state", lambda s: None)
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda sid: {})
-    monkeypatch.setattr(routes, "_is_messaging_session_record", lambda s: False)
+    monkeypatch.setattr(foreign_session_access, "metadata", lambda sid: {})
     monkeypatch.setattr(routes, "get_state_db_session_messages", lambda sid, profile=None, since_timestamp=None, include_inactive=False, limit=None: [])
-    monkeypatch.setattr(routes.Session, "load", lambda sid: parent if sid == "parent-webui" else None)
+    monkeypatch.setattr(detail_owner.Session, "load", lambda sid: parent if sid == "parent-webui" else None)
+    monkeypatch.setattr(
+        detail_owner,
+        "get_session",
+        lambda sid, metadata_only=False: parent,
+    )
     monkeypatch.setattr(routes, "_resolve_effective_session_model_for_display", lambda s: getattr(s, "model", None))
     monkeypatch.setattr(routes, "_resolve_effective_session_model_provider_for_display", lambda s: None)
-    monkeypatch.setattr(routes, "_merge_cli_sidebar_metadata", lambda raw, meta: raw)
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "merge_external_metadata",
+        lambda raw, meta: raw,
+    )
     monkeypatch.setattr(routes, "redact_session_data", lambda raw: raw)
     monkeypatch.setattr(routes, "j", lambda handler, payload, status=200: captured.setdefault("payload", payload))
 
@@ -270,9 +303,9 @@ def test_webui_fork_session_does_not_stitch_non_snapshot_parent(monkeypatch):
         messages=[{"role": "user", "content": "fork child only", "timestamp": 2.0}],
     )
 
-    monkeypatch.setattr(routes.Session, "load", lambda sid: parent if sid == "parent-fork" else None)
+    monkeypatch.setattr(detail_owner.Session, "load", lambda sid: parent if sid == "parent-fork" else None)
 
-    assert [m["content"] for m in routes._webui_sidecar_lineage_messages_for_display(child)] == [
+    assert [m["content"] for m in session_detail_projection.sidecar_lineage_messages(child)] == [
         "fork child only",
     ]
 
@@ -296,9 +329,9 @@ def test_webui_fork_session_does_not_stitch_snapshot_parent(monkeypatch):
         messages=[{"role": "user", "content": "fork child only", "timestamp": 2.0}],
     )
 
-    monkeypatch.setattr(routes.Session, "load", lambda sid: parent if sid == "parent-snapshot-fork" else None)
+    monkeypatch.setattr(detail_owner.Session, "load", lambda sid: parent if sid == "parent-snapshot-fork" else None)
 
-    assert [m["content"] for m in routes._webui_sidecar_lineage_messages_for_display(child)] == [
+    assert [m["content"] for m in session_detail_projection.sidecar_lineage_messages(child)] == [
         "fork child only",
     ]
 
@@ -342,9 +375,9 @@ def test_webui_compressed_fork_stitches_fork_snapshots_only(monkeypatch):
         "fork-compression-snapshot-2": second_snapshot,
     }
 
-    monkeypatch.setattr(routes.Session, "load", lambda sid: by_id.get(sid))
+    monkeypatch.setattr(detail_owner.Session, "load", lambda sid: by_id.get(sid))
 
-    assert [m["content"] for m in routes._webui_sidecar_lineage_messages_for_display(child)] == [
+    assert [m["content"] for m in session_detail_projection.sidecar_lineage_messages(child)] == [
         "before first fork compression",
         "before second fork compression",
         "after fork compression",
@@ -365,9 +398,9 @@ def test_webui_merged_lineage_keeps_session_source_fork_isolated(monkeypatch):
         truncation_watermark=None,
     )
 
-    monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: parent)
+    monkeypatch.setattr(detail_owner, "get_session", lambda sid, metadata_only=False: parent)
 
-    merged = routes._merged_webui_lineage_messages_for_display(fork, fork.messages)
+    merged = session_detail_projection.merge_lineage_messages(fork, fork.messages)
 
     assert [m["content"] for m in merged] == ["fork starts here"]
 
@@ -386,9 +419,9 @@ def test_webui_merged_lineage_keeps_child_relationship_isolated(monkeypatch):
         truncation_watermark=None,
     )
 
-    monkeypatch.setattr(routes, "get_session", lambda sid, metadata_only=False: parent)
+    monkeypatch.setattr(detail_owner, "get_session", lambda sid, metadata_only=False: parent)
 
-    merged = routes._merged_webui_lineage_messages_for_display(child, child.messages)
+    merged = session_detail_projection.merge_lineage_messages(child, child.messages)
 
     assert [m["content"] for m in merged] == ["child starts here"]
 
@@ -415,9 +448,9 @@ def test_webui_lineage_display_keeps_child_tail_after_snapshot_watermark(monkeyp
             {"role": "assistant", "content": "child assistant final", "timestamp": 1003.0},
         ],
     )
-    monkeypatch.setattr(routes.Session, "load", lambda sid: parent if sid == "parent-watermark" else None)
+    monkeypatch.setattr(detail_owner.Session, "load", lambda sid: parent if sid == "parent-watermark" else None)
 
-    contents = [m["content"] for m in routes._webui_sidecar_lineage_messages_for_display(child)]
+    contents = [m["content"] for m in session_detail_projection.sidecar_lineage_messages(child)]
 
     assert contents == [
         "parent user",
@@ -460,9 +493,9 @@ def test_webui_lineage_display_does_not_restitch_ancestor_when_child_replays_par
         ],
     )
     by_id = {"parent-replayed": parent, "grandparent-replayed": grandparent}
-    monkeypatch.setattr(routes.Session, "load", lambda sid: by_id.get(sid))
+    monkeypatch.setattr(detail_owner.Session, "load", lambda sid: by_id.get(sid))
 
-    contents = [m["content"] for m in routes._webui_sidecar_lineage_messages_for_display(child)]
+    contents = [m["content"] for m in session_detail_projection.sidecar_lineage_messages(child)]
 
     assert contents == [
         "grandparent user",

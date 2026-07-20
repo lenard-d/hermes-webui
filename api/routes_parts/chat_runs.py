@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from api.sessions import foreign_session_access, start_or_get_focused_continuation
+
 
 def _handle_sessions_cleanup(handler, body, zero_only=False):
     result = cleanup_session_store(zero_only=zero_only)
@@ -32,7 +34,7 @@ def _handle_btw(handler, body):
     stale_response = _agent_runtime_barrier_response(runner_local_owned=False)
     if stale_response is not None:
         return j(handler, stale_response, status=409)
-    if _session_is_subagent_view_only(str(body.get("session_id") or "")):
+    if foreign_session_access.is_view_only(str(body.get("session_id") or "")):
         return bad(handler, "Subagent sessions are view-only and cannot be used for /btw from WebUI", 400)
     try:
         s = get_session(body["session_id"])
@@ -755,7 +757,7 @@ def _handle_session_compression_recovery_start(handler, body):
     sid = str(body.get("session_id") or "").strip()
     if not sid:
         return bad(handler, "session_id is required")
-    if _session_is_subagent_view_only(sid):
+    if foreign_session_access.is_view_only(sid):
         return bad(handler, "Subagent sessions are view-only and cannot start compression recovery from WebUI", 400)
     try:
         source = get_session(sid)
@@ -770,57 +772,19 @@ def _handle_session_compression_recovery_start(handler, body):
     if action != COMPRESSION_RECOVERY_ACTION_START_FOCUSED:
         return bad(handler, "Unsupported compression recovery action.", 409)
 
-    created = False
-    with _COMPRESSION_RECOVERY_START_LOCK:
-        source_profile = getattr(source, "profile", None)
-        copied_session = find_compression_recovery_session(sid, action, source_profile=source_profile)
-        if copied_session is None:
-            title = str(getattr(source, "title", None) or "Untitled").strip() or "Untitled"
-            if not title.endswith(" (focused continuation)"):
-                title = f"{title} (focused continuation)"
-            copied_session = Session(
-                session_id=uuid.uuid4().hex[:12],
-                title=title,
-                workspace=getattr(source, "workspace", get_last_workspace()),
-                model=getattr(source, "model", None),
-                model_provider=getattr(source, "model_provider", None),
-                messages=[],
-                tool_calls=[],
-                pinned=False,
-                archived=False,
-                project_id=getattr(source, "project_id", None),
-                profile=getattr(source, "profile", None),
-                session_source="fork",
-                personality=getattr(source, "personality", None),
-                enabled_toolsets=copy.deepcopy(getattr(source, "enabled_toolsets", None)),
-                context_length=getattr(source, "context_length", None),
-                threshold_tokens=getattr(source, "threshold_tokens", None),
-                gateway_routing=copy.deepcopy(getattr(source, "gateway_routing", None)),
-                gateway_routing_history=copy.deepcopy(getattr(source, "gateway_routing_history", None) or []),
-                parent_session_id=getattr(source, "session_id", sid),
-                worktree_path=getattr(source, "worktree_path", None),
-                worktree_branch=getattr(source, "worktree_branch", None),
-                worktree_repo_root=getattr(source, "worktree_repo_root", None),
-                worktree_created_at=getattr(source, "worktree_created_at", None),
-                compression_recovery_source_session_id=sid,
-                compression_recovery_action=action,
-            )
-            # Preserve the workspace/model/profile lane, but intentionally start with an
-            # empty model-facing transcript so a focused follow-up does not replay the
-            # exhausted state.db/context tail.
-            copied_session.context_messages = []
-            copied_session.composer_draft = {"text": "", "files": []}
-            try:
-                copied_session.save()
-            except Exception as e:
-                logger.exception("failed to persist compression recovery session for %s", sid)
-                return bad(handler, f"Failed to start compression recovery: {_sanitize_error(e)}", 500)
-
-            with LOCK:
-                SESSIONS[copied_session.session_id] = copied_session
-                SESSIONS.move_to_end(copied_session.session_id)
-                _evict_sessions_over_cap()
-            created = True
+    try:
+        copied_session, created = start_or_get_focused_continuation(
+            source,
+            action,
+            fallback_workspace=get_last_workspace(),
+        )
+    except Exception as e:
+        logger.exception("failed to persist compression recovery session for %s", sid)
+        return bad(
+            handler,
+            f"Failed to start compression recovery: {_sanitize_error(e)}",
+            500,
+        )
     if created:
         publish_session_list_changed(
             "session_compression_recovery",
@@ -850,7 +814,7 @@ def _handle_goal_command(handler, body):
         require(body, "session_id")
     except ValueError as e:
         return bad(handler, str(e))
-    if _session_is_subagent_view_only(str(body.get("session_id") or "")):
+    if foreign_session_access.is_view_only(str(body.get("session_id") or "")):
         return bad(handler, "Subagent sessions are view-only and cannot run /goal from WebUI", 400)
     try:
         s = get_session(body["session_id"])
@@ -1020,7 +984,7 @@ def _handle_chat_start(handler, body, diag=None):
             # TUI/Desktop session loads read-only via GET /api/session but
             # 404s on the first POST /api/chat/start, making the typed
             # message disappear into the empty state.
-            synth, reason = _claim_or_synthesize_cli_session(body["session_id"])
+            synth, reason = foreign_session_access.claim(body["session_id"])
             if synth is None:
                 # 'was_webui' (deleted WebUI session, client should self-heal
                 # via the existing 404 path), 'no_foreign_state' (sid has
@@ -1307,7 +1271,7 @@ def _handle_chat_sync(handler, body):
     stale_response = _agent_runtime_barrier_response(runner_local_owned=False)
     if stale_response is not None:
         return j(handler, stale_response, status=409)
-    if _session_is_subagent_view_only(str(body.get("session_id") or "")):
+    if foreign_session_access.is_view_only(str(body.get("session_id") or "")):
         return bad(handler, "Subagent sessions are view-only and cannot be written from WebUI", 400)
     s = get_session(body["session_id"])
     msg = str(body.get("message", "")).strip()

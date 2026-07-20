@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import api.routes as routes
-from api.routes_parts import session_projection
+from api.sessions import foreign_session_access, materialization
 import pytest
 
 
@@ -168,7 +168,6 @@ def _capture_route(monkeypatch):
         return True
 
     monkeypatch.setattr(routes, "bad", _bad)
-    monkeypatch.setattr(session_projection, "bad", _bad)
     monkeypatch.setattr(routes, "j", _j)
     return cap
 
@@ -210,34 +209,34 @@ def test_branch_endpoint_validates_session_id():
 def test_branch_helper_classifies_synthesized_foreign_sources(monkeypatch):
     """Only canonical cron sources may fork from a synthesized read-only view."""
     monkeypatch.setattr(
-        session_projection,
+        materialization,
         "get_session",
         lambda _sid: (_ for _ in ()).throw(KeyError("missing")),
     )
-    responses = []
     monkeypatch.setattr(
-        session_projection,
-        "bad",
-        lambda _handler, msg, code=400: responses.append((msg, code)) or True,
+        materialization,
+        "_session_is_subagent_view_only",
+        lambda _sid: False,
     )
-
     messaging = routes.Session(session_id="foreign-msg", source_tag="messaging", read_only=True)
     monkeypatch.setattr(
-        session_projection,
+        materialization,
         "_claim_or_synthesize_cli_session",
         lambda _sid: (messaging, "not_claimable"),
     )
-    monkeypatch.setattr(session_projection, "_session_is_subagent_view_only", lambda _sid: False)
-    assert session_projection._load_branch_source_or_refuse(object(), "foreign-msg") is None
-    assert responses[-1] == ("Read-only sessions cannot be branched from WebUI", 403)
+    resolution = materialization.resolve_branch_source("foreign-msg")
+    assert resolution.session is None
+    assert resolution.refusal == "foreign_view_only"
 
     cron = routes.Session(session_id="foreign-cron", source_tag="cron", read_only=True)
     monkeypatch.setattr(
-        session_projection,
+        materialization,
         "_claim_or_synthesize_cli_session",
         lambda _sid: (cron, "not_claimable"),
     )
-    assert session_projection._load_branch_source_or_refuse(object(), "foreign-cron") is cron
+    resolution = materialization.resolve_branch_source("foreign-cron")
+    assert resolution.session is cron
+    assert resolution.refusal is None
     assert cron._branch_source_readonly is True
 
 
@@ -254,19 +253,14 @@ def test_branch_helper_gates_persisted_read_only_sources_too():
     # Covered behaviorally alongside the synthesized path below; this name is
     # retained because it documents the persisted-sidecar ownership case.
     with pytest.MonkeyPatch.context() as monkeypatch:
-        responses = []
         source = routes.Session(
             session_id="persisted-read-only", source_tag="messaging", read_only=True
         )
-        monkeypatch.setattr(session_projection, "get_session", lambda _sid: source)
-        monkeypatch.setattr(session_projection, "_session_is_subagent_view_only", lambda _sid: False)
-        monkeypatch.setattr(
-            session_projection,
-            "bad",
-            lambda _handler, msg, code=400: responses.append((msg, code)) or True,
-        )
-        assert session_projection._load_branch_source_or_refuse(object(), source.session_id) is None
-        assert responses == [("Read-only sessions cannot be branched from WebUI", 403)]
+        monkeypatch.setattr(materialization, "get_session", lambda _sid: source)
+        monkeypatch.setattr(materialization, "_session_is_subagent_view_only", lambda _sid: False)
+        resolution = materialization.resolve_branch_source(source.session_id)
+        assert resolution.session is None
+        assert resolution.refusal == "foreign_view_only"
 
 
 def test_branch_route_returns_materialized_fork_contract(monkeypatch):
@@ -286,18 +280,20 @@ def test_branch_route_returns_materialized_fork_contract(monkeypatch):
     )
     monkeypatch.setattr(source, "save", lambda: None)
     monkeypatch.setattr(routes, "get_session", lambda _sid: source)
-    monkeypatch.setattr(routes, "_session_is_subagent_view_only", lambda _sid: False)
-    monkeypatch.setattr(session_projection, "get_session", lambda _sid: source)
-    monkeypatch.setattr(session_projection, "_session_is_subagent_view_only", lambda _sid: False)
+    monkeypatch.setattr(materialization, "get_session", lambda _sid: source)
+    monkeypatch.setattr(materialization, "_session_is_subagent_view_only", lambda _sid: False)
     published = []
     responses = []
     context = dict(routes.__dict__)
     context.update(
         get_session=lambda _sid: source,
-        _session_is_subagent_view_only=lambda _sid: False,
-        _publish_materialized_session=lambda session, persist: published.append((session, persist)),
         publish_session_list_changed=lambda *_args, **_kwargs: None,
         j=lambda _handler, payload, **_kwargs: responses.append(payload) or True,
+    )
+    monkeypatch.setattr(
+        foreign_session_access,
+        "publish",
+        lambda session, persist: published.append((session, persist)),
     )
 
     assert session_mutations.handle_post(
@@ -394,8 +390,8 @@ def test_branch_route_allows_not_claimable_cron_sessions_to_fork(monkeypatch):
         "get_session",
         lambda _sid, metadata_only=False: (_ for _ in ()).throw(KeyError("Session not found")),
     )
-    monkeypatch.setattr(session_projection, "get_session", routes.get_session)
-    monkeypatch.setattr(session_projection, "_session_is_subagent_view_only", lambda _sid: False)
+    monkeypatch.setattr(materialization, "get_session", routes.get_session)
+    monkeypatch.setattr(materialization, "_session_is_subagent_view_only", lambda _sid: False)
     source = routes.Session(
         session_id="cron-1",
         title="Cron Run",
@@ -406,8 +402,11 @@ def test_branch_route_allows_not_claimable_cron_sessions_to_fork(monkeypatch):
         raw_source="cron",
         session_source="other",
     )
-    monkeypatch.setattr(routes, "_claim_or_synthesize_cli_session", lambda _sid: (source, "not_claimable"))
-    monkeypatch.setattr(session_projection, "_claim_or_synthesize_cli_session", routes._claim_or_synthesize_cli_session)
+    monkeypatch.setattr(
+        materialization,
+        "_claim_or_synthesize_cli_session",
+        lambda _sid: (source, "not_claimable"),
+    )
     cap = _capture_route(monkeypatch)
     routes.handle_post(handler, urlparse("/api/session/branch"))
     assert "bad" not in cap
@@ -427,14 +426,13 @@ def test_branch_route_keeps_404_for_truly_missing_sessions(monkeypatch):
         "get_session",
         lambda _sid, metadata_only=False: (_ for _ in ()).throw(KeyError("Session not found")),
     )
-    monkeypatch.setattr(session_projection, "get_session", routes.get_session)
-    monkeypatch.setattr(session_projection, "_session_is_subagent_view_only", lambda _sid: False)
+    monkeypatch.setattr(materialization, "get_session", routes.get_session)
+    monkeypatch.setattr(materialization, "_session_is_subagent_view_only", lambda _sid: False)
     monkeypatch.setattr(
-        routes,
+        materialization,
         "_claim_or_synthesize_cli_session",
         lambda _sid: (None, "no_foreign_state"),
     )
-    monkeypatch.setattr(session_projection, "_claim_or_synthesize_cli_session", routes._claim_or_synthesize_cli_session)
     cap = _capture_route(monkeypatch)
     routes.handle_post(handler, urlparse("/api/session/branch"))
     assert cap["bad"] == ("Session not found", 404)

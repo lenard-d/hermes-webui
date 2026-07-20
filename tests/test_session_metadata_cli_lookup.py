@@ -2,6 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+from api.sessions import foreign_session_access
+
 
 class _FakeSession:
     def __init__(self, *, is_cli_session=False, session_source=None, source_tag=None):
@@ -64,7 +66,7 @@ def _invoke_api_session(session_obj, *, lookup_cli):
     parsed = urlparse("/api/session?session_id=native_webui_001&messages=0&resolve_model=0")
     with patch("api.routes.get_session", return_value=session_obj), \
          patch("api.routes._clear_stale_stream_state", return_value=False), \
-         patch("api.routes._lookup_cli_session_metadata", side_effect=lookup_cli) as lookup, \
+         patch.object(foreign_session_access, "metadata", side_effect=lookup_cli) as lookup, \
          patch("api.routes.j", side_effect=fake_j):
         routes.handle_get(SimpleNamespace(), parsed)
     return captured, lookup

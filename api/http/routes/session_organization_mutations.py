@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.sessions import foreign_session_access, is_messaging_session_record
 
 
 def handle_post(handler, parsed, body, diag, ctx: RouteContext):
@@ -14,13 +15,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     _active_stream_ids = ctx["_active_stream_ids"]
     _get_or_materialize_session = ctx["_get_or_materialize_session"]
     _handle_session_import = ctx["_handle_session_import"]
-    _is_messaging_session_record = ctx["_is_messaging_session_record"]
-    _is_subagent_child_session_id = ctx["_is_subagent_child_session_id"]
-    _lookup_cli_session_metadata = ctx["_lookup_cli_session_metadata"]
     _profiles_match = ctx["_profiles_match"]
     _session_counts_toward_pin_quota = ctx["_session_counts_toward_pin_quota"]
     _session_field = ctx["_session_field"]
-    _session_is_subagent_view_only = ctx["_session_is_subagent_view_only"]
     _session_row_lineage_root_id = ctx["_session_row_lineage_root_id"]
     _visible_pinned_lineage_ids = ctx["_visible_pinned_lineage_ids"]
     _worktree_retained_payload = ctx["_worktree_retained_payload"]
@@ -51,7 +48,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             require(body, "session_id")
         except ValueError as e:
             return bad(handler, str(e))
-        if _session_is_subagent_view_only(body["session_id"]):
+        if foreign_session_access.is_view_only(body["session_id"]):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be modified from WebUI",
@@ -134,7 +131,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         except ValueError as e:
             return bad(handler, str(e))
         sid = body["session_id"]
-        if _session_is_subagent_view_only(sid):
+        if foreign_session_access.is_view_only(sid):
             return bad(
                 handler,
                 "Subagent sessions are view-only and cannot be archived from WebUI",
@@ -143,7 +140,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         try:
             s = get_session(sid)
         except KeyError:
-            cli_meta = _lookup_cli_session_metadata(sid)
+            cli_meta = foreign_session_access.metadata(sid)
             if not cli_meta:
                 return bad(handler, "Session not found", 404)
             if cli_meta.get("read_only"):
@@ -161,11 +158,11 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
                 .strip()
                 .lower()
             )
-            if _arch_source_tag == "subagent" or _is_subagent_child_session_id(sid):
+            if _arch_source_tag == "subagent" or foreign_session_access.is_subagent_child(sid):
                 return bad(
                     handler, "Subagent sessions cannot be archived from WebUI", 400
                 )
-            if _is_messaging_session_record(cli_meta):
+            if is_messaging_session_record(cli_meta):
                 s = Session(
                     session_id=sid,
                     title=cli_meta.get("title")
