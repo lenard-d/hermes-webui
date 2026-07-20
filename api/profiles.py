@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import re
-import shutil
+import shutil  # noqa: F401 - historical compatibility-facade export
 import sys
 import threading
 from contextlib import contextmanager
@@ -22,8 +22,15 @@ from typing import Optional
 import yaml
 
 from api.session_events import publish_session_list_changed
+from api.profiles_parts.facade import bind_profile_function, bind_profiles_api
 
 logger = logging.getLogger(__name__)
+
+
+# Extracted profile modules resolve this compatibility facade at call time so
+# historical imports and monkeypatch seams continue to observe one namespace.
+bind_profiles_api(lambda: sys.modules[__name__])
+_PROFILE_FACADE = sys.modules[__name__]
 
 # ── Constants (match hermes_cli.profiles upstream) ─────────────────────────
 _PROFILE_ID_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
@@ -1640,501 +1647,51 @@ def switch_profile(name: str, *, process_wide: bool = True) -> dict:
     }
 
 
+# Profile catalog cache state remains facade-owned for compatibility.  The
+# catalog implementation resolves this namespace at call time, so direct cache
+# clears and historical monkeypatches remain observable.
 _SKILLS_STATS_CACHE: dict[Path, tuple[int, int, int, float]] = {}
-_SKILLS_STATS_CACHE_TTL = 300.0  # seconds — long because .clear() handles programmatic changes
-
-# Per-profile compute locks (#5364). Without these, concurrent cold-startup
-# requests (ThreadingHTTPServer runs one OS thread per request) all miss the
-# unlocked _SKILLS_STATS_CACHE at once and each walks + parses the whole skill
-# tree simultaneously — a thundering herd that stalled workers 57–70s under
-# Docker overlay2. A per-profile lock lets independent profiles compute in
-# parallel while collapsing concurrent misses on the SAME profile to a single
-# shared compute (double-checked locking below). The lock registry is guarded by
-# its own meta-lock and is bounded by the (small) number of profiles.
+_SKILLS_STATS_CACHE_TTL = 300.0
 _SKILLS_STATS_LOCKS: dict[Path, threading.Lock] = {}
 _SKILLS_STATS_LOCKS_GUARD = threading.Lock()
 
-
-def _skills_stats_lock_for(profile_dir: Path) -> threading.Lock:
-    """Return (creating if needed) the per-profile compute lock for profile_dir.
-
-    profile_dir must already be resolved so distinct spellings of the same
-    directory share one lock.
-    """
-    with _SKILLS_STATS_LOCKS_GUARD:
-        lock = _SKILLS_STATS_LOCKS.get(profile_dir)
-        if lock is None:
-            lock = threading.Lock()
-            _SKILLS_STATS_LOCKS[profile_dir] = lock
-        return lock
-
-
-def _skill_tree_max_mtime_ns(skills_dir: Path, config_path: Path) -> int:
-    """Return the max st_mtime_ns across config.yaml, skill dirs, and SKILL.md files."""
-    max_ns = 0
-    try:
-        if config_path.exists():
-            max_ns = max(max_ns, config_path.stat().st_mtime_ns)
-    except OSError:
-        pass
-    if not skills_dir.is_dir():
-        return max_ns
-    try:
-        from agent.skill_utils import EXCLUDED_SKILL_DIRS, SKILL_SUPPORT_DIRS
-    except Exception:
-        EXCLUDED_SKILL_DIRS = frozenset()
-        SKILL_SUPPORT_DIRS = frozenset()
-    try:
-        # Directory mtimes catch nested out-of-band deletes that leave file mtimes unchanged.
-        # followlinks=True mirrors agent.skill_utils.iter_skill_index_files (the compute
-        # path), so a symlinked skill directory is descended into and edits to its target
-        # SKILL.md change the probe value — otherwise such edits would stay stale up to the TTL.
-        for root, dirnames, filenames in os.walk(skills_dir, followlinks=True):
-            root_path = Path(root)
-            # Prune the SAME trees iter_skill_index_files prunes (.git/.venv/
-            # node_modules/site-packages + skill support dirs), so a skill that
-            # vendors a dependency tree doesn't make this every-call probe walk
-            # thousands of irrelevant files and defeat the cache's perf goal.
-            has_skill_md = "SKILL.md" in filenames
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in EXCLUDED_SKILL_DIRS
-                and not (has_skill_md and d in SKILL_SUPPORT_DIRS)
-            ]
-            try:
-                max_ns = max(max_ns, root_path.stat().st_mtime_ns)
-            except OSError:
-                pass
-            for dirname in dirnames:
-                try:
-                    max_ns = max(max_ns, (root_path / dirname).stat().st_mtime_ns)
-                except OSError:
-                    pass
-            if "SKILL.md" in filenames:
-                try:
-                    max_ns = max(max_ns, (root_path / "SKILL.md").stat().st_mtime_ns)
-                except OSError:
-                    pass
-    except Exception:
-        pass
-    return max_ns
-
-
-def _compute_profile_skills_stats(profile_dir: Path) -> tuple[int, int]:
-    """Compute (enabled_count, compatible_count) by reading and parsing all SKILL.md files."""
-    skills_dir = profile_dir / "skills"
-    if not skills_dir.is_dir():
-        return (0, 0)
-
-    disabled = set()
-    config_path = profile_dir / "config.yaml"
-    if config_path.exists():
-        try:
-            import yaml as _yaml
-            cfg = _yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            if isinstance(cfg, dict):
-                skills_cfg = cfg.get("skills")
-                if isinstance(skills_cfg, dict):
-                    # Align with get_disabled_skill_names(platform="webui") behavior:
-                    platform_disabled = (skills_cfg.get("platform_disabled") or {}).get("webui")
-                    if platform_disabled is not None:
-                        disabled_val = platform_disabled
-                    else:
-                        disabled_val = skills_cfg.get("disabled")
-
-                    if disabled_val is not None:
-                        if isinstance(disabled_val, str):
-                            disabled_val = [disabled_val]
-                        disabled = {str(v).strip() for v in disabled_val if str(v).strip()}
-        except Exception:
-            pass
-
-    from agent.skill_utils import iter_skill_index_files, parse_frontmatter, skill_matches_platform
-
-    seen_names = set()
-    enabled_count = 0
-    compatible_count = 0
-
-    for skill_md in iter_skill_index_files(skills_dir, "SKILL.md"):
-        try:
-            content = skill_md.read_text(encoding="utf-8")[:4000]
-            frontmatter, _ = parse_frontmatter(content)
-            if not skill_matches_platform(frontmatter):
-                continue
-            name = frontmatter.get("name", skill_md.parent.name)[:64]
-            if name in seen_names:
-                continue
-            seen_names.add(name)
-
-            compatible_count += 1
-            if name not in disabled:
-                enabled_count += 1
-        except Exception:
-            pass
-
-    return (enabled_count, compatible_count)
-
-
-def _get_profile_skills_stats(profile_dir: Path) -> tuple[int, int]:
-    """Calculate (enabled_count, compatible_count) with two-tier mtime cache.
-
-    A cheap stat-only mtime probe runs on EVERY call so out-of-band (CLI/git)
-    skill changes are reflected promptly — the expensive part (reading + parsing
-    every SKILL.md) is what the cache avoids, not the change detection. The TTL
-    is only a safety-net upper bound that forces an occasional full recompute
-    even when the mtime probe sees no change.
-    """
-    import time
-    profile_dir = Path(profile_dir).resolve()
-    now = time.time()
-    skills_dir = profile_dir / "skills"
-    config_path = profile_dir / "config.yaml"
-
-    # Always run the cheap stat-only probe first — this is what catches an
-    # out-of-band create/edit/delete within the same request (not after the TTL).
-    current_mtime_ns = _skill_tree_max_mtime_ns(skills_dir, config_path)
-
-    # Read via .get() (not membership-check + index) so a concurrent
-    # _SKILLS_STATS_CACHE.clear() on another thread can't raise KeyError
-    # between the `in` test and the lookup.
-    cached = _SKILLS_STATS_CACHE.get(profile_dir)
-    if cached is not None:
-        enabled, compat, cached_mtime_ns, expiry = cached
-        # Fast path: files unchanged (by the cheap probe above) AND still within
-        # the TTL → serve cached without re-reading any SKILL.md. The mtime probe
-        # already ran, so an out-of-band change is caught immediately regardless
-        # of the TTL. On TTL expiry we deliberately fall through to a full
-        # recompute (the TTL is a safety net for mtime-preserving changes that
-        # the probe can't see — e.g. a git checkout that restores the old mtime).
-        if current_mtime_ns == cached_mtime_ns and now < expiry:
-            return enabled, compat
-
-    # Cache miss, mtime changed, or TTL expired — serialize per-profile so a
-    # burst of concurrent misses (cold startup) collapses to ONE compute instead
-    # of a thundering herd of simultaneous os.walk + SKILL.md parses (#5364).
-    lock = _skills_stats_lock_for(profile_dir)
-    with lock:
-        # Double-checked locking: another thread may have populated a fresh entry
-        # while we waited for the lock. Reuse it when the mtime we already probed
-        # still matches and the entry is within its TTL — no second compute.
-        cached = _SKILLS_STATS_CACHE.get(profile_dir)
-        if cached is not None:
-            enabled, compat, cached_mtime_ns, expiry = cached
-            if current_mtime_ns == cached_mtime_ns and time.time() < expiry:
-                return enabled, compat
-
-        # Snapshot mtime BEFORE compute so any concurrent SKILL.md write during
-        # the compute window causes a mismatch on the next probe instead of
-        # silently serving stale data (TOCTOU).
-        new_mtime_ns = _skill_tree_max_mtime_ns(skills_dir, config_path)
-        res = _compute_profile_skills_stats(profile_dir)
-        _SKILLS_STATS_CACHE[profile_dir] = (
-            res[0], res[1], new_mtime_ns, time.time() + _SKILLS_STATS_CACHE_TTL
-        )
-        return res
-
-
 _LIST_PROFILES_CACHE: tuple[list, float] | None = None
-_LIST_PROFILES_CACHE_TTL = 4.0  # seconds. The perf(session-load-latency) pass bumped this to 60s, but that was reverted: profile-row mutations (defaults / providers / skills / gateway config) do NOT invalidate this cache, so a 60s TTL served stale profile rows for too long after such a change. 4s keeps the os.walk frequent enough that mutation→poll staleness is negligible while still making rapid dropdown re-opens free. The create/delete invalidation hooks below clear the cache immediately on those specific mutations.
+# Profile-row mutations beyond create/delete do not all invalidate this cache;
+# keep the short freshness contract established by the original implementation.
+_LIST_PROFILES_CACHE_TTL = 4.0
 _LIST_PROFILES_CACHE_LOCK = threading.Lock()
 
+from api.profiles_parts import catalog as _catalog
 
-def _invalidate_list_profiles_cache() -> None:
-    """Drop the cached profile list (call after create/delete/switch)."""
-    global _LIST_PROFILES_CACHE
-    with _LIST_PROFILES_CACHE_LOCK:
-        _LIST_PROFILES_CACHE = None
-
-
-def _build_profile_rows_fast() -> list | None:
-    """Build the profile list WITHOUT the upstream alias scan.
-
-    ``hermes_cli.profiles.list_profiles()`` calls ``find_alias_for_profile()``
-    once per profile, which iterates every file in the wrapper dir
-    (``~/.local/bin``) and ``read_text()``s each one — including large binaries
-    (claude, node, uv, …). On a machine with big binaries on PATH that is
-    hundreds of MB of reads PER PROFILE, which makes the compose-footer profile
-    dropdown hang for many seconds.
-
-    The WebUI never uses the alias data (``list_profiles_api`` does not return
-    ``alias_name``/``alias_path``), so we replicate the cheap part of upstream's
-    ``list_profiles()`` — the same per-profile metadata, the same hardcoded
-    ``"default"`` name for the base home — and simply skip the alias scan.
-
-    Returns ``None`` if the upstream cheap helpers can't be imported, so the
-    caller can fall back to the original (slow but correct) path. Forward-
-    compatible: if upstream fixes ``find_alias_for_profile`` this stays fast and
-    correct with nothing to revert.
-    """
-    try:
-        from hermes_cli.profiles import (
-            _get_default_hermes_home,
-            _get_profiles_root,
-            _read_config_model,
-            _check_gateway_running,
-            _PROFILE_ID_RE as _UPSTREAM_PROFILE_ID_RE,
-        )
-    except Exception:
-        return None
-
-    def _row(home: Path, name: str, is_default: bool) -> dict:
-        try:
-            model, provider = _read_config_model(home)
-        except Exception:
-            model, provider = None, None
-        try:
-            gateway_running = _check_gateway_running(home)
-        except Exception:
-            gateway_running = False
-        enabled_count, total_count = _get_profile_skills_stats(home)
-        return {
-            'name': name,
-            'path': str(home),
-            'is_default': is_default,
-            'is_active': False,  # filled in by caller (cheap, varies per request)
-            'gateway_running': gateway_running,
-            'model': model,
-            'provider': provider,
-            'has_env': (home / '.env').exists(),
-            'visible': _profile_visible_from_meta(home),
-            'skill_count': enabled_count,
-            'enabled_skills': enabled_count,
-            'total_skills': total_count,
-        }
-
-    rows: list = []
-    default_home = _get_default_hermes_home()
-    if default_home.is_dir():
-        # Upstream hardcodes the base home's display name to "default" even when
-        # the directory is literally ".hermes" — match that exactly.
-        rows.append(_row(default_home, 'default', True))
-
-    profiles_root = _get_profiles_root()
-    if profiles_root.is_dir():
-        for entry in sorted(profiles_root.iterdir()):
-            if not entry.is_dir():
-                continue
-            if not _UPSTREAM_PROFILE_ID_RE.match(entry.name):
-                continue
-            rows.append(_row(entry, entry.name, False))
-
-    return rows
+_skills_stats_lock_for = bind_profile_function(
+    _PROFILE_FACADE, _catalog._skills_stats_lock_for
+)
+_skill_tree_max_mtime_ns = bind_profile_function(
+    _PROFILE_FACADE, _catalog._skill_tree_max_mtime_ns
+)
+_compute_profile_skills_stats = bind_profile_function(
+    _PROFILE_FACADE, _catalog._compute_profile_skills_stats
+)
+_get_profile_skills_stats = bind_profile_function(
+    _PROFILE_FACADE, _catalog._get_profile_skills_stats
+)
+_invalidate_list_profiles_cache = bind_profile_function(
+    _PROFILE_FACADE, _catalog._invalidate_list_profiles_cache
+)
+_build_profile_rows_fast = bind_profile_function(
+    _PROFILE_FACADE, _catalog._build_profile_rows_fast
+)
+list_profiles_api = bind_profile_function(_PROFILE_FACADE, _catalog.list_profiles_api)
+_profile_visible_from_meta = bind_profile_function(
+    _PROFILE_FACADE, _catalog._profile_visible_from_meta
+)
+_default_profile_dict = bind_profile_function(
+    _PROFILE_FACADE, _catalog._default_profile_dict
+)
 
 
-def list_profiles_api() -> list:
-    """List all profiles with metadata, serialized for JSON response.
-
-    In isolated profile mode (HERMES_HOME points to ~/.hermes/profiles/<name>),
-    returns only that single profile and skips other profiles entirely.
-
-    Fast path: build the rows from upstream's cheap per-profile helpers and skip
-    ``find_alias_for_profile`` (whose result the WebUI discards) — see
-    ``_build_profile_rows_fast``. Results are cached for a short TTL so rapid
-    re-opens of the compose-footer dropdown are free; the cache is busted on
-    profile create/delete. Falls back to upstream ``list_profiles()`` if the
-    cheap helpers are unavailable.
-    """
-    import time
-    global _LIST_PROFILES_CACHE
-    now = time.time()
-
-    # In isolated profile mode, return only the active (isolated) profile
-    if _is_isolated_profile_mode():
-        active = _isolated_profile_name()
-        hermes_home = Path(_INITIAL_HERMES_HOME).expanduser()
-        try:
-            from hermes_cli.profiles import list_profiles
-            infos = list_profiles()
-            # When the isolated profile is literally named "default", upstream
-            # can surface the base-home row first. Only trust a row whose path
-            # resolves to the same directory as the isolated startup home.
-            for p in infos:
-                try:
-                    same_home = Path(p.path).expanduser().resolve() == hermes_home.resolve()
-                except OSError:
-                    same_home = False
-                if p.name == active and same_home:
-                    enabled_count, total_count = _get_profile_skills_stats(p.path)
-                    return [{
-                        'name': p.name,
-                        'path': str(p.path),
-                        'is_default': p.is_default,
-                        'is_active': True,  # Always true in isolated mode
-                        'gateway_running': p.gateway_running,
-                        'model': p.model,
-                        'provider': p.provider,
-                        'has_env': p.has_env,
-                        'visible': _profile_visible_from_meta(p.path),
-                        'skill_count': enabled_count,
-                        'enabled_skills': enabled_count,
-                        'total_skills': total_count,
-                    }]
-        except (ImportError, OSError, PermissionError):
-            pass
-        # Fallback: construct profile dict with actual active name and hermes_home path
-        enabled_count, total_count = _get_profile_skills_stats(hermes_home)
-        return [{
-            'name': active,
-            'path': str(hermes_home),
-            'is_default': active == 'default',
-            'is_active': True,
-            'gateway_running': False,
-            'model': None,
-            'provider': None,
-            'has_env': (hermes_home / '.env').exists(),
-            'visible': _profile_visible_from_meta(hermes_home),
-            'skill_count': enabled_count,
-            'enabled_skills': enabled_count,
-            'total_skills': total_count,
-        }]
-
-    # Single-flight the build (#5364): hold the cache lock across the row build
-    # so a cold-startup burst of concurrent requests collapses to ONE build while
-    # the others wait and then serve the freshly-cached rows — instead of every
-    # thread rebuilding (each walking all profiles' skill trees) at once. The
-    # per-profile skills locks taken inside _build_profile_rows_fast are always
-    # acquired AFTER this lock (never the reverse), so there is no deadlock.
-    with _LIST_PROFILES_CACHE_LOCK:
-        cached = _LIST_PROFILES_CACHE
-        if cached is not None and now - cached[1] < _LIST_PROFILES_CACHE_TTL:
-            rows = cached[0]
-        else:
-            rows = _build_profile_rows_fast()
-            if rows is not None:
-                _LIST_PROFILES_CACHE = (rows, now)
-
-    if rows is None:
-        # Fallback: cheap helpers unavailable — use the original (slow) path,
-        # or the default-only dict if hermes_cli isn't importable at all.
-        logger.debug(
-            "list_profiles_api: fast path unavailable, falling back to "
-            "upstream list_profiles() (slower)"
-        )
-        try:
-            from hermes_cli.profiles import list_profiles
-            infos = list_profiles()
-        except ImportError:
-            return [_default_profile_dict()]
-
-        active = get_active_profile_name()
-        result = []
-        for p in infos:
-            enabled_count, total_count = _get_profile_skills_stats(p.path)
-            result.append({
-                'name': p.name,
-                'path': str(p.path),
-                'is_default': p.is_default,
-                'is_active': p.name == active,
-                'gateway_running': p.gateway_running,
-                'model': p.model,
-                'provider': p.provider,
-                'has_env': p.has_env,
-                'visible': _profile_visible_from_meta(p.path),
-                'skill_count': enabled_count,
-                'enabled_skills': enabled_count,
-                'total_skills': total_count,
-            })
-        return result
-
-    active = get_active_profile_name()
-    return [{**p, 'is_active': p['name'] == active} for p in rows]
-
-
-def _profile_visible_from_meta(profile_path: Path) -> bool:
-    """Return False only for an explicit boolean ``visible: false`` in profile.yaml."""
-    try:
-        meta_path = Path(profile_path) / 'profile.yaml'
-        if not meta_path.exists():
-            return True
-        data = yaml.safe_load(meta_path.read_text(encoding='utf-8'))
-    except Exception:
-        return True
-    if not isinstance(data, dict):
-        return True
-    visible = data.get('visible')
-    return visible is not False
-
-
-def _default_profile_dict() -> dict:
-    """Fallback profile dict when hermes_cli is not importable."""
-    enabled_count, compatible_count = _get_profile_skills_stats(_DEFAULT_HERMES_HOME)
-    return {
-        'name': 'default',
-        'path': str(_DEFAULT_HERMES_HOME),
-        'is_default': True,
-        'is_active': True,
-        'gateway_running': False,
-        'model': None,
-        'provider': None,
-        'has_env': (_DEFAULT_HERMES_HOME / '.env').exists(),
-        'visible': True,
-        'skill_count': enabled_count,
-        'enabled_skills': enabled_count,
-        'total_skills': compatible_count,
-    }
-
-
-def _validate_profile_name(name: str):
-    """Validate profile name format (matches hermes_cli.profiles upstream)."""
-    if name == 'default':
-        raise ValueError("Cannot create a profile named 'default' -- it is the built-in profile.")
-    # Use fullmatch (not match) so a trailing newline can't sneak past the $ anchor
-    if not _PROFILE_ID_RE.fullmatch(name):
-        raise ValueError(
-            f"Invalid profile name {name!r}. "
-            "Must match [a-z0-9][a-z0-9_-]{0,63}"
-        )
-
-
-def _profiles_root() -> Path:
-    """Return the canonical root that contains named profiles."""
-    return (_DEFAULT_HERMES_HOME / 'profiles').resolve()
-
-
-def _resolve_named_profile_home(name: str) -> Path:
-    """Resolve a named profile to a directory under the profiles root.
-
-    Validates *name* as a logical profile identifier first, then resolves the
-    final filesystem path and enforces containment under ~/.hermes/profiles.
-    """
-    _validate_profile_name(name)
-    profiles_root = _profiles_root()
-    candidate = (profiles_root / name).resolve()
-    candidate.relative_to(profiles_root)
-    return candidate
-
-
-def _create_profile_fallback(name: str, clone_from: str = None,
-                              clone_config: bool = False) -> Path:
-    """Create a profile directory without hermes_cli (Docker/standalone fallback)."""
-    profile_dir = _DEFAULT_HERMES_HOME / 'profiles' / name
-    if profile_dir.exists():
-        raise FileExistsError(f"Profile '{name}' already exists.")
-
-    # Bootstrap directory structure (exist_ok=False so a concurrent create raises)
-    profile_dir.mkdir(parents=True, exist_ok=False)
-    for subdir in _PROFILE_DIRS:
-        (profile_dir / subdir).mkdir(parents=True, exist_ok=True)
-
-    # Clone config files from source profile if requested
-    if clone_config and clone_from:
-        if _is_root_profile(clone_from):
-            source_dir = _DEFAULT_HERMES_HOME
-        else:
-            source_dir = _DEFAULT_HERMES_HOME / 'profiles' / clone_from
-        if source_dir.is_dir():
-            for filename in _CLONE_CONFIG_FILES:
-                src = source_dir / filename
-                if src.exists():
-                    shutil.copy2(src, profile_dir / filename)
-
-    return profile_dir
-
-
-# Provider → .env variable name mapping.
-# When a user supplies an API key during profile creation in the WebUI,
-# the key must be written to the profile's .env file so that Hermes Agent's
-# provider layer can read it — config.yaml model.api_key is not consumed.
+# Provider-to-secret mapping is part of the profile-management persistence
+# contract. API keys are written only to the profile's .env, never config.yaml.
 _PROVIDER_ENV_MAP: dict[str, str] = {
     "kimi-coding": "KIMI_API_KEY",
     "kimi-coding-cn": "KIMI_CN_API_KEY",
@@ -2157,397 +1714,51 @@ _PROVIDER_ENV_MAP: dict[str, str] = {
     "nous": "NOUS_API_KEY",
 }
 
+from api.profiles_parts import management as _management
 
-def _resolve_env_var_for_provider(provider: Optional[str]) -> Optional[str]:
-    """Return the .env variable name for *provider*, or the generic fallback."""
-    if not provider:
-        return None
-    return _PROVIDER_ENV_MAP.get(str(provider).strip().lower())
-
-
-def _upsert_dotenv_line(env_path: Path, key: str, value: str) -> None:
-    """Write or replace a KEY=value line in a dotenv file.
-
-    Reads existing lines; if *key* already exists its value is replaced.
-    Otherwise a new line is appended.  The file (and parent dirs) are created
-    when they do not exist yet.
-    """
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
-    except Exception:
-        lines = []
-
-    new_line = f"{key}={value}"
-    found = False
-    new_lines: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            k, _ = stripped.split("=", 1)
-            if k.strip() == key:
-                new_lines.append(new_line)
-                found = True
-                continue
-        new_lines.append(line)
-
-    if not found:
-        new_lines.append(new_line)
-
-    try:
-        env_path.write_text("\n".join(new_lines).rstrip("\n") + "\n", encoding="utf-8")
-    except Exception as exc:
-        logger.error("Failed to write %s to %s: %s", key, env_path, exc)
-        raise
-
-
-def _write_api_key_to_dotenv(
-    profile_dir: Path,
-    api_key: str,
-    model_provider: Optional[str] = None,
-) -> None:
-    """Write *api_key* to the profile's .env under the correct variable name.
-
-    If *model_provider* is known, the key is stored under the provider-specific
-    env var (e.g. ``KIMI_API_KEY``); otherwise it falls back to a generic
-    ``HERMES_API_KEY`` that the user can rename later.
-    """
-    env_var = _resolve_env_var_for_provider(model_provider)
-    if not env_var:
-        env_var = "HERMES_API_KEY"
-        logger.info(
-            "No provider→env mapping for %r; writing API key as %s",
-            model_provider,
-            env_var,
-        )
-
-    env_path = profile_dir / ".env"
-    _upsert_dotenv_line(env_path, env_var, api_key)
-
-    # Tighten permissions so the key isn't world-readable.
-    try:
-        env_path.chmod(0o600)
-    except Exception:
-        logger.debug("Failed to chmod 0o600 on %s", env_path)
-
-
-def _write_endpoint_to_config(profile_dir: Path, base_url: str = None, api_key: str = None) -> None:
-    """Write base_url into config.yaml for a profile.
-
-    API keys are intentionally NOT written to config.yaml — they belong in
-    the profile's .env file instead (see ``_write_api_key_to_dotenv``).
-    The *api_key* parameter is accepted for backward compatibility with
-    callers that still pass it; it is silently dropped here (the caller
-    should have already called ``_write_api_key_to_dotenv``).
-    """
-    if not base_url:
-        return
-    config_path = profile_dir / 'config.yaml'
-    try:
-        import yaml as _yaml
-    except ImportError:
-        return
-    cfg = {}
-    if config_path.exists():
-        try:
-            loaded = _yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                cfg = loaded
-        except Exception:
-            logger.debug("Failed to load config from %s", config_path)
-    model_section = cfg.get('model', {})
-    if not isinstance(model_section, dict):
-        model_section = {}
-    if base_url:
-        model_section['base_url'] = base_url
-    cfg['model'] = model_section
-    config_path.write_text(_yaml.dump(cfg, default_flow_style=False, allow_unicode=True), encoding='utf-8')
-
-
-def _clean_profile_config_value(value: Optional[str], field: str) -> Optional[str]:
-    """Return a safe single-line config value or raise ValueError."""
-    if value is None:
-        return None
-    cleaned = str(value).strip()
-    if not cleaned:
-        return None
-    if any(ch in cleaned for ch in ("\x00", "\r", "\n")):
-        raise ValueError(f"{field} must be a single-line value")
-    if len(cleaned) > 512:
-        raise ValueError(f"{field} is too long")
-    return cleaned
-
-
-def _split_webui_provider_model_value(default_model: Optional[str], model_provider: Optional[str]) -> tuple[Optional[str], Optional[str]]:
-    """Normalize WebUI-internal @provider:model picker values for config.yaml."""
-    model = _clean_profile_config_value(default_model, "default_model")
-    provider = _clean_profile_config_value(model_provider, "model_provider")
-    if model and model.startswith("@") and ":" in model:
-        provider_part, model_part = model[1:].rsplit(":", 1)
-        provider = provider or _clean_profile_config_value(provider_part, "model_provider")
-        model = _clean_profile_config_value(model_part, "default_model")
-    return model, provider
-
-
-def _strip_webui_provider_prefix(model_id: object) -> str:
-    value = str(model_id or "").strip()
-    if value.startswith("@") and ":" in value:
-        return value.rsplit(":", 1)[1]
-    return value
-
-
-def _profile_model_selection_exists(
-    available_models: object,
-    default_model: Optional[str],
-    model_provider: Optional[str],
-) -> bool:
-    """Return True when a profile default model/provider exists in /api/models."""
-    if not default_model and not model_provider:
-        return True
-    if not isinstance(available_models, dict):
-        return False
-
-    provider_seen = False
-    model_seen = False
-    for group in available_models.get("groups", []) or []:
-        if not isinstance(group, dict):
-            continue
-        provider_id = str(group.get("provider_id") or "").strip()
-        if model_provider and provider_id != model_provider:
-            continue
-        if model_provider and provider_id == model_provider:
-            provider_seen = True
-        all_group_models = (group.get("models") or []) + (group.get("extra_models") or [])
-        for model in all_group_models:
-            if not isinstance(model, dict):
-                continue
-            model_id = str(model.get("id") or "").strip()
-            if not model_id:
-                continue
-            if default_model and (
-                model_id == default_model
-                or _strip_webui_provider_prefix(model_id) == default_model
-            ):
-                model_seen = True
-                if model_provider:
-                    return True
-        if not default_model and provider_seen:
-            return True
-
-    if model_provider and not provider_seen:
-        return False
-    return bool(model_seen)
-
-
-def _get_available_models_for_profile_validation() -> dict:
-    from api.config import get_available_models
-
-    return get_available_models()
-
-
-def _validate_profile_model_selection(
-    default_model: Optional[str],
-    model_provider: Optional[str],
-    available_models: Optional[dict] = None,
-) -> None:
-    """Reject profile model defaults that do not exist in the server catalog."""
-    if not default_model and not model_provider:
-        return
-    catalog = (
-        available_models
-        if available_models is not None
-        else _get_available_models_for_profile_validation()
-    )
-    if _profile_model_selection_exists(catalog, default_model, model_provider):
-        return
-    if default_model and model_provider:
-        raise ValueError(
-            f"Selected model '{default_model}' is not available for provider '{model_provider}'"
-        )
-    if default_model:
-        raise ValueError(f"Selected model '{default_model}' is not available")
-    raise ValueError(f"Selected model provider '{model_provider}' is not available")
-
-
-def _write_model_defaults_to_config(
-    profile_dir: Path,
-    *,
-    default_model: Optional[str] = None,
-    model_provider: Optional[str] = None,
-) -> None:
-    """Write model default/provider fields into config.yaml for a profile."""
-    default_model, model_provider = _split_webui_provider_model_value(default_model, model_provider)
-    if not default_model and not model_provider:
-        return
-    config_path = profile_dir / 'config.yaml'
-    try:
-        import yaml as _yaml
-    except ImportError:
-        return
-    cfg = {}
-    if config_path.exists():
-        try:
-            loaded = _yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                cfg = loaded
-        except Exception:
-            logger.debug("Failed to load config from %s", config_path)
-    model_section = cfg.get('model', {})
-    if not isinstance(model_section, dict):
-        model_section = {}
-    if default_model:
-        model_section['default'] = default_model
-    if model_provider:
-        model_section['provider'] = model_provider
-    cfg['model'] = model_section
-    config_path.write_text(_yaml.dump(cfg, default_flow_style=False, allow_unicode=True), encoding='utf-8')
-
-
-def create_profile_api(name: str, clone_from: str = None,
-                       clone_config: bool = False,
-                       base_url: str = None,
-                       api_key: str = None,
-                       default_model: str = None,
-                       model_provider: str = None) -> dict:
-    """Create a new profile. Returns the new profile info dict.
-
-    In isolated profile mode, profile creation is rejected (403).
-    """
-    if _is_isolated_profile_mode():
-        raise PermissionError("Profile creation is not allowed in isolated profile mode.")
-    _validate_profile_name(name)
-    # Defense-in-depth: validate clone_from here too, even though routes.py
-    # also validates it. Any caller that bypasses the HTTP layer gets protection.
-    if clone_from is not None and not _is_root_profile(clone_from):
-        _validate_profile_name(clone_from)
-    default_model, model_provider = _split_webui_provider_model_value(default_model, model_provider)
-    _validate_profile_model_selection(default_model, model_provider)
-
-    try:
-        from hermes_cli.profiles import create_profile
-        create_profile(
-            name,
-            clone_from=clone_from,
-            clone_config=clone_config,
-            clone_all=False,
-            no_alias=True,
-        )
-    except ImportError:
-        _create_profile_fallback(name, clone_from, clone_config)
-
-    # Resolve the profile directory from the profile list when possible.
-    # hermes_cli and the webui runtime do not always agree on the exact root,
-    # so we prefer the path returned by list_profiles_api() and fall back to the
-    # standard profile location only if the profile cannot be found there yet.
-    profile_path = _DEFAULT_HERMES_HOME / 'profiles' / name
-    for p in list_profiles_api():
-        if p['name'] == name:
-            try:
-                profile_path = Path(p.get('path') or profile_path)
-            except Exception:
-                logger.debug("Failed to parse profile path")
-            break
-
-    profile_path.mkdir(parents=True, exist_ok=True)
-
-    # Seed bundled skills for non-cloned profiles (#2305).
-    # Cloned profiles should preserve the clone-source behaviour and must not
-    # receive a second bundled-skill overlay.
-    if clone_from is None:
-        try:
-            from hermes_cli.profiles import seed_profile_skills
-            seed_profile_skills(profile_path, quiet=True)
-        except ImportError:
-            logger.debug(
-                'seed_profile_skills unavailable — bundled skills not seeded '
-                'for profile %s (hermes_cli not in path)',
-                name,
-            )
-        except Exception:
-            logger.warning(
-                'Bundled skills could not be seeded for profile %s; '
-                'profile created successfully anyway',
-                name,
-                exc_info=True,
-            )
-
-    _write_endpoint_to_config(profile_path, base_url=base_url)
-    if api_key:
-        _write_api_key_to_dotenv(
-            profile_path,
-            api_key=api_key,
-            model_provider=model_provider,
-        )
-    _write_model_defaults_to_config(
-        profile_path,
-        default_model=default_model,
-        model_provider=model_provider,
-    )
-
-    # Invalidate cached root-profile-name lookup; create_profile may have added
-    # a new profile that flips is_default semantics on the agent side (#1612).
-    _SKILLS_STATS_CACHE.clear()
-    _invalidate_list_profiles_cache()
-    _invalidate_root_profile_cache()
-
-    # Find and return the newly created profile info.
-    # When hermes_cli is not importable, list_profiles_api() also falls back
-    # to the stub default-only list and won't find the new profile by name.
-    # In that case, return a complete profile dict directly.
-    for p in list_profiles_api():
-        if p['name'] == name:
-            return p
-    return {
-        'name': name,
-        'path': str(profile_path),
-        'is_default': False,
-        'is_active': _active_profile == name,
-        'gateway_running': False,
-        'model': None,
-        'provider': None,
-        'has_env': (profile_path / '.env').exists(),
-        'skill_count': 0,
-        'enabled_skills': 0,
-        'total_skills': 0,
-    }
-
-
-def delete_profile_api(name: str) -> dict:
-    """Delete a profile. Switches to default first if it's the active one.
-
-    In isolated profile mode, profile deletion is rejected (403).
-    """
-    if _is_isolated_profile_mode():
-        raise PermissionError("Profile deletion is not allowed in isolated profile mode.")
-    if _is_root_profile(name):
-        raise ValueError("Cannot delete the default profile.")
-    _validate_profile_name(name)
-
-    # If deleting the active profile, switch to default first
-    if _active_profile == name:
-        try:
-            switch_profile('default')
-        except RuntimeError:
-            raise RuntimeError(
-                f"Cannot delete active profile '{name}' while an agent is running. "
-                "Cancel or wait for it to finish."
-            )
-
-    try:
-        from hermes_cli.profiles import delete_profile
-        delete_profile(name, yes=True)
-    except ImportError:
-        # Manual fallback: just remove the directory
-        import shutil
-        profile_dir = _resolve_named_profile_home(name)
-        if profile_dir.is_dir():
-            shutil.rmtree(str(profile_dir))
-        else:
-            raise ValueError(f"Profile '{name}' does not exist.")
-
-    # Drop cached root-profile-name lookup — list_profiles_api() shape changed.
-    _SKILLS_STATS_CACHE.clear()
-    _invalidate_list_profiles_cache()
-    _invalidate_root_profile_cache()
-    return {'ok': True, 'name': name}
+_validate_profile_name = bind_profile_function(
+    _PROFILE_FACADE, _management._validate_profile_name
+)
+_profiles_root = bind_profile_function(_PROFILE_FACADE, _management._profiles_root)
+_resolve_named_profile_home = bind_profile_function(
+    _PROFILE_FACADE, _management._resolve_named_profile_home
+)
+_create_profile_fallback = bind_profile_function(
+    _PROFILE_FACADE, _management._create_profile_fallback
+)
+_resolve_env_var_for_provider = bind_profile_function(
+    _PROFILE_FACADE, _management._resolve_env_var_for_provider
+)
+_upsert_dotenv_line = bind_profile_function(
+    _PROFILE_FACADE, _management._upsert_dotenv_line
+)
+_write_api_key_to_dotenv = bind_profile_function(
+    _PROFILE_FACADE, _management._write_api_key_to_dotenv
+)
+_write_endpoint_to_config = bind_profile_function(
+    _PROFILE_FACADE, _management._write_endpoint_to_config
+)
+_clean_profile_config_value = bind_profile_function(
+    _PROFILE_FACADE, _management._clean_profile_config_value
+)
+_split_webui_provider_model_value = bind_profile_function(
+    _PROFILE_FACADE, _management._split_webui_provider_model_value
+)
+_strip_webui_provider_prefix = bind_profile_function(
+    _PROFILE_FACADE, _management._strip_webui_provider_prefix
+)
+_profile_model_selection_exists = bind_profile_function(
+    _PROFILE_FACADE, _management._profile_model_selection_exists
+)
+_get_available_models_for_profile_validation = bind_profile_function(
+    _PROFILE_FACADE,
+    _management._get_available_models_for_profile_validation,
+)
+_validate_profile_model_selection = bind_profile_function(
+    _PROFILE_FACADE, _management._validate_profile_model_selection
+)
+_write_model_defaults_to_config = bind_profile_function(
+    _PROFILE_FACADE, _management._write_model_defaults_to_config
+)
+create_profile_api = bind_profile_function(_PROFILE_FACADE, _management.create_profile_api)
+delete_profile_api = bind_profile_function(_PROFILE_FACADE, _management.delete_profile_api)

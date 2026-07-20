@@ -64,6 +64,24 @@ def test_delete_profile_rejects_path_traversal():
             profiles.delete_profile_api("../../escape-target")
 
 
+def test_delete_fallback_observes_facade_shutil_patch(monkeypatch, tmp_path):
+    import api.profiles as profiles
+
+    base = tmp_path / ".hermes"
+    profile_dir = base / "profiles" / "demo"
+    profile_dir.mkdir(parents=True)
+    removed = []
+
+    assert profiles.shutil is not None
+    monkeypatch.setattr(profiles, "_DEFAULT_HERMES_HOME", base)
+    monkeypatch.setattr(profiles, "_active_profile", "default")
+    monkeypatch.setitem(sys.modules, "hermes_cli.profiles", None)
+    monkeypatch.setattr(profiles.shutil, "rmtree", removed.append)
+
+    assert profiles.delete_profile_api("demo") == {"ok": True, "name": "demo"}
+    assert removed == [str(profile_dir)]
+
+
 def test_switch_profile_allows_valid_profile_name():
     with tempfile.TemporaryDirectory() as td:
         temp_root = Path(td)
