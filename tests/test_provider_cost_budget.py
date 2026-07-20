@@ -34,18 +34,20 @@ def test_provider_cost_budget_in_settings_defaults():
     )
 
 
-def test_monthly_budget_in_providers_response_dicts():
-    src = _read("api/providers.py")
-    assert '"monthly_budget"' in src or "'monthly_budget'" in src, (
-        "monthly_budget must appear in providers.py response dicts"
-    )
+def test_cost_history_public_interface_remains_on_providers_facade():
+    import api.providers as providers
+
+    assert callable(providers.get_provider_cost_history)
+    assert providers.get_provider_cost_history.__module__ == "api.providers"
 
 
-def test_get_provider_cost_budget_defined():
-    src = _read("api/providers.py")
-    assert "_get_provider_cost_budget" in src, (
-        "_get_provider_cost_budget helper must be defined in providers.py"
-    )
+def test_cost_budget_helper_remains_patchable_on_providers_facade(monkeypatch):
+    import api.providers as providers
+
+    monkeypatch.setattr(config, "load_settings", lambda: {"provider_cost_budget": "12.5"})
+    monkeypatch.setattr(providers, "_coerce_provider_cost_budget", float)
+    assert providers._get_provider_cost_budget() == 12.5
+    assert providers._get_provider_cost_budget.__module__ == "api.providers"
 
 
 def test_attach_budget_controls_defined():

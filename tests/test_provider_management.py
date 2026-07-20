@@ -70,6 +70,13 @@ def _install_fake_hermes_cli(monkeypatch):
 # ── Unit tests (api/providers.py functions directly) ──────────────────────
 
 
+def test_model_label_helper_remains_reexported_from_providers():
+    from api.config import _get_label_for_model as config_helper
+    from api.providers import _get_label_for_model as providers_helper
+
+    assert providers_helper is config_helper
+
+
 class TestGetProviders:
     """Unit tests for get_providers() function."""
 

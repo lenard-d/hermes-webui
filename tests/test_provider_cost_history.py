@@ -67,6 +67,16 @@ def _restore_config(old_cfg, old_mtime):
 # ── Happy path: snapshot append + delta response ──────────────────────────────
 
 
+def test_cost_snapshot_lock_unwraps_to_facade_bound_generator():
+    import inspect
+
+    import api.providers as providers
+
+    unwrapped = inspect.unwrap(providers._cost_snapshot_file_lock)
+    assert inspect.isgeneratorfunction(unwrapped)
+    assert unwrapped.__globals__ is vars(providers)
+
+
 def test_openrouter_cost_history_happy_path(monkeypatch, tmp_path):
     """On-demand snapshot append returns deltas from cumulative usage."""
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
