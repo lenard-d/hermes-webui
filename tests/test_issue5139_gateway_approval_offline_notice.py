@@ -11,7 +11,8 @@ from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from api.sessions import store as models
+from api.sessions import cache as session_cache
+from api.sessions import records as session_records
 from api.config import STREAMS, STREAMS_LOCK, invalidate_gateway_caps
 from api.gateway_chat import _run_gateway_chat_streaming
 
@@ -23,10 +24,12 @@ MESSAGES_JS = family_source("messages")
 def _gateway_session(tmp_path, monkeypatch, *, session_id: str, stream_id: str):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    session = models.Session(
+    sessions = OrderedDict()
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_records, "SESSIONS", sessions)
+    monkeypatch.setattr(session_cache, "SESSIONS", sessions)
+    session = session_records.Session(
         session_id=session_id,
         active_stream_id=stream_id,
         workspace="/tmp",
@@ -37,7 +40,7 @@ def _gateway_session(tmp_path, monkeypatch, *, session_id: str, stream_id: str):
     )
     session._approval_notice_emitted = False
     session.save()
-    models.cache_full_session(session_id, session)
+    session_cache.cache_full_session(session_id, session)
     return session
 
 
