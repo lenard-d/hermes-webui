@@ -16,10 +16,15 @@ import * as messageCopyActions from './message-copy-actions.js';
 import * as reconnectBanner from './reconnect-banner.js';
 import * as textToSpeech from './text-to-speech.js';
 import * as todoState from './todo-state.js';
-import * as healthAndUpdates from './health-and-updates.js';
 import * as cliToolPresentation from './cli-tool-presentation.js';
 import * as compressionUi from './compression-ui.js';
 import * as handoffUi from './handoff-ui.js';
+import * as agentHealthMonitor from './agent-health-monitor.js';
+import * as sessionRecovery from './session-recovery.js';
+import * as systemHealthMonitor from './system-health-monitor.js';
+import * as updateBanner from './update-banner.js';
+import * as updateLifecycle from './update-lifecycle.js';
+import * as updateSummary from './update-summary.js';
 import * as liveActivity from './live-activity.js';
 import * as liveRunStatus from './live-run-status.js';
 import * as messageRenderCache from './message-render-cache.js';
@@ -64,10 +69,15 @@ const modules = Object.assign(Object.create(null), {
   reconnectBanner,
   textToSpeech,
   todoState,
-  healthAndUpdates,
   cliToolPresentation,
   compressionUi,
   handoffUi,
+  agentHealthMonitor,
+  sessionRecovery,
+  systemHealthMonitor,
+  updateBanner,
+  updateLifecycle,
+  updateSummary,
   presentation,
   transparentWorklog,
   topbarPresentation,

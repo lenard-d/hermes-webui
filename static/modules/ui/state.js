@@ -1,5 +1,5 @@
 import { showToast } from './composer.js';
-import { refreshSession } from './health-and-updates.js';
+import { refreshSession } from './session-recovery.js';
 import { _compressionMessageAnchorKey, _isContextCompactionMessage, _isPreservedCompressionTaskListMessage } from './compression-ui.js';
 import { _clearRenderCache, _clearUserRowIntrinsicHeightCache, _currentMessageRenderWindowSize, _scheduleMessageVirtualizedRender } from './navigation.js';
 import { _assistantMessageHasVisibleContent, _isRecoveryControlMessage, _messageHasReasoningPayload, msgContent } from './assistant-turn-presentation.js';

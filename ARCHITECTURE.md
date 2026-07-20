@@ -151,6 +151,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         mobile-composer-config.js Narrow-layout composer configuration panel owner
         message-scroll-follow.js Transcript scroll intent, pinning, cue, and PWA gesture owner
         activity-timing.js Worklog duration, compression timer, and event timestamp owner
+        system-health-monitor.js Host resource rendering, visibility-aware polling, and timer cleanup
+        agent-health-monitor.js Gateway heartbeat alert, restart action, dismissal, and polling lifecycle
+        update-banner.js Available-update status and banner presentation
+        update-summary.js Compare links, bounded summary cache, generation, and summary rendering
+        update-lifecycle.js Apply/force/lock-recovery actions and restart identity polling
+        session-recovery.js Active-session refresh, pending-turn merge, and boot reattach checks
       session_render_cache.js Native ES module owning the bounded transcript-render LRU
       session_render_cache_adapter.js Temporary classic-frontend compatibility adapter
       workspace.js         Workspace transport and compatibility facade

@@ -1,10 +1,25 @@
 import { syncToolsetsChip } from './composer-controls.js';
-import { _topbarMessageMetaText } from './health-and-updates.js';
 import { _liveModelFetchPending, syncModelChip } from './model-catalog.js';
 import { syncReasoningChip } from './model-selection.js';
 import { _applyModelToDropdown, _applySessionModelFallback, _ensureModelOptionInDropdown, _persistSessionModelCorrection, _providerDefersMissingModelFallback } from './model-state.js';
 import { $, S, assistantDisplayName } from './state.js';
 import { _syncWorkspaceHeadingState } from './workspace-and-uploads.js';
+
+function _topbarLoadedMessageCount(){
+  const messages=Array.isArray(S.messages)?S.messages:[];
+  return messages.filter((message)=>message&&message.role&&message.role!=='tool').length;
+}
+
+function _topbarMessageMetaText(){
+  const loadedCount=_topbarLoadedMessageCount();
+  const totalCount=Number(S.session&&S.session.message_count);
+  const hasTotal=Number.isFinite(totalCount)&&totalCount>0;
+  const isTruncated=!!(typeof _messagesTruncated!=='undefined'&&_messagesTruncated);
+  if(isTruncated&&hasTotal&&totalCount>loadedCount){
+    return `${loadedCount} loaded of ${totalCount} messages`;
+  }
+  return t('n_messages',loadedCount);
+}
 
 function syncTopbar(){
   if(!S.session){
@@ -156,11 +171,15 @@ function syncTopbar(){
 }
 
 export {
+  _topbarLoadedMessageCount,
+  _topbarMessageMetaText,
   syncTopbar,
 };
 
 const compatibilityBindings = {};
 Object.defineProperties(compatibilityBindings, {
+  _topbarLoadedMessageCount: { enumerable: true, get: () => _topbarLoadedMessageCount, set: (value) => { _topbarLoadedMessageCount = value; } },
+  _topbarMessageMetaText: { enumerable: true, get: () => _topbarMessageMetaText, set: (value) => { _topbarMessageMetaText = value; } },
   syncTopbar: { enumerable: true, get: () => syncTopbar, set: (value) => { syncTopbar = value; } },
 });
 Object.freeze(compatibilityBindings);
