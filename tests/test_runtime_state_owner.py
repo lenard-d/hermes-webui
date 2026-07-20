@@ -7,7 +7,7 @@ import threading
 import pytest
 
 import api.config as config
-from api.config_parts import runtime_registry
+from api.config import runtime
 from api.runtime_state import ProcessRuntimeState, RunProgressSnapshot
 
 
@@ -81,9 +81,9 @@ def test_register_runtime_stream_publishes_channel_owner_and_goal_state():
 
 
 def test_config_reexports_runtime_registry_implementation():
-    assert config.register_runtime_stream is runtime_registry.register_runtime_stream
-    assert config.blocking_runtime_stream is runtime_registry.blocking_runtime_stream
-    assert config.finish_runtime_run is runtime_registry.finish_runtime_run
+    assert config.register_runtime_stream is runtime.register_runtime_stream
+    assert config.blocking_runtime_stream is runtime.blocking_runtime_stream
+    assert config.finish_runtime_run is runtime.finish_runtime_run
 
 
 def test_runtime_registry_resolves_patched_config_state_at_call_time(monkeypatch):

@@ -4,7 +4,7 @@ Issue #803 (completes #798) — per-client profile isolation via cookie + thread
 PR #800 fixed POST /api/session/new (client sends profile in body).
 PR #805 extends the fix to ALL endpoints: profile switches set a hermes_profile
 cookie, server.py reads it per-request into a thread-local, and the existing
-api/profiles.py helpers consult the thread-local before the process global.
+api/profiles/__init__.py helpers consult the thread-local before the process global.
 
 Covers:
   1. build_profile_cookie() / get_profile_cookie() roundtrip + validation

@@ -16,12 +16,12 @@ from typing import Optional
 
 import yaml
 
-from api.profiles_parts.facade import profiles_api
+from api import profiles as _profiles_module
 
 
 def snapshot_skill_home_modules() -> dict[str, dict[str, object]]:
     """Snapshot imported skill-module path globals before a temporary patch."""
-    api = profiles_api()
+    api = _profiles_module
     snapshot: dict[str, dict[str, object]] = {}
     for module_name in api._SKILL_HOME_MODULES:
         module = api.sys.modules.get(module_name)
@@ -40,7 +40,7 @@ def snapshot_skill_home_modules() -> dict[str, dict[str, object]]:
 
 def restore_skill_home_modules(snapshot: dict[str, dict[str, object]]) -> None:
     """Restore skill-module globals captured by snapshot_skill_home_modules()."""
-    api = profiles_api()
+    api = _profiles_module
     for module_name, values in snapshot.items():
         module = api.sys.modules.get(module_name)
         if not values.get("module_present"):
@@ -80,7 +80,7 @@ def _stringify_env_value(value) -> str:
 
 def get_profile_runtime_env(home: Path) -> dict[str, str]:
     """Return terminal settings and dotenv values for one profile home."""
-    api = profiles_api()
+    api = _profiles_module
     home = Path(home).expanduser()
     env: dict[str, str] = {}
     try:
@@ -115,7 +115,7 @@ def get_profile_runtime_env(home: Path) -> dict[str, str]:
 
 def filter_runtime_env_for_gateway_parity(env: dict[str, str]) -> dict[str, str]:
     """Filter profile runtime env to match Hermes gateway semantics."""
-    api = profiles_api()
+    api = _profiles_module
     filtered: dict[str, str] = {}
     for key, value in (env or {}).items():
         normalized = str(key).strip()
@@ -129,7 +129,7 @@ def filter_runtime_env_for_gateway_parity(env: dict[str, str]) -> dict[str, str]
 
 def _agent_registry_credential_env_names() -> set[str]:
     """Return all credential env names consumed by the agent runtime."""
-    api = profiles_api()
+    api = _profiles_module
     names: set[str] = set(api._NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES)
     try:
         from hermes_cli.auth import PROVIDER_REGISTRY
@@ -153,17 +153,11 @@ def _agent_registry_credential_env_names() -> set[str]:
 
 def _profile_secret_env_names(profile_home_path: Path) -> set[str]:
     """Return credential names to scrub before applying one profile's env."""
-    api = profiles_api()
+    api = _profiles_module
     names: set[str] = set()
-    try:
-        from api.providers import _provider_credential_env_vars
+    from api.config.provider_credentials import provider_credential_env_vars
 
-        names.update(_provider_credential_env_vars())
-    except Exception:
-        api.logger.debug(
-            "Failed to load provider credential env names for profile scope",
-            exc_info=True,
-        )
+    names.update(provider_credential_env_vars())
     names.update(api._agent_registry_credential_env_names())
 
     config_path = Path(profile_home_path) / "config.yaml"
@@ -213,7 +207,7 @@ def _apply_profile_env_to_process(
 
 
 def _resolve_secret_scope_module():
-    api = profiles_api()
+    api = _profiles_module
     module = api.sys.modules.get("agent.secret_scope")
     if module is not None:
         return module
@@ -238,7 +232,7 @@ def _resolve_secret_scope_module():
 
 def _resolve_hermes_home_override():
     """Return optional context-local Hermes-home override support."""
-    api = profiles_api()
+    api = _profiles_module
     if api._hermes_home_override_available is False:
         return None
     module = api.sys.modules.get("hermes_constants")
@@ -263,7 +257,7 @@ def profile_env_for_background_worker(
     logger_override=None,
 ):
     """Return a context manager routing detached worker reads through a profile."""
-    api = profiles_api()
+    api = _profiles_module
 
     @contextmanager
     def scope():
@@ -383,7 +377,7 @@ def profile_env_for_active_request_readonly(
     logger_override=None,
 ):
     """Return a thread-local-only profile scope for read-only request paths."""
-    api = profiles_api()
+    api = _profiles_module
 
     @contextmanager
     def scope():
@@ -471,7 +465,7 @@ def profile_env_for_active_request(
     logger_override=None,
 ):
     """Return the legacy process-mirrored active-request scope."""
-    api = profiles_api()
+    api = _profiles_module
 
     @contextmanager
     def scope():
@@ -493,7 +487,7 @@ def profile_scope_for_detached_worker(
     logger_override=None,
 ):
     """Return a scope binding both request TLS and runtime env on a new thread."""
-    api = profiles_api()
+    api = _profiles_module
 
     @contextmanager
     def scope():
@@ -515,7 +509,7 @@ def profile_scope_for_detached_worker(
 
 def _set_hermes_home(home: Path):
     """Set process HERMES_HOME and patch agent modules caching its paths."""
-    api = profiles_api()
+    api = _profiles_module
     os.environ["HERMES_HOME"] = str(home)
     api.patch_skill_home_modules(home)
     try:
@@ -539,7 +533,7 @@ def _set_hermes_home(home: Path):
 
 def _reload_dotenv(home: Path):
     """Replace prior profile dotenv keys with the selected profile's values."""
-    api = profiles_api()
+    api = _profiles_module
     for key in list(api._loaded_profile_env_keys):
         os.environ.pop(key, None)
     api._loaded_profile_env_keys = set()

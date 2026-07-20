@@ -3,7 +3,7 @@
 import copy
 import json
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 
 def _parse_positive_int_config_value(raw) -> int | None:
@@ -25,7 +25,7 @@ def get_max_tokens_status() -> dict[str, int | None]:
     ``max_tokens_effective`` is the runtime cap a new streaming turn would
     currently use.
     """
-    api = config_api()
+    api = _config_module
     config_data = api._load_yaml_config_file(api._get_config_path())
     if not isinstance(config_data, dict):
         return {
@@ -60,7 +60,7 @@ def set_max_tokens(max_tokens) -> dict[str, int | None]:
     Positive integers are written to the active profile's ``config.yaml``.
     Unrelated YAML keys are preserved verbatim.
     """
-    api = config_api()
+    api = _config_module
     if isinstance(max_tokens, str):
         max_tokens = max_tokens.strip()
     clear_root = max_tokens in (None, "")
@@ -94,7 +94,7 @@ def set_reasoning_display(show: bool) -> dict:
     writes, so the preference is shared across the WebUI and the terminal
     REPL for the same profile.
     """
-    api = config_api()
+    api = _config_module
     config_path = api._get_config_path()
     with api._cfg_lock:
         config_data = api._load_yaml_config_file(config_path)
@@ -129,7 +129,7 @@ def set_reasoning_effort(
 
     Raises ``ValueError`` on any other unrecognised level so callers can 400.
     """
-    api = config_api()
+    api = _config_module
     raw = str(effort or "").strip().lower()
     if raw and raw != "none" and raw not in api.VALID_REASONING_EFFORTS:
         raise ValueError(
@@ -180,7 +180,7 @@ def _is_openai_family_provider(provider: str | None) -> bool:
     """Return True when a provider should receive OpenAI-family request overrides."""
     if not provider:
         return False
-    resolved = str(config_api()._resolve_provider_alias(str(provider).strip().lower()))
+    resolved = str(_config_module._resolve_provider_alias(str(provider).strip().lower()))
     return resolved in ("openai", "openai-api", "openai-codex")
 
 
@@ -215,7 +215,7 @@ def _legacy_openai_service_tier_overrides(
     preserves the old WebUI behavior when the agent package is unavailable,
     while still failing closed for codex model slugs and foreign provider IDs.
     """
-    api = config_api()
+    api = _config_module
     if not api._is_openai_family_provider(provider):
         return {}
     resolved_provider = str(
@@ -243,7 +243,7 @@ def _resolve_main_model_fast_mode_overrides(
     model_id: str | None, provider: str | None = None
 ) -> dict:
     """Return provider request overrides for the main model fast-mode setting."""
-    api = config_api()
+    api = _config_module
     normalized_model = api._normalize_openai_family_model_id(model_id)
     if not normalized_model:
         return api._legacy_openai_service_tier_overrides(model_id, provider)
@@ -270,7 +270,7 @@ def _main_model_supports_service_tier(
     provider: str | None,
 ) -> bool:
     """Return True when the current main-model selection can use OpenAI service tier."""
-    api = config_api()
+    api = _config_module
     if not api._is_openai_family_provider(provider):
         return False
     return (
@@ -289,7 +289,7 @@ def _model_supports_fast_tier_for_provider(
     model_id: str | None, provider: str | None
 ) -> bool:
     """Return whether a provider/model entry supports WebUI's service-tier toggle."""
-    return config_api()._main_model_supports_service_tier(model_id, provider)
+    return _config_module._main_model_supports_service_tier(model_id, provider)
 
 
 def _annotate_fast_tier_model_groups(payload: dict | None) -> dict | None:
@@ -299,7 +299,7 @@ def _annotate_fast_tier_model_groups(payload: dict | None) -> dict | None:
     groups = payload.get("groups")
     if not isinstance(groups, list):
         return payload
-    api = config_api()
+    api = _config_module
     for group in groups:
         if not isinstance(group, dict):
             continue
@@ -327,7 +327,7 @@ def _public_main_service_tier(model_cfg: dict) -> str:
     """Return the saved main-model service tier only for OpenAI-family providers."""
     if not isinstance(model_cfg, dict):
         return ""
-    api = config_api()
+    api = _config_module
     model_id = str(model_cfg.get("default") or model_cfg.get("name") or "").strip()
     provider = str(model_cfg.get("provider") or "").strip().lower()
     if not provider:
@@ -355,7 +355,7 @@ def _main_model_request_overrides(
     model_cfg = config_data.get("model", {})
     if not isinstance(model_cfg, dict):
         return {}
-    api = config_api()
+    api = _config_module
     overrides = {}
     gate_model = effective_model
     gate_provider = effective_provider
@@ -391,7 +391,7 @@ def _apply_advanced_model_options(model_cfg: dict, advanced: dict | None) -> Non
             model_cfg.pop("base_url", None)
     for field in ("timeout", "download_timeout", "max_concurrency"):
         if field in advanced:
-            coerced = config_api()._coerce_optional_positive_int(
+            coerced = _config_module._coerce_optional_positive_int(
                 advanced.get(field), field
             )
             if coerced == "":
@@ -438,7 +438,7 @@ def set_hermes_default_model(
     if not selected_model:
         raise ValueError("model is required")
 
-    api = config_api()
+    api = _config_module
     config_path = api._get_config_path()
     # Hold _cfg_lock only around the read-modify-write of the YAML file.
     # reload_config() acquires _cfg_lock internally (it's not reentrant) so
@@ -608,7 +608,7 @@ def _aux_task_payload(
 
 def _iter_auxiliary_task_rows() -> list[dict]:
     """Return canonical auxiliary task payload rows."""
-    api = config_api()
+    api = _config_module
     aux_cfg = api.cfg.get("auxiliary", {})
     if not isinstance(aux_cfg, dict):
         aux_cfg = {}
@@ -644,7 +644,7 @@ def get_auxiliary_models() -> dict:
         "main": {"provider": "openrouter", "model": "anthropic/claude-opus-4.7", "service_tier": ""},
     }
     """
-    api = config_api()
+    api = _config_module
     api.reload_config()
     model_cfg = api.cfg.get("model", {})
     if not isinstance(model_cfg, dict):
@@ -697,7 +697,7 @@ def set_auxiliary_model(
     Sensitive api_key values are write-only: get_auxiliary_models() only reports
     whether one is set.
     """
-    api = config_api()
+    api = _config_module
     config_path = api._get_config_path()
     with api._cfg_lock:
         config_data = api._load_yaml_config_file(config_path)

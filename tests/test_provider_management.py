@@ -85,7 +85,7 @@ class TestGetProviders:
         _install_fake_hermes_cli(monkeypatch)
         monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
 
-        from api import providers as prov
+        import api.providers as prov
 
         calls = []
         monkeypatch.setattr(prov, "_PROVIDER_DISPLAY", {"openai": "OpenAI"})
@@ -119,7 +119,7 @@ class TestGetProviders:
         active_home = {"path": home_a}
         monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: active_home["path"])
 
-        from api import providers as prov
+        import api.providers as prov
 
         monkeypatch.setattr(prov, "_PROVIDER_DISPLAY", {"openai": "OpenAI"})
         monkeypatch.setattr(prov, "_PROVIDER_MODELS", {"openai": []})
@@ -146,7 +146,7 @@ class TestGetProviders:
         monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
 
-        from api import providers as prov
+        import api.providers as prov
 
         key_present = {"value": False}
         monkeypatch.setattr(prov, "_PROVIDER_DISPLAY", {"anthropic": "Anthropic"})
@@ -179,8 +179,8 @@ class TestGetProviders:
 
     def test_oauth_credential_updates_invalidate_providers_cache(self, monkeypatch, tmp_path):
         """OAuth credential updates should invalidate cached Providers responses (#6010)."""
-        from api import oauth
-        from api import providers as prov
+        from api.auth import oauth
+        import api.providers as prov
 
         invalidated_credentials = []
         providers_invalidated = []
@@ -495,7 +495,7 @@ class TestRemoveProviderKey:
 
         monkeypatch.setattr(providers, "_get_config_path", lambda: stale_config, raising=False)
         monkeypatch.setattr(cfg_mod, "_get_config_path", lambda: active_config)
-        monkeypatch.setattr(providers, "reload_config", lambda: None)
+        monkeypatch.setattr(cfg_mod, "reload_config", lambda: None)
 
         providers._clean_provider_key_from_config("openai")
 
@@ -526,7 +526,7 @@ class TestRemoveProviderKey:
         )
 
         monkeypatch.setattr(cfg_mod, "_get_config_path", lambda: config_path)
-        monkeypatch.setattr(providers, "reload_config", lambda: None)
+        monkeypatch.setattr(cfg_mod, "reload_config", lambda: None)
 
         providers._clean_provider_key_from_config("custom:local-127.0.0.1-15721")
 

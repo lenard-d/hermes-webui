@@ -12,7 +12,7 @@ from tests._pytest_port import BASE
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SETTINGS_PY = (
-    ROOT / "api" / "config_parts" / "settings_persistence.py"
+    ROOT / "api" / "config" / "settings.py"
 ).read_text(encoding="utf-8")
 BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")

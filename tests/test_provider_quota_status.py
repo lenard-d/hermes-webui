@@ -64,13 +64,13 @@ def _restore_config(old_cfg, old_mtime):
     config._cfg_path = old_path
 
 
-def test_account_usage_facade_preserves_class_globals_and_state_identity():
+def test_account_usage_exports_preserve_owner_state_identity():
     import api.providers as providers
-    from api.provider_parts import account_usage
+    from api.providers import account_usage
 
-    assert providers.get_provider_quota.__module__ == "api.providers"
-    assert providers._AccountUsageProbeWorker.__module__ == "api.providers"
-    assert providers._AccountUsageProbeWorker.fetch.__globals__ is vars(providers)
+    assert providers.get_provider_quota is account_usage.get_provider_quota
+    assert providers._AccountUsageProbeWorker is account_usage._AccountUsageProbeWorker
+    assert providers._AccountUsageProbeWorker.fetch.__globals__ is vars(account_usage)
     assert providers._account_usage_status_cache is account_usage._account_usage_status_cache
     assert providers._account_usage_status_cache_lock is account_usage._account_usage_status_cache_lock
     assert providers._account_usage_worker_pool is account_usage._account_usage_worker_pool
@@ -84,7 +84,7 @@ def test_openrouter_quota_fetches_key_endpoint_and_sanitizes_response(monkeypatc
     (tmp_path / ".env").write_text("OPENROUTER_API_KEY=test-openrouter-key-private\n", encoding="utf-8")
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
     seen = {}
 
     def fake_urlopen(req, timeout):
@@ -125,7 +125,7 @@ def test_openrouter_quota_no_key_returns_safe_no_key_without_network(monkeypatch
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     def explode(*_args, **_kwargs):
         raise AssertionError("quota lookup should not call the network without a key")
@@ -151,7 +151,7 @@ def test_openrouter_quota_invalid_key_and_timeout_are_sanitized(monkeypatch, tmp
     (tmp_path / ".env").write_text("OPENROUTER_API_KEY=test-openrouter-key-private\n", encoding="utf-8")
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     req = providers.urllib.request.Request("https://openrouter.ai/api/v1/key")
     invalid = urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, BytesIO(b"secret body"))
@@ -178,7 +178,7 @@ def test_unsupported_provider_reports_followup_state(monkeypatch, tmp_path):
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
     try:
         result = providers.get_provider_quota()
     finally:
@@ -197,7 +197,7 @@ def test_codex_account_usage_is_fetched_under_active_profile_home(monkeypatch, t
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
     seen = {}
     previous_home = os.environ.get("HERMES_HOME")
 
@@ -280,7 +280,7 @@ def test_codex_account_usage_unavailable_is_sanitized(monkeypatch, tmp_path):
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     def fake_fetch(*_args, **_kwargs):
         raise RuntimeError("secret access token should not leak")
@@ -302,7 +302,7 @@ def test_codex_account_usage_unavailable_is_sanitized(monkeypatch, tmp_path):
 
 def test_codex_account_usage_subprocess_reports_read_only_credential_pool(monkeypatch, capsys):
     """Codex quota probes should inspect pool entries without mutating selection order."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     def b64url(payload: bytes) -> str:
         return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
@@ -475,7 +475,7 @@ def test_codex_account_usage_subprocess_reports_read_only_credential_pool(monkey
 
 def test_codex_account_usage_subprocess_retries_expired_pool_exhaustion(monkeypatch, capsys):
     """Expired pool cooldowns should be probed instead of shown as still exhausted."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     def b64url(payload: bytes) -> str:
         return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
@@ -552,7 +552,7 @@ def test_codex_account_usage_subprocess_retries_expired_pool_exhaustion(monkeypa
 
 def test_codex_account_usage_subprocess_probes_pool_entries_concurrently(monkeypatch, capsys):
     """Eligible pool credentials should be probed concurrently and reported in pool order."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     def b64url(payload: bytes) -> str:
         return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
@@ -647,7 +647,7 @@ def test_codex_account_usage_subprocess_probes_pool_entries_concurrently(monkeyp
 
 def test_codex_account_usage_subprocess_sanitizes_pool_entry_errors(monkeypatch, capsys):
     """Pool per-entry failures must not leak bearer/JWT-like exception text."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     fetch_calls = []
     agent_mod = types.ModuleType("agent")
@@ -702,7 +702,7 @@ def test_codex_account_usage_subprocess_sanitizes_pool_entry_errors(monkeypatch,
 
 def test_codex_account_usage_subprocess_keeps_legacy_reason_when_pool_misses(monkeypatch, capsys):
     """A failed pool fallback should not discard the legacy unavailable reason."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     fetch_calls = []
     load_pool_calls = []
@@ -758,7 +758,7 @@ def test_codex_account_usage_subprocess_keeps_legacy_reason_when_pool_misses(mon
 
 def test_account_usage_pool_payload_round_trips_to_provider_quota_status():
     """Parent process serialization must preserve pooled credential summaries."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     payload = {
         "provider": "openai-codex",
@@ -801,7 +801,7 @@ def test_anthropic_oauth_usage_unavailable_reason_is_reported(monkeypatch, tmp_p
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "anthropic"})
 
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(
         providers,
@@ -833,7 +833,7 @@ def test_anthropic_oauth_usage_unavailable_reason_is_reported(monkeypatch, tmp_p
 
 def test_account_usage_profile_fetch_does_not_enter_cron_env_context():
     """Quota probes must not reuse cron's process-global env/module swapper."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     body = inspect.getsource(providers._fetch_account_usage_with_profile_context)
     assert "cron_profile_context_for_home" not in body
@@ -842,7 +842,7 @@ def test_account_usage_profile_fetch_does_not_enter_cron_env_context():
 
 def test_account_usage_profile_env_is_child_scoped(monkeypatch, tmp_path):
     """Profile .env values should be passed to the child probe only."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     home = tmp_path / "profile-a"
     home.mkdir()
@@ -858,7 +858,7 @@ def test_account_usage_profile_env_is_child_scoped(monkeypatch, tmp_path):
 
 def test_account_usage_profile_fetch_uses_short_lived_cache(monkeypatch, tmp_path):
     """Repeated Settings refreshes should not re-query pooled account usage immediately."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
@@ -917,7 +917,7 @@ def test_account_usage_profile_fetch_uses_short_lived_cache(monkeypatch, tmp_pat
 
 def test_account_usage_forced_refresh_failure_preserves_warm_snapshot(monkeypatch, tmp_path):
     """A failed manual refresh should not discard the last usable account snapshot."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
@@ -965,7 +965,7 @@ def test_account_usage_forced_refresh_failure_preserves_warm_snapshot(monkeypatc
 
 def test_account_usage_profile_cache_invalidates_with_credential_pool_cache(monkeypatch, tmp_path):
     """Credential-pool invalidation should also clear pooled account usage."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
@@ -1022,7 +1022,7 @@ def test_account_usage_profile_cache_invalidates_with_credential_pool_cache(monk
 
 def test_account_usage_profile_fetch_caches_unavailable_snapshots(monkeypatch, tmp_path):
     """Known unavailable account snapshots should be cached like available ones."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
@@ -1060,7 +1060,7 @@ def test_account_usage_profile_fetch_caches_unavailable_snapshots(monkeypatch, t
 
 def test_account_usage_profile_fetch_does_not_cache_transient_none_results(monkeypatch, tmp_path):
     """Transient None probe results should not mask the next successful status check."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={"provider": "openai-codex"})
@@ -1103,7 +1103,7 @@ def test_account_usage_profile_fetch_does_not_cache_transient_none_results(monke
 
 def test_account_usage_profile_fetches_can_overlap_for_different_homes(monkeypatch, tmp_path):
     """Different profile quota fetches should not serialize on cron's global lock."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     homes = {
         "quota-a": tmp_path / "a",
@@ -1184,7 +1184,7 @@ def test_openai_api_key_detection_still_accepts_real_api_keys(monkeypatch, tmp_p
     (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-test-real-openai-key\n", encoding="utf-8")
     old_cfg, old_mtime = _with_config(model={"provider": "openai"})
 
-    import api.providers as providers
+    import api.providers.credentials as providers
     try:
         assert providers._provider_has_key("openai") is True
         assert providers._get_provider_api_key("openai") == "sk-test-real-openai-key"
@@ -1213,7 +1213,7 @@ def test_openai_api_key_detection_falls_through_after_codex_jwt_config_value(mon
         providers={"openai": {"api_key": "sk-config-openai-key"}},
     )
 
-    import api.providers as providers
+    import api.providers.credentials as providers
     try:
         assert providers._provider_has_key("openai") is True
         assert providers._get_provider_api_key("openai") == "sk-config-openai-key"
@@ -1221,12 +1221,41 @@ def test_openai_api_key_detection_falls_through_after_codex_jwt_config_value(mon
         _restore_config(old_cfg, old_mtime)
 
 
-def test_provider_quota_route_is_registered():
-    """The backend must expose a route for the UI to poll quota status."""
-    routes = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-    assert 'parsed.path == "/api/provider/quota"' in routes
-    assert 'query.get("refresh", [""])' in routes
-    assert "get_provider_quota(provider_id, refresh=refresh)" in routes
+def test_provider_quota_route_dispatches_to_owner(monkeypatch):
+    """The backend must expose a working route for the UI quota poll."""
+    from contextlib import nullcontext
+    from urllib.parse import urlsplit
+
+    import api.profiles as profiles_api
+    import api.routes as routes
+
+    sentinel = object()
+    seen = []
+    monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args: False)
+    monkeypatch.setattr(
+        routes,
+        "_guard_request_session_visibility",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        profiles_api,
+        "profile_env_for_active_request_readonly",
+        lambda *_args, **_kwargs: nullcontext(),
+    )
+    monkeypatch.setattr(
+        routes,
+        "get_provider_quota",
+        lambda provider, refresh=False: seen.append((provider, refresh)) or {"ok": True},
+    )
+    monkeypatch.setattr(routes, "j", lambda _handler, payload: (sentinel, payload))
+
+    result = routes.handle_get(
+        object(),
+        urlsplit("/api/provider/quota?provider=openai-codex&refresh=1"),
+    )
+
+    assert result == (sentinel, {"ok": True})
+    assert seen == [("openai-codex", True)]
 
 
 def test_provider_quota_card_is_rendered_in_providers_panel():
@@ -1396,7 +1425,7 @@ class _FakeAccountUsageWorkerProcess:
 
 
 def test_account_usage_worker_reuses_process_for_same_home(monkeypatch, tmp_path):
-    import api.providers as providers
+    import api.providers.account_usage as providers
     import subprocess
 
     launched = []
@@ -1424,7 +1453,7 @@ def test_account_usage_worker_reuses_process_for_same_home(monkeypatch, tmp_path
 
 
 def test_account_usage_worker_pool_is_keyed_by_home(monkeypatch, tmp_path):
-    import api.providers as providers
+    import api.providers.account_usage as providers
     import subprocess
 
     launched = []
@@ -1448,7 +1477,7 @@ def test_account_usage_worker_pool_is_keyed_by_home(monkeypatch, tmp_path):
 
 
 def test_account_usage_worker_idle_cleanup_closes_stale_process(monkeypatch, tmp_path):
-    import api.providers as providers
+    import api.providers.account_usage as providers
     import subprocess
 
     launched = []
@@ -1477,7 +1506,7 @@ def test_account_usage_worker_idle_cleanup_closes_stale_process(monkeypatch, tmp
 
 
 def test_busy_account_usage_worker_uses_one_shot_fallback(monkeypatch, tmp_path):
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     worker = providers._AccountUsageProbeWorker(tmp_path)
     calls = []
@@ -1510,7 +1539,7 @@ def test_busy_account_usage_worker_uses_one_shot_fallback(monkeypatch, tmp_path)
 
 
 def test_account_usage_cleanup_removes_null_proc_worker(monkeypatch, tmp_path):
-    import api.providers as providers
+    import api.providers.account_usage as providers
     import subprocess
 
     launched = []
@@ -1559,7 +1588,7 @@ def test_provider_key_mutation_invalidates_warm_account_usage_workers(monkeypatc
 
 def test_account_usage_worker_uses_controlled_pipe_stdin(monkeypatch):
     """Account-usage probe workers must not inherit process stdin."""
-    import api.providers as providers
+    import api.providers.account_usage as providers
     import subprocess
 
     seen_stdin = None
@@ -1589,7 +1618,7 @@ def test_account_usage_probe_semaphore_has_correct_bound(monkeypatch, tmp_path):
     Verifying the bound directly ensures the cap actually prevents resource
     exhaustion when the UI polls multiple providers in rapid succession.
     """
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     monkeypatch.setattr(profiles, 'get_active_hermes_home', lambda: tmp_path)
     old_cfg, old_mtime = _with_config(model={'provider': 'openai-codex'})
@@ -1612,7 +1641,7 @@ def test_account_usage_preexec_fn_is_wired_on_posix(monkeypatch):
     terminated when the WebUI parent dies (OOM kill, systemctl restart, etc.).
     This test verifies the wiring and skips harmlessly on non-POSIX (Windows).
     """
-    import api.providers as providers
+    import api.providers.account_usage as providers
 
     assert callable(providers._account_usage_preexec_fn)
 
@@ -1654,7 +1683,7 @@ def test_account_usage_semaphore_caps_concurrency(monkeypatch, tmp_path):
     Verifies the bounded semaphore is used in the call path and genuinely
     prevents more than _MAX_CONCURRENT_ACCOUNT_USAGE_PROBES probes running.
     """
-    import api.providers as providers
+    import api.providers.account_usage as providers
     import threading
 
     monkeypatch.setattr(profiles, 'get_active_hermes_home', lambda: tmp_path)

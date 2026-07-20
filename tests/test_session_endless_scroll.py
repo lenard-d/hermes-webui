@@ -3,7 +3,7 @@ from tests.frontend_asset_contract import family_source
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 BOOT_JS = family_source("boot")

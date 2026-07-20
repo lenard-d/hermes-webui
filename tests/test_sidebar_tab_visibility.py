@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 UI_JS = family_source("ui")
 PANELS_PATH = ROOT / "static" / "panels.js"

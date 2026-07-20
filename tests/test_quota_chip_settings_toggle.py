@@ -11,7 +11,7 @@ INDEX = REPO_ROOT / "static" / "index.html"
 PANELS = REPO_ROOT / "static" / "panels.js"
 UI_JS = REPO_ROOT / "static" / "ui.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
-SETTINGS = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
+SETTINGS = REPO_ROOT / "api" / "config" / "settings.py"
 
 
 def test_quota_chip_settings_field_present():

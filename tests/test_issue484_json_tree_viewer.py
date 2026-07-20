@@ -252,7 +252,7 @@ class TestStructuredCodeSettingsWiring:
 
     def test_server_defaults_and_validation(self):
         with open(
-            "api/config_parts/settings_persistence.py", "r", encoding="utf-8"
+            "api/config/settings.py", "r", encoding="utf-8"
         ) as f:
             content = f.read()
         # Defaults preserve current behavior: auto + threshold 10.

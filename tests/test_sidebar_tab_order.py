@@ -3,7 +3,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")

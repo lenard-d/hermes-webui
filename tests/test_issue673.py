@@ -22,7 +22,7 @@ import urllib.request
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 CONFIG_PY = (
-    REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
+    REPO_ROOT / "api" / "config" / "settings.py"
 ).read_text(encoding="utf-8")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 BOOT_JS = family_source("boot")

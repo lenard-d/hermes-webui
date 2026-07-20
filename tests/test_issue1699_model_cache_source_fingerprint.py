@@ -92,6 +92,7 @@ def _configure_isolated_sources(tmp_path, monkeypatch, provider_id: str) -> None
     # Leave model.provider unset so get_available_models() must honor the auth
     # store's active_provider fallback, matching CLI setup/auth-store drift.
     config_path.write_text("model:\n  default: glm-5.1\n", encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
     monkeypatch.setenv("HERMES_CONFIG_PATH", str(config_path))
 
     import api.profiles as profiles

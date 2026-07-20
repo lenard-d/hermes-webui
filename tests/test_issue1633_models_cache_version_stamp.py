@@ -20,6 +20,17 @@ from pathlib import Path
 import pytest
 
 
+def _set_unknown_runtime_version(monkeypatch):
+    from dataclasses import replace
+    from api.config import hooks
+
+    monkeypatch.setattr(
+        hooks,
+        "_runtime_hooks",
+        replace(hooks.get_config_runtime_hooks(), webui_version=lambda: None),
+    )
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
@@ -74,6 +85,7 @@ def test_current_webui_version_returns_none_when_module_missing(monkeypatch):
     the startup sequence on AttributeError.
     """
     monkeypatch.delitem(sys.modules, "api.updates", raising=False)
+    _set_unknown_runtime_version(monkeypatch)
     from api.config import _current_webui_version
     assert _current_webui_version() is None
 
@@ -98,6 +110,7 @@ def test_save_omits_webui_version_when_runtime_unknown(isolated_cache, monkeypat
     skips the version stamp. The next load with a known runtime version will
     treat the file as invalid (fail-safe rebuild on first real call)."""
     monkeypatch.delitem(sys.modules, "api.updates", raising=False)
+    _set_unknown_runtime_version(monkeypatch)
     from api import config
 
     config._save_models_cache_to_disk(_shape_cache())
@@ -221,6 +234,7 @@ def test_load_skips_version_check_when_runtime_unknown(isolated_cache, monkeypat
     json.dump(cache, open(isolated_cache, "w"))
 
     monkeypatch.delitem(sys.modules, "api.updates", raising=False)
+    _set_unknown_runtime_version(monkeypatch)
     loaded = config._load_models_cache_from_disk()
     # Loadable because runtime version was unknown — once api.updates loads,
     # the next call would re-validate.

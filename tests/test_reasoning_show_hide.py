@@ -46,13 +46,13 @@ class TestShowThinkingConfig:
     """show_thinking must appear in defaults and bool keys."""
 
     def test_show_thinking_in_defaults(self):
-        src = read('api/config_parts/settings_persistence.py')
+        src = read('api/config/settings.py')
         assert '"show_thinking": True' in src, (
             "show_thinking must be True in _SETTINGS_DEFAULTS"
         )
 
     def test_show_thinking_in_bool_keys(self):
-        src = read('api/config_parts/settings_persistence.py')
+        src = read('api/config/settings.py')
         assert '"show_thinking"' in src
         # Find the _SETTINGS_BOOL_KEYS set and confirm show_thinking is in it
         m = re.search(r'_SETTINGS_BOOL_KEYS\s*=\s*\{([^}]+)\}', src, re.DOTALL)

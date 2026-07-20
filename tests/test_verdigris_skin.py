@@ -6,7 +6,7 @@ from pathlib import Path
 REPO = Path(__file__).parent.parent
 CSS = family_source("style")
 BOOT_JS = family_source("boot")
-SETTINGS_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+SETTINGS_PY = (REPO / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")

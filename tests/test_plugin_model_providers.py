@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import api.config as config
 import api.profiles as profiles
-from api.plugin_providers import invalidate_plugin_model_provider_cache
+from api.config.plugin_providers import invalidate_plugin_model_provider_cache
 
 
 def _install_fake_yandex_plugin(monkeypatch):
@@ -165,7 +165,7 @@ class TestPluginOnlyExcludesStaticProviders:
     def test_bundled_agent_profiles_are_not_plugin_only(self, monkeypatch):
         """Agent bundled profiles must not hijack WebUI static/custom paths."""
         _install_fake_yandex_plugin(monkeypatch)
-        from api.plugin_providers import (
+        from api.config.plugin_providers import (
             effective_provider_display_name,
             is_plugin_model_provider,
             plugin_model_provider_ids,
@@ -316,7 +316,7 @@ class TestPluginFallbackModelsInStaticCatalog:
         fake_providers.list_providers = _fake_list_providers
         monkeypatch.setitem(sys.modules, "providers", fake_providers)
 
-        from api.plugin_providers import invalidate_plugin_model_provider_cache
+        from api.config.plugin_providers import invalidate_plugin_model_provider_cache
 
         invalidate_plugin_model_provider_cache()
 

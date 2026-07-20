@@ -77,6 +77,7 @@ def _install_fake_hermes_cli(monkeypatch, *, with_load_pool: bool = False, pool_
 
 def _call_get_available_models(monkeypatch, tmp_path, auth_payload, *, with_load_pool: bool = False):
     """Call get_available_models() with auth.json pinned to a temp Hermes home."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     _install_fake_hermes_cli(
         monkeypatch,
         with_load_pool=with_load_pool,
@@ -84,6 +85,7 @@ def _call_get_available_models(monkeypatch, tmp_path, auth_payload, *, with_load
     )
 
     (tmp_path / "auth.json").write_text(json.dumps(auth_payload), encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
 
     old_cfg = dict(config.cfg)
@@ -575,6 +577,7 @@ def test_fallback_path_resolves_alias_when_load_pool_unavailable(monkeypatch, tm
     }
 
     (tmp_path / "auth.json").write_text(json.dumps(auth_payload), encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
 
     old_cfg = dict(config.cfg)

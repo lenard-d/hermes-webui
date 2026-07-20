@@ -1,9 +1,8 @@
 """Primitive provider/model routing helpers outside the main resolver."""
 
-from types import ModuleType
-from typing import Protocol, cast
+from typing import Protocol
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 
 class ProviderRoutingAPI(Protocol):
@@ -20,14 +19,10 @@ class ProviderRoutingAPI(Protocol):
     def _get_providers_cfg(self) -> dict: ...
 
 
-def _config_api() -> ProviderRoutingAPI:
-    return cast(ProviderRoutingAPI, cast(ModuleType, config_api()))
-
-
 def _is_local_server_provider(provider_id: str) -> bool:
     """Return whether provider_id names a known local model server."""
     provider = str(provider_id or "").strip().lower()
-    local_providers = _config_api()._LOCAL_SERVER_PROVIDERS
+    local_providers = _config_module._LOCAL_SERVER_PROVIDERS
     if provider in local_providers:
         return True
     if provider.startswith("custom:"):
@@ -40,7 +35,7 @@ def _model_id_declared_in_config(model_id: str, config_provider: str | None) -> 
     model = str(model_id or "").strip()
     if not model:
         return False
-    api = _config_api()
+    api = _config_module
     model_cfg = api.cfg.get("model", {})
     if isinstance(model_cfg, dict):
         if str(model_cfg.get("default") or "").strip() == model:
@@ -71,7 +66,7 @@ def _is_first_party_model(provider_id: str, model_id: str) -> bool:
     model = str(model_id or "").strip()
     if not provider or not model:
         return False
-    catalog = _config_api()._PROVIDER_MODELS.get(provider)
+    catalog = _config_module._PROVIDER_MODELS.get(provider)
     if not isinstance(catalog, list):
         return False
     return any(
@@ -136,7 +131,7 @@ def _parse_provider_qualified_model_id(model_id: str) -> tuple[str, str] | None:
         return None
     inner = candidate[1:]
     provider_hint, bare_model = inner.rsplit(":", 1)
-    api = _config_api()
+    api = _config_module
     if provider_hint.startswith("custom:") and provider_hint.count(":") >= 2:
         slug_rest = provider_hint[len("custom:") :]
         if not api._custom_slug_rest_looks_like_host_port(slug_rest):
@@ -153,7 +148,7 @@ def _parse_provider_qualified_model_id(model_id: str) -> tuple[str, str] | None:
 
 def _get_provider_base_url(provider_id):
     """Return a provider-specific or active-model base URL when configured."""
-    api = _config_api()
+    api = _config_module
     provider_cfg = api._get_provider_cfg(provider_id)
     explicit = (provider_cfg.get("base_url") or "").strip().rstrip("/")
     if explicit:
@@ -169,10 +164,10 @@ def _get_provider_base_url(provider_id):
 
 
 def _get_providers_cfg() -> dict:
-    providers_cfg = _config_api().cfg.get("providers")
+    providers_cfg = _config_module.cfg.get("providers")
     return providers_cfg if isinstance(providers_cfg, dict) else {}
 
 
 def _get_provider_cfg(provider_id) -> dict:
-    provider_cfg = _config_api()._get_providers_cfg().get(provider_id, {})
+    provider_cfg = _config_module._get_providers_cfg().get(provider_id, {})
     return provider_cfg if isinstance(provider_cfg, dict) else {}

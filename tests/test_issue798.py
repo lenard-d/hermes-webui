@@ -2,7 +2,7 @@
 Issue #798 — Profile isolation: switching profile in one browser client must not
 affect sessions created by other concurrent clients.
 
-Root cause: _active_profile was a process-level global in api/profiles.py.
+Root cause: _active_profile was a process-level global in api/profiles/__init__.py.
 Fix: new_session() now accepts an explicit `profile` param passed from the client
 request body (S.activeProfile), which bypasses the shared global entirely.
 get_hermes_home_for_profile() resolves a HERMES_HOME path from a name without

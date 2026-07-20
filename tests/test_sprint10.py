@@ -70,7 +70,7 @@ def test_health_still_works(cleanup_test_sessions):
 def test_api_modules_exist(cleanup_test_sessions):
     """All api/ module files must exist on disk."""
     base = REPO_ROOT / "api"
-    for mod in ["__init__.py", "config.py", "helpers.py", "models.py",
+    for mod in ["__init__.py", "config", "helpers.py", "models.py",
                 "workspace", "upload.py", "streaming.py"]:
         assert (base / mod).exists(), f"Missing api/{mod}"
 
@@ -80,7 +80,7 @@ def test_server_py_under_750_lines(cleanup_test_sessions):
     assert lines < 750, f"server.py is {lines} lines -- split may not have landed"
 
 def test_api_config_has_cancel_flags(cleanup_test_sessions):
-    src = (REPO_ROOT / "api/config.py").read_text()
+    src = (REPO_ROOT / "api/config/__init__.py").read_text()
     assert "CANCEL_FLAGS" in src
     assert "STREAMS" in src
 

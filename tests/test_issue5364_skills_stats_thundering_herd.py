@@ -89,7 +89,7 @@ def _make_profiles_module():
     sys.modules["api"] = api_pkg
 
     import importlib.util
-    spec_path = Path(__file__).parent.parent / "api" / "profiles.py"
+    spec_path = Path(__file__).parent.parent / "api" / "profiles" / "__init__.py"
     spec = importlib.util.spec_from_file_location(mod_name, spec_path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[mod_name] = mod
@@ -102,20 +102,10 @@ def _make_profiles_module():
 
 @pytest.fixture()
 def mod(tmp_path):
-    saved_modules = {}
-    _ABSENT = object()
-    try:
-        m, saved_modules, _ABSENT = _make_profiles_module()
-        assert hasattr(m, "_get_profile_skills_stats")
-        assert hasattr(m, "_skills_stats_lock_for")
-    except Exception:
-        # Restore anything we already mutated before skipping.
-        for k, v in saved_modules.items():
-            if v is _ABSENT:
-                sys.modules.pop(k, None)
-            else:
-                sys.modules[k] = v
-        pytest.skip("api.profiles not importable in this environment")
+    import api.profiles as m
+
+    assert hasattr(m, "_get_profile_skills_stats")
+    assert hasattr(m, "_skills_stats_lock_for")
     # Reset both caches + the per-profile lock registry for isolation.
     if hasattr(m, "_SKILLS_STATS_CACHE"):
         m._SKILLS_STATS_CACHE.clear()
@@ -126,14 +116,9 @@ def mod(tmp_path):
     try:
         yield m
     finally:
-        # Fully restore sys.modules: put back the real modules we evicted and
-        # drop any stub we introduced, so the manipulation cannot leak into
-        # subsequent tests (they re-import the real api.config/api.routes).
-        for k, v in saved_modules.items():
-            if v is _ABSENT:
-                sys.modules.pop(k, None)
-            else:
-                sys.modules[k] = v
+        m._SKILLS_STATS_CACHE.clear()
+        m._SKILLS_STATS_LOCKS.clear()
+        m._LIST_PROFILES_CACHE = None
 
 
 # ---------------------------------------------------------------------------

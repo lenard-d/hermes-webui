@@ -64,7 +64,7 @@ def _make_profiles_module():
     sys.modules["api"] = api_pkg
 
     import importlib.util
-    spec_path = Path(__file__).parent.parent / "api" / "profiles.py"
+    spec_path = Path(__file__).parent.parent / "api" / "profiles" / "__init__.py"
     spec = importlib.util.spec_from_file_location(mod_name, spec_path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[mod_name] = mod
@@ -78,26 +78,12 @@ def _make_profiles_module():
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    """Clear the module-level cache and restore sys.modules after each test."""
-    saved = {k: v for k, v in sys.modules.items() if k == "api" or k.startswith("api.")}
-    try:
-        mod = sys.modules.get("api.profiles")
-        if mod and hasattr(mod, "_SKILLS_STATS_CACHE"):
-            mod._SKILLS_STATS_CACHE.clear()
-    except Exception:
-        pass
+    """Clear the package-owned cache around each test."""
+    import api.profiles as mod
+
+    mod._SKILLS_STATS_CACHE.clear()
     yield
-    try:
-        mod = sys.modules.get("api.profiles")
-        if mod and hasattr(mod, "_SKILLS_STATS_CACHE"):
-            mod._SKILLS_STATS_CACHE.clear()
-    except Exception:
-        pass
-    for k in [k for k in sys.modules if k == "api" or k.startswith("api.")]:
-        if k in saved:
-            sys.modules[k] = saved[k]
-        else:
-            sys.modules.pop(k, None)
+    mod._SKILLS_STATS_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -106,13 +92,10 @@ def _clear_cache():
 
 @pytest.fixture()
 def profiles_mod(tmp_path):
-    """Return (mod, profile_dir) with the cache functions importable."""
-    # Attempt a real import; fall back to a minimal synthetic module if it fails.
-    try:
-        mod = _make_profiles_module()
-        assert hasattr(mod, "_get_profile_skills_stats")
-    except Exception:
-        pytest.skip("api.profiles not importable in this environment")
+    """Return the real package owner and an isolated profile directory."""
+    import api.profiles as mod
+
+    assert hasattr(mod, "_get_profile_skills_stats")
     profile_dir = tmp_path / "test_profile"
     profile_dir.mkdir()
     return mod, profile_dir

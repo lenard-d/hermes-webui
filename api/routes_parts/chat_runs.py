@@ -860,9 +860,9 @@ def _handle_goal_command(handler, body):
     requested_profile = str(body.get("profile") or "").strip()
     if requested_profile:
         try:
-            from api.profiles import _PROFILE_ID_RE
+            from api.profiles import is_valid_profile_id
 
-            if requested_profile != "default" and not _PROFILE_ID_RE.fullmatch(requested_profile):
+            if requested_profile != "default" and not is_valid_profile_id(requested_profile):
                 return bad(handler, "invalid profile", 400)
         except ImportError:
             requested_profile = ""
@@ -1080,9 +1080,9 @@ def _handle_chat_start(handler, body, diag=None):
         active_profile = _get_active_profile_name()
         if requested_profile:
             try:
-                from api.profiles import _PROFILE_ID_RE
+                from api.profiles import is_valid_profile_id
 
-                if requested_profile != "default" and not _PROFILE_ID_RE.fullmatch(requested_profile):
+                if requested_profile != "default" and not is_valid_profile_id(requested_profile):
                     return bad(handler, "invalid profile", 400)
             except ImportError:
                 requested_profile = ""

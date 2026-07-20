@@ -13,7 +13,7 @@ from pathlib import Path
 from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = Path(__file__).parent.parent
-CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+CONFIG_PY = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
     encoding="utf-8"
 )
 UI_JS = family_source("ui")

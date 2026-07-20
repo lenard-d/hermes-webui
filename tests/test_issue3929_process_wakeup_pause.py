@@ -17,7 +17,7 @@ import api.config as config
 from api.runs import gateway as gateway_chat
 import api.sessions.store as models
 import api.profiles as profiles
-import api.providers as providers
+import api.providers.credentials as providers
 import api.routes as routes
 import api.streaming as streaming
 from api.runs import execution as turn_execution

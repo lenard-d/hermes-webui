@@ -547,13 +547,13 @@ def _abort_if_already_serving(host: str, port: int) -> None:
 
 def main() -> None:
     from api.config import print_startup_config, verify_hermes_imports, _HERMES_FOUND
-
+    from api.profiles import init_profile_state
     # Crash visibility FIRST (issue #4633): enable faulthandler + excepthooks +
     # exit audit before any heavy startup work so a native crash or a daemon /
     # handler-thread exception during startup or serving produces a diagnostic
     # instead of a silent death. The paired memory root-cause is #4765.
     install_crash_visibility()
-
+    init_profile_state()
     print_startup_config()
 
     fd_limit = _raise_fd_soft_limit()

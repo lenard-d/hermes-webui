@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 # ── Settings persistence ─────────────────────────────────────────────────────
 
@@ -188,7 +188,7 @@ def _normalize_appearance(theme, skin) -> tuple[str, str]:
     """
     raw_theme = theme.strip().lower() if isinstance(theme, str) else ""
     raw_skin = skin.strip().lower() if isinstance(skin, str) else ""
-    cfg = config_api()
+    cfg = _config_module
     legacy = cfg._SETTINGS_LEGACY_THEME_MAP.get(raw_theme)
     if legacy:
         next_theme, legacy_skin = legacy
@@ -203,7 +203,7 @@ def _normalize_appearance(theme, skin) -> tuple[str, str]:
 
 def _read_raw_settings_file() -> dict:
     """Read settings.json without applying defaults."""
-    cfg = config_api()
+    cfg = _config_module
     settings_file = cfg.SETTINGS_FILE
     try:
         if not settings_file.exists():
@@ -225,18 +225,18 @@ def _read_raw_settings_file() -> dict:
 def _extract_persisted_speech_keys(stored: dict) -> set[str]:
     if not isinstance(stored, dict):
         return set()
-    return {key for key in config_api()._SETTINGS_SPEECH_KEYS if key in stored}
+    return {key for key in _config_module._SETTINGS_SPEECH_KEYS if key in stored}
 
 
 def persisted_speech_settings_keys() -> list[str]:
-    cfg = config_api()
+    cfg = _config_module
     return sorted(cfg._extract_persisted_speech_keys(cfg._read_raw_settings_file()))
 
 
 def _settings_payload_for_write(
     settings: dict, persisted_speech_keys: set[str]
 ) -> dict:
-    cfg = config_api()
+    cfg = _config_module
     persisted = {
         k: v
         for k, v in settings.items()
@@ -250,7 +250,7 @@ def _settings_payload_for_write(
 
 def load_settings() -> dict:
     """Load settings from disk, merging with defaults for any missing keys."""
-    cfg = config_api()
+    cfg = _config_module
     settings = dict(cfg._SETTINGS_DEFAULTS)
     stored = cfg._read_raw_settings_file()
     if isinstance(stored, dict):
@@ -443,7 +443,7 @@ def _atomic_write_settings_text(path: Path, text: str) -> None:
     try:
         mode = os.stat(write_path).st_mode & 0o777
     except FileNotFoundError:
-        mode = 0o666 & ~config_api()._current_umask()
+        mode = 0o666 & ~_config_module._current_umask()
     try:
         with open(tmp, "w", encoding="utf-8") as handle:
             handle.write(text)
@@ -484,7 +484,7 @@ def _coerce_provider_cost_budget(value: Any) -> float | None:
 
 def save_settings(settings: dict) -> dict:
     """Save settings to disk. Returns the merged settings. Ignores unknown keys."""
-    cfg = config_api()
+    cfg = _config_module
     raw_settings = cfg._read_raw_settings_file()
     persisted_speech_keys = cfg._extract_persisted_speech_keys(raw_settings)
     current = cfg.load_settings()
@@ -670,7 +670,7 @@ def _apply_startup_settings() -> None:
     An explicit ``HERMES_WEBUI_DEFAULT_WORKSPACE`` remains authoritative over
     persisted state so Docker operators always retain an environment override.
     """
-    cfg = config_api()
+    cfg = _config_module
     startup_settings = cfg.load_settings()
     try:
         settings_file_exists = cfg.SETTINGS_FILE.exists()

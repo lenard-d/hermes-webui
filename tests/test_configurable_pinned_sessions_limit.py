@@ -10,7 +10,7 @@ import urllib.request
 from tests._pytest_port import BASE
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")

@@ -6113,7 +6113,7 @@ def ensure_cron_project(create: bool = True) -> str | None:
     Thread-safe and idempotent.  Returns a 12-char hex project_id string, or
     None if `create` is False and no existing cron project resolves.
     """
-    from api.profiles import get_active_profile_name, _is_root_profile
+    from api.profiles import get_active_profile_name, is_root_profile
 
     active = get_active_profile_name() or 'default'
     with _CRON_PROJECT_LOCK:
@@ -6128,7 +6128,7 @@ def ensure_cron_project(create: bool = True) -> str | None:
             row_profile = p.get('profile')
             if row_profile == active:
                 return p['project_id']
-            if _is_root_profile(row_profile or 'default') and _is_root_profile(active):
+            if is_root_profile(row_profile or 'default') and is_root_profile(active):
                 return p['project_id']
         # Reuse a legacy untagged cron project — back-tag it to the active profile.
         for p in projects:
@@ -6157,7 +6157,7 @@ _WEBHOOK_PROJECT_LOCK = threading.Lock()
 
 def ensure_webhook_project() -> str:
     """Return the project_id of the system "Webhooks" project for the active profile."""
-    from api.profiles import get_active_profile_name, _is_root_profile
+    from api.profiles import get_active_profile_name, is_root_profile
 
     active = get_active_profile_name() or 'default'
     with _WEBHOOK_PROJECT_LOCK:
@@ -6168,7 +6168,7 @@ def ensure_webhook_project() -> str:
             row_profile = p.get('profile')
             if row_profile == active:
                 return p['project_id']
-            if _is_root_profile(row_profile or 'default') and _is_root_profile(active):
+            if is_root_profile(row_profile or 'default') and is_root_profile(active):
                 return p['project_id']
         for p in projects:
             if p.get('name') == WEBHOOK_PROJECT_NAME and not p.get('profile'):
@@ -6198,7 +6198,7 @@ def _profile_has_user_projects() -> bool:
 
     Read-only: never mutates projects.json, safe to call as often as needed.
     """
-    from api.profiles import get_active_profile_name, _is_root_profile
+    from api.profiles import get_active_profile_name, is_root_profile
 
     active = get_active_profile_name() or 'default'
     reserved = {CRON_PROJECT_NAME, WEBHOOK_PROJECT_NAME}
@@ -6208,7 +6208,7 @@ def _profile_has_user_projects() -> bool:
         row_profile = p.get('profile')
         if row_profile == active:
             return True
-        if _is_root_profile(row_profile or 'default') and _is_root_profile(active):
+        if is_root_profile(row_profile or 'default') and is_root_profile(active):
             return True
     return False
 

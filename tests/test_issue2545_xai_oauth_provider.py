@@ -59,6 +59,7 @@ def test_xai_oauth_provider_card_uses_oauth_status_and_models(monkeypatch, tmp_p
 
 
 def test_xai_oauth_model_picker_group_uses_live_catalog(monkeypatch, tmp_path):
+    from api.config import model_catalog
     restore = _with_config(
         monkeypatch,
         tmp_path,
@@ -67,7 +68,7 @@ def test_xai_oauth_model_picker_group_uses_live_catalog(monkeypatch, tmp_path):
             "providers": {"xai-oauth": {}},
         },
     )
-    monkeypatch.setattr(config, "_read_live_provider_model_ids", lambda pid: ["grok-4.20"] if pid == "xai-oauth" else [])
+    monkeypatch.setattr(model_catalog, "_read_live_provider_model_ids", lambda pid: ["grok-4.20"] if pid == "xai-oauth" else [])
     try:
         result = config.get_available_models()
         group = next(g for g in result["groups"] if g["provider_id"] == "xai-oauth")

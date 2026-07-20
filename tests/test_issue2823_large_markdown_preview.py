@@ -6,7 +6,7 @@ from tests.frontend_asset_contract import family_source
 
 
 WORKSPACE_JS = family_source("workspace")
-CONFIG_PY = Path("api/config.py").read_text(encoding="utf-8")
+CONFIG_PY = Path("api/config/__init__.py").read_text(encoding="utf-8")
 
 
 def _open_file_block() -> str:

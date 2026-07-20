@@ -9,20 +9,36 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    effective_provider_env_var = None
-    _custom_provider_slug_from_name = None
-    _pool_entry_payloads = None
-    _get_hermes_home = None
-    _thread_local_env_value = None
-    get_config = None
-    logger = None
+from api.config import (
+    _custom_provider_slug_from_name,
+    _pool_entry_payloads,
+    _thread_local_env_value,
+    get_config,
+)
+
+from api.config.provider_credentials import (
+    _OAUTH_PROVIDERS,
+    _PROVIDER_CREDENTIAL_ENV_VARS,  # noqa: F401 - package compatibility export
+    _PROVIDER_ENV_VAR,
+    _PROVIDER_ENV_VAR_ALIASES,
+    _SELF_HOSTED_PROVIDER_IDS,  # noqa: F401 - package compatibility export
+    provider_credential_env_vars as _provider_credential_env_vars,  # noqa: F401
+)
+from api.config.plugin_providers import effective_provider_env_var
+logger = logging.getLogger(__name__)
+
+
+def _get_hermes_home() -> Path:
+    from api import profiles
+
+    return profiles.get_active_hermes_home()
 
 def _provider_env_var_for(provider_id: str) -> str | None:
     """Resolve the API-key env var for a provider (static table + plugin profiles)."""
@@ -40,94 +56,6 @@ def _custom_provider_name_matches(provider_id: str, name: object) -> bool:
     if slug:
         candidates.add(slug)
     return pid in candidates
-
-# SECTION: Provider ↔ env var mapping
-
-# Maps canonical provider slug → env var name for API key.
-# Providers not listed here (OAuth/token-flow providers like copilot, nous,
-# openai-codex) cannot have their keys managed from the WebUI.
-_PROVIDER_ENV_VAR: dict[str, str] = {
-    "openrouter": "OPENROUTER_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "google": "GOOGLE_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "zai": "GLM_API_KEY",
-    "kimi-coding": "KIMI_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-    "minimax": "MINIMAX_API_KEY",
-    "minimax-cn": "MINIMAX_CN_API_KEY",
-    "mistralai": "MISTRAL_API_KEY",
-    "x-ai": "XAI_API_KEY",
-    "xiaomi": "XIAOMI_API_KEY",
-    "neuralwatt": "NEURALWATT_API_KEY",
-    "opencode-zen": "OPENCODE_ZEN_API_KEY",
-    "opencode-go": "OPENCODE_GO_API_KEY",
-    # NOTE: bare "ollama" (local) deliberately omitted — local Ollama is keyless
-    # by default and the runtime in hermes_cli/runtime_provider.py only consumes
-    # OLLAMA_API_KEY when the base URL hostname is ollama.com (Ollama Cloud).
-    # If we mapped both providers to the same env var, configuring Ollama Cloud
-    # would falsely flip the local Ollama card to "API key configured" (#1410).
-    # Users who genuinely run an authenticated local Ollama can still set a key
-    # via providers.ollama.api_key in config.yaml — that path remains supported
-    # by _provider_has_key().
-    "ollama-cloud": "OLLAMA_API_KEY",
-    # Bare "lmstudio" maps to LM_API_KEY — the canonical env var the agent CLI
-    # runtime reads (hermes_cli/auth.py:182, api_key_env_vars=("LM_API_KEY",)).
-    # Pre-#1499/#1500 the WebUI used LMSTUDIO_API_KEY here, which made Settings
-    # report keys correctly but the agent runtime ignored them — masked in
-    # practice by the LMSTUDIO_NOAUTH_PLACEHOLDER for keyless local installs.
-    # Aligning to LM_API_KEY makes a configured LM Studio key actually work
-    # for chat. The legacy LMSTUDIO_API_KEY name is read by `_provider_has_key`
-    # via _PROVIDER_ENV_VAR_ALIASES below so existing users don't see Settings
-    # flip to "no key" after upgrading.
-    "lmstudio": "LM_API_KEY",
-    "nvidia": "NVIDIA_API_KEY",
-}
-
-# Read-only legacy env-var aliases.  When `_provider_has_key(pid)` looks up its
-# canonical env var name and finds nothing, it also checks any aliases listed
-# here.  Onboarding (api/onboarding.py:apply_onboarding_setup) only writes the
-# canonical name.  Use this for env vars that were renamed in a past release;
-# add an entry, ship for a few releases, then remove the alias once enough
-# users have upgraded.
-_PROVIDER_ENV_VAR_ALIASES: dict[str, tuple[str, ...]] = {
-    # #1500 — agent runtime reads LM_API_KEY (canonical), but WebUI builds
-    # ≤ v0.50.272 wrote LMSTUDIO_API_KEY into .env.  Keep reading both.
-    "lmstudio": ("LMSTUDIO_API_KEY",),
-    # #3145 — provider detection treats OPENCODE_API_KEY as enabling both
-    # OpenCode Zen and OpenCode Go. The runtime-facing lookup must read the same
-    # shared bridge key after the provider-specific slot, otherwise Settings can
-    # show the groups as configured while chat fails the no-key path.
-    "opencode-zen": ("OPENCODE_API_KEY",),
-    "opencode-go": ("OPENCODE_API_KEY",),
-}
-
-_SELF_HOSTED_PROVIDER_IDS = frozenset({"ollama", "lmstudio"})
-
-
-def _provider_credential_env_vars() -> tuple[str, ...]:
-    names = {name for name in _PROVIDER_ENV_VAR.values() if name}
-    for aliases in _PROVIDER_ENV_VAR_ALIASES.values():
-        for alias in aliases or ():
-            if alias:
-                names.add(alias)
-    return tuple(sorted(names))
-
-
-_PROVIDER_CREDENTIAL_ENV_VARS = _provider_credential_env_vars()
-
-# Providers that use OAuth or token flows — their credentials are managed
-# through the Hermes CLI, not via API keys.  The WebUI cannot set these.
-_OAUTH_PROVIDERS = frozenset({
-    "copilot",
-    "copilot-acp",
-    "nous",
-    "openai-codex",
-    "qwen-oauth",
-    "xai-oauth",
-})
-
 
 def _entry_value(entry, *names):
     for name in names:
@@ -794,3 +722,5 @@ __provider_exports__ = (
     "provider_has_process_wakeup_recovery_credential",
     "_provider_is_oauth",
 )
+
+__all__ = __provider_exports__

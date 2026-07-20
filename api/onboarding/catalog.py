@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from api.config import _FALLBACK_MODELS, _PROVIDER_MODELS
+from api.config import FALLBACK_MODELS, PROVIDER_MODELS
 
 
 SUPPORTED_PROVIDER_SETUPS = {
@@ -16,7 +16,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "requires_base_url": False,
         "models": [
             {"id": model["id"], "label": model["label"]}
-            for model in _FALLBACK_MODELS
+            for model in FALLBACK_MODELS
         ],
         "category": "easy_start",
         "quick": True,
@@ -26,7 +26,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "env_var": "ANTHROPIC_API_KEY",
         "default_model": "claude-sonnet-4.6",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("anthropic", [])),
+        "models": list(PROVIDER_MODELS.get("anthropic", [])),
         "category": "easy_start",
         "oauth_provider": "anthropic",
         "oauth_label": "Claude Code OAuth",
@@ -37,7 +37,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "gpt-4o",
         "default_base_url": "https://api.openai.com/v1",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("openai", [])),
+        "models": list(PROVIDER_MODELS.get("openai", [])),
         "category": "easy_start",
     },
     "ollama": {
@@ -76,7 +76,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "gemini-3.1-pro-preview",
         "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("google", [])),
+        "models": list(PROVIDER_MODELS.get("google", [])),
         "category": "specialized",
     },
     "deepseek": {
@@ -85,7 +85,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "deepseek-v4-flash",
         "default_base_url": "https://api.deepseek.com",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("deepseek", [])),
+        "models": list(PROVIDER_MODELS.get("deepseek", [])),
         "category": "specialized",
     },
     "xiaomi": {
@@ -94,7 +94,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "mimo-v2.5-pro",
         "default_base_url": "https://api.xiaomimimo.com/v1",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("xiaomi", [])),
+        "models": list(PROVIDER_MODELS.get("xiaomi", [])),
         "category": "specialized",
     },
     "zai": {
@@ -103,7 +103,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "glm-5.1",
         "default_base_url": "https://open.bigmodel.cn/api/paas/v4",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("zai", [])),
+        "models": list(PROVIDER_MODELS.get("zai", [])),
         "category": "specialized",
     },
     "nvidia": {
@@ -112,7 +112,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
         "default_base_url": "https://integrate.api.nvidia.com/v1",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("nvidia", [])),
+        "models": list(PROVIDER_MODELS.get("nvidia", [])),
         "category": "specialized",
     },
     "mistralai": {
@@ -121,7 +121,7 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_model": "mistral-large-latest",
         "default_base_url": "https://api.mistral.ai/v1",
         "requires_base_url": False,
-        "models": list(_PROVIDER_MODELS.get("mistralai", [])),
+        "models": list(PROVIDER_MODELS.get("mistralai", [])),
         "category": "specialized",
     },
     "x-ai": {
@@ -131,8 +131,8 @@ SUPPORTED_PROVIDER_SETUPS = {
         "default_base_url": "https://api.x.ai/v1",
         "requires_base_url": False,
         "models": list(
-            _PROVIDER_MODELS.get("xai", [])
-            or _PROVIDER_MODELS.get("x-ai", [])
+            PROVIDER_MODELS.get("xai", [])
+            or PROVIDER_MODELS.get("x-ai", [])
         ),
         "category": "specialized",
     },

@@ -252,7 +252,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             {
                 "name": active_profile_name,
                 "path": str(profiles_api.get_active_hermes_home()),
-                "is_default": profiles_api._is_root_profile(active_profile_name),
+                "is_default": profiles_api.is_root_profile(active_profile_name),
                 "default_workspace": _profile_default_workspace,
             },
         )

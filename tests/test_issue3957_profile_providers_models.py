@@ -47,8 +47,14 @@ def _force_active_profile(monkeypatch, name, *, root=False):
     monkeypatch.setattr(
         profiles, "_is_root_profile", lambda n: bool(root) or n in ("", "default")
     )
-    # config imports these names lazily inside _get_models_cache_path, so the
-    # patches on the profiles module are what matter.
+    from dataclasses import replace
+    from api.config import hooks
+
+    monkeypatch.setattr(
+        hooks,
+        "_runtime_hooks",
+        replace(hooks.get_config_runtime_hooks(), active_profile_name=lambda: name),
+    )
 
 
 def test_models_cache_path_default_profile_unchanged(monkeypatch):
@@ -372,22 +378,19 @@ def test_providers_and_models_routes_wrap_in_profile_env():
         for the detached rebuild worker (the request-thread wrapper cannot reach
         the worker thread — Codex CORE finding).
     """
-    routes_src = Path(profiles.__file__).resolve().parent.joinpath("routes.py").read_text(
+    routes_src = Path(profiles.__file__).resolve().parent.parent.joinpath("routes.py").read_text(
         encoding="utf-8"
     )
     assert 'with profile_env_for_active_request("/api/models/live"' in routes_src
     assert "profile_env_for_active_request_readonly" in routes_src
     catalog_src = (
-        Path(config.__file__).resolve().parent
-        / "config_parts"
-        / "model_catalog.py"
+        Path(config.__file__).resolve().parent / "model_catalog.py"
     ).read_text(encoding="utf-8")
-    assert "profile_env_for_active_request as _prof_env_request" in catalog_src
-    assert "profile_scope_for_detached_worker" in catalog_src
+    assert "active_profile_scope" in catalog_src
+    assert "detached_profile_scope" in catalog_src
     cache_src = (
         Path(config.__file__).resolve().parent
-        / "config_parts"
-        / "models_cache.py"
+        / "model_cache.py"
     ).read_text(encoding="utf-8")
     assert "_get_models_cache_path" in cache_src
 

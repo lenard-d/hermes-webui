@@ -84,7 +84,7 @@ def test_filter_runtime_env_for_gateway_parity_blocks_shell_identity_vars():
 
 
 def test_profile_background_worker_uses_gateway_parity_runtime_env_filter():
-    src = Path("api/profiles_parts/runtime_scope.py").read_text(encoding="utf-8")
+    src = Path("api/profiles/runtime.py").read_text(encoding="utf-8")
 
     assert "filter_runtime_env_for_gateway_parity" in src
     assert "safe_runtime_env" in src

@@ -19,15 +19,15 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 GATEWAY_WATCHER_PY = (REPO_ROOT / "api" / "gateway_watcher.py").read_text(encoding="utf-8")
-CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+CONFIG_PY = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
     encoding="utf-8"
 )
 BOOTSTRAP_PY = (REPO_ROOT / "bootstrap.py").read_text(encoding="utf-8")
 SERVER_PY = (REPO_ROOT / "server.py").read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 AUTH_PY = (REPO_ROOT / "api" / "auth" / "cookies_password.py").read_text(encoding="utf-8")
-PROFILES_PY = (REPO_ROOT / "api" / "profiles.py").read_text(encoding="utf-8")
-PROFILES_RUNTIME_PY = (REPO_ROOT / "api" / "profiles_parts" / "runtime_scope.py").read_text(
+PROFILES_PY = (REPO_ROOT / "api" / "profiles" / "__init__.py").read_text(encoding="utf-8")
+PROFILES_RUNTIME_PY = (REPO_ROOT / "api" / "profiles" / "runtime.py").read_text(
     encoding="utf-8"
 )
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
@@ -121,9 +121,9 @@ class TestBareExceptLogging(unittest.TestCase):
 
     MODULES_REQUIRING_LOGGER = [
         ("api/auth/cookies_password.py", AUTH_PY),
-        ("api/config_parts/model_catalog.py", CONFIG_PY),
+        ("api/config/model_catalog.py", CONFIG_PY),
         ("api/gateway_watcher.py", GATEWAY_WATCHER_PY),
-        ("api/profiles.py", PROFILES_PY),
+        ("api/profiles/__init__.py", PROFILES_PY),
         ("api/streaming.py", STREAMING_PY),
         ("api/workspace/registry.py", WORKSPACE_REGISTRY_PY),
         ("api/state_sync.py", STATE_SYNC_PY),
@@ -155,12 +155,12 @@ class TestBareExceptLogging(unittest.TestCase):
         self.assertIn(
             "_loaded_profile_env_keys = set()",
             PROFILES_RUNTIME_PY,
-            "runtime_scope.py: _reload_dotenv except must reset loaded profile keys",
+            "runtime.py: _reload_dotenv except must reset loaded profile keys",
         )
         self.assertIn(
             "Failed to reload dotenv",
             PROFILES_RUNTIME_PY,
-            "runtime_scope.py: _reload_dotenv except must log a warning",
+            "runtime.py: _reload_dotenv except must log a warning",
         )
 
 

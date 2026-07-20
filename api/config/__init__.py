@@ -6,12 +6,17 @@ Discovery order for all paths:
   1. Explicit environment variable
   2. Filesystem heuristics (sibling checkout, parent dir, common install locations)
   3. Hardened defaults relative to $HOME
-  4. Fail loudly with a human-readable fix-it message if required modules are missing
+4. Fail loudly with a human-readable fix-it message if required modules are missing
 """
+
+# The entrypoint intentionally preserves the historical public import surface
+# while implementation owners live in focused sibling modules.
+# ruff: noqa: F401, F405
 
 import collections
 import copy
 import hashlib
+import importlib
 import json
 import logging
 import math
@@ -31,18 +36,9 @@ from typing import Any
 
 from urllib.parse import parse_qs, urlparse
 
-from api.config_parts._binding import install_config_part as _install_config_part
-from api.config_parts.facade import bind_config_api
-
-
-# One late-bound compatibility facade serves every extracted config module.
-# Resolve the module object at call time so reloads and monkeypatches remain
-# observable instead of being captured during import.
-bind_config_api(lambda: sys.modules[__name__])
-
 # ── Basic layout ──────────────────────────────────────────────────────────────
 import api.paths as _paths
-from api.plugin_providers import (
+from api.config.plugin_providers import (
     effective_provider_display_name as _effective_provider_display_name,
     is_plugin_model_provider as _is_plugin_model_provider,
     plugin_model_provider_profiles as _plugin_model_provider_profiles,
@@ -52,8 +48,8 @@ HOME = _paths.HOME
 _hermes_home_has_webui_state = _paths._hermes_home_has_webui_state
 _platform_default_hermes_home = _paths._platform_default_hermes_home
 
-# REPO_ROOT is the directory that contains this file's parent (api/ -> repo root)
-REPO_ROOT = Path(__file__).parent.parent.resolve()
+# REPO_ROOT is the directory above the nested api/config package.
+REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 
 # ── Network config (env-overridable) ─────────────────────────────────────────
 HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")
@@ -92,7 +88,7 @@ CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS = 5.0
 
 
 # ── Environment and installation discovery implementation ───────────────────
-from api.config_parts import path_env as _path_env
+from api.config import paths as _path_env
 
 _env_int = _path_env._env_int
 _env_mb_bytes = _path_env._env_mb_bytes
@@ -145,7 +141,7 @@ else:
 _thread_ctx = threading.local()
 
 # ── Config file state (reloadable -- supports profile switching) ─────────────
-from api.config_parts import config_io as _config_io
+from api.config import io as _config_io
 
 _thread_local_env_value = _config_io._thread_local_env_value
 _expand_env_vars = _config_io._expand_env_vars
@@ -200,6 +196,7 @@ is_unified_session_db_enabled = _config_io.is_unified_session_db_enabled
 
 _refresh_config_cache = _config_io._refresh_config_cache
 reload_config = _config_io.reload_config
+update_config = _config_io.update_config
 
 
 # Memoized parse cache for _load_yaml_config_file, keyed on (resolved path,
@@ -356,13 +353,18 @@ def _resolve_cli_toolsets(cfg=None):
 
 # ── Model / provider discovery ───────────────────────────────────────────────
 
-from api.model_catalog import (
-    FALLBACK_MODELS as _FALLBACK_MODELS,
-    PROVIDER_ALIASES as _PROVIDER_ALIASES,  # noqa: F401 - facade-owned state
-    PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
-    PROVIDER_MODELS as _PROVIDER_MODELS,
+from api.config.static_catalog import (
+    FALLBACK_MODELS,
+    PROVIDER_ALIASES,
+    PROVIDER_DISPLAY,
+    PROVIDER_MODELS,
 )
-from api.config_parts import provider_discovery as _provider_discovery
+
+_FALLBACK_MODELS = copy.deepcopy(FALLBACK_MODELS)
+_PROVIDER_ALIASES = dict(PROVIDER_ALIASES)
+_PROVIDER_DISPLAY = dict(PROVIDER_DISPLAY)
+_PROVIDER_MODELS = copy.deepcopy(PROVIDER_MODELS)
+from api.config import provider_discovery as _provider_discovery
 
 
 _get_anthropic_fallback_env_vars = _provider_discovery._get_anthropic_fallback_env_vars
@@ -453,7 +455,7 @@ _LOCAL_SERVER_PROVIDERS = {
     "textgen",      # text-generation-webui (oobabooga) OpenAI-compat extension
     "localai",      # LocalAI project (#1625 Opus NIT)
 }
-from api.config_parts import provider_routing as _provider_routing
+from api.config import provider_routing as _provider_routing
 
 
 _is_local_server_provider = _provider_routing._is_local_server_provider
@@ -1063,7 +1065,7 @@ def get_effective_default_model(config_data: dict | None = None) -> str:
 
 # ── Reasoning config (CLI parity for /reasoning) ─────────────────────────────
 
-from api.config_parts import model_reasoning as _model_reasoning
+from api.config import reasoning as _model_reasoning
 
 VALID_REASONING_EFFORTS = _model_reasoning.VALID_REASONING_EFFORTS
 _NESTED_ROUTE_PATTERN = _model_reasoning._NESTED_ROUTE_PATTERN
@@ -1113,7 +1115,7 @@ coerce_reasoning_effort_for_model = (
 get_reasoning_status = _model_reasoning.get_reasoning_status
 
 
-from api.config_parts import model_settings as _model_settings
+from api.config import model_settings as _model_settings
 
 _parse_positive_int_config_value = _model_settings._parse_positive_int_config_value
 get_max_tokens_status = _model_settings.get_max_tokens_status
@@ -1150,99 +1152,6 @@ _coerce_optional_positive_int = _model_settings._coerce_optional_positive_int
 set_auxiliary_model = _model_settings.set_auxiliary_model
 
 
-# ── TTL cache for get_available_models() ─────────────────────────────────────
-_available_models_cache: dict | None = None
-_available_models_cache_ts: float = 0.0
-_available_models_live_rebuild_ts: float = 0.0
-_available_models_cache_source_fingerprint: dict | None = None
-_AVAILABLE_MODELS_CACHE_TTL: float = 86400.0  # 24 hours
-_SESSION_VISIT_MODELS_FRESHNESS_SECONDS: float = 300.0
-_available_models_cache_lock = threading.RLock()  # must be RLock: cold path refactoring moved slow work inside this lock, requiring re-entry
-_cache_build_cv = threading.Condition(_available_models_cache_lock)  # shares underlying RLock so notify_all() is safe inside with _available_models_cache_lock
-_cache_build_in_progress = False  # True while a cold path is actively building
-_models_cache_build_generation = 0
-_active_models_cache_build_generation: int | None = None
-
-
-
-# Memoized (snapshot_ref, {provider_slug: frozenset(model_ids)}) derived from
-# the published models-catalog snapshot. Used by _endpoint_advertised_model_ids
-# to answer "did this endpoint actually advertise this exact id?" in O(1) per
-# send without rebuilding. Keyed on the snapshot object identity so it is
-# recomputed exactly once per catalog publish (the cache is replaced wholesale,
-# never mutated) and can never serve stale ids from a superseded catalog.
-_advertised_model_ids_memo: tuple | None = None
-
-# Atomic provenance pair: an immutable (snapshot, publisher_fingerprint) tuple
-# published together at every catalog publish/invalidate site via
-# _sync_models_cache_provenance(). The resolver reads THIS single global with one
-# lock-free load so it can never observe a torn snapshot/fingerprint pair (the
-# two underlying globals are assigned as separate statements). Reading a tuple is
-# atomic under the GIL and, crucially, acquires NO lock — so the per-send
-# provenance check introduces no lock-ordering edge (avoids the _cfg_lock ↔
-# _available_models_cache_lock deadlock) and never waits behind a catalog rebuild.
-_models_cache_provenance: tuple | None = None
-
-
-
-
-
-
-# Hard wall-clock budget for a COLD live provider-catalog rebuild when it is
-# run from a foreground request path. The live rebuild does one network probe
-# per detected provider (Copilot token-exchange HTTPS, OpenRouter /v1/models,
-# Nous /models, ...). On a flaky / corp / WSL network any single probe can
-# stall for its full per-call timeout (Copilot urllib timeout=10s) and, summed
-# across N providers, block the request thread for tens of seconds. This bounds
-# the time a foreground caller will wait: past the budget it returns a usable
-# fallback (last-known disk cache or a network-free minimal catalog) and lets
-# the rebuild finish out-of-band and populate the cache for the next call.
-# Set HERMES_WEBUI_MODELS_REBUILD_BUDGET=0 to restore the legacy synchronous
-# (unbounded) behaviour.
-try:
-    _LIVE_REBUILD_BUDGET_SECONDS: float = float(
-        os.getenv("HERMES_WEBUI_MODELS_REBUILD_BUDGET", "4") or "4"
-    )
-except (TypeError, ValueError):
-    _LIVE_REBUILD_BUDGET_SECONDS = 4.0
-
-
-# ── Budget-exceeded warning rate-limit ───────────────────────────────────────
-# Q-2979-A3 / Copilot discussion_r3305864400: the live-rebuild-budget-exceeded
-# warning at _invoke_models_rebuild's slow-path is potentially high-volume —
-# every provider catalog refresh that runs past _LIVE_REBUILD_BUDGET_SECONDS
-# emits one, so a hung upstream probe (or a sustained burst of cold callers)
-# could flood the log at warning level. Rate-limit per reason: the FIRST
-# occurrence in a cooldown window logs at warning; subsequent occurrences in
-# the same window log at info (so log signal stays useful but volume bounded).
-# Override the default cooldown via HERMES_WEBUI_BUDGET_WARN_COOLDOWN (seconds).
-try:
-    _BUDGET_WARN_COOLDOWN_SECONDS: float = float(
-        os.getenv("HERMES_WEBUI_BUDGET_WARN_COOLDOWN", "300") or "300"
-    )
-except (TypeError, ValueError):
-    _BUDGET_WARN_COOLDOWN_SECONDS = 300.0
-
-_BUDGET_WARN_STATE: dict[str, float] = {}
-_BUDGET_WARN_LOCK = threading.Lock()
-
-
-
-
-
-
-
-
-# Cache for credential pool results -- calling load_pool() per-provider per-server
-# session is expensive (~10s for zai due to endpoint probing).  The credential pool
-# only changes when the user adds/removes credentials, which is rare; a 24h TTL
-# is plenty safe and ensures get_available_models() cold paths are fast.
-_CREDENTIAL_POOL_CACHE: dict[tuple[str, str], tuple[float, "CredentialPool"]] = {}  # noqa: F821  forward-ref string annotation, resolved at runtime  # (profile_tag, pid) -> (ts, pool)
-
-
-
-
-
 # Disk-backed in-memory cache for get_available_models().
 # Written to disk on every cache population so the cache survives server restarts.
 # Invalidated (file deleted) whenever a provider is added/changed/removed or
@@ -1262,13 +1171,16 @@ _CREDENTIAL_POOL_CACHE: dict[tuple[str, str], tuple[float, "CredentialPool"]] = 
 # guarantees that even if a future release accidentally reuses the same
 # WebUI version string (or a debug build doesn't have a version), a structural
 # change still invalidates the cache.
-_MODELS_CACHE_SCHEMA_VERSION = 3
+from api.config.catalog_state import (
+    MODEL_CATALOG_STATE,
+    publish_legacy_model_catalog_state,
+)
+
+MODEL_CATALOG_STATE.models_cache_path = STATE_DIR / "models_cache.json"
+publish_legacy_model_catalog_state(importlib.import_module(__name__))
 
 
-_models_cache_path = STATE_DIR / "models_cache.json"
-
-
-from api.config_parts import models_cache as _models_cache_impl
+from api.config import model_cache as _models_cache_impl
 
 _get_models_cache_path = _models_cache_impl._get_models_cache_path
 _get_auth_store_path = _models_cache_impl._get_auth_store_path
@@ -1315,10 +1227,17 @@ for _models_cache_export in (
     _models_cache_export.__module__ = __name__
 del _models_cache_export
 
-from api.config_parts import model_catalog as _model_catalog
+from api.config.model_catalog import *  # noqa: F403 - package compatibility exports
 
-_install_config_part(globals(), _model_catalog)
-del _model_catalog
+_sync_models_cache_provenance_impl = _sync_models_cache_provenance
+
+
+def _sync_models_cache_provenance() -> None:
+    """Adopt explicit compatibility overrides before publishing provenance."""
+    from api.config.catalog_state import import_legacy_model_catalog_state
+
+    import_legacy_model_catalog_state(importlib.import_module(__name__))
+    _sync_models_cache_provenance_impl()
 
 
 
@@ -1559,7 +1478,7 @@ SERVER_START_TIME = time.time()
 # Keep the long-standing ``api.config`` import and monkeypatch surface while the
 # implementations live in a cohesive leaf module.  The resolver is late-bound
 # so patched facade state remains authoritative for every adapter call.
-from api.config_parts import runtime_registry as _runtime_registry
+from api.config import runtime as _runtime_registry
 
 register_stream_owner = _runtime_registry.register_stream_owner
 stream_owner_session_id = _runtime_registry.stream_owner_session_id
@@ -1727,7 +1646,7 @@ def alias_session_agent_lock(
 
 # ── Settings persistence ─────────────────────────────────────────────────────
 
-from api.config_parts import settings_persistence as _settings_persistence
+from api.config import settings as _settings_persistence
 
 _SETTINGS_DEFAULTS = _settings_persistence._build_settings_defaults(DEFAULT_WORKSPACE)
 _SETTINGS_SPEECH_KEYS = _settings_persistence._SETTINGS_SPEECH_KEYS
@@ -1771,16 +1690,6 @@ _settings_persistence._apply_startup_settings()
 # ── SESSIONS in-memory cache (LRU OrderedDict) ───────────────────────────────
 SESSIONS: collections.OrderedDict = collections.OrderedDict()
 
-# ── Profile state initialisation ────────────────────────────────────────────
-# Must run after all imports are resolved to correctly patch module-level caches
-try:
-    from api.profiles import init_profile_state
-
-    init_profile_state()
-except ImportError:
-    pass  # hermes_cli not available -- default profile only
-
-
 # Run the provider-model seeder once at import time. Must be at the END of the
 # module because _seed_provider_models_from_core() calls _get_label_for_model,
 # which is defined ~3000 lines above. Placing the invocation earlier (e.g. right
@@ -1792,3 +1701,6 @@ except ImportError:
     pass  # hermes_cli not available (standalone deployment)
 except Exception:
     logger.warning("provider-model seeder failed", exc_info=True)
+
+
+__all__ = tuple(name for name in globals() if not name.startswith("__"))

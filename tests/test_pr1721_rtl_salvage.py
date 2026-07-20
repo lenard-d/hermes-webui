@@ -12,7 +12,7 @@ INDEX = REPO_ROOT / "static" / "index.html"
 STYLE = REPO_ROOT / "static" / "style.css"
 PANELS = REPO_ROOT / "static" / "panels.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
-CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
+CONFIG = REPO_ROOT / "api" / "config" / "settings.py"
 
 
 def test_rtl_settings_field_present_in_settings_panel():

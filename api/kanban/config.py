@@ -45,11 +45,9 @@ def _update_config_payload(body):
     if not isinstance(body.get("lane_by_profile"), bool):
         raise ValueError("lane_by_profile must be boolean")
 
-    from api import config
+    from api.config import update_config
 
-    config_path = config._get_config_path()
-    with config._cfg_lock:
-        config_data = config._load_yaml_config_file(config_path)
+    def update_kanban(config_data):
         dashboard_cfg = config_data.get("dashboard")
         if not isinstance(dashboard_cfg, dict):
             dashboard_cfg = {}
@@ -59,8 +57,9 @@ def _update_config_payload(body):
         kanban_cfg["lane_by_profile"] = body["lane_by_profile"]
         dashboard_cfg["kanban"] = kanban_cfg
         config_data["dashboard"] = dashboard_cfg
-        config._save_yaml_config_file(config_path, config_data)
-    config.reload_config()
+        return True
+
+    update_config(update_kanban)
     payload = _config_payload()
     payload["lane_by_profile"] = body["lane_by_profile"]
     return payload

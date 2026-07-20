@@ -12,12 +12,12 @@ from pathlib import Path
 
 import yaml
 
-from api.profiles_parts.facade import profiles_api
+from api import profiles as _profiles_module
 
 
 def _skills_stats_lock_for(profile_dir: Path) -> threading.Lock:
     """Return (creating if needed) the per-profile compute lock."""
-    api = profiles_api()
+    api = _profiles_module
     with api._SKILLS_STATS_LOCKS_GUARD:
         lock = api._SKILLS_STATS_LOCKS.get(profile_dir)
         if lock is None:
@@ -133,7 +133,7 @@ def _compute_profile_skills_stats(profile_dir: Path) -> tuple[int, int]:
 
 def _get_profile_skills_stats(profile_dir: Path) -> tuple[int, int]:
     """Return skill counts through the mtime-aware, single-flight cache."""
-    api = profiles_api()
+    api = _profiles_module
     profile_dir = Path(profile_dir).resolve()
     now = time.time()
     skills_dir = profile_dir / "skills"
@@ -167,14 +167,14 @@ def _get_profile_skills_stats(profile_dir: Path) -> tuple[int, int]:
 
 def _invalidate_list_profiles_cache() -> None:
     """Drop the cached profile list after a catalog mutation."""
-    api = profiles_api()
+    api = _profiles_module
     with api._LIST_PROFILES_CACHE_LOCK:
         api._LIST_PROFILES_CACHE = None
 
 
 def _build_profile_rows_fast() -> list | None:
     """Build WebUI profile rows while avoiding the upstream alias scan."""
-    api = profiles_api()
+    api = _profiles_module
     try:
         from hermes_cli.profiles import (
             _PROFILE_ID_RE as _UPSTREAM_PROFILE_ID_RE,
@@ -226,7 +226,7 @@ def _build_profile_rows_fast() -> list | None:
 
 def list_profiles_api() -> list:
     """Project all profiles into the stable WebUI response shape."""
-    api = profiles_api()
+    api = _profiles_module
     now = time.time()
 
     if api._is_isolated_profile_mode():
@@ -341,7 +341,7 @@ def _profile_visible_from_meta(profile_path: Path) -> bool:
 
 def _default_profile_dict() -> dict:
     """Return the fallback root-profile row without hermes_cli."""
-    api = profiles_api()
+    api = _profiles_module
     enabled_count, compatible_count = api._get_profile_skills_stats(
         api._DEFAULT_HERMES_HOME
     )

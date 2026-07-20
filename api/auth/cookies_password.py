@@ -571,8 +571,8 @@ def verify_profile_cookie_value(cookie_value: str, session_cookie_value: str | N
     # Defense-in-depth: validate the profile-name pattern here too, not only in
     # get_profile_cookie(), so any future caller of this verifier can't return an
     # unvalidated name. (#4023 Opus hardening.)
-    from api.profiles import _PROFILE_ID_RE
-    if profile_name != 'default' and not _PROFILE_ID_RE.fullmatch(profile_name):
+    from api.profiles import is_valid_profile_id
+    if profile_name != 'default' and not is_valid_profile_id(profile_name):
         return None
     expected = hmac.new(
         _signing_key(),

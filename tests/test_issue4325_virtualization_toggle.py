@@ -20,7 +20,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
-CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
+CONFIG = REPO_ROOT / "api" / "config" / "settings.py"
 
 
 def test_virtualize_transcript_setting_is_default_off_and_allowed():

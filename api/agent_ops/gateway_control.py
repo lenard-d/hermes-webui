@@ -11,11 +11,11 @@ import threading
 from pathlib import Path
 
 from api.profiles import (
-    _PROFILE_ID_RE,
-    _is_root_profile,
     get_active_hermes_home,
     get_active_profile_name,
     get_hermes_home_for_profile,
+    is_root_profile,
+    is_valid_profile_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def _gateway_restart_profile_context(profile: str | None = None) -> tuple[Path, 
         active_home = Path(get_active_hermes_home())
     else:
         raw_profile = str(profile or "")
-        if not raw_profile or not _PROFILE_ID_RE.fullmatch(raw_profile):
+        if not is_valid_profile_id(raw_profile):
             raise ValueError(f"Invalid profile for gateway restart: {profile!r}")
         active_home = Path(get_hermes_home_for_profile(raw_profile))
 
@@ -69,7 +69,7 @@ def _gateway_restart_profile_context(profile: str | None = None) -> tuple[Path, 
         and active_home.parent.name == "profiles"
     ):
         return active_home, None
-    if not raw_profile or not _PROFILE_ID_RE.fullmatch(raw_profile) or _is_root_profile(raw_profile):
+    if not is_valid_profile_id(raw_profile) or is_root_profile(raw_profile):
         return active_home, "default"
     return active_home, raw_profile
 

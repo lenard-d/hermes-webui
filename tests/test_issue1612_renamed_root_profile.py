@@ -4,7 +4,7 @@ not ~/.hermes/profiles/<name>.
 A renamed root/default Hermes profile (`is_default=True` on the agent side
 but with a display name like `kinni`) was being treated as a named profile
 directory under `~/.hermes/profiles/kinni`, which doesn't exist. Every
-`if name == 'default':` site in api/profiles.py fell through to the wrong
+`if name == 'default':` site in api/profiles/__init__.py fell through to the wrong
 filesystem path with `Profile 'kinni' does not exist.`
 
 Fix: centralize the "is this the root?" check in `_is_root_profile(name)`

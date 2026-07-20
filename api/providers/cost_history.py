@@ -9,6 +9,7 @@ to preserve the established import and monkeypatch seam.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import urllib.error
@@ -16,23 +17,30 @@ import urllib.request
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows-only import fallback
     fcntl = None  # type: ignore[assignment]
 
-if TYPE_CHECKING:
-    _coerce_provider_cost_budget = None
-    _get_hermes_home = None
-    _OPENROUTER_KEY_URL = ""
-    _PROVIDER_QUOTA_TIMEOUT_SECONDS = 0.0
-    _sanitize_openrouter_quota = None
-    logger = None
-    _quota_number = None
-    _PROVIDER_DISPLAY = {}
-    _get_provider_api_key = None
+from api.config import _coerce_provider_cost_budget
+from api.config.static_catalog import PROVIDER_DISPLAY as _PROVIDER_DISPLAY
+from api.providers.account_usage import (
+    _OPENROUTER_KEY_URL,
+    _PROVIDER_QUOTA_TIMEOUT_SECONDS,
+    _quota_number,
+    _sanitize_openrouter_quota,
+)
+from api.providers.credentials import _get_provider_api_key
+
+logger = logging.getLogger(__name__)
+
+
+def _get_hermes_home() -> Path:
+    from api import profiles
+
+    return profiles.get_active_hermes_home()
 
 # ── OpenRouter cost-history snapshot helpers (#692) ──────────────────────────
 
@@ -341,3 +349,5 @@ __provider_exports__ = (
     "_compute_deltas",
     "get_provider_cost_history",
 )
+
+__all__ = __provider_exports__

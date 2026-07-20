@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -21,18 +22,25 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    get_config = None
-    _PROVIDER_DISPLAY = {}
-    _PROVIDER_CREDENTIAL_ENV_VARS = ()
-    _load_env_file = None
-    _provider_env_var_for = None
-    _get_hermes_home = None
-    _get_provider_api_key = None
-    _local_pool_snapshot = None
-    logger = None
+from api.config import get_config
+from api.config.provider_credentials import _PROVIDER_CREDENTIAL_ENV_VARS
+from api.config.static_catalog import PROVIDER_DISPLAY as _PROVIDER_DISPLAY
+from api.providers.credentials import (
+    _get_provider_api_key,
+    _load_env_file,
+    _local_pool_snapshot,
+    _provider_env_var_for,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _get_hermes_home() -> Path:
+    from api import profiles
+
+    return profiles.get_active_hermes_home()
 
 _OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 _PROVIDER_QUOTA_TIMEOUT_SECONDS = 3.0
@@ -1421,3 +1429,5 @@ __provider_exports__ = (
     "_provider_account_usage_status",
     "get_provider_quota",
 )
+
+__all__ = __provider_exports__

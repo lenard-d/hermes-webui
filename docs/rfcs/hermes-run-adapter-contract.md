@@ -243,7 +243,7 @@ Classifications:
 |---|---|---|---|---|---|
 | `STREAMS` / `STREAMS_LOCK` | `api.state_sync` process memory | adapter API surface + presentation fan-out | WebUI runner or future Hermes run observation API | keep live path; mirror events into journal | Must stop being authoritative for active run existence. |
 | `CANCEL_FLAGS` | `api.state_sync` process memory | runner process | cancel/interrupt endpoint or runner control | no control-flow change | Final cancel state must return as a replayable event. |
-| cached `AIAgent` objects / `AGENT_INSTANCES` | `api/config.py` process memory | runner process | runner-owned Hermes integration | unchanged | Moving this is deferred until after journal proof. |
+| cached `AIAgent` objects / `AGENT_INSTANCES` | `api/config/` process memory | runner process | runner-owned Hermes integration | unchanged | Moving this is deferred until after journal proof. |
 | background thread lifecycle | `_run_agent_streaming` in `api/streaming.py` | runner process | runner-owned execution lifecycle | unchanged | Slice 1 must not rewrite thread/control flow. |
 | token / partial text buffers | streaming callbacks and browser SSE state | journal + presentation cache | replayable runtime events | append emitted events | Browser can cache rendered state, but replay must rebuild it. |
 | reasoning buffers | streaming callbacks and UI rendering state | journal + presentation cache | replayable reasoning events | append emitted events | Thinking cards must survive reconnect. |

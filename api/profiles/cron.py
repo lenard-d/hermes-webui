@@ -8,28 +8,28 @@ into those globals and restores every value on success or failure.
 import os
 from pathlib import Path
 
-from api.profiles_parts.facade import profiles_api
+from api import profiles as _profiles_module
 
 
 def _cron_profile_context_depth() -> int:
-    api = profiles_api()
+    api = _profiles_module
     return int(getattr(api._tls, "cron_profile_depth", 0) or 0)
 
 
 def _push_cron_profile_context_depth() -> None:
-    api = profiles_api()
+    api = _profiles_module
     api._tls.cron_profile_depth = api._cron_profile_context_depth() + 1
 
 
 def _pop_cron_profile_context_depth() -> None:
-    api = profiles_api()
+    api = _profiles_module
     depth = api._cron_profile_context_depth()
     api._tls.cron_profile_depth = max(0, depth - 1)
 
 
 def _home_for_scheduled_cron_job(job: dict) -> Path:
     """Resolve a scheduler job's profile home, falling back safely."""
-    api = profiles_api()
+    api = _profiles_module
     raw = str((job or {}).get("profile") or "").strip()
     if api._is_isolated_profile_mode():
         active = api._isolated_profile_name()
@@ -66,7 +66,7 @@ def _home_for_scheduled_cron_job(job: dict) -> Path:
 
 def install_cron_scheduler_profile_isolation() -> None:
     """Patch in-process scheduler runs with persisted profile isolation."""
-    api = profiles_api()
+    api = _profiles_module
     try:
         import cron.scheduler as cron_scheduler
     except ImportError:
@@ -106,12 +106,11 @@ def install_cron_scheduler_profile_isolation() -> None:
 class CronProfileContextForHome:
     """Pin cron globals to an explicit profile home for a worker body."""
 
-    def __init__(self, api, home: Path):
-        self._api = api
+    def __init__(self, home: Path):
         self._home = Path(home)
 
     def __enter__(self):
-        api = self._api
+        api = _profiles_module
         api._cron_env_lock.acquire()
         api._push_cron_profile_context_depth()
         try:
@@ -159,7 +158,7 @@ class CronProfileContextForHome:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        api = self._api
+        api = _profiles_module
         try:
             if self._prev_env is None:
                 os.environ.pop("HERMES_HOME", None)
@@ -197,11 +196,8 @@ class CronProfileContextForHome:
 class CronProfileContext:
     """Pin cron globals to the request/TLS-active profile for a request body."""
 
-    def __init__(self, api):
-        self._api = api
-
     def __enter__(self):
-        api = self._api
+        api = _profiles_module
         api._cron_env_lock.acquire()
         api._push_cron_profile_context_depth()
         try:
@@ -249,7 +245,7 @@ class CronProfileContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        api = self._api
+        api = _profiles_module
         try:
             if self._prev_env is None:
                 os.environ.pop("HERMES_HOME", None)

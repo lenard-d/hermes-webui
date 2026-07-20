@@ -36,18 +36,19 @@ def test_provider_cost_budget_in_settings_defaults():
 
 def test_cost_history_public_interface_remains_on_providers_facade():
     import api.providers as providers
+    from api.providers import cost_history
 
     assert callable(providers.get_provider_cost_history)
-    assert providers.get_provider_cost_history.__module__ == "api.providers"
+    assert providers.get_provider_cost_history is cost_history.get_provider_cost_history
 
 
 def test_cost_budget_helper_remains_patchable_on_providers_facade(monkeypatch):
-    import api.providers as providers
+    import api.providers.cost_history as providers
 
     monkeypatch.setattr(config, "load_settings", lambda: {"provider_cost_budget": "12.5"})
     monkeypatch.setattr(providers, "_coerce_provider_cost_budget", float)
     assert providers._get_provider_cost_budget() == 12.5
-    assert providers._get_provider_cost_budget.__module__ == "api.providers"
+    assert providers._get_provider_cost_budget.__module__ == "api.providers.cost_history"
 
 
 def test_attach_budget_controls_defined():
@@ -153,7 +154,7 @@ def test_monthly_budget_in_available_response(monkeypatch, tmp_path):
 
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.cost_history as providers
     monkeypatch.setattr(providers.urllib.request, "urlopen", _fake_urlopen_with_usage(5.0, 20.0))
 
     try:
@@ -177,7 +178,7 @@ def test_monthly_budget_none_when_not_configured(monkeypatch, tmp_path):
 
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.cost_history as providers
     monkeypatch.setattr(providers.urllib.request, "urlopen", _fake_urlopen_with_usage(5.0, 20.0))
 
     try:
@@ -200,7 +201,7 @@ def test_monthly_budget_in_unavailable_response(monkeypatch, tmp_path):
 
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.cost_history as providers
 
     req = providers.urllib.request.Request("https://openrouter.ai/api/v1/key")
 
@@ -230,7 +231,7 @@ def test_monthly_budget_in_no_key_response(monkeypatch, tmp_path):
 
     old_cfg, old_mtime = _with_config(model={"provider": "openrouter"})
 
-    import api.providers as providers
+    import api.providers.cost_history as providers
 
     def explode(*_a, **_kw):
         raise AssertionError("must not call network without a key")
@@ -386,6 +387,6 @@ def test_get_provider_cost_budget_rejects_huge_manual_setting(monkeypatch, tmp_p
     settings_path.write_text(json.dumps({"provider_cost_budget": 5e12}), encoding="utf-8")
     monkeypatch.setattr(config, "SETTINGS_FILE", settings_path)
 
-    import api.providers as providers
+    import api.providers.cost_history as providers
 
     assert providers._get_provider_cost_budget() is None

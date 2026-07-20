@@ -16,7 +16,7 @@ from pathlib import Path
 from tests.helpers import source_between as _source_between
 
 ROOT = Path(__file__).parent.parent
-CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 COMMANDS_JS = family_source("commands")

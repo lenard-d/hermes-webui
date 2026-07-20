@@ -48,9 +48,9 @@ def _reload_runtime_config(
     if set_env_before_dotenv and env_var and api_key:
         os.environ[env_var] = api_key
     try:
-        from api.profiles import _reload_dotenv
+        from api.profiles import reload_profile_environment
 
-        _reload_dotenv(home)
+        reload_profile_environment(home)
     except Exception:
         logger.debug("Failed to reload dotenv", exc_info=True)
     if not set_env_before_dotenv and env_var and api_key:

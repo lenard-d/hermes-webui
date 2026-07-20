@@ -1,11 +1,11 @@
 """Tests for #604 — model picker shows all configured providers."""
 import re
 
-from api.model_catalog import PROVIDER_MODELS
+from api.config.static_catalog import PROVIDER_MODELS
 
 
 def _src() -> str:
-    with open("api/config_parts/model_catalog.py") as f:
+    with open("api/config/model_catalog.py") as f:
         return f.read()
 
 

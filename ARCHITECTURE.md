@@ -64,20 +64,20 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       auth.py              Optional password authentication, signed cookies, passkeys/WebAuthn
       background_process.py Compatibility facade for background-run coordination
       background_process_parts/ Completion-event and deferred-wakeup lifecycle owners
-      config.py            Compatibility facade and owner of shared mutable config state
-      config_parts/        Importable config I/O, discovery, routing, settings, and reasoning domains
+      config/              Compatibility package plus config I/O, discovery, routing,
+                           settings, reasoning, snapshot, and catalog-state owners
         model_catalog.py   Complete model discovery/catalog lifecycle; intentionally kept cohesive
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
-        models_cache.py    Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
+        model_cache.py     Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       insights.py          Usage aggregation across WebUI index and Hermes state.db
-      model_catalog.py     Static provider names, aliases, and fallback models
+      model_catalog.py     Compatibility exports for config/static_catalog.py
       models.py            Compatibility facade for the session/model public API
       models_parts/        Importable session, persistence, projection, CLI, and state.db domains
-      profiles.py          Profile compatibility facade and shared profile identity state
-      profiles_parts/      Catalog, management, runtime environment, and cron-scope owners
-      providers.py         Provider compatibility facade
-      provider_parts/      Credential, cost-history, and account/quota lifecycle owners
+      profiles/            Profile compatibility package plus catalog, management,
+                           runtime-environment, and cron-scope owners
+      providers/           Provider compatibility package plus credential, cost-history,
+                           and account/quota lifecycle owners
       run_event_sink.py    Journal, cursor, and live-frame publication ordering
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
@@ -310,28 +310,26 @@ larger migration remains incremental:
   slow-subscriber backpressure, event cursors, and non-sensitive diagnostics.
   `api.config` re-exports its Interface for compatibility but no longer contains
   the queueing Implementation.
-- `api/model_catalog.py` owns the static provider display names, aliases, and
-  fallback model rows. `api.config` re-exports the same mutable catalog objects
-  for compatibility, while provider management imports them from their owner
-  instead of routing static data through configuration.
+- `api/config/static_catalog.py` owns the static provider display names, aliases,
+  and fallback model rows. `api/model_catalog.py` is a compatibility export.
+  Runtime discovery works on private copies so seeding from Hermes Agent cannot
+  mutate the static catalog shared with provider management.
 - `api/insights.py` owns usage aggregation across the WebUI session index and
   Hermes `state.db`. Its Interface accepts query text and storage collaborators
   and returns a payload; the route wrapper only supplies those values and
   serializes the response.
-- `api.config`, `api.models`, `api.routes`, `api.streaming`, `api.providers`,
-  `api.profiles`, `api.workspace`, and `api.workspace_git`
-  preserve their established import and monkeypatch surfaces as compatibility
-  facades. Cohesive implementations live in their corresponding owner modules
-  and `*_parts/` packages. Moved functions are rebound to the exporting facade
-  when historical monkeypatch or introspection behavior requires it; shared
-  locks, caches, registries, and `ContextVar` state retain one authoritative
-  owner. These are normal Python modules, not source strings or
-  runtime-concatenated fragments.
-- `api.updates` is the pilot semantic package. Its small `__init__.py` preserves
-  the established import path and public exports, while repository, policy,
-  summary, and transaction implementations use direct relative imports. Update
-  execution no longer resolves internal calls through a facade binder,
-  `ContextVar`, or `sys.modules`.
+- `api.config`, `api.profiles`, and `api.providers` are real packages whose
+  entrypoints preserve their established imports while exporting functions from
+  explicit owner modules. They do not use function cloning, context-local facade
+  binding, or `sys.modules` dispatch. Config publishes downstream extension
+  hooks, profiles installs profile adapters, and providers installs credential
+  adapters, preserving the dependency direction config -> profiles -> providers.
+  `api.models` preserves only a stateless compatibility import, while the
+  durable owner lives in `api.sessions`.
+- `api.updates`, `api.workspace`, and `api.workspace_git` use explicit package
+  owners and stateless compatibility interfaces. `api.routes` and
+  `api.streaming` remain temporary compatibility surfaces while their HTTP and
+  transport owners are migrated incrementally.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.
@@ -606,7 +604,7 @@ compatibility globals are therefore part of the contract, while family namespace
 such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
 the semantic owners. A domain stays intact when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
-`config_parts/model_catalog.py`, `streaming_parts/local_run.py`, and
+`config/model_catalog.py`, `streaming_parts/local_run.py`, and
 `ui_parts/017-message-renderer.js` are deliberately larger than the line-count
 heuristic because their state and cleanup lifecycles do not expose a narrower
 safe Interface.
@@ -835,7 +833,7 @@ The api/ modules in turn import Hermes internals:
 
     api/streaming.py imports:
       run_agent.AIAgent              Main agent class. Wraps LLM + tool execution.
-    api/config.py imports:
+    api/config/__init__.py imports:
       yaml                           Config loading.
     server.py imports:
       tools.approval.*               Module-level approval state (with graceful fallback).
@@ -931,11 +929,10 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         routes.py             GET + POST dispatch and route compatibility facade
         routes_parts/         Cohesive importable chat-run, projection, transport, media,
                               workspace, terminal, login, notes/wiki, TTS, and runtime domains
-        config.py             Config compatibility facade and shared mutable state owner
-        config_parts/         Cohesive importable config and model-catalog domains with late binding
+        config/               Config compatibility entrypoint and cohesive config/model domains
         helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
         insights.py           Transport-independent usage aggregation
-        model_catalog.py      Static provider and fallback-model catalog
+        model_catalog.py      Compatibility exports for config/static_catalog.py
         models.py             Session/model compatibility facade
         models_parts/         Session, persistence, projection, CLI, and state.db domains
         runtime_state.py      Process-local stream and worker lifecycle owner
@@ -943,17 +940,13 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         session_sources.py    Imported-session source identity policy
         stream_channel.py     Bounded live-event broadcast and replay
         turn_admission.py     Atomic local-turn admission and worker launch
-        providers.py          Provider compatibility facade
-        provider_parts/       Credentials, costs, and account/quota lifecycle
-        profiles.py           Profile compatibility facade and shared identity state
-        profiles_parts/       Catalog, management, runtime, and cron scopes
+        providers/            Provider entrypoint, credentials, costs, and account/quota lifecycle
+        profiles/             Profile entrypoint, catalog, management, runtime, and cron scopes
         updates/              Stable update interface plus semantic implementation modules
           {repository,policy,summary,transaction}.py
-                              Repository, selection policy, summaries, and atomic transactions
-        workspace.py          Workspace identity and registry facade
-        workspace_parts/      Path safety, anchored access, escape navigation, git summary
-        workspace_git.py      High-level Git workflow facade
-        workspace_git_parts/  Repository identity, subprocess, temp resource, and lock owner
+                              Repository, selection policy, and atomic update transaction
+        workspace/            Identity, path safety, anchored access, navigation, and Git owners
+        workspace_git.py      Stateless high-level Git compatibility interface
         upload.py             Multipart parser and file upload handler
         streaming.py          SSE orchestration and streaming compatibility facade
         streaming_parts/      Payload, replay, compression, Gateway routing metadata,
@@ -976,9 +969,9 @@ thin shell relative to the rest of the app: Handler class with headers,
 structured logging, dispatch to routes, TLS wrapping, and `main()`. The later
 semantic splits keep the established `api.config`, `api.models`, `api.routes`, and
 `api.streaming` import surfaces while moving bounded responsibilities into
-ordinary part modules. The facades still contain orchestration and shared-state
-ownership, so further extraction should follow domain boundaries rather than a
-line-count target.
+ordinary owner modules. Compatibility entrypoints still contain orchestration
+and selected shared-state seams, so further extraction should follow domain
+boundaries rather than a line-count target.
 
 ### Phase B: Thread-Safe Request Context (Priority: Critical, Effort: Medium)
 
@@ -1486,7 +1479,7 @@ Quick-reference table for prioritizing architecture work. Phases are from Sectio
 Recommended current execution order:
     1. Finish runtime lifecycle ownership behind `runtime_state.py` and `turn_admission.py`.
     2. Move remaining session mutations behind `session_repository.py`.
-    3. Extract provider discovery and configuration from `config.py` behind deep Interfaces.
+    3. Continue deepening provider discovery and configuration within the `api.config` package.
     4. Replace frontend global coupling with native Module Interfaces, one behavior slice at a time.
     5. Review the line/branch baseline, set a justified floor, and continue hardening behavior-level tests.
     6. Keep current architecture/contracts concise; archive sprint snapshots and validate assets.

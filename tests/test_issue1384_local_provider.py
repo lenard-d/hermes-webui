@@ -41,7 +41,7 @@ class TestAutoDetectWritesCustom:
 
     def test_source_code_no_local_assignment(self):
         """The string ``provider = "local"`` must not appear in api/config.py."""
-        src = Path("api/config_parts/model_catalog.py").read_text(encoding="utf-8")
+        src = Path("api/config/model_catalog.py").read_text(encoding="utf-8")
         assert 'provider = "local"' not in src, (
             'api/config.py must not assign provider = "local" — see #1384. '
             "Use ``custom`` instead so the agent's auxiliary client takes the "
@@ -50,7 +50,7 @@ class TestAutoDetectWritesCustom:
 
     def test_auto_detect_branch_uses_custom(self):
         """The else-branch in the auto-detect block resolves to ``custom``."""
-        src = Path("api/config_parts/model_catalog.py").read_text(encoding="utf-8")
+        src = Path("api/config/model_catalog.py").read_text(encoding="utf-8")
         # Find the auto-detect block (host-keyword classifier).
         m = re.search(
             r'if "ollama" in host or "127\.0\.0\.1" in host or "localhost" in host:\s*\n'

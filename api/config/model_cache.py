@@ -5,13 +5,28 @@ import hashlib
 import json
 import logging
 import os
-import re
 from pathlib import Path
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
+from api.config.catalog_state import (
+    MODEL_CATALOG_STATE,  # noqa: F401 - public canonical-owner re-export
+    import_legacy_model_catalog_state,
+    publish_legacy_model_catalog_state,
+)
+
+
+def _sync_legacy_state() -> None:
+    import_legacy_model_catalog_state(_config_module)
+
+
+def _sync_models_cache_provenance_owner() -> None:
+    from api.config.model_catalog import _sync_models_cache_provenance
+
+    _sync_models_cache_provenance()
 
 
 def _get_models_cache_path() -> Path:
+    _sync_legacy_state()
     """Return the /api/models disk-cache path for the *active* profile (#3957).
 
     WebUI profile switching is per-client/cookie scoped (issue #798), but the
@@ -32,40 +47,21 @@ def _get_models_cache_path() -> Path:
     (thread-local cookie context), falling back to the module-level default
     path if the profiles module is unavailable (very early boot / import cycle).
 
-    The named-profile path is derived from ``_models_cache_path`` (the
+    The named-profile path is derived from ``MODEL_CATALOG_STATE.models_cache_path`` (the
     module-level default), not from ``STATE_DIR`` directly, so the path stays
     correct if the default is repointed (e.g. tests monkeypatch
-    ``_models_cache_path`` to an isolated tmp file).
+    ``MODEL_CATALOG_STATE.models_cache_path`` to an isolated tmp file).
     """
-    api = config_api()
-    try:
-        from api.profiles import get_active_profile_name, _is_root_profile
+    from api.config.snapshot import resolve_config_snapshot
 
-        name = (get_active_profile_name() or "").strip()
-        if not name or _is_root_profile(name):
-            return api._models_cache_path
-        # Defensive filename sanitization: the cookie-derived profile name is
-        # already validated by _PROFILE_ID_RE at the request boundary, but keep
-        # the on-disk filename safe regardless of how the name was resolved.
-        safe = re.sub(r"[^a-z0-9_-]", "_", name.lower())[:64]
-        if not safe:
-            return api._models_cache_path
-        # Splice the profile into the default filename: models_cache.json →
-        # models_cache.<safe>.json, keeping the default's parent dir + suffix.
-        base = api._models_cache_path
-        return base.with_name(f"{base.stem}.{safe}{base.suffix}")
-    except Exception:
-        return api._models_cache_path
+    return resolve_config_snapshot(config_data={}).models_cache_path
 
 
 def _get_auth_store_path() -> Path:
     """Return the auth.json path for the active Hermes profile."""
-    try:
-        from api.profiles import get_active_hermes_home as _gah
+    from api.config.snapshot import resolve_config_snapshot
 
-        return _gah() / "auth.json"
-    except ImportError:
-        return config_api()._DEFAULT_HERMES_HOME / "auth.json"
+    return resolve_config_snapshot(config_data={}).auth_store_path
 
 
 def _models_cache_file_fingerprint(path: Path) -> dict:
@@ -96,7 +92,7 @@ def _models_cache_catalog_fingerprint() -> dict:
     serving an otherwise-valid persisted models_cache.json until the 24h TTL
     expires (#2443).
     """
-    api = config_api()
+    api = _config_module
     catalog_payload = {
         "provider_models": api._PROVIDER_MODELS,
         "provider_display": api._PROVIDER_DISPLAY,
@@ -177,7 +173,7 @@ def _strip_volatile_auth_fields(obj):
     deny-list is preserved verbatim so real provider/endpoint changes still
     show through in the fingerprint.
     """
-    api = config_api()
+    api = _config_module
     if isinstance(obj, dict):
         return {
             k: api._strip_volatile_auth_fields(v)
@@ -221,7 +217,7 @@ def _auth_store_semantic_fingerprint(path: Path) -> dict:
         fp["size"] = st.st_size
         fp["semantic"] = "unparsed-fallback"
         return fp
-    stripped = config_api()._strip_volatile_auth_fields(raw)
+    stripped = _config_module._strip_volatile_auth_fields(raw)
     try:
         encoded = json.dumps(
             stripped,
@@ -249,7 +245,7 @@ def _models_cache_source_fingerprint() -> dict:
     mtime/size fingerprint because it is only rewritten on deliberate user
     edits (which can change anything) and does not churn on a timer.
     """
-    api = config_api()
+    api = _config_module
     return {
         "config_yaml": api._models_cache_file_fingerprint(api._get_config_path()),
         "auth_json": api._auth_store_semantic_fingerprint(api._get_auth_store_path()),
@@ -259,7 +255,7 @@ def _models_cache_source_fingerprint() -> dict:
 
 def _delete_models_cache_on_disk() -> None:
     try:
-        os.unlink(str(config_api()._get_models_cache_path()))
+        os.unlink(str(_config_module._get_models_cache_path()))
     except OSError:
         pass  # already absent
 
@@ -296,7 +292,7 @@ def _is_loadable_disk_cache(cache: object) -> bool:
     """Return True when an on-disk cache is safe to use after a process boot.
 
     Adds two checks on top of _is_valid_models_cache (#1633):
-      1. ``_schema_version`` matches `_MODELS_CACHE_SCHEMA_VERSION`. A bumped
+      1. ``_schema_version`` matches `MODEL_CATALOG_STATE.models_cache_schema_version`. A bumped
          schema version unconditionally invalidates older cache files.
       2. ``_webui_version`` matches the current runtime version. Forces a
          rebuild after every release so users see picker-shape fixes
@@ -310,19 +306,19 @@ def _is_loadable_disk_cache(cache: object) -> bool:
     independent invalidation axis for breaking changes that lack a tag bump;
     bump it whenever the cache shape changes incompatibly.
     """
-    api = config_api()
+    api = _config_module
     if not api._is_valid_models_cache(cache):
         return False
     if not isinstance(cache, dict):  # appease type-narrowing — already guarded above
         return False
     cached_schema = cache.get("_schema_version")
-    if cached_schema != api._MODELS_CACHE_SCHEMA_VERSION:
+    if cached_schema != api.MODEL_CATALOG_STATE.models_cache_schema_version:
         # DEBUG telemetry per stage-294 absorption: makes "why did my cache
         # rebuild" investigations one log-grep away.
         api.logger.debug(
             "models cache rejected: schema=%r vs runtime=%r",
             cached_schema,
-            api._MODELS_CACHE_SCHEMA_VERSION,
+            api.MODEL_CATALOG_STATE.models_cache_schema_version,
         )
         return False
     runtime_version = api._current_webui_version()
@@ -348,6 +344,7 @@ def _is_loadable_disk_cache(cache: object) -> bool:
 
 
 def _load_models_cache_from_disk() -> dict | None:
+    _sync_legacy_state()
     """Load /api/models cache from disk if it exists and has current metadata.
 
     Adds the per-release version check from #1633: a cache stamped with a
@@ -360,7 +357,7 @@ def _load_models_cache_from_disk() -> dict | None:
     try:
         import json as _j
 
-        api = config_api()
+        api = _config_module
         cache_path = api._get_models_cache_path()
         if not cache_path.exists():
             return None
@@ -399,7 +396,7 @@ def _model_aliases_from_config() -> dict[str, str]:
     disk cache that never persisted them).
     """
     try:
-        raw_aliases = config_api().cfg.get("model", {}).get("aliases", {})
+        raw_aliases = _config_module.cfg.get("model", {}).get("aliases", {})
         if isinstance(raw_aliases, dict):
             return {
                 str(k).strip(): str(v).strip()
@@ -425,7 +422,7 @@ def _load_stale_models_cache_from_disk() -> dict | None:
     try:
         import json as _j
 
-        api = config_api()
+        api = _config_module
         cache_path = api._get_models_cache_path()
         if not cache_path.exists():
             return None
@@ -433,7 +430,7 @@ def _load_stale_models_cache_from_disk() -> dict | None:
             cache = _j.load(f)
         if not api._is_valid_models_cache(cache):
             return None
-        if cache.get("_schema_version") != api._MODELS_CACHE_SCHEMA_VERSION:
+        if cache.get("_schema_version") != api.MODEL_CATALOG_STATE.models_cache_schema_version:
             return None
         aliases = cache.get("aliases")
         if not isinstance(aliases, dict):
@@ -458,6 +455,7 @@ def _load_stale_models_cache_from_disk() -> dict | None:
 
 
 def _save_models_cache_to_disk(cache: dict) -> None:
+    _sync_legacy_state()
     """Save cache to disk so it survives server restarts.
 
     Stamps the payload with `_webui_version` and `_schema_version` (#1633) so
@@ -474,11 +472,11 @@ def _save_models_cache_to_disk(cache: dict) -> None:
     once on the next boot.
     """
     try:
-        api = config_api()
+        api = _config_module
         if not api._is_valid_models_cache(cache):
             return
         payload = {
-            "_schema_version": api._MODELS_CACHE_SCHEMA_VERSION,
+            "_schema_version": api.MODEL_CATALOG_STATE.models_cache_schema_version,
             "_source_fingerprint": api._models_cache_source_fingerprint(),
             "active_provider": cache["active_provider"],
             "default_model": cache["default_model"],
@@ -498,34 +496,35 @@ def _save_models_cache_to_disk(cache: dict) -> None:
 
 
 def _get_fresh_memory_models_cache(now: float) -> dict | None:
+    _sync_legacy_state()
     """Return a valid fresh in-memory /api/models cache, or clear stale shapes."""
-    api = config_api()
-    if api._available_models_cache is None:
+    api = _config_module
+    if api.MODEL_CATALOG_STATE.available_models_cache is None:
         return None
-    if (now - api._available_models_cache_ts) >= api._AVAILABLE_MODELS_CACHE_TTL:
+    if (now - api.MODEL_CATALOG_STATE.available_models_cache_ts) >= api.MODEL_CATALOG_STATE.available_models_cache_ttl:
         return None
     current_sources = api._models_cache_source_fingerprint()
-    if api._available_models_cache_source_fingerprint != current_sources:
+    if api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint != current_sources:
         api.logger.debug(
             "models memory cache rejected: source_fingerprint=%r vs runtime=%r",
-            api._available_models_cache_source_fingerprint,
+            api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint,
             current_sources,
         )
-        api._available_models_cache = None
-        api._available_models_cache_ts = 0.0
-        api._available_models_live_rebuild_ts = 0.0
-        api._available_models_cache_source_fingerprint = None
-        api._sync_models_cache_provenance()
+        api.MODEL_CATALOG_STATE.available_models_cache = None
+        api.MODEL_CATALOG_STATE.available_models_cache_ts = 0.0
+        api.MODEL_CATALOG_STATE.available_models_live_rebuild_ts = 0.0
+        api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = None
+        _sync_models_cache_provenance_owner()
         return None
-    if api._is_valid_models_cache(api._available_models_cache):
+    if api._is_valid_models_cache(api.MODEL_CATALOG_STATE.available_models_cache):
         return api._annotate_fast_tier_model_groups(
-            copy.deepcopy(api._available_models_cache)
+            copy.deepcopy(api.MODEL_CATALOG_STATE.available_models_cache)
         )
-    api._available_models_cache = None
-    api._available_models_cache_ts = 0.0
-    api._available_models_live_rebuild_ts = 0.0
-    api._available_models_cache_source_fingerprint = None
-    api._sync_models_cache_provenance()
+    api.MODEL_CATALOG_STATE.available_models_cache = None
+    api.MODEL_CATALOG_STATE.available_models_cache_ts = 0.0
+    api.MODEL_CATALOG_STATE.available_models_live_rebuild_ts = 0.0
+    api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = None
+    _sync_models_cache_provenance_owner()
     return None
 
 
@@ -537,6 +536,7 @@ def _models_cache_file_age_seconds(cache_path: Path, now: float) -> float | None
 
 
 def warm_models_catalog_provenance_if_cold() -> None:
+    _sync_legacy_state()
     """Best-effort, NON-BLOCKING, disk-only publish of catalog provenance.
 
     The send path (``api/streaming.py``) resolves the wire model via
@@ -550,7 +550,7 @@ def warm_models_catalog_provenance_if_cold() -> None:
     signal from the durable disk cache so the #433 bare-only-strip stays exact.
 
     Deliberately does NOT call ``get_available_models(prefer_cache=True)``: even
-    in prefer-cache mode that acquires ``_available_models_cache_lock`` and can
+    in prefer-cache mode that acquires ``MODEL_CATALOG_STATE.available_models_cache_lock`` and can
     block up to ~60s waiting on an in-flight rebuild (unbounded in synchronous
     rebuild mode) — unacceptable on the send hot path. Instead this:
       * tries the cache lock NON-BLOCKING and returns immediately if it's busy
@@ -574,10 +574,10 @@ def warm_models_catalog_provenance_if_cold() -> None:
     published fingerprint to the current one before short-circuiting closes that
     hole — a mismatch falls through to load THIS profile's disk snapshot.
     """
-    api = config_api()
+    api = _config_module
 
     def _provenance_is_current() -> bool:
-        prov = api._models_cache_provenance
+        prov = api.MODEL_CATALOG_STATE.models_cache_provenance
         if prov is None:
             return False
         try:
@@ -587,7 +587,7 @@ def warm_models_catalog_provenance_if_cold() -> None:
 
     if _provenance_is_current():
         return  # already warm for THIS profile — one global read, no work
-    got = api._available_models_cache_lock.acquire(blocking=False)
+    got = api.MODEL_CATALOG_STATE.available_models_cache_lock.acquire(blocking=False)
     if not got:
         return  # a concurrent build/publish holds the lock; it will publish
     try:
@@ -600,15 +600,17 @@ def warm_models_catalog_provenance_if_cold() -> None:
         if disk_groups is None:
             return  # no durable cache for this profile → stay cold, preserve verbatim
         current_fingerprint = api._models_cache_source_fingerprint()
-        api._models_cache_provenance = (disk_groups, current_fingerprint)
-        api._advertised_model_ids_memo = None
+        api.MODEL_CATALOG_STATE.models_cache_provenance = (disk_groups, current_fingerprint)
+        api.MODEL_CATALOG_STATE.advertised_model_ids_memo = None
+        publish_legacy_model_catalog_state(api)
     except Exception:
         api.logger.debug("models catalog provenance warm failed", exc_info=True)
     finally:
-        api._available_models_cache_lock.release()
+        api.MODEL_CATALOG_STATE.available_models_cache_lock.release()
 
 
 def get_available_models_for_session_visit() -> dict:
+    _sync_legacy_state()
     """Return /api/models with a short session-visit freshness horizon.
 
     perf(session-load-latency) Phase 0: this function is the source of the
@@ -618,7 +620,7 @@ def get_available_models_for_session_visit() -> dict:
     """
     import time as _time
 
-    api = config_api()
+    api = _config_module
     _stagelog: list[tuple[str, float]] = [("enter", _time.monotonic())]
 
     def _mark(name: str) -> None:
@@ -646,11 +648,11 @@ def get_available_models_for_session_visit() -> dict:
     disk_cached = None
     if (
         cache_age is not None
-        and cache_age < api._SESSION_VISIT_MODELS_FRESHNESS_SECONDS
+        and cache_age < api.MODEL_CATALOG_STATE.session_visit_models_freshness_seconds
     ):
         _mark("cache_age_within_ttl")
         now_mono = api.time.monotonic()
-        with api._available_models_cache_lock:
+        with api.MODEL_CATALOG_STATE.available_models_cache_lock:
             cached = api._get_fresh_memory_models_cache(now_mono)
             if cached is not None:
                 _mark("memory_cache_hit")
@@ -664,7 +666,7 @@ def get_available_models_for_session_visit() -> dict:
         _mark("memory_cache_miss_loading_disk")
         disk_cached = api._load_models_cache_from_disk()
         if disk_cached is not None:
-            with api._available_models_cache_lock:
+            with api.MODEL_CATALOG_STATE.available_models_cache_lock:
                 cached = api._get_fresh_memory_models_cache(api.time.monotonic())
                 if cached is not None:
                     _mark("disk_then_memory_cache_hit")
@@ -675,12 +677,12 @@ def get_available_models_for_session_visit() -> dict:
                         "models.session_visit",
                     )
                     return cached
-                api._available_models_cache = api.copy.deepcopy(disk_cached)
-                api._available_models_cache_ts = api.time.monotonic()
-                api._available_models_cache_source_fingerprint = (
+                api.MODEL_CATALOG_STATE.available_models_cache = api.copy.deepcopy(disk_cached)
+                api.MODEL_CATALOG_STATE.available_models_cache_ts = api.time.monotonic()
+                api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = (
                     api._models_cache_source_fingerprint()
                 )
-                api._sync_models_cache_provenance()
+                _sync_models_cache_provenance_owner()
             _mark("disk_cache_returned")
             api._maybe_log_slow_stages(
                 _logger,
@@ -757,6 +759,7 @@ def _maybe_log_slow_stages(
 
 
 def invalidate_models_cache():
+    _sync_legacy_state()
     """Force the TTL cache for get_available_models() to be cleared.
 
     Call this after modifying config.cfg in-memory (e.g. in tests) so
@@ -770,24 +773,25 @@ def invalidate_models_cache():
     result from the disk cache because the disk hit is checked before the memory
     cache rebuild runs.
     """
-    api = config_api()
-    with api._available_models_cache_lock:
-        api._available_models_cache = None
-        api._available_models_cache_ts = 0.0
-        api._available_models_live_rebuild_ts = 0.0
-        api._available_models_cache_source_fingerprint = None
-        api._sync_models_cache_provenance()
+    api = _config_module
+    with api.MODEL_CATALOG_STATE.available_models_cache_lock:
+        api.MODEL_CATALOG_STATE.available_models_cache = None
+        api.MODEL_CATALOG_STATE.available_models_cache_ts = 0.0
+        api.MODEL_CATALOG_STATE.available_models_live_rebuild_ts = 0.0
+        api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = None
+        _sync_models_cache_provenance_owner()
         api._invalidate_models_build_locked()
         # Clear the credential pool cache too (all profiles). Without this,
         # tests (and live provider key edits) see a stale CredentialPool from a
         # prior auth_store payload — the test_credential_pool_providers suite was
         # hitting this directly. A full reset is intentionally profile-wide.
-        api._CREDENTIAL_POOL_CACHE.clear()
+        api.MODEL_CATALOG_STATE.credential_pool_cache.clear()
     # Also delete the disk cache so the next cold build starts fresh.
     # Disk delete is outside the lock — file I/O shouldn't block other readers.
     api._delete_models_cache_on_disk()
+    publish_legacy_model_catalog_state(api)
     try:
-        from api.plugin_providers import invalidate_plugin_model_provider_cache
+        from api.config.plugin_providers import invalidate_plugin_model_provider_cache
 
         invalidate_plugin_model_provider_cache()
     except Exception:
@@ -795,32 +799,26 @@ def invalidate_models_cache():
 
 
 def invalidate_credential_pool_cache(provider_id: str):
+    _sync_legacy_state()
     """Invalidate the credential pool cache for a specific provider.
 
     Used by the streaming layer's credential self-heal logic (#1401) to
     force a fresh credential pool load after re-reading auth.json.
     """
-    api = config_api()
-    with api._available_models_cache_lock:
+    api = _config_module
+    with api.MODEL_CATALOG_STATE.available_models_cache_lock:
         _cp_tag = api._credential_pool_profile_tag()
-        api._CREDENTIAL_POOL_CACHE.pop((_cp_tag, provider_id), None)
-        api._CREDENTIAL_POOL_CACHE.pop(
+        api.MODEL_CATALOG_STATE.credential_pool_cache.pop((_cp_tag, provider_id), None)
+        api.MODEL_CATALOG_STATE.credential_pool_cache.pop(
             (_cp_tag, api._resolve_provider_alias(provider_id)), None
         )
-    try:
-        # api.providers imports from api.config; keep this lazy to avoid
-        # import-cycle/module-initialization issues.
-        from api.providers import invalidate_account_usage_status_cache
+    from api.config.hooks import get_config_runtime_hooks
 
-        invalidate_account_usage_status_cache(provider_id)
-        invalidate_account_usage_status_cache(api._resolve_provider_alias(provider_id))
-    except Exception:
-        api.logger.debug(
-            "Failed to invalidate account usage status cache", exc_info=True
-        )
+    get_config_runtime_hooks().credential_cache_invalidated(provider_id)
 
 
 def invalidate_provider_models_cache(provider_id: str):
+    _sync_legacy_state()
     """Invalidate cached models for a single provider.
 
     Also invalidates the full cache so that the next get_available_models()
@@ -829,21 +827,22 @@ def invalidate_provider_models_cache(provider_id: str):
     Args:
         provider_id: canonical provider id (e.g. 'openai', 'anthropic', 'custom:my-key')
     """
-    api = config_api()
-    with api._available_models_cache_lock:
-        api._available_models_cache = None
-        api._available_models_cache_ts = 0.0
-        api._available_models_live_rebuild_ts = 0.0
-        api._available_models_cache_source_fingerprint = None
-        api._sync_models_cache_provenance()
+    api = _config_module
+    with api.MODEL_CATALOG_STATE.available_models_cache_lock:
+        api.MODEL_CATALOG_STATE.available_models_cache = None
+        api.MODEL_CATALOG_STATE.available_models_cache_ts = 0.0
+        api.MODEL_CATALOG_STATE.available_models_live_rebuild_ts = 0.0
+        api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = None
+        _sync_models_cache_provenance_owner()
         api._invalidate_models_build_locked()
         # Also evict the credential pool so the next cold path re-loads it.
         # Must evict both the original key and its canonical form (load_pool
         # may be called with either, and both paths cache under their own key),
         # scoped to the active profile's cache key.
         _cp_tag = api._credential_pool_profile_tag()
-        api._CREDENTIAL_POOL_CACHE.pop((_cp_tag, provider_id), None)
-        api._CREDENTIAL_POOL_CACHE.pop(
+        api.MODEL_CATALOG_STATE.credential_pool_cache.pop((_cp_tag, provider_id), None)
+        api.MODEL_CATALOG_STATE.credential_pool_cache.pop(
             (_cp_tag, api._resolve_provider_alias(provider_id)), None
         )
     api._delete_models_cache_on_disk()
+    publish_legacy_model_catalog_state(api)

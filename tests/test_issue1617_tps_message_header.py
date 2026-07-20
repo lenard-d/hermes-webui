@@ -10,7 +10,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (REPO / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")

@@ -289,9 +289,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         # producing hidden cross-profile rows that can't be managed normally.
         _requested_profile = str(body.get("profile") or "").strip()
         if _requested_profile and _requested_profile != "default":
-            from api.profiles import _PROFILE_ID_RE
+            from api.profiles import is_valid_profile_id
 
-            if not _PROFILE_ID_RE.fullmatch(_requested_profile):
+            if not is_valid_profile_id(_requested_profile):
                 return bad(handler, "invalid profile")
         proj = {
             "project_id": uuid.uuid4().hex[:12],

@@ -130,7 +130,7 @@ Plus two boundaries:
 The shipped preference is independent of `simplified_tool_calling`:
 
 ```python
-# api/config.py preferences
+# api/config/ preferences
 "chat_activity_display_mode": "compact_worklog",  # | "transparent_stream" | "hide_all_activity"
 ```
 

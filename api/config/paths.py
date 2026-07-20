@@ -10,10 +10,9 @@ import os
 import re
 import shutil
 from pathlib import Path
-from types import ModuleType
-from typing import Protocol, cast
+from typing import Protocol
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 
 class PathEnvironmentAPI(Protocol):
@@ -39,10 +38,6 @@ class PathEnvironmentAPI(Protocol):
     def _warn_state_dir_divergence(self, warn_prefix: str) -> None: ...
 
 
-def _config_api() -> PathEnvironmentAPI:
-    return cast(PathEnvironmentAPI, cast(ModuleType, config_api()))
-
-
 def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
     """Read a bounded integer environment setting, falling back on bad input."""
     raw = os.getenv(name)
@@ -62,7 +57,7 @@ def _env_mb_bytes(name: str, default_mb: int) -> int:
         return default_mb * 1024 * 1024
     match = re.match(r"^(\d+)\s*(?:m|mb|mib)?$", raw, re.IGNORECASE)
     if not match:
-        _config_api().logger.warning(
+        _config_module.logger.warning(
             "Invalid %s=%r; expected a positive integer in MB. Falling back to %sMB.",
             name,
             raw,
@@ -71,7 +66,7 @@ def _env_mb_bytes(name: str, default_mb: int) -> int:
         return default_mb * 1024 * 1024
     value_mb = int(match.group(1))
     if value_mb <= 0:
-        _config_api().logger.warning(
+        _config_module.logger.warning(
             "Invalid %s=%r; expected a value greater than zero. Falling back to %sMB.",
             name,
             raw,
@@ -83,7 +78,7 @@ def _env_mb_bytes(name: str, default_mb: int) -> int:
 
 def _discover_agent_dir() -> Path | None:
     """Locate the Hermes Agent source root using the documented priority."""
-    api = _config_api()
+    api = _config_module
     explicit_override = os.getenv("HERMES_WEBUI_AGENT_DIR")
     if explicit_override:
         explicit_path = Path(explicit_override).expanduser().resolve()
@@ -116,7 +111,7 @@ def _looks_like_agent_source_root(path: Path) -> bool:
     """Return whether a directory resembles a Hermes Agent source root."""
     if (path / "run_agent.py").exists():
         return True
-    return _config_api()._looks_like_pip_style_agent_source_root(path)
+    return _config_module._looks_like_pip_style_agent_source_root(path)
 
 
 def _looks_like_pip_style_agent_source_root(path: Path) -> bool:
@@ -146,7 +141,7 @@ def _discover_python(agent_dir: Path | None) -> str:
                     return str(candidate)
 
     for subdir, binary in (("bin", "python"), ("Scripts", "python.exe")):
-        local_venv = _config_api().REPO_ROOT / ".venv" / subdir / binary
+        local_venv = _config_module.REPO_ROOT / ".venv" / subdir / binary
         if local_venv.exists():
             return str(local_venv)
 
@@ -159,7 +154,7 @@ def _discover_python(agent_dir: Path | None) -> str:
 
 def _workspace_candidates(raw: str | Path | None = None) -> list[Path]:
     """Return ordered workspace candidates without duplicates."""
-    api = _config_api()
+    api = _config_module
     candidates: list[Path] = []
 
     def add(candidate: str | Path | None) -> None:
@@ -202,7 +197,7 @@ def _ensure_workspace_dir(path: Path) -> bool:
 
 def resolve_default_workspace(raw: str | Path | None = None) -> Path:
     """Return the first usable workspace path, creating it when possible."""
-    api = _config_api()
+    api = _config_module
     for candidate in api._workspace_candidates(raw):
         if api._ensure_workspace_dir(candidate):
             return candidate
@@ -219,7 +214,7 @@ def _discover_default_workspace() -> Path:
 
 def _warn_state_dir_divergence(warn_prefix: str) -> None:
     """Warn when another sibling state directory appears to own sessions."""
-    api = _config_api()
+    api = _config_module
     try:
         if api.SESSION_DIR.exists():
             session_dir_empty = not any(
@@ -268,7 +263,7 @@ def _warn_state_dir_divergence(warn_prefix: str) -> None:
 
 def print_startup_config() -> None:
     """Print detected configuration so operators can verify discovery."""
-    api = _config_api()
+    api = _config_module
     ok = "\033[32m[ok]\033[0m"
     warn = "\033[33m[!!]\033[0m"
     err = "\033[31m[XX]\033[0m"

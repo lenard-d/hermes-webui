@@ -15,6 +15,7 @@ def _provider_group(payload: dict, provider_id: str) -> dict:
 
 def test_copilot_provider_models_settings_do_not_replace_live_catalog(monkeypatch, tmp_path):
     import api.config as config
+    from api.config import model_catalog
 
     cfg = {
         "model": {"default": "gpt-5.5", "provider": "copilot"},
@@ -39,7 +40,7 @@ def test_copilot_provider_models_settings_do_not_replace_live_catalog(monkeypatc
     monkeypatch.setattr(config, "reload_config", lambda: None)
     monkeypatch.setattr(config, "_cfg_mtime", 0.0, raising=False)
     monkeypatch.setattr(config, "_LIVE_REBUILD_BUDGET_SECONDS", 0.0, raising=False)
-    monkeypatch.setattr(config, "_read_live_provider_model_ids", lambda pid: ["gpt-5.5", "claude-opus-4.8", "gpt-5.4"] if pid == "copilot" else [])
+    monkeypatch.setattr(model_catalog, "_read_live_provider_model_ids", lambda pid: ["gpt-5.5", "claude-opus-4.8", "gpt-5.4"] if pid == "copilot" else [])
 
     config.invalidate_models_cache()
     payload = config.get_available_models(force_refresh=True)
@@ -51,6 +52,7 @@ def test_copilot_provider_models_settings_do_not_replace_live_catalog(monkeypatc
 
 def test_unknown_duplicate_copilot_provider_config_is_not_rendered(monkeypatch, tmp_path):
     import api.config as config
+    from api.config import model_catalog
 
     cfg = {
         "model": {"default": "gpt-5.5", "provider": "copilot"},
@@ -69,7 +71,7 @@ def test_unknown_duplicate_copilot_provider_config_is_not_rendered(monkeypatch, 
     monkeypatch.setattr(config, "reload_config", lambda: None)
     monkeypatch.setattr(config, "_cfg_mtime", 0.0, raising=False)
     monkeypatch.setattr(config, "_LIVE_REBUILD_BUDGET_SECONDS", 0.0, raising=False)
-    monkeypatch.setattr(config, "_read_live_provider_model_ids", lambda pid: ["gpt-5.5", "claude-opus-4.8"] if pid == "copilot" else [])
+    monkeypatch.setattr(model_catalog, "_read_live_provider_model_ids", lambda pid: ["gpt-5.5", "claude-opus-4.8"] if pid == "copilot" else [])
 
     config.invalidate_models_cache()
     payload = config.get_available_models(force_refresh=True)

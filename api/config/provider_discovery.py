@@ -7,11 +7,10 @@ compatibility.  Helpers resolve that facade at call time so existing patches of
 
 import copy
 import re
-from types import ModuleType
-from typing import Protocol, cast
+from typing import Protocol
 from urllib.parse import urlparse
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 
 class ProviderDiscoveryAPI(Protocol):
@@ -50,10 +49,6 @@ class ProviderDiscoveryAPI(Protocol):
         selected_model_id: str | None,
         provider_id: str | None = None,
     ) -> bool: ...
-
-
-def _config_api() -> ProviderDiscoveryAPI:
-    return cast(ProviderDiscoveryAPI, cast(ModuleType, config_api()))
 
 
 def _get_anthropic_fallback_env_vars() -> tuple[str, ...]:
@@ -103,7 +98,7 @@ def _resolve_provider_alias(name: str) -> str:
             return _agent_aliases[raw]
     except Exception:
         pass
-    return _config_api()._PROVIDER_ALIASES.get(raw, name)
+    return _config_module._PROVIDER_ALIASES.get(raw, name)
 
 
 def _is_known_model_provider(provider_id: str) -> bool:
@@ -113,7 +108,7 @@ def _is_known_model_provider(provider_id: str) -> bool:
         return False
     if pid.startswith("custom:"):
         return True
-    api = _config_api()
+    api = _config_module
     if pid in api._PROVIDER_DISPLAY or pid in api._PROVIDER_MODELS:
         return True
     try:
@@ -140,7 +135,7 @@ def _custom_provider_slug_from_name(name: object) -> str:
 
 
 def _custom_provider_entries(config_obj: dict | None = None) -> list[dict]:
-    source = config_obj if isinstance(config_obj, dict) else _config_api().cfg
+    source = config_obj if isinstance(config_obj, dict) else _config_module.cfg
     entries = source.get("custom_providers", [])
     if not isinstance(entries, list):
         return []
@@ -183,12 +178,12 @@ def _configured_model_options(raw_models: object) -> list[dict[str, str]]:
             labels[model_id] = label
     return [
         {"id": model_id, "label": labels.get(model_id, model_id)}
-        for model_id in _config_api()._configured_model_ids(raw_models)
+        for model_id in _config_module._configured_model_ids(raw_models)
     ]
 
 
 def _named_custom_provider_slugs(config_obj: dict | None = None) -> set[str]:
-    api = _config_api()
+    api = _config_module
     return {
         slug
         for slug in (
@@ -206,7 +201,7 @@ def _named_custom_provider_slug_for_provider(
     raw = str(provider or "").strip().lower()
     if not raw:
         return ""
-    api = _config_api()
+    api = _config_module
     raw_suffix = raw.removeprefix("custom:")
     for entry in api._custom_provider_entries(config_obj):
         entry_name = str(entry.get("name") or "").strip().lower()
@@ -226,7 +221,7 @@ def _resolve_configured_provider_id(
     resolve_alias: bool = True,
 ) -> str:
     """Normalize configured and named-custom provider identifiers."""
-    api = _config_api()
+    api = _config_module
     named_slug = api._named_custom_provider_slug_for_provider(provider, config_obj)
     if named_slug:
         return named_slug
@@ -256,7 +251,7 @@ def _canonicalise_provider_id(name: object) -> str:
     raw = str(name).strip().lower().replace("_", "-")
     if not raw:
         return ""
-    api = _config_api()
+    api = _config_module
     if raw in api._PROVIDER_DISPLAY or raw in api._PROVIDER_MODELS:
         return raw
     resolved = api._resolve_provider_alias(raw)
@@ -317,7 +312,7 @@ def _legacy_custom_api_key_env_name(provider_id: object) -> str:
 
 def _lookup_custom_api_key_env(provider_id: object) -> str | None:
     """Look up sanitized custom-provider env first, then legacy broken shape."""
-    api = _config_api()
+    api = _config_module
     env_name = api._api_key_env_name(provider_id)
     api_key = api._thread_local_env_value(env_name).strip()
     if api_key:
@@ -342,7 +337,7 @@ def _named_custom_provider_slug_for_base_url(
     base_url: object,
     config_obj: dict | None = None,
 ) -> str:
-    api = _config_api()
+    api = _config_module
     target = api._normalize_base_url_for_match(base_url)
     if not target:
         return ""
@@ -362,7 +357,7 @@ def _provider_is_known_or_configured(
     raw = str(provider_id or "").strip().lower()
     if not raw:
         return False
-    api = _config_api()
+    api = _config_module
     if api._named_custom_provider_slug_for_provider(raw, config_obj):
         return True
     if raw == "custom" or raw.startswith("custom:"):
@@ -388,7 +383,7 @@ def _seed_provider_models_from_core() -> None:
     except ImportError:
         return
 
-    api = _config_api()
+    api = _config_module
     webui_key_by_canonical: dict[str, str] = {}
     for webui_key in api._PROVIDER_MODELS:
         try:
@@ -460,7 +455,7 @@ _AMBIENT_GH_ENV_SOURCES = frozenset({"env:github_token", "env:gh_token"})
 def _is_ambient_gh_cli_entry(source: str, label: str, key_source: str) -> bool:
     """Return whether a credential was ambiently seeded from GitHub CLI."""
     source_lower = source.strip().lower()
-    api = _config_api()
+    api = _config_module
     return (
         source_lower in api._AMBIENT_GH_CLI_MARKERS
         or source_lower in api._AMBIENT_GH_ENV_SOURCES
@@ -499,7 +494,7 @@ def _format_nous_label(model_id: str) -> str:
     name_part = model_id.split("/", 1)[-1] if "/" in model_id else model_id
     if name_part.lower().startswith("minimax"):
         name_part = "MiniMax" + name_part[len("minimax") :]
-    return f"{_config_api()._format_ollama_label(name_part)} (via Nous)"
+    return f"{_config_module._format_ollama_label(name_part)} (via Nous)"
 
 
 _NOUS_FEATURED_THRESHOLD = 25
@@ -534,7 +529,7 @@ def _build_nous_featured_set(
     """Split a large Nous catalog into featured rows and a complete overflow."""
     if not live_ids:
         return [], []
-    api = _config_api()
+    api = _config_module
     if len(live_ids) <= api._NOUS_FEATURED_THRESHOLD:
         return list(live_ids), []
 
@@ -606,7 +601,7 @@ def _model_matches_picker_selection(
     if candidate == selected:
         return True
 
-    api = _config_api()
+    api = _config_module
     selected_bare = api._strip_picker_provider_hint(selected)
     candidate_bare = api._strip_picker_provider_hint(candidate)
     if selected_bare != candidate_bare:
@@ -647,7 +642,7 @@ def _split_picker_overflow_models(
     if not selected_model_id:
         return visible, extras
 
-    api = _config_api()
+    api = _config_module
     if any(
         api._model_matches_picker_selection(
             model.get("id", ""), selected_model_id, provider_id

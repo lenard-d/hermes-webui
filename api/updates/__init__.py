@@ -108,6 +108,10 @@ logger = logging.getLogger(__name__)
 
 # Version identity is process-stable and is passed once to the policy owner.
 WEBUI_VERSION: str = _detect_webui_version()
+
+from api.config.hooks import install_config_runtime_hooks
+
+install_config_runtime_hooks(webui_version=lambda: WEBUI_VERSION)
 AGENT_VERSION: str = _detect_agent_version()
 
 # The policy owner keeps process-stable version identity for no-git release

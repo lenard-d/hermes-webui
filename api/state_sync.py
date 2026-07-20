@@ -66,18 +66,18 @@ def _get_state_db(profile: Optional[str] = None):
         # the EXACT named profile, or write nowhere."
         try:
             from api.profiles import (
-                _resolve_profile_home_for_name,
-                _PROFILE_ID_RE,
-                _is_root_profile,
+                get_hermes_home_for_profile,
+                is_root_profile,
+                is_valid_profile_id,
             )
-            if not (_is_root_profile(profile) or _PROFILE_ID_RE.fullmatch(profile)):
+            if not (is_root_profile(profile) or is_valid_profile_id(profile)):
                 logger.warning(
                     "state_sync: refusing invalid profile name %r — skipping "
                     "write rather than leaking to the default state.db (#2762).",
                     profile,
                 )
                 return None
-            hermes_home = Path(_resolve_profile_home_for_name(profile)).expanduser().resolve()
+            hermes_home = Path(get_hermes_home_for_profile(profile)).expanduser().resolve()
         except Exception:
             logger.warning(
                 "state_sync: could not resolve profile %r — skipping write rather "

@@ -23,7 +23,7 @@ import pathlib
 import api.config as config
 
 REPO = pathlib.Path(__file__).parent.parent
-CONFIG_SRC = (REPO / "api" / "config_parts" / "model_catalog.py").read_text(
+CONFIG_SRC = (REPO / "api" / "config" / "model_catalog.py").read_text(
     encoding="utf-8"
 )
 
@@ -65,7 +65,7 @@ def test_openai_api_key_env_var_path_detects_openai_codex(monkeypatch):
     src = (
         _cfg.Path(__file__).parent.parent
         / "api"
-        / "config_parts"
+        / "config"
         / "model_catalog.py"
     ).read_text(encoding="utf-8")
     assert 'detected_providers.add("openai-codex")' in src, (

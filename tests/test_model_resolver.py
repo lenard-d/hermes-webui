@@ -960,6 +960,7 @@ def _available_models_with_provider(provider):
     old_cfg = dict(config.cfg)
     config.cfg['model'] = {'provider': provider}
     try:
+        config.invalidate_models_cache()
         return config.get_available_models()
     finally:
         config.cfg.clear()
@@ -1007,7 +1008,9 @@ def test_no_duplicate_when_default_model_is_prefixed():
 def test_default_provider_models_not_prefixed(monkeypatch):
     """The active provider's models remain bare (no @prefix added)."""
     import api.config as _cfg
-    monkeypatch.setattr(_cfg, "_read_live_provider_model_ids", lambda pid: ["claude-sonnet-5.0"] if pid == "anthropic" else [])
+    from api.config import model_catalog
+
+    monkeypatch.setattr(model_catalog, "_read_live_provider_model_ids", lambda pid: ["claude-sonnet-5.0"] if pid == "anthropic" else [])
     result = _available_models_with_provider('anthropic')
     groups = {g['provider']: g['models'] for g in result['groups']}
     if 'Anthropic' in groups:
@@ -1039,6 +1042,7 @@ def test_provider_config_object_list_catalog_uses_picker_supported_keys_6121(mon
         _cfg._cfg_mtime = 0.0
     monkeypatch.setattr(_cfg, "_read_live_provider_model_ids", lambda pid: [])
     try:
+        _cfg.invalidate_models_cache()
         result = _cfg.get_available_models()
     finally:
         _cfg.cfg.clear()
@@ -1088,6 +1092,7 @@ def _available_models_with_full_cfg(provider, default, base_url):
     _model_env_keys = ('HERMES_MODEL', 'OPENAI_MODEL', 'LLM_MODEL')
     _saved_env = {k: os.environ.pop(k, None) for k in _model_env_keys}
     try:
+        _cfg.invalidate_models_cache()
         return _cfg.get_available_models()
     finally:
         _cfg.cfg.clear()
@@ -1259,6 +1264,7 @@ def test_custom_endpoint_uses_model_config_api_key_for_model_discovery(monkeypat
     monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
     monkeypatch.delenv('API_KEY', raising=False)
     try:
+        _cfg.invalidate_models_cache()
         result = _cfg.get_available_models()
     finally:
         _cfg.cfg.clear()

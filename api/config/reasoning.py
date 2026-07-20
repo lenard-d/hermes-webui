@@ -6,7 +6,7 @@ import re
 import urllib.error
 import urllib.request
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 # ── Reasoning config (CLI parity for /reasoning) ─────────────────────────────
 # Mirrors hermes_constants.parse_reasoning_effort so WebUI can validate without
@@ -29,7 +29,7 @@ def parse_reasoning_effort(effort):
     eff = str(effort).strip().lower()
     if eff == "none":
         return {"enabled": False}
-    if eff in config_api().VALID_REASONING_EFFORTS:
+    if eff in _config_module.VALID_REASONING_EFFORTS:
         return {"enabled": True, "effort": eff}
     return None
 
@@ -193,7 +193,7 @@ def _nested_route_reasoning_denied(model: str) -> bool:
     lower = str(model or "").strip().lower()
     if not lower:
         return False
-    match = config_api()._NESTED_ROUTE_PATTERN.search(lower)
+    match = _config_module._NESTED_ROUTE_PATTERN.search(lower)
     if not match:
         return False
     tail = match.group(2)
@@ -257,7 +257,7 @@ def _zai_glm_classification(model_id: str, provider_id: str) -> str | None:
     ``get_reasoning_status`` (whether the composer renders an On/None toggle when
     the effort ladder is empty) so all three surfaces agree.
     """
-    api = config_api()
+    api = _config_module
     provider = api._resolve_provider_alias(str(provider_id or "").strip().lower())
     if provider != "zai":
         return None
@@ -300,7 +300,7 @@ def _zai_glm_reasoning_efforts_supported(
     for genuinely unknown models, which preserves the configured effort verbatim
     per #3505).
     """
-    cls = config_api()._zai_glm_classification(model_id, provider_id)
+    cls = _config_module._zai_glm_classification(model_id, provider_id)
     if cls is None:
         return None
     return cls == "effort"
@@ -319,7 +319,7 @@ def _zai_glm_thinking_toggle_supported(model_id: str, provider_id: str) -> bool 
     the composer can render an operable On/None control for GLM-4.5–5.1 models
     that accept the thinking toggle but not the effort ladder.
     """
-    cls = config_api()._zai_glm_classification(model_id, provider_id)
+    cls = _config_module._zai_glm_classification(model_id, provider_id)
     if cls is None:
         return None
     return cls in {"effort", "thinking"}
@@ -331,7 +331,7 @@ def _filter_reasoning_efforts_for_provider(
     provider_id: str,
 ) -> list[str]:
     """Apply provider/model quirks to otherwise valid reasoning effort levels."""
-    api = config_api()
+    api = _config_module
     normalized = [
         str(eff).strip().lower()
         for eff in efforts
@@ -429,7 +429,7 @@ def _provider_known_reasoning_capable(provider_id) -> bool:
     providers genuinely support it; for a truly unknown/custom provider, degrade
     'max' -> 'xhigh' so we never send a supra-ceiling level that would 400.
     """
-    api = config_api()
+    api = _config_module
     prov = api._resolve_provider_alias(str(provider_id or "").strip().lower())
     return prov in api._KNOWN_REASONING_PROVIDERS
 
@@ -475,7 +475,7 @@ def _is_pre_adaptive_anthropic(bare_model: str) -> bool:
 
 def _heuristic_reasoning_efforts(model_id: str, provider_id: str) -> list[str]:
     """Fallback when hermes_cli is unavailable."""
-    api = config_api()
+    api = _config_module
     model = api._strip_provider_hint_for_reasoning(model_id).lower()
     provider = api._resolve_provider_alias(str(provider_id or "").strip().lower())
     if not model or provider in {"cursor-acp", "copilot-acp"}:
@@ -526,7 +526,7 @@ def _models_dev_reasoning_efforts(model_id: str, provider_id: str) -> list[str] 
     caller should continue to compatibility fallbacks. A concrete list (including
     ``[]``) is authoritative.
     """
-    api = config_api()
+    api = _config_module
     model = api._strip_provider_hint_for_reasoning(model_id)
     provider = str(provider_id or "").strip().lower()
     if not model or not provider:
@@ -570,7 +570,7 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 def _get_lmstudio_reasoning_probe_api_key() -> str | None:
     """Resolve the LM Studio key for reasoning probes with WebUI precedence."""
-    config_data = config_api().cfg
+    config_data = _config_module.cfg
     model_cfg = config_data.get("model") or {}
     if isinstance(model_cfg, dict):
         active_provider = str(model_cfg.get("provider") or "").strip().lower()
@@ -628,7 +628,7 @@ def _lmstudio_reasoning_probe_options_fallback(
     # target, so a 3xx from the probe URL could exfiltrate the configured
     # LM Studio credential to an attacker-controlled host. A no-redirect opener
     # turns any 3xx into an HTTPError we swallow below. (#3837 security review)
-    api = config_api()
+    api = _config_module
     opener = urllib.request.build_opener(api._NoRedirectHandler)
     try:
         with opener.open(request, timeout=timeout) as response:  # nosec B310
@@ -685,7 +685,7 @@ def _lmstudio_model_reasoning_options(
     probes have no credential to leak, so they may use the richer CLI path.
     (#3837 security review)
     """
-    api = config_api()
+    api = _config_module
     if api_key:
         return api._lmstudio_reasoning_probe_options_fallback(
             model,
@@ -748,7 +748,7 @@ def resolve_model_reasoning_efforts(
     agree: 'max' is offered ONLY for models whose native ladder genuinely includes
     it, and is stripped everywhere it would be rejected/mishandled.
     """
-    api = config_api()
+    api = _config_module
     raw = api._resolve_model_reasoning_efforts_impl(model_id, provider_id, base_url)
     if not raw:
         return raw
@@ -776,7 +776,7 @@ def _resolve_model_reasoning_efforts_impl(
     base_url: str | None = None,
 ) -> list[str]:
     """Return supported reasoning-effort levels for *model_id*, or [] if none."""
-    api = config_api()
+    api = _config_module
     model = str(model_id or "").strip()
     if not model:
         return []
@@ -894,7 +894,7 @@ def coerce_reasoning_effort_for_model(
     base_url: str | None = None,
 ) -> str:
     """Return the closest supported effort for the target model/provider."""
-    api = config_api()
+    api = _config_module
     raw = str(effort or "").strip().lower()
     if not raw:
         return ""
@@ -1006,7 +1006,7 @@ def get_reasoning_status(
       - show_reasoning: bool — from ``display.show_reasoning`` (default True)
       - reasoning_effort: str — from ``agent.reasoning_effort`` ('' = default)
     """
-    api = config_api()
+    api = _config_module
     config_data = api._load_yaml_config_file(api._get_config_path())
     display_cfg = config_data.get("display") or {}
     agent_cfg = config_data.get("agent") or {}

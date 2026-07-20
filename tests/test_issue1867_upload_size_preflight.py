@@ -4,7 +4,7 @@ from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PY = ROOT / "api" / "config.py"
+CONFIG_PY = ROOT / "api" / "config" / "__init__.py"
 
 
 def _function_body(src: str, name: str) -> str:

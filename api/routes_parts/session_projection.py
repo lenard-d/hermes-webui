@@ -454,8 +454,8 @@ def _normalize_import_profile_value(value):
     if not profile:
         return None
     try:
-        from api.profiles import _PROFILE_ID_RE
-        if profile != "default" and not _PROFILE_ID_RE.fullmatch(profile):
+        from api.profiles import is_valid_profile_id
+        if profile != "default" and not is_valid_profile_id(profile):
             return ""
     except Exception:
         pass

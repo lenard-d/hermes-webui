@@ -15,7 +15,7 @@ CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")
 SESSION_EVENTS = Path("api/sessions/events.py").read_text(encoding="utf-8")
 PROFILES = "\n".join(
     Path(path).read_text(encoding="utf-8")
-    for path in ("api/profiles.py", "api/profiles_parts/cron_scope.py")
+    for path in ("api/profiles/__init__.py", "api/profiles/cron.py")
 )
 TURN_ADMISSION = Path("api/runs/admission.py").read_text(encoding="utf-8")
 

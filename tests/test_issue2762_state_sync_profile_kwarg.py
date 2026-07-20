@@ -420,7 +420,7 @@ def test_invalid_profile_name_refused_not_falls_back(two_profile_homes, bad_name
 
     The empty string is intentionally in the parametrize set because
     we want to confirm it's refused — ``_is_root_profile('')`` returns
-    False (per ``api/profiles.py:216-217`` it short-circuits on falsy
+    False (per ``api/profiles/__init__.py:216-217`` it short-circuits on falsy
     input), so an empty explicit profile fails both the
     ``_is_root_profile`` check and the regex, and the contract refuses
     the write. That's the expected behavior — an empty explicit name

@@ -73,9 +73,9 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         if not name:
             return bad(handler, "name is required")
         try:
-            from api.profiles import delete_profile_api, _validate_profile_name
+            from api.profiles import delete_profile_api, validate_profile_name
 
-            _validate_profile_name(name)
+            validate_profile_name(name)
             result = delete_profile_api(name)
             return j(handler, result)
         except PermissionError as e:

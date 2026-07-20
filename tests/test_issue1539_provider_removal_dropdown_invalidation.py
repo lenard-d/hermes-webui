@@ -221,7 +221,7 @@ class TestServerSideInvariantPreserved:
     ``set_provider_key`` cannot silently regress it."""
 
     def test_set_provider_key_invalidates_cache(self):
-        src = (REPO / "api" / "providers.py").read_text(encoding="utf-8")
+        src = (REPO / "api" / "providers" / "__init__.py").read_text(encoding="utf-8")
         # set_provider_key is the canonical write path — both add and remove
         # flow through it (remove_provider_key calls set_provider_key(pid, None)).
         m = re.search(

@@ -123,6 +123,7 @@ def _call_get_available_models(monkeypatch, tmp_path, auth_payload, *,
         _install_fake_base_url_probe(monkeypatch, probe_models or [])
 
     (tmp_path / "auth.json").write_text(json.dumps(auth_payload), encoding="utf-8")
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
 
     for var in ("OPENAI_API_KEY", "HERMES_API_KEY", "HERMES_OPENAI_API_KEY",

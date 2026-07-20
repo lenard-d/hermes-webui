@@ -25,7 +25,7 @@ def _function_body(src, name):
 
 
 def test_setting_in_defaults():
-    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+    src = (ROOT / "api" / "config" / "settings.py").read_text(
         encoding="utf-8"
     )
     assert '"worklog_details_expanded_default"' in src or "'worklog_details_expanded_default'" in src, \
@@ -36,7 +36,7 @@ def test_setting_in_defaults():
 
 
 def test_setting_in_bool_keys():
-    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+    src = (ROOT / "api" / "config" / "settings.py").read_text(
         encoding="utf-8"
     )
     assert re.search(r'_SETTINGS_BOOL_KEYS\b.*?worklog_details_expanded_default', src, re.DOTALL), \
@@ -44,7 +44,7 @@ def test_setting_in_bool_keys():
 
 
 def test_legacy_activity_feed_setting_migrates_without_remaining_primary_semantics():
-    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+    src = (ROOT / "api" / "config" / "settings.py").read_text(
         encoding="utf-8"
     )
     assert '"activity_feed_expanded_default"' in src, \

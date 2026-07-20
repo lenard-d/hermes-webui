@@ -63,7 +63,7 @@ def _src(name: str) -> str:
     ("filename", "hardened"),
     [
         ("onboarding/persistence.py", 'config.get("providers") or {}'),
-        ("providers.py", _HARDENED),
+        ("providers/__init__.py", _HARDENED),
         ("routes_parts/session_models.py", _HARDENED),
     ],
 )
@@ -108,7 +108,7 @@ def test_file_hardens_providers_key_read_against_none(filename, hardened):
         "onboarding/probe.py",
         "onboarding/setup.py",
         "onboarding/status.py",
-        "providers.py",
+        "providers/__init__.py",
         "routes_parts/session_models.py",
     ],
 )

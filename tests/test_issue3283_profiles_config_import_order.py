@@ -33,6 +33,7 @@ def test_profiles_first_then_config_still_initializes_active_profile(tmp_path):
 import os
 import api.profiles
 import api.config
+api.profiles.init_profile_state()
 print(os.environ.get('HERMES_HOME', ''))
 """
     proc = subprocess.run(

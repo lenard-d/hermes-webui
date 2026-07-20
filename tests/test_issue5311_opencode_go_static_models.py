@@ -6,10 +6,10 @@ and documented Go models endpoint while excluding preview/free-only Zen models.
 
 from pathlib import Path
 
-from api.model_catalog import PROVIDER_MODELS
+from api.config.static_catalog import PROVIDER_MODELS
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = (ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+CONFIG = (ROOT / "api" / "config" / "model_catalog.py").read_text(
     encoding="utf-8"
 )
 

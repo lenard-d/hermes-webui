@@ -216,10 +216,10 @@ def get_profile_cookie(handler) -> str | None:
     if not (morsel and morsel.value):
         return None
 
-    from api.profiles import _PROFILE_ID_RE
+    from api.profiles import is_valid_profile_id
 
     def _valid_profile_name(val: str) -> bool:
-        return val == 'default' or bool(_PROFILE_ID_RE.fullmatch(val))
+        return val == 'default' or is_valid_profile_id(val)
 
     raw_val = morsel.value
     try:

@@ -1012,7 +1012,7 @@ def test_server():
         "HERMES_HOME":                    str(TEST_STATE_DIR),
         "HERMES_CONFIG_PATH":             str(TEST_STATE_DIR / 'config.yaml'),
         # Belt-and-suspenders: HERMES_BASE_HOME hard-locks _DEFAULT_HERMES_HOME
-        # in api/profiles.py to the test state dir regardless of profile switching
+        # in api/profiles/__init__.py to the test state dir regardless of profile switching
         # or any os.environ mutation that happens inside the server process.
         # Without this, a profile switch or active_profile file in the real
         # ~/.hermes can redirect _get_active_hermes_home() out of the sandbox,

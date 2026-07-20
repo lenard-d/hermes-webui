@@ -599,7 +599,7 @@ def _handle_live_models(handler, parsed):
 
         # Static fallback — only reached when live fetch also failed.
         if not ids:
-            from api.config import _PROVIDER_MODELS as _pm
+            from api.config import PROVIDER_MODELS as _pm
             ids = [m["id"] for m in _pm.get(provider, [])]
         if not ids:
             return _finish({"provider": provider, "models": [], "count": 0})

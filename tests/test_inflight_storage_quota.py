@@ -5,7 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PY = (
-    REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
+    REPO_ROOT / "api" / "config" / "settings.py"
 ).read_text(encoding="utf-8")
 BOOT_JS = family_source("boot")
 UI_JS = family_source("ui")

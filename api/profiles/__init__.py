@@ -22,21 +22,8 @@ from typing import Optional  # noqa: F401 - compatibility export
 
 import yaml  # noqa: F401 - historical compatibility-facade export
 
-from api.sessions.events import publish_session_list_changed  # noqa: F401 - cron adapter seam
-from api.profiles_parts.facade import bind_profile_function, bind_profiles_api
-
+from api.sessions import publish_session_list_changed  # noqa: F401 - cron adapter seam
 logger = logging.getLogger(__name__)
-
-
-# Extracted profile modules resolve this compatibility facade at call time so
-# historical imports and monkeypatch seams continue to observe one namespace.
-bind_profiles_api(lambda: sys.modules[__name__])
-_PROFILE_FACADE = sys.modules[__name__]
-
-
-def profiles_api():
-    """Return this facade instance to functions rebound from profile parts."""
-    return _PROFILE_FACADE
 
 # ── Constants (match hermes_cli.profiles upstream) ─────────────────────────
 _PROFILE_ID_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
@@ -71,11 +58,9 @@ _tls = threading.local()
 _SKILL_HOME_MODULES = ("tools.skills_tool", "tools.skill_manager_tool")
 
 
-from api.profiles_parts import runtime_scope as _runtime_scope
+from api.profiles import runtime as _runtime_scope
 
-snapshot_skill_home_modules = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.snapshot_skill_home_modules
-)
+snapshot_skill_home_modules = _runtime_scope.snapshot_skill_home_modules
 
 
 def patch_skill_home_modules(home: Path) -> None:
@@ -91,9 +76,7 @@ def patch_skill_home_modules(home: Path) -> None:
             logger.debug("Failed to patch %s module", module_name)
 
 
-restore_skill_home_modules = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.restore_skill_home_modules
-)
+restore_skill_home_modules = _runtime_scope.restore_skill_home_modules
 
 
 def _unwrap_profile_home_to_base(home: Path) -> Path:
@@ -346,6 +329,16 @@ def _is_root_profile(name: str) -> bool:
         return name in _root_profile_name_cache
 
 
+def is_root_profile(name: str) -> bool:
+    """Return whether a logical profile name refers to the base Hermes home."""
+    return _is_root_profile(name)
+
+
+def is_valid_profile_id(name: object) -> bool:
+    """Return whether *name* is a syntactically valid named-profile identifier."""
+    return isinstance(name, str) and bool(_PROFILE_ID_RE.fullmatch(name))
+
+
 def _profiles_match(row_profile, active_profile) -> bool:
     """Return True if a session/project row's profile matches the active profile.
 
@@ -451,37 +444,27 @@ def get_active_hermes_home() -> Path:
 # serialized setup/restore lifecycle while this facade retains the lock seam.
 _cron_env_lock = threading.Lock()
 
-from api.profiles_parts import cron_scope as _cron_scope
+from api.profiles import cron as _cron_scope
 
-_cron_profile_context_depth = bind_profile_function(
-    _PROFILE_FACADE, _cron_scope._cron_profile_context_depth
-)
-_push_cron_profile_context_depth = bind_profile_function(
-    _PROFILE_FACADE, _cron_scope._push_cron_profile_context_depth
-)
-_pop_cron_profile_context_depth = bind_profile_function(
-    _PROFILE_FACADE, _cron_scope._pop_cron_profile_context_depth
-)
-_home_for_scheduled_cron_job = bind_profile_function(
-    _PROFILE_FACADE, _cron_scope._home_for_scheduled_cron_job
-)
-install_cron_scheduler_profile_isolation = bind_profile_function(
-    _PROFILE_FACADE, _cron_scope.install_cron_scheduler_profile_isolation
-)
+_cron_profile_context_depth = _cron_scope._cron_profile_context_depth
+_push_cron_profile_context_depth = _cron_scope._push_cron_profile_context_depth
+_pop_cron_profile_context_depth = _cron_scope._pop_cron_profile_context_depth
+_home_for_scheduled_cron_job = _cron_scope._home_for_scheduled_cron_job
+install_cron_scheduler_profile_isolation = _cron_scope.install_cron_scheduler_profile_isolation
 
 
 class cron_profile_context_for_home(_cron_scope.CronProfileContextForHome):
     """Compatibility facade for an explicit-home cron scope."""
 
     def __init__(self, home: Path):
-        super().__init__(_PROFILE_FACADE, home)
+        super().__init__(home)
 
 
 class cron_profile_context(_cron_scope.CronProfileContext):
     """Compatibility facade for the request-active cron scope."""
 
     def __init__(self):
-        super().__init__(_PROFILE_FACADE)
+        super().__init__()
 
 
 def get_hermes_home_for_profile(name: str) -> Path:
@@ -571,42 +554,18 @@ _NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES: tuple[str, ...] = (
 _secret_scope_available = None
 _hermes_home_override_available = None
 
-_stringify_env_value = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._stringify_env_value
-)
-get_profile_runtime_env = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.get_profile_runtime_env
-)
-filter_runtime_env_for_gateway_parity = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.filter_runtime_env_for_gateway_parity
-)
-_agent_registry_credential_env_names = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._agent_registry_credential_env_names
-)
-_profile_secret_env_names = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._profile_secret_env_names
-)
-_apply_profile_env_to_process = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._apply_profile_env_to_process
-)
-_resolve_secret_scope_module = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._resolve_secret_scope_module
-)
-_resolve_hermes_home_override = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._resolve_hermes_home_override
-)
-_profile_env_for_background_worker_impl = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.profile_env_for_background_worker
-)
-_profile_env_for_active_request_readonly_impl = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.profile_env_for_active_request_readonly
-)
-_profile_env_for_active_request_impl = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.profile_env_for_active_request
-)
-_profile_scope_for_detached_worker_impl = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope.profile_scope_for_detached_worker
-)
+_stringify_env_value = _runtime_scope._stringify_env_value
+get_profile_runtime_env = _runtime_scope.get_profile_runtime_env
+filter_runtime_env_for_gateway_parity = _runtime_scope.filter_runtime_env_for_gateway_parity
+_agent_registry_credential_env_names = _runtime_scope._agent_registry_credential_env_names
+_profile_secret_env_names = _runtime_scope._profile_secret_env_names
+_apply_profile_env_to_process = _runtime_scope._apply_profile_env_to_process
+_resolve_secret_scope_module = _runtime_scope._resolve_secret_scope_module
+_resolve_hermes_home_override = _runtime_scope._resolve_hermes_home_override
+_profile_env_for_background_worker_impl = _runtime_scope.profile_env_for_background_worker
+_profile_env_for_active_request_readonly_impl = _runtime_scope.profile_env_for_active_request_readonly
+_profile_env_for_active_request_impl = _runtime_scope.profile_env_for_active_request
+_profile_scope_for_detached_worker_impl = _runtime_scope.profile_scope_for_detached_worker
 
 
 @contextmanager
@@ -659,12 +618,8 @@ def profile_scope_for_detached_worker(
         yield
 
 
-_set_hermes_home = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._set_hermes_home
-)
-_reload_dotenv = bind_profile_function(
-    _PROFILE_FACADE, _runtime_scope._reload_dotenv
-)
+_set_hermes_home = _runtime_scope._set_hermes_home
+_reload_dotenv = _runtime_scope._reload_dotenv
 
 
 def init_profile_state() -> None:
@@ -856,33 +811,17 @@ _LIST_PROFILES_CACHE: tuple[list, float] | None = None
 _LIST_PROFILES_CACHE_TTL = 4.0
 _LIST_PROFILES_CACHE_LOCK = threading.Lock()
 
-from api.profiles_parts import catalog as _catalog
+from api.profiles import catalog as _catalog
 
-_skills_stats_lock_for = bind_profile_function(
-    _PROFILE_FACADE, _catalog._skills_stats_lock_for
-)
-_skill_tree_max_mtime_ns = bind_profile_function(
-    _PROFILE_FACADE, _catalog._skill_tree_max_mtime_ns
-)
-_compute_profile_skills_stats = bind_profile_function(
-    _PROFILE_FACADE, _catalog._compute_profile_skills_stats
-)
-_get_profile_skills_stats = bind_profile_function(
-    _PROFILE_FACADE, _catalog._get_profile_skills_stats
-)
-_invalidate_list_profiles_cache = bind_profile_function(
-    _PROFILE_FACADE, _catalog._invalidate_list_profiles_cache
-)
-_build_profile_rows_fast = bind_profile_function(
-    _PROFILE_FACADE, _catalog._build_profile_rows_fast
-)
-list_profiles_api = bind_profile_function(_PROFILE_FACADE, _catalog.list_profiles_api)
-_profile_visible_from_meta = bind_profile_function(
-    _PROFILE_FACADE, _catalog._profile_visible_from_meta
-)
-_default_profile_dict = bind_profile_function(
-    _PROFILE_FACADE, _catalog._default_profile_dict
-)
+_skills_stats_lock_for = _catalog._skills_stats_lock_for
+_skill_tree_max_mtime_ns = _catalog._skill_tree_max_mtime_ns
+_compute_profile_skills_stats = _catalog._compute_profile_skills_stats
+_get_profile_skills_stats = _catalog._get_profile_skills_stats
+_invalidate_list_profiles_cache = _catalog._invalidate_list_profiles_cache
+_build_profile_rows_fast = _catalog._build_profile_rows_fast
+list_profiles_api = _catalog.list_profiles_api
+_profile_visible_from_meta = _catalog._profile_visible_from_meta
+_default_profile_dict = _catalog._default_profile_dict
 
 
 # Provider-to-secret mapping is part of the profile-management persistence
@@ -909,51 +848,49 @@ _PROVIDER_ENV_MAP: dict[str, str] = {
     "nous": "NOUS_API_KEY",
 }
 
-from api.profiles_parts import management as _management
+from api.profiles import management as _management
 
-_validate_profile_name = bind_profile_function(
-    _PROFILE_FACADE, _management._validate_profile_name
+_validate_profile_name = _management._validate_profile_name
+validate_profile_name = _management._validate_profile_name
+_profiles_root = _management._profiles_root
+_resolve_named_profile_home = _management._resolve_named_profile_home
+_create_profile_fallback = _management._create_profile_fallback
+_resolve_env_var_for_provider = _management._resolve_env_var_for_provider
+_upsert_dotenv_line = _management._upsert_dotenv_line
+_write_api_key_to_dotenv = _management._write_api_key_to_dotenv
+_write_endpoint_to_config = _management._write_endpoint_to_config
+_clean_profile_config_value = _management._clean_profile_config_value
+_split_webui_provider_model_value = _management._split_webui_provider_model_value
+_strip_webui_provider_prefix = _management._strip_webui_provider_prefix
+_profile_model_selection_exists = _management._profile_model_selection_exists
+_get_available_models_for_profile_validation = (
+    _management._get_available_models_for_profile_validation
 )
-_profiles_root = bind_profile_function(_PROFILE_FACADE, _management._profiles_root)
-_resolve_named_profile_home = bind_profile_function(
-    _PROFILE_FACADE, _management._resolve_named_profile_home
-)
-_create_profile_fallback = bind_profile_function(
-    _PROFILE_FACADE, _management._create_profile_fallback
-)
-_resolve_env_var_for_provider = bind_profile_function(
-    _PROFILE_FACADE, _management._resolve_env_var_for_provider
-)
-_upsert_dotenv_line = bind_profile_function(
-    _PROFILE_FACADE, _management._upsert_dotenv_line
-)
-_write_api_key_to_dotenv = bind_profile_function(
-    _PROFILE_FACADE, _management._write_api_key_to_dotenv
-)
-_write_endpoint_to_config = bind_profile_function(
-    _PROFILE_FACADE, _management._write_endpoint_to_config
-)
-_clean_profile_config_value = bind_profile_function(
-    _PROFILE_FACADE, _management._clean_profile_config_value
-)
-_split_webui_provider_model_value = bind_profile_function(
-    _PROFILE_FACADE, _management._split_webui_provider_model_value
-)
-_strip_webui_provider_prefix = bind_profile_function(
-    _PROFILE_FACADE, _management._strip_webui_provider_prefix
-)
-_profile_model_selection_exists = bind_profile_function(
-    _PROFILE_FACADE, _management._profile_model_selection_exists
-)
-_get_available_models_for_profile_validation = bind_profile_function(
-    _PROFILE_FACADE,
-    _management._get_available_models_for_profile_validation,
-)
-_validate_profile_model_selection = bind_profile_function(
-    _PROFILE_FACADE, _management._validate_profile_model_selection
-)
-_write_model_defaults_to_config = bind_profile_function(
-    _PROFILE_FACADE, _management._write_model_defaults_to_config
-)
-create_profile_api = bind_profile_function(_PROFILE_FACADE, _management.create_profile_api)
-delete_profile_api = bind_profile_function(_PROFILE_FACADE, _management.delete_profile_api)
+_validate_profile_model_selection = _management._validate_profile_model_selection
+_write_model_defaults_to_config = _management._write_model_defaults_to_config
+create_profile_api = _management.create_profile_api
+delete_profile_api = _management.delete_profile_api
+
+
+def reload_profile_environment(home: Path) -> None:
+    """Reload process environment values from a known profile home."""
+    _reload_dotenv(home)
+
+
+def _install_config_profile_hooks() -> None:
+    import importlib
+
+    from api.config.hooks import install_config_runtime_hooks
+
+    install_config_runtime_hooks(
+        active_profile_name=lambda: importlib.import_module(__name__).get_active_profile_name(),
+        active_profile_home=lambda: importlib.import_module(__name__).get_active_hermes_home(),
+        active_profile_scope=profile_env_for_active_request,
+        detached_profile_scope=profile_scope_for_detached_worker,
+    )
+
+
+_install_config_profile_hooks()
+
+
+__all__ = tuple(name for name in globals() if not name.startswith("__"))

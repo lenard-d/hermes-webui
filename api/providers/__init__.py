@@ -5,6 +5,10 @@ Closes #586 (allow provider key update) and part of #604 (model picker
 multi-provider support).
 """
 
+# The entrypoint intentionally re-exports the historical provider API from its
+# credential, usage, and cost-history owners.
+# ruff: noqa: F401, F405
+
 from __future__ import annotations
 
 import atexit
@@ -40,56 +44,35 @@ from api.config import (
     _pool_entry_payloads,  # noqa: F401 -- credential-store facade dependency
     _read_live_provider_model_ids,
     _read_visible_codex_cache_model_ids,
-    _save_yaml_config_file,
     _thread_local_env_value,
     get_config,
     invalidate_models_cache,
-    reload_config,
 )
-from api.model_catalog import (
+from api.config.static_catalog import (
     PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
     PROVIDER_MODELS as _PROVIDER_MODELS,
 )
-from api.plugin_providers import (
+from api.config.plugin_providers import (
     effective_provider_display_name,
     effective_provider_env_var,  # noqa: F401 -- credential-store facade dependency
     is_plugin_model_provider,
     plugin_model_provider_ids,
 )
-from api.provider_parts import account_usage as _account_usage_part
-from api.provider_parts import cost_history as _cost_history_part
-from api.provider_parts import credential_store as _credential_store_part
-from api.provider_parts._binding import install_provider_part
+from api.providers.account_usage import *  # noqa: F403 - compatibility exports
+from api.providers.cost_history import *  # noqa: F403 - compatibility exports
+from api.providers.credentials import *  # noqa: F403 - compatibility exports
 
 logger = logging.getLogger(__name__)
 
 
-# Extracted provider modules are rebound into this compatibility facade so
-# existing imports and monkeypatches continue to observe one canonical seam.
-install_provider_part(globals(), _credential_store_part)
-install_provider_part(globals(), _account_usage_part)
-install_provider_part(globals(), _cost_history_part)
-atexit.register(globals()["_close_account_usage_probe_workers"])
+atexit.register(_close_account_usage_probe_workers)  # noqa: F405
 
-if TYPE_CHECKING:
-    _PROVIDER_CREDENTIAL_ENV_VARS = ()
-    _PROVIDER_ENV_VAR_ALIASES = {}
-    _OAUTH_PROVIDERS = frozenset()
-    _SELF_HOSTED_PROVIDER_IDS = frozenset()
-    _provider_env_var_for = _credential_store_part._provider_env_var_for
-    _provider_is_oauth = _credential_store_part._provider_is_oauth
-    _provider_has_key = _credential_store_part._provider_has_key
-    _provider_value_counts_as_api_key = _credential_store_part._provider_value_counts_as_api_key
-    _provider_has_shadowed_codex_oauth_value = _credential_store_part._provider_has_shadowed_codex_oauth_value
-    _get_provider_api_key = _credential_store_part._get_provider_api_key
-    _local_pool_snapshot = _credential_store_part._local_pool_snapshot
-    _load_env_file = _credential_store_part._load_env_file
-    _write_env_file = _credential_store_part._write_env_file
-    _custom_provider_name_matches = _credential_store_part._custom_provider_name_matches
-    invalidate_account_usage_status_cache = _account_usage_part.invalidate_account_usage_status_cache
-    _close_account_usage_probe_workers = _account_usage_part._close_account_usage_probe_workers
+from api.config.hooks import install_config_runtime_hooks
 
-
+install_config_runtime_hooks(
+    provider_has_credential=_provider_has_key,  # noqa: F405
+    credential_cache_invalidated=invalidate_account_usage_status_cache,  # noqa: F405
+)
 
 _PROVIDERS_CACHE_TTL_SECONDS = 30.0
 _providers_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
@@ -622,11 +605,9 @@ def _clean_provider_key_from_config(provider_id: str) -> None:
     2. ``model.api_key`` — top-level key (only if provider is active)
     3. ``custom_providers[].api_key`` — custom provider entries
 
-    Writes back to config.yaml only if something was actually removed.
-    Uses ``_cfg_lock`` to prevent TOCTOU races.
+    Writes back to config.yaml only if something was actually removed. Uses the
+    config package's atomic mutation boundary to prevent TOCTOU races.
     """
-    from api.config import _cfg_lock
-
     try:
         # Resolve through api.config at call time instead of the function imported
         # at module load. Several tests (and some profile flows) monkeypatch the
@@ -642,15 +623,12 @@ def _clean_provider_key_from_config(provider_id: str) -> None:
         return
 
     try:
-        import yaml as _yaml
+        from api.config import update_config
 
-        changed = False
-
-        with _cfg_lock:
-            raw = config_path.read_text(encoding="utf-8")
-            cfg = _yaml.safe_load(raw)
+        def remove_keys(cfg):
+            changed = False
             if not isinstance(cfg, dict):
-                return
+                return False
 
             # 1. Clean providers.<id>.api_key
             providers_cfg = cfg.get("providers") or {}
@@ -678,14 +656,13 @@ def _clean_provider_key_from_config(provider_id: str) -> None:
                                 del cp["api_key"]
                                 changed = True
 
-            if changed:
-                _save_yaml_config_file(config_path, cfg)
-        # Sync in-memory cache and bust model TTL cache
-        # MUST be called outside _cfg_lock to avoid deadlock:
-        # _cfg_lock is a threading.Lock (non-reentrant) and
-        # reload_config() also acquires _cfg_lock internally.
+            return changed
+
+        changed = update_config(remove_keys)
         if changed:
-            reload_config()
             invalidate_providers_cache()
     except Exception:
         logger.exception("Failed to clean provider key from config.yaml for %s", provider_id)
+
+
+__all__ = tuple(name for name in globals() if not name.startswith("__"))

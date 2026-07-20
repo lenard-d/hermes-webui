@@ -250,11 +250,11 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             return bad(handler, "name is required")
         try:
             from api.auth import ensure_trusted_auth_session
-            from api.profiles import switch_profile, _validate_profile_name
+            from api.profiles import switch_profile, validate_profile_name
             from api.helpers import build_profile_cookie
 
             if name != "default":
-                _validate_profile_name(name)
+                validate_profile_name(name)
             session_info = ensure_trusted_auth_session(handler)
             if getattr(handler, "_trusted_auth_session_rejected", False):
                 return bad(handler, "Authentication required", 401)

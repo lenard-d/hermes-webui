@@ -26,6 +26,7 @@ def test_invalidated_detached_build_cannot_overwrite_newer_publication(
     provenance, or disk snapshot, and must not disturb the current build owner.
     """
     from api import config
+    from api.config import model_catalog
 
     cache_path = tmp_path / "models_cache.json"
     source_fingerprint = {"test": "generation-fence"}
@@ -61,7 +62,7 @@ def test_invalidated_detached_build_cannot_overwrite_newer_publication(
     monkeypatch.setattr(config, "_load_models_cache_from_disk", lambda: None)
     monkeypatch.setattr(config, "_load_stale_models_cache_from_disk", lambda: None)
     monkeypatch.setattr(
-        config, "_static_models_catalog_without_live_probes", lambda: _catalog("fallback")
+        model_catalog, "_static_models_catalog_without_live_probes", lambda: _catalog("fallback")
     )
     monkeypatch.setattr(config, "_get_models_cache_path", lambda: cache_path)
     monkeypatch.setattr(config, "_models_cache_source_fingerprint", lambda: source_fingerprint)

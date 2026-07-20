@@ -207,7 +207,7 @@ class TestFontSizeSettingsValidation:
     """The backend settings contract must accept the persisted xlarge value."""
 
     def test_config_allows_extra_large_font_size(self):
-        config = _read("api/config_parts/settings_persistence.py")
+        config = _read("api/config/settings.py")
         assert '"font_size": {"small", "default", "large", "xlarge"}' in config, (
             "api/config.py must accept xlarge as a persisted font_size value"
         )

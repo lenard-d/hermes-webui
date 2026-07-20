@@ -1,19 +1,29 @@
 """Provider model-catalog construction and cache coordination.
 
-The mutable catalog, generation, provenance, and credential-pool state remains
-owned by :mod:`api.config`. The compatibility facade binds these complete
-implementations to its globals so historical monkeypatches and global mutations
-continue to resolve against that single authoritative state owner.
+The mutable catalog, generation, provenance, and credential-pool state is owned
+by :mod:`api.config.catalog_state` and shared with the disk-cache implementation.
 """
 
-# Functions in this owner are rebound to the ``api.config`` facade so legacy
-# monkeypatch seams and facade-owned state remain authoritative.
 # ruff: noqa: F821
 
 from __future__ import annotations
 
+import copy
+import json
 import logging
+import os
+import threading
+import time
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+
+from api import config as _config_module
+from api.config.catalog_state import (
+    MODEL_CATALOG_STATE,
+    import_legacy_model_catalog_state,
+    publish_legacy_model_catalog_state,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -21,37 +31,36 @@ logger = logging.getLogger(__name__)
 
 def _invalidate_models_build_locked() -> None:
     """Revoke publication rights from any detached catalog rebuild."""
-    global _models_cache_build_generation, _active_models_cache_build_generation
-    global _cache_build_in_progress
-    _models_cache_build_generation += 1
-    _active_models_cache_build_generation = None
-    _cache_build_in_progress = False
-    _cache_build_cv.notify_all()
+    MODEL_CATALOG_STATE.models_cache_build_generation += 1
+    MODEL_CATALOG_STATE.active_models_cache_build_generation = None
+    MODEL_CATALOG_STATE.cache_build_in_progress = False
+    MODEL_CATALOG_STATE.cache_build_cv.notify_all()
+    publish_legacy_model_catalog_state(_config_module)
 
 
 def _sync_models_cache_provenance() -> None:
     """Republish the atomic (snapshot, fingerprint) provenance pair.
 
-    MUST be called at every site that assigns ``_available_models_cache`` and
-    ``_available_models_cache_source_fingerprint`` (publish and invalidate),
+    MUST be called at every site that assigns ``MODEL_CATALOG_STATE.available_models_cache`` and
+    ``MODEL_CATALOG_STATE.available_models_cache_source_fingerprint`` (publish and invalidate),
     AFTER both have been set. It snapshots the current pair into one immutable
     tuple so ``_endpoint_advertised_model_ids`` reads both consistently with a
     single lock-free load. A reader that races between an underlying assignment
     and this call sees the PREVIOUS consistent tuple (never a torn pair); once
     this runs, readers see the new consistent pair.
     """
-    global _models_cache_provenance
-    snap = _available_models_cache
-    _models_cache_provenance = (
-        (snap, _available_models_cache_source_fingerprint) if snap is not None else None
+    snap = MODEL_CATALOG_STATE.available_models_cache
+    MODEL_CATALOG_STATE.models_cache_provenance = (
+        (snap, MODEL_CATALOG_STATE.available_models_cache_source_fingerprint) if snap is not None else None
     )
+    publish_legacy_model_catalog_state(_config_module)
 
 
 def _endpoint_advertised_model_ids(provider_id: str | None) -> frozenset | None:
     """Model ids the given provider's group advertised in the current catalog.
 
     Reads ONLY the already-published in-memory catalog snapshot
-    (``_available_models_cache``) — it never builds, live-probes, or touches
+    (``MODEL_CATALOG_STATE.available_models_cache``) — it never builds, live-probes, or touches
     disk, so it is safe to call on the per-turn send hot path. Returns:
 
       * a ``frozenset`` of the ids advertised by ``provider_id``'s own group
@@ -65,13 +74,12 @@ def _endpoint_advertised_model_ids(provider_id: str | None) -> frozenset | None:
     an ``openai/gpt-5.4`` sitting in the OpenRouter group) from masquerading as
     something this custom endpoint advertised.
     """
-    global _advertised_model_ids_memo
     # Single lock-free atomic read of the immutable (snapshot, fingerprint) pair
     # published by _sync_models_cache_provenance(). Reading one tuple can never
     # tear, and acquiring no lock means this per-send check adds no lock-ordering
-    # edge (no _cfg_lock ↔ _available_models_cache_lock deadlock) and never waits
+    # edge (no _cfg_lock ↔ MODEL_CATALOG_STATE.available_models_cache_lock deadlock) and never waits
     # behind a catalog rebuild.
-    provenance = _models_cache_provenance
+    provenance = MODEL_CATALOG_STATE.models_cache_provenance
     if provenance is None:
         return None
     snapshot, published_fp = provenance
@@ -82,17 +90,17 @@ def _endpoint_advertised_model_ids(provider_id: str | None) -> frozenset | None:
     # snapshot we're now reading. Only trust it for provenance when the
     # fingerprint captured AT PUBLISH TIME still matches the current runtime
     # fingerprint — the ``config_yaml`` axis of that fingerprint is the
-    # PROFILE-SPECIFIC config path (_get_config_path -> get_active_hermes_home),
+    # PROFILE-SPECIFIC config path (_config_module._get_config_path -> get_active_hermes_home),
     # so a match guarantees the snapshot belongs to the profile asking. Any
     # mismatch (foreign profile, config edit, stale) returns None so the caller
     # preserves the id verbatim rather than stripping against another profile's
     # catalog.
     try:
-        if published_fp != _models_cache_source_fingerprint():
+        if published_fp != _config_module._models_cache_source_fingerprint():
             return None
     except Exception:
         return None  # fingerprint unavailable → no trustworthy provenance
-    memo = _advertised_model_ids_memo
+    memo = MODEL_CATALOG_STATE.advertised_model_ids_memo
     # Identity check (``is``), not id(): holding the snapshot reference in the
     # memo keeps it alive, so a freed-then-reused id() can't cause a false hit.
     if memo is None or memo[0] is not snapshot:
@@ -120,7 +128,7 @@ def _endpoint_advertised_model_ids(provider_id: str | None) -> frozenset | None:
             )
             by_slug[slug] = by_slug.get(slug, frozenset()) | ids
         memo = (snapshot, by_slug)
-        _advertised_model_ids_memo = memo
+        MODEL_CATALOG_STATE.advertised_model_ids_memo = memo
     slug = str(provider_id or "").strip().lower()
     return memo[1].get(slug)
 
@@ -134,13 +142,13 @@ def _should_warn_budget(reason: str, cooldown_s: float | None = None) -> bool:
     callers in this process.
     """
     cooldown = (
-        _BUDGET_WARN_COOLDOWN_SECONDS if cooldown_s is None else float(cooldown_s)
+        MODEL_CATALOG_STATE.budget_warn_cooldown_seconds if cooldown_s is None else float(cooldown_s)
     )
     now = time.monotonic()
-    with _BUDGET_WARN_LOCK:
-        last = _BUDGET_WARN_STATE.get(reason)
+    with MODEL_CATALOG_STATE.budget_warn_lock:
+        last = MODEL_CATALOG_STATE.budget_warn_state.get(reason)
         if last is None or (now - last) >= cooldown:
-            _BUDGET_WARN_STATE[reason] = now
+            MODEL_CATALOG_STATE.budget_warn_state[reason] = now
             return True
         return False
 
@@ -172,12 +180,12 @@ def _configured_model_badges_from_static_catalog(
             }
         )
 
-    fallback_cfg = cfg.get("fallback_providers", []) if isinstance(cfg, dict) else []
+    fallback_cfg = _config_module.cfg.get("fallback_providers", []) if isinstance(_config_module.cfg, dict) else []
     if isinstance(fallback_cfg, list):
         for idx, entry in enumerate(fallback_cfg, start=1):
             if not isinstance(entry, dict):
                 continue
-            provider = _resolve_provider_alias(entry.get("provider"))
+            provider = _config_module._resolve_provider_alias(entry.get("provider"))
             model = str(entry.get("model") or "").strip()
             if not provider or not model:
                 continue
@@ -282,31 +290,31 @@ def _minimal_static_models_catalog() -> dict:
     try:
         active_provider = None
         cfg_base_url = ""
-        model_cfg = cfg.get("model", {}) if isinstance(cfg, dict) else {}
+        model_cfg = _config_module.cfg.get("model", {}) if isinstance(_config_module.cfg, dict) else {}
         if isinstance(model_cfg, dict):
             active_provider = model_cfg.get("provider")
             cfg_base_url = model_cfg.get("base_url", "") or ""
         if active_provider:
             try:
-                active_provider = _resolve_configured_provider_id(
-                    active_provider, cfg, base_url=cfg_base_url
+                active_provider = _config_module._resolve_configured_provider_id(
+                    active_provider, _config_module.cfg, base_url=cfg_base_url
                 )
             except Exception:
                 active_provider = str(active_provider or "").strip() or None
         if not active_provider:
             try:
-                _ap = _get_auth_store_path()
+                _ap = _config_module._get_auth_store_path()
                 if _ap.exists():
                     _store = json.loads(_ap.read_text(encoding="utf-8"))
                     active_provider = (
-                        _resolve_configured_provider_id(
-                            _store.get("active_provider"), cfg, base_url=cfg_base_url
+                        _config_module._resolve_configured_provider_id(
+                            _store.get("active_provider"), _config_module.cfg, base_url=cfg_base_url
                         )
                         or None
                     )
             except Exception:
                 pass
-        default_model = get_effective_default_model(cfg)
+        default_model = _config_module.get_effective_default_model(_config_module.cfg)
         groups: list[dict] = []
         if default_model:
             try:
@@ -320,7 +328,7 @@ def _minimal_static_models_catalog() -> dict:
                     "models": [{"id": default_model, "label": label}],
                 }
             )
-        return _annotate_fast_tier_model_groups({
+        return _config_module._annotate_fast_tier_model_groups({
             "active_provider": active_provider,
             "default_model": default_model,
             "configured_model_badges": {},
@@ -342,19 +350,21 @@ def _minimal_static_models_catalog() -> dict:
 def _static_models_catalog_without_live_probes() -> dict:
     """Return a network-free /api/models catalog from local config/auth only."""
     try:
-        from api.providers import _provider_has_key
+        from api.config.hooks import get_config_runtime_hooks
+
+        _provider_has_key = get_config_runtime_hooks().provider_has_credential
 
         active_provider = None
         cfg_base_url = ""
-        model_cfg = cfg.get("model", {}) if isinstance(cfg, dict) else {}
+        model_cfg = _config_module.cfg.get("model", {}) if isinstance(_config_module.cfg, dict) else {}
         if isinstance(model_cfg, dict):
             active_provider = model_cfg.get("provider")
             cfg_base_url = model_cfg.get("base_url", "") or ""
         if active_provider:
             try:
-                active_provider = _resolve_configured_provider_id(
+                active_provider = _config_module._resolve_configured_provider_id(
                     active_provider,
-                    cfg,
+                    _config_module.cfg,
                     base_url=cfg_base_url,
                 )
             except Exception:
@@ -362,14 +372,14 @@ def _static_models_catalog_without_live_probes() -> dict:
 
         auth_store: dict = {}
         try:
-            auth_store_path = _get_auth_store_path()
+            auth_store_path = _config_module._get_auth_store_path()
             if auth_store_path.exists():
                 auth_store = json.loads(auth_store_path.read_text(encoding="utf-8"))
                 if not active_provider:
                     active_provider = (
-                        _resolve_configured_provider_id(
+                        _config_module._resolve_configured_provider_id(
                             auth_store.get("active_provider"),
-                            cfg,
+                            _config_module.cfg,
                             base_url=cfg_base_url,
                         )
                         or None
@@ -377,16 +387,16 @@ def _static_models_catalog_without_live_probes() -> dict:
         except Exception:
             logger.debug("Failed to load auth store for static models catalog", exc_info=True)
 
-        default_model = get_effective_default_model(cfg)
+        default_model = _config_module.get_effective_default_model(_config_module.cfg)
         detected_providers: set[str] = set()
         configured_model_ids: dict[str, list[str]] = {}
         named_custom_groups: dict[str, dict[str, object]] = {}
         custom_group_models: list[dict] = []
         canonical_to_raw_provider_key: dict[str, str] = {}
-        providers_cfg = _get_providers_cfg()
+        providers_cfg = _config_module._get_providers_cfg()
 
         def _append_model_id(provider_id: str | None, model_id: object) -> None:
-            pid = _canonicalise_provider_id(provider_id)
+            pid = _config_module._canonicalise_provider_id(provider_id)
             mid = str(model_id or "").strip()
             if not pid or not mid:
                 return
@@ -406,26 +416,26 @@ def _static_models_catalog_without_live_probes() -> dict:
                         continue
                     if any(
                         isinstance(_entry, dict)
-                        and not _is_ambient_gh_cli_entry(
+                        and not _config_module._is_ambient_gh_cli_entry(
                             str(_entry.get("source", "") or ""),
                             str(_entry.get("label", "") or ""),
                             str(_entry.get("key_source", "") or ""),
                         )
                         for _entry in _entries
                     ):
-                        detected_providers.add(_resolve_provider_alias(str(_pid)))
+                        detected_providers.add(_config_module._resolve_provider_alias(str(_pid)))
         except Exception:
             logger.debug("Failed to inspect auth-store credential pool", exc_info=True)
 
         if isinstance(providers_cfg, dict):
             for provider_key, provider_cfg in providers_cfg.items():
-                canonical = _canonicalise_provider_id(provider_key)
+                canonical = _config_module._canonicalise_provider_id(provider_key)
                 if not canonical:
                     continue
                 is_known_provider = (
-                    canonical in _PROVIDER_MODELS
-                    or canonical in _PROVIDER_DISPLAY
-                    or _is_plugin_model_provider(canonical)
+                    canonical in _config_module._PROVIDER_MODELS
+                    or canonical in _config_module._PROVIDER_DISPLAY
+                    or _config_module._is_plugin_model_provider(canonical)
                 )
                 is_provider_config = isinstance(provider_cfg, dict)
                 if not (is_known_provider or is_provider_config):
@@ -437,47 +447,47 @@ def _static_models_catalog_without_live_probes() -> dict:
                         for key in ("api_key", "key_env", "base_url")
                     )
                     provider_models = provider_cfg.get("models")
-                    for model_id in _configured_model_ids(provider_models):
+                    for model_id in _config_module._configured_model_ids(provider_models):
                         _append_model_id(canonical, model_id)
                         has_local_signal = True
                     if has_local_signal:
                         detected_providers.add(canonical)
 
-        for provider_id in set(_PROVIDER_MODELS) | set(_PROVIDER_DISPLAY):
-            canonical = _canonicalise_provider_id(provider_id)
+        for provider_id in set(_config_module._PROVIDER_MODELS) | set(_config_module._PROVIDER_DISPLAY):
+            canonical = _config_module._canonicalise_provider_id(provider_id)
             if canonical and _provider_has_key(canonical):
                 detected_providers.add(canonical)
 
         # Plugin-only providers (e.g. 9router) are not in the static
-        # _PROVIDER_MODELS / _PROVIDER_DISPLAY tables and are detected above
+        # _config_module._PROVIDER_MODELS / _config_module._PROVIDER_DISPLAY tables and are detected above
         # only when the user puts them in `providers.<slug>`.  Plugins ship
         # with their own env-var wiring, so an installed-and-keyed plugin
         # provider should also enter the static catalog even without a
         # `providers:` block — otherwise the picker silently drops the
         # group when the live-rebuild cache is cold.
         try:
-            for _plugin_pid in list(_plugin_model_provider_profiles().keys()):
+            for _plugin_pid in list(_config_module._plugin_model_provider_profiles().keys()):
                 if not _plugin_pid or not _provider_has_key(_plugin_pid):
                     continue
-                _canonical = _canonicalise_provider_id(_plugin_pid) or _plugin_pid
+                _canonical = _config_module._canonicalise_provider_id(_plugin_pid) or _plugin_pid
                 if _canonical:
                     detected_providers.add(_canonical)
         except Exception:
             logger.debug("Plugin provider detection failed in static catalog", exc_info=True)
 
-        fallback_cfg = cfg.get("fallback_providers", []) if isinstance(cfg, dict) else []
+        fallback_cfg = _config_module.cfg.get("fallback_providers", []) if isinstance(_config_module.cfg, dict) else []
         if isinstance(fallback_cfg, list):
             for entry in fallback_cfg:
                 if not isinstance(entry, dict):
                     continue
-                provider = _resolve_provider_alias(entry.get("provider"))
+                provider = _config_module._resolve_provider_alias(entry.get("provider"))
                 if provider:
                     detected_providers.add(provider)
                     _append_model_id(provider, entry.get("model"))
 
-        for entry in _custom_provider_entries(cfg):
+        for entry in _config_module._custom_provider_entries(_config_module.cfg):
             provider_name = str(entry.get("name") or "").strip()
-            provider_slug = _custom_provider_slug_from_name(provider_name) or "custom"
+            provider_slug = _config_module._custom_provider_slug_from_name(provider_name) or "custom"
             if provider_slug != "custom":
                 named_custom_groups.setdefault(
                     provider_slug,
@@ -489,7 +499,7 @@ def _static_models_catalog_without_live_probes() -> dict:
             model_id = str(entry.get("model") or "").strip()
             if model_id:
                 configured_ids.append(model_id)
-            for configured_id in _configured_model_ids(entry.get("models")):
+            for configured_id in _config_module._configured_model_ids(entry.get("models")):
                 if configured_id not in configured_ids:
                     configured_ids.append(configured_id)
 
@@ -505,14 +515,14 @@ def _static_models_catalog_without_live_probes() -> dict:
 
         if cfg_base_url:
             detected_providers.add(
-                _named_custom_provider_slug_for_base_url(cfg_base_url, cfg)
+                _config_module._named_custom_provider_slug_for_base_url(cfg_base_url, _config_module.cfg)
                 or active_provider
                 or "custom"
             )
 
         if detected_providers:
             detected_providers = {
-                _canonicalise_provider_id(provider_id) or provider_id
+                _config_module._canonicalise_provider_id(provider_id) or provider_id
                 for provider_id in detected_providers
                 if provider_id
             }
@@ -527,7 +537,7 @@ def _static_models_catalog_without_live_probes() -> dict:
                         {
                             "provider": custom_group.get("name") or pid.replace("custom:", ""),
                             "provider_id": pid,
-                            "models": _apply_provider_prefix(
+                            "models": _config_module._apply_provider_prefix(
                                 group_models,
                                 pid,
                                 active_provider,
@@ -546,9 +556,9 @@ def _static_models_catalog_without_live_probes() -> dict:
                 if group_models or cfg_base_url or pid == active_provider:
                     groups.append(
                         {
-                            "provider": _PROVIDER_DISPLAY.get(pid, "Custom"),
+                            "provider": _config_module._PROVIDER_DISPLAY.get(pid, "Custom"),
                             "provider_id": pid,
-                            "models": _apply_provider_prefix(
+                            "models": _config_module._apply_provider_prefix(
                                 group_models,
                                 pid,
                                 active_provider,
@@ -557,15 +567,15 @@ def _static_models_catalog_without_live_probes() -> dict:
                     )
                 continue
 
-            provider_name = _PROVIDER_DISPLAY.get(pid, pid.replace("-", " ").title())
+            provider_name = _config_module._PROVIDER_DISPLAY.get(pid, pid.replace("-", " ").title())
             raw_key = canonical_to_raw_provider_key.get(pid, pid)
-            provider_cfg = _get_provider_cfg(raw_key)
+            provider_cfg = _config_module._get_provider_cfg(raw_key)
             raw_models = []
             if isinstance(provider_cfg, dict) and "models" in provider_cfg:
-                raw_models = _configured_model_options(provider_cfg["models"])
+                raw_models = _config_module._configured_model_options(provider_cfg["models"])
             if not raw_models:
-                raw_models = copy.deepcopy(_PROVIDER_MODELS.get(pid, []))
-            # Plugin-only providers (e.g. 9router) are not in _PROVIDER_MODELS
+                raw_models = copy.deepcopy(_config_module._PROVIDER_MODELS.get(pid, []))
+            # Plugin-only providers (e.g. 9router) are not in _config_module._PROVIDER_MODELS
             # and rarely ship a `models:` allowlist in providers.<slug>, so
             # the static catalog above would render them as empty groups that
             # the picker filters out. Fall back to the plugin's own
@@ -573,8 +583,8 @@ def _static_models_catalog_without_live_probes() -> dict:
             # curated, network-free subset on the cold path. The live
             # rebuild (_build_available_models_uncached) does a full
             # /v1/models fetch and supersedes this view on the next call.
-            if not raw_models and _is_plugin_model_provider(pid):
-                _plugin_profile = _plugin_model_provider_profiles().get(
+            if not raw_models and _config_module._is_plugin_model_provider(pid):
+                _plugin_profile = _config_module._plugin_model_provider_profiles().get(
                     (pid or "").strip().lower()
                 )
                 if _plugin_profile is not None:
@@ -590,12 +600,12 @@ def _static_models_catalog_without_live_probes() -> dict:
             # Without this, the earlier plugin-fallback pass only seeds
             # `raw_models` when `fallback_models` is non-empty; the cold-cache
             # picker still silently drops a keyed plugin with no models yet.
-            if raw_models or _is_plugin_model_provider(pid):
+            if raw_models or _config_module._is_plugin_model_provider(pid):
                 groups.append(
                     {
                         "provider": provider_name,
                         "provider_id": pid,
-                        "models": _apply_provider_prefix(raw_models, pid, active_provider),
+                        "models": _config_module._apply_provider_prefix(raw_models, pid, active_provider),
                     }
                 )
 
@@ -622,7 +632,7 @@ def _static_models_catalog_without_live_probes() -> dict:
                         }
                     )
 
-        _deduplicate_model_ids(groups)
+        _config_module._deduplicate_model_ids(groups)
         groups = [
             group
             for group in groups
@@ -633,7 +643,7 @@ def _static_models_catalog_without_live_probes() -> dict:
             # hasn't completed). Otherwise they silently drop from the
             # picker and look "not installed" — the same 9router-empty-group
             # regression this branch was added to fix.
-            or _is_plugin_model_provider(str(group.get("provider_id") or ""))
+            or _config_module._is_plugin_model_provider(str(group.get("provider_id") or ""))
         ]
 
         providers_with_keys: set[str] = set()
@@ -641,7 +651,7 @@ def _static_models_catalog_without_live_probes() -> dict:
             _pool = auth_store.get("credential_pool", {}) if isinstance(auth_store, dict) else {}
             if isinstance(_pool, dict):
                 for _pid in _pool:
-                    _canonical = _canonicalise_provider_id(_pid)
+                    _canonical = _config_module._canonicalise_provider_id(_pid)
                     if _canonical:
                         providers_with_keys.add(_canonical)
         except Exception:
@@ -653,7 +663,7 @@ def _static_models_catalog_without_live_probes() -> dict:
                     or _pv.get("key_env")
                     or _pv.get("base_url")
                 ):
-                    _canonical = _canonicalise_provider_id(_pk)
+                    _canonical = _config_module._canonicalise_provider_id(_pk)
                     if _canonical:
                         providers_with_keys.add(_canonical)
         except Exception:
@@ -673,7 +683,7 @@ def _static_models_catalog_without_live_probes() -> dict:
 
         model_aliases: dict[str, str] = {}
         try:
-            raw_aliases = cfg.get("model", {}).get("aliases", {})
+            raw_aliases = _config_module.cfg.get("model", {}).get("aliases", {})
             if isinstance(raw_aliases, dict):
                 model_aliases = {
                     str(k).strip(): str(v).strip()
@@ -686,7 +696,7 @@ def _static_models_catalog_without_live_probes() -> dict:
         if not groups and default_model:
             return copy.deepcopy(_minimal_static_models_catalog())
 
-        return _annotate_fast_tier_model_groups({
+        return _config_module._annotate_fast_tier_model_groups({
             "active_provider": active_provider,
             "default_model": default_model,
             "configured_model_badges": _configured_model_badges_from_static_catalog(
@@ -713,7 +723,7 @@ def _credential_pool_profile_tag() -> str:
     crossing profile boundaries.
     """
     try:
-        return str(_get_auth_store_path())
+        return str(_config_module._get_auth_store_path())
     except Exception:
         return ""
 
@@ -725,8 +735,8 @@ def _pool_entry_payloads(provider_id: str) -> list[dict[str, Any]]:
     because that can materialize server-default credentials into a named
     profile's auth store. In that mode, read raw auth.json payloads only.
     """
-    _pid = _resolve_provider_alias(provider_id)
-    if bool(getattr(_thread_ctx, "block_process_env_fallback", False)):
+    _pid = _config_module._resolve_provider_alias(provider_id)
+    if bool(getattr(_config_module._thread_ctx, "block_process_env_fallback", False)):
         try:
             from hermes_cli.auth import read_credential_pool as _read_credential_pool
 
@@ -737,7 +747,7 @@ def _pool_entry_payloads(provider_id: str) -> list[dict[str, Any]]:
         for entry in raw_entries:
             if not isinstance(entry, dict):
                 continue
-            if _is_ambient_gh_cli_entry(
+            if _config_module._is_ambient_gh_cli_entry(
                 str(entry.get("source", "") or ""),
                 str(entry.get("label", "") or ""),
                 str(entry.get("key_source", "") or ""),
@@ -750,25 +760,25 @@ def _pool_entry_payloads(provider_id: str) -> list[dict[str, Any]]:
         from agent.credential_pool import load_pool as _load_pool
 
         _ck = (_credential_pool_profile_tag(), _pid)
-        _cached = _CREDENTIAL_POOL_CACHE.get(_ck)
+        _cached = MODEL_CATALOG_STATE.credential_pool_cache.get(_ck)
         if _cached is not None:
             _cp_ts, _cp_pool = _cached
             if (time.time() - _cp_ts) < 86400.0:
                 _all_entries = _cp_pool.entries() if _cp_pool is not None and hasattr(_cp_pool, "entries") else []
             else:
                 _cp_pool = _load_pool(_pid)
-                _CREDENTIAL_POOL_CACHE[_ck] = (time.time(), _cp_pool)
+                MODEL_CATALOG_STATE.credential_pool_cache[_ck] = (time.time(), _cp_pool)
                 _all_entries = _cp_pool.entries() if _cp_pool is not None and hasattr(_cp_pool, "entries") else []
         else:
             _cp_pool = _load_pool(_pid)
-            _CREDENTIAL_POOL_CACHE[_ck] = (time.time(), _cp_pool)
+            MODEL_CATALOG_STATE.credential_pool_cache[_ck] = (time.time(), _cp_pool)
             _all_entries = _cp_pool.entries() if _cp_pool is not None and hasattr(_cp_pool, "entries") else []
     except ImportError:
         return []
 
     payloads = []
     for entry in _all_entries:
-        if _is_ambient_gh_cli_entry(
+        if _config_module._is_ambient_gh_cli_entry(
             str(getattr(entry, "source", "") or ""),
             str(getattr(entry, "label", "") or ""),
             str(getattr(entry, "key_source", "") or ""),
@@ -807,7 +817,7 @@ def _has_explicit_pool_credentials(provider_id: str) -> bool:
     """Return True when the credential pool has at least one non-ambient entry
     for *provider_id* (i.e. not a gh-cli / GITHUB_TOKEN auto-detect).
 
-    Reuses ``_CREDENTIAL_POOL_CACHE`` so that callers on hot paths (provider
+    Reuses ``MODEL_CATALOG_STATE.credential_pool_cache`` so that callers on hot paths (provider
     detection, model listing, live-model fetch) don't pay the ~10s load_pool
     cost more than once per TTL window.
     """
@@ -815,29 +825,11 @@ def _has_explicit_pool_credentials(provider_id: str) -> bool:
 
 
 def _current_webui_version() -> str | None:
-    """Lazy resolver for the WebUI version, used to stamp the disk cache (#1633).
+    """Return the version supplied by the downstream update layer."""
+    from api.config.hooks import get_config_runtime_hooks
 
-    `api.updates` imports `api.config` at module-load time, so we cannot
-    `from api.updates import WEBUI_VERSION` at the top of this module without a
-    circular import. Instead we resolve lazily on each cache load/save.
-
-    Returns the runtime version string (e.g. ``v0.50.293``) when api.updates
-    has been imported, or None if it isn't loaded yet (boot-time corner case
-    before the server has finished initializing). A None return is treated as
-    "do not stamp / do not validate" by the cache layer so cache reads/writes
-    that happen during early init still work — the next call after init will
-    stamp normally.
-    """
-    try:
-        # Read attribute via dotted lookup so we don't add an import-time edge.
-        import sys as _sys
-        mod = _sys.modules.get('api.updates')
-        if mod is None:
-            return None
-        v = getattr(mod, 'WEBUI_VERSION', None)
-        return str(v) if v else None
-    except Exception:
-        return None
+    value = get_config_runtime_hooks().webui_version()
+    return str(value) if value else None
 
 
 def _get_label_for_model(model_id: str, existing_groups: list) -> str:
@@ -880,7 +872,7 @@ def _get_label_for_model(model_id: str, existing_groups: list) -> str:
 def _read_live_provider_model_ids(provider_id: str) -> list[str]:
     """Return live model IDs from Hermes CLI for a provider, or [] on failure.
 
-    WebUI's static ``_PROVIDER_MODELS`` table is only a fallback.  The agent CLI
+    WebUI's static ``_config_module._PROVIDER_MODELS`` table is only a fallback.  The agent CLI
     owns the provider registry and catalog-discovery logic, so ordinary picker
     groups should ask ``hermes_cli.models.provider_model_ids()`` first (#1240).
     Provider aliases are tried as a secondary lookup because WebUI keeps a few
@@ -897,7 +889,7 @@ def _read_live_provider_model_ids(provider_id: str) -> list[str]:
 
     candidates = [pid]
     try:
-        alias = _resolve_provider_alias(pid)
+        alias = _config_module._resolve_provider_alias(pid)
     except Exception:
         alias = ""
     if alias and alias not in candidates:
@@ -924,7 +916,7 @@ def _read_live_provider_model_ids(provider_id: str) -> list[str]:
 
 def _models_from_live_provider_ids(provider_id: str, live_ids: list[str]) -> list[dict]:
     """Convert Hermes CLI model ids into WebUI picker model entries."""
-    formatter = _format_ollama_label if provider_id in ("ollama", "ollama-cloud") else None
+    formatter = _config_module._format_ollama_label if provider_id in ("ollama", "ollama-cloud") else None
     models: list[dict] = []
     seen: set[str] = set()
     for mid in live_ids:
@@ -940,7 +932,7 @@ def _models_from_live_provider_ids(provider_id: str, live_ids: list[str]) -> lis
 
 def _moa_preset_models_from_config(config_obj: dict | None = None) -> list[dict]:
     """Return enabled MoA presets from local config as picker model entries."""
-    source = config_obj if isinstance(config_obj, dict) else cfg
+    source = config_obj if isinstance(config_obj, dict) else _config_module.cfg
     moa_cfg = source.get("moa") if isinstance(source, dict) else None
     if not isinstance(moa_cfg, dict) or not bool(moa_cfg.get("enabled", True)):
         return []
@@ -969,7 +961,7 @@ def _read_visible_codex_cache_model_ids() -> list[str]:
     in its picker (notably ``gpt-5.3-codex-spark`` from #1680), so the WebUI
     merges this visible local catalog to stay in sync with Codex itself.
     """
-    codex_home = Path(os.getenv("CODEX_HOME", "").strip() or (HOME / ".codex")).expanduser()
+    codex_home = Path(os.getenv("CODEX_HOME", "").strip() or (_config_module.HOME / ".codex")).expanduser()
     cache_path = codex_home / "models_cache.json"
     try:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -1004,6 +996,7 @@ def _read_visible_codex_cache_model_ids() -> list[str]:
 
 
 def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = False) -> dict:
+    import_legacy_model_catalog_state(_config_module)
     """
     Return available models grouped by provider.
 
@@ -1032,27 +1025,24 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
     checks that need a real live rebuild while preserving the default cache
     contract for every existing caller.
     """
-    global _cache_build_in_progress, _available_models_cache, _available_models_cache_ts
-    global _available_models_live_rebuild_ts, _available_models_cache_source_fingerprint, _cache_build_cv
-    global _models_cache_build_generation, _active_models_cache_build_generation
     # Config mtime check — must come before any config reads.
     # (Test #585 verifies _current_mtime appears before active_provider = None)
     try:
-        _current_path = _get_config_path()
+        _current_path = _config_module._get_config_path()
         _current_mtime = _current_path.stat().st_mtime
     except OSError:
-        _current_path = _get_config_path()
+        _current_path = _config_module._get_config_path()
         _current_mtime = 0.0
-    path_changed = _current_path != _cfg_path
-    mtime_stale = _current_mtime != _cfg_mtime
-    if path_changed or (mtime_stale and not _cfg_has_in_memory_overrides()):
-        reload_config_if_stale()
+    path_changed = _current_path != _config_module._cfg_path
+    mtime_stale = _current_mtime != _config_module._cfg_mtime
+    if path_changed or (mtime_stale and not _config_module._cfg_has_in_memory_overrides()):
+        _config_module.reload_config_if_stale()
     # ── COLD PATH helper ─────────────────────────────────────────────────────
-    # Extracted so it runs inside _available_models_cache_lock (RLock) to
+    # Extracted so it runs inside MODEL_CATALOG_STATE.available_models_cache_lock (RLock) to
     # prevent thundering-herd: only one thread rebuilds while others wait.
     def _build_available_models_uncached() -> dict:
         active_provider = None
-        default_model = get_effective_default_model(cfg)
+        default_model = _config_module.get_effective_default_model(_config_module.cfg)
         groups = []
 
         def _norm_model_id(model_id: str) -> str:
@@ -1100,12 +1090,12 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                         "label": "Primary",
                     }
                 )
-            fallback_cfg = cfg.get("fallback_providers", [])
+            fallback_cfg = _config_module.cfg.get("fallback_providers", [])
             if isinstance(fallback_cfg, list):
                 for idx, entry in enumerate(fallback_cfg, start=1):
                     if not isinstance(entry, dict):
                         continue
-                    provider = _resolve_provider_alias(entry.get("provider"))
+                    provider = _config_module._resolve_provider_alias(entry.get("provider"))
                     model = str(entry.get("model") or "").strip()
                     if not provider or not model:
                         continue
@@ -1175,7 +1165,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
 
         # 1. Read config.yaml model section
         cfg_base_url = ""  # must be defined before conditional blocks (#117)
-        model_cfg = cfg.get("model", {})
+        model_cfg = _config_module.cfg.get("model", {})
         cfg_base_url = ""
         if isinstance(model_cfg, str):
             pass  # default_model already set by get_effective_default_model
@@ -1191,24 +1181,24 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # user-facing name from config.yaml (``provider: ollama-local``) and
         # route it through the same ``custom:<name>`` slug the picker emits.
         if active_provider:
-            active_provider = _resolve_configured_provider_id(
+            active_provider = _config_module._resolve_configured_provider_id(
                 active_provider,
-                cfg,
+                _config_module.cfg,
                 base_url=cfg_base_url,
             )
 
         # 2. Read auth store (active_provider fallback + credential_pool inspection)
         auth_store = {}
-        auth_store_path = _get_auth_store_path()
+        auth_store_path = _config_module._get_auth_store_path()
         if auth_store_path.exists():
             try:
                 import json as _j
 
                 auth_store = _j.loads(auth_store_path.read_text(encoding="utf-8"))
                 if not active_provider:
-                    active_provider = _resolve_configured_provider_id(
+                    active_provider = _config_module._resolve_configured_provider_id(
                         auth_store.get("active_provider"),
-                        cfg,
+                        _config_module.cfg,
                         base_url=cfg_base_url,
                     )
             except Exception:
@@ -1227,11 +1217,11 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
 
                     for _pid in list(_pool.keys()):
                         try:
-                            _canonical_pid = _resolve_provider_alias(str(_pid))
+                            _canonical_pid = _config_module._resolve_provider_alias(str(_pid))
                             # Check credential pool cache first (profile-scoped key
                             # so a pool loaded under another profile can't leak in).
                             _ck = (_credential_pool_profile_tag(), _pid)
-                            _cached = _CREDENTIAL_POOL_CACHE.get(_ck)
+                            _cached = MODEL_CATALOG_STATE.credential_pool_cache.get(_ck)
                             if _cached is not None:
                                 _cp_ts, _cp_pool = _cached
                                 if (time.time() - _cp_ts) < 86400.0:
@@ -1239,22 +1229,22 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                                 else:
                                     _lp_t0 = time.monotonic()
                                     _cp_pool = _load_pool(_pid)
-                                    _CREDENTIAL_POOL_CACHE[_ck] = (time.time(), _cp_pool)
+                                    MODEL_CATALOG_STATE.credential_pool_cache[_ck] = (time.time(), _cp_pool)
                                     _all_entries = _cp_pool.entries()
                             else:
                                 _lp_t0 = time.monotonic()
                                 _cp_pool = _load_pool(_pid)
-                                _CREDENTIAL_POOL_CACHE[_ck] = (time.time(), _cp_pool)
+                                MODEL_CATALOG_STATE.credential_pool_cache[_ck] = (time.time(), _cp_pool)
                                 _all_entries = _cp_pool.entries()
                             _explicit = [
                                 e for e in _all_entries
-                                if not _is_ambient_gh_cli_entry(
+                                if not _config_module._is_ambient_gh_cli_entry(
                                     str(getattr(e, "source", "") or ""),
                                     str(getattr(e, "label", "") or ""),
                                     str(getattr(e, "key_source", "") or ""),
                                 )
                             ]
-                            if _explicit and _is_known_model_provider(_canonical_pid):
+                            if _explicit and _config_module._is_known_model_provider(_canonical_pid):
                                 detected_providers.add(_canonical_pid)
                         except Exception:
                             logger.debug("credential_pool.load_pool(%s) failed", _pid)
@@ -1264,7 +1254,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                             continue
                         _has_explicit_cred = any(
                             isinstance(_entry, dict)
-                            and not _is_ambient_gh_cli_entry(
+                            and not _config_module._is_ambient_gh_cli_entry(
                                 str(_entry.get("source", "") or ""),
                                 str(_entry.get("label", "") or ""),
                                 str(_entry.get("key_source", "") or ""),
@@ -1272,8 +1262,8 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                             for _entry in _entries
                         )
                         if _has_explicit_cred:
-                            _canonical_pid = _resolve_provider_alias(str(_pid))
-                            if _is_known_model_provider(_canonical_pid):
+                            _canonical_pid = _config_module._resolve_provider_alias(str(_pid))
+                            if _config_module._is_known_model_provider(_canonical_pid):
                                 detected_providers.add(_canonical_pid)
         except Exception:
             logger.debug("Failed to inspect credential_pool from auth store")
@@ -1316,12 +1306,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             logger.debug("Failed to detect auth providers from hermes")
 
         if not _hermes_auth_used:
-            try:
-                from api.profiles import get_active_hermes_home as _gah2
-
-                hermes_env_path = _gah2() / ".env"
-            except ImportError:
-                hermes_env_path = _DEFAULT_HERMES_HOME / ".env"
+            hermes_env_path = _config_module._get_config_path().parent / ".env"
             env_keys = {}
             if hermes_env_path.exists():
                 try:
@@ -1333,7 +1318,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 except Exception:
                     logger.debug("Failed to parse hermes env file")
             all_env = {**env_keys}
-            _anthropic_env_vars = _get_anthropic_fallback_env_vars()
+            _anthropic_env_vars = _config_module._get_anthropic_fallback_env_vars()
             for k in (
                 *_anthropic_env_vars,
                 "OPENAI_API_KEY",
@@ -1354,7 +1339,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 "AWS_ACCESS_KEY_ID",
                 "AWS_SECRET_ACCESS_KEY",
             ):
-                val = _thread_local_env_value(k).strip()
+                val = _config_module._thread_local_env_value(k).strip()
                 if val:
                     all_env[k] = val
             if any(all_env.get(env_var) for env_var in _anthropic_env_vars):
@@ -1410,7 +1395,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # without setting the corresponding env var. (#604)
         #
         # Gating: only seed picker groups for keys whose canonical id is known
-        # to ``_PROVIDER_MODELS`` / ``_PROVIDER_DISPLAY``, or whose value is a
+        # to ``_config_module._PROVIDER_MODELS`` / ``_config_module._PROVIDER_DISPLAY``, or whose value is a
         # dict-shaped provider config (custom/local). Scalar siblings under
         # ``providers:`` (e.g. ``providers.only_configured: true``) are config
         # flags, not providers, and must not render as phantom picker groups
@@ -1422,25 +1407,25 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # and a phantom ``Opencode_Go`` group for the config-key form (#1568).
         # The same applies to mixed-case ids like ``OpenCode-Go`` and to
         # legitimate aliases like ``z-ai`` → ``zai``.
-        _cfg_providers = _get_providers_cfg()
+        _cfg_providers = _config_module._get_providers_cfg()
         # Map canonical provider IDs back to raw config keys so the
         # generic-provider branch can preserve mixed-case/underscore
         # provider_cfg values (#2245).
         _canonical_to_raw_provider_key: dict[str, str] = {}
         if isinstance(_cfg_providers, dict):
             for _pid_key, _provider_cfg in _cfg_providers.items():
-                _canonical = _canonicalise_provider_id(_pid_key)
+                _canonical = _config_module._canonicalise_provider_id(_pid_key)
                 if not _canonical:
                     continue
 
-                # See the gating comment on the block above. ``_PROVIDER_MODELS``
-                # / ``_PROVIDER_DISPLAY`` membership accepts known providers and
+                # See the gating comment on the block above. ``_config_module._PROVIDER_MODELS``
+                # / ``_config_module._PROVIDER_DISPLAY`` membership accepts known providers and
                 # aliases; ``isinstance(_provider_cfg, dict)`` accepts custom
                 # entries that supply their own models/api_key/base_url. (#2399)
                 _is_known_provider = (
-                    _canonical in _PROVIDER_MODELS
-                    or _canonical in _PROVIDER_DISPLAY
-                    or _is_plugin_model_provider(_canonical)
+                    _canonical in _config_module._PROVIDER_MODELS
+                    or _canonical in _config_module._PROVIDER_DISPLAY
+                    or _config_module._is_plugin_model_provider(_canonical)
                 )
                 _is_provider_config = isinstance(_provider_cfg, dict)
                 _has_provider_route = False
@@ -1462,7 +1447,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     and _is_provider_config
                     and isinstance(_provider_cfg.get("models"), (dict, list))
                     and _provider_cfg["models"]
-                    and _canonical == _canonicalise_provider_id(active_provider)
+                    and _canonical == _config_module._canonicalise_provider_id(active_provider)
                 )
                 if not (_is_known_provider or _has_provider_route or _has_models_only_active_route):
                     continue
@@ -1471,45 +1456,45 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 detected_providers.add(_canonical)
 
         def _configured_provider_for_base_url(base_url: object) -> str:
-            target = _normalize_base_url_for_match(base_url)
+            target = _config_module._normalize_base_url_for_match(base_url)
             if not target:
                 return ""
 
             if isinstance(model_cfg, dict):
-                model_base_url = _normalize_base_url_for_match(model_cfg.get("base_url"))
+                model_base_url = _config_module._normalize_base_url_for_match(model_cfg.get("base_url"))
                 if model_base_url == target:
-                    provider_hint = _resolve_configured_provider_id(
+                    provider_hint = _config_module._resolve_configured_provider_id(
                         model_cfg.get("provider"),
-                        cfg,
+                        _config_module.cfg,
                         base_url=base_url,
                     )
                     if provider_hint:
                         return str(provider_hint).strip().lower()
 
-            providers_cfg = cfg.get("providers", {})
+            providers_cfg = _config_module.cfg.get("providers", {})
             if isinstance(providers_cfg, dict):
                 for provider_key, provider_cfg in providers_cfg.items():
                     if not isinstance(provider_cfg, dict):
                         continue
-                    provider_base_url = _normalize_base_url_for_match(
+                    provider_base_url = _config_module._normalize_base_url_for_match(
                         provider_cfg.get("base_url")
                     )
                     if provider_base_url == target:
-                        provider_hint = _resolve_provider_alias(provider_key)
+                        provider_hint = _config_module._resolve_provider_alias(provider_key)
                         if provider_hint:
                             return str(provider_hint).strip().lower()
 
-            custom_providers_cfg = cfg.get("custom_providers", [])
+            custom_providers_cfg = _config_module.cfg.get("custom_providers", [])
             if isinstance(custom_providers_cfg, list):
                 for entry in custom_providers_cfg:
                     if not isinstance(entry, dict):
                         continue
-                    entry_base_url = _normalize_base_url_for_match(entry.get("base_url"))
+                    entry_base_url = _config_module._normalize_base_url_for_match(entry.get("base_url"))
                     if entry_base_url != target:
                         continue
                     entry_name = str(entry.get("name") or "").strip()
                     if entry_name:
-                        return _custom_provider_slug_from_name(entry_name)
+                        return _config_module._custom_provider_slug_from_name(entry_name)
                     return "custom"
 
             return ""
@@ -1543,7 +1528,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 if not model_id or not model_name or model_id in seen:
                     continue
                 seen.add(model_id)
-                label = _format_ollama_label(model_id) if provider in ("ollama", "ollama-cloud") else model_name
+                label = _config_module._format_ollama_label(model_id) if provider in ("ollama", "ollama-cloud") else model_name
                 models.append({"id": model_id, "label": label})
             return models
 
@@ -1629,7 +1614,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 req.add_header("User-Agent", "OpenAI/Python 1.0")
                 for k, v in headers.items():
                     req.add_header(k, v)
-                with urllib.request.urlopen(req, timeout=CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS) as response:  # nosec B310
+                with urllib.request.urlopen(req, timeout=_config_module.CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS) as response:  # nosec B310
                     data = json.loads(response.read().decode("utf-8"))
                 return _extract_model_entries_from_payload(data, provider), None
             except urllib.error.HTTPError as exc:
@@ -1680,7 +1665,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             if isinstance(model_cfg, dict):
                 api_key = (model_cfg.get("api_key") or "").strip()
             if not api_key:
-                providers_cfg = cfg.get("providers", {})
+                providers_cfg = _config_module.cfg.get("providers", {})
                 if isinstance(providers_cfg, dict):
                     for provider_key in filter(None, [active_provider, "custom"]):
                         provider_cfg = providers_cfg.get(provider_key, {})
@@ -1698,12 +1683,12 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     "API_KEY",
                 )
                 for key in api_key_vars:
-                    api_key = (all_env.get(key) or _thread_local_env_value(key) or "").strip()
+                    api_key = (all_env.get(key) or _config_module._thread_local_env_value(key) or "").strip()
                     if api_key:
                         break
 
             _trusted_custom_bases: list[object] = [cfg_base_url]
-            _custom_providers_for_trust = cfg.get("custom_providers", [])
+            _custom_providers_for_trust = _config_module.cfg.get("custom_providers", [])
             if isinstance(_custom_providers_for_trust, list):
                 _trusted_custom_bases.extend(
                     _cp.get("base_url")
@@ -1722,7 +1707,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 auto_detected_models_by_provider.setdefault(provider_key, []).append(auto_model)
                 detected_providers.add(provider_key)
 
-        _custom_providers_cfg = cfg.get("custom_providers", [])
+        _custom_providers_cfg = _config_module.cfg.get("custom_providers", [])
         _named_custom_groups: dict = {}
         _named_custom_errors: dict[str, dict] = {}
         if isinstance(_custom_providers_cfg, list):
@@ -1731,7 +1716,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 if not isinstance(_cp, dict):
                     continue
                 _cp_name = (_cp.get("name") or "").strip()
-                _slug = _custom_provider_slug_from_name(_cp_name) if _cp_name else None
+                _slug = _config_module._custom_provider_slug_from_name(_cp_name) if _cp_name else None
                 if _slug and _slug not in _named_custom_groups:
                     _named_custom_groups[_slug] = (_cp_name, [])
 
@@ -1740,14 +1725,14 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 if not _cp_api_key:
                     _cp_key_env = str(_cp.get("key_env") or "").strip()
                     if _cp_key_env:
-                        _cp_api_key = _thread_local_env_value(_cp_key_env).strip()
+                        _cp_api_key = _config_module._thread_local_env_value(_cp_key_env).strip()
                 # Fallback: check credential pool for both api_key and base_url
                 if (not _cp_api_key or not _cp_base_url) and _slug:
                     try:
                         from api.config import _has_explicit_pool_credentials
                         if _has_explicit_pool_credentials(_slug):
                             from agent.credential_pool import load_pool
-                            _resolved = _resolve_provider_alias(_slug)
+                            _resolved = _config_module._resolve_provider_alias(_slug)
                             _pool = load_pool(_resolved)
                             if _pool:
                                 _entry = _pool.select()
@@ -1813,7 +1798,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 _cp_model = _cp.get("model", "")
                 if _cp_model:
                     _cp_model_ids.append(_cp_model)
-                for _cp_model_id in _configured_model_ids(_cp.get("models")):
+                for _cp_model_id in _config_module._configured_model_ids(_cp.get("models")):
                     if _cp_model_id not in _cp_model_ids:
                         _cp_model_ids.append(_cp_model_id)
 
@@ -1848,8 +1833,8 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             if not _has_unnamed:
                 detected_providers.discard("custom")
 
-        _named_custom_slugs = _named_custom_provider_slugs(cfg)
-        _base_matched_named_slug = _named_custom_provider_slug_for_base_url(cfg_base_url, cfg)
+        _named_custom_slugs = _config_module._named_custom_provider_slugs(_config_module.cfg)
+        _base_matched_named_slug = _config_module._named_custom_provider_slug_for_base_url(cfg_base_url, _config_module.cfg)
         if _base_matched_named_slug and _named_custom_slugs:
             for _pid in list(detected_providers):
                 _pid_norm = str(_pid or "").strip().lower()
@@ -1857,20 +1842,20 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     detected_providers.discard(_pid)
 
         # Filter providers if providers.only_configured is set
-        providers_cfg = cfg.get("providers", {})
+        providers_cfg = _config_module.cfg.get("providers", {})
         only_show_configured = providers_cfg.get("only_configured", False) if isinstance(providers_cfg, dict) else False
         if only_show_configured:
             configured_providers = set()
             if active_provider:
                 configured_providers.add(active_provider)
-            cfg_providers = cfg.get("providers", {})
+            cfg_providers = _config_module.cfg.get("providers", {})
             if isinstance(cfg_providers, dict):
                 # Canonicalise here too — same rationale as #1568 detection
                 # path. Without this, only_show_configured mode could
                 # exclude detected ``opencode-go`` because configured_providers
                 # only has the underscore-variant key from config.yaml.
                 configured_providers.update(
-                    _canonicalise_provider_id(k) or k for k in cfg_providers.keys()
+                    _config_module._canonicalise_provider_id(k) or k for k in cfg_providers.keys()
                 )
             # Only show providers that are both detected and configured
             detected_providers = detected_providers.intersection(configured_providers)
@@ -1885,12 +1870,12 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         if detected_providers:
             _canonicalised_detected = set()
             for _pid in detected_providers:
-                _c = _canonicalise_provider_id(_pid) or _pid
+                _c = _config_module._canonicalise_provider_id(_pid) or _pid
                 _canonicalised_detected.add(_c)
             detected_providers = _canonicalised_detected
 
         try:
-            _moa_cfg = cfg.get("moa") if isinstance(cfg, dict) else None
+            _moa_cfg = _config_module.cfg.get("moa") if isinstance(_config_module.cfg, dict) else None
             if isinstance(_moa_cfg, dict):
                 _moa_enabled = bool(_moa_cfg.get("enabled", True))
                 _moa_presets = _moa_cfg.get("presets")
@@ -1918,7 +1903,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 allow_empty: bool = False,
             ) -> None:
                 picker_models = copy.deepcopy(raw_models or [])
-                if _is_openai_family_provider(provider_id):
+                if _config_module._is_openai_family_provider(provider_id):
                     for _model in picker_models:
                         if not isinstance(_model, dict):
                             continue
@@ -1927,13 +1912,13 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                             continue
                         _model["supports_fast_tier"] = (
                             str(
-                                _resolve_main_model_fast_mode_overrides(_model_id, provider_id).get("service_tier", "")
+                                _config_module._resolve_main_model_fast_mode_overrides(_model_id, provider_id).get("service_tier", "")
                             ).strip().lower()
                             == "priority"
                         )
                 if apply_prefix:
-                    picker_models = _apply_provider_prefix(picker_models, provider_id, active_provider)
-                visible_models, extra_models = _split_picker_overflow_models(
+                    picker_models = _config_module._apply_provider_prefix(picker_models, provider_id, active_provider)
+                visible_models, extra_models = _config_module._split_picker_overflow_models(
                     picker_models,
                     selected_model_id=_picker_selected_model_id,
                     provider_id=provider_id,
@@ -1988,7 +1973,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                                 apply_prefix=False,
                             )
                     continue
-                provider_name = _effective_provider_display_name(pid, _PROVIDER_DISPLAY)
+                provider_name = _config_module._effective_provider_display_name(pid, _config_module._PROVIDER_DISPLAY)
                 if pid == "openrouter":
                     # OpenRouter has two model surfaces:
                     #   (1) curated tool-supporting catalog via hermes_cli.models.fetch_openrouter_models()
@@ -2001,7 +1986,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     # Strategy: take the live curated list as the base, then augment with a
                     # separate live-fetch of OpenRouter's /v1/models filtered to free-tier-only.
                     # Free-tier entries get a "(free)" label suffix so the picker is honest about
-                    # what the user is selecting. Falls back to the static _FALLBACK_MODELS list
+                    # what the user is selecting. Falls back to the static _config_module._FALLBACK_MODELS list
                     # when both live fetches fail (offline, transient API error, test env).
                     raw_models = []
                     seen_ids = set()
@@ -2063,14 +2048,14 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                                 _label = f"{_label} (free)"
                             _entry = {"id": _mid, "label": _label}
                             free_tier_models.append(_entry)
-                            if _model_matches_picker_selection(
+                            if _config_module._model_matches_picker_selection(
                                 _mid,
                                 _picker_selected_model_id,
                                 "openrouter",
                             ):
                                 selected_free_tier_model = _entry
-                        if len(free_tier_models) > _OPENROUTER_FREE_TIER_AUGMENT_CAP:
-                            free_tier_models = free_tier_models[:_OPENROUTER_FREE_TIER_AUGMENT_CAP]
+                        if len(free_tier_models) > _config_module._OPENROUTER_FREE_TIER_AUGMENT_CAP:
+                            free_tier_models = free_tier_models[:_config_module._OPENROUTER_FREE_TIER_AUGMENT_CAP]
                             if (
                                 selected_free_tier_model
                                 and not any(
@@ -2091,7 +2076,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                         # into the module-level catalog.
                         raw_models = [
                             {"id": m["id"], "label": m["label"]}
-                            for m in _FALLBACK_MODELS
+                            for m in _config_module._FALLBACK_MODELS
                             if m.get("provider") == "OpenRouter"
                         ]
 
@@ -2102,7 +2087,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                         from hermes_cli.models import provider_model_ids as _provider_model_ids
 
                         raw_models = [
-                            {"id": mid, "label": _format_ollama_label(mid)}
+                            {"id": mid, "label": _config_module._format_ollama_label(mid)}
                             for mid in (_provider_model_ids("ollama-cloud") or [])
                         ]
                     except Exception:
@@ -2116,7 +2101,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     # agent's Codex resolver first so /api/models inherits the
                     # live Codex API / local ~/.codex cache / static fallback
                     # chain instead of freezing the picker to WebUI's curated
-                    # _PROVIDER_MODELS snapshot.
+                    # _config_module._PROVIDER_MODELS snapshot.
                     raw_models = []
                     codex_ids = []
                     try:
@@ -2136,7 +2121,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     ]
 
                     if not raw_models:
-                        raw_models = copy.deepcopy(_PROVIDER_MODELS.get("openai-codex", []))
+                        raw_models = copy.deepcopy(_config_module._PROVIDER_MODELS.get("openai-codex", []))
 
                     if raw_models:
                         _append_picker_group(provider_name, pid, raw_models)
@@ -2167,13 +2152,13 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                         live_fetch_failed = True
 
                     if live_ids:
-                        featured_ids, extras_ids = _build_nous_featured_set(
+                        featured_ids, extras_ids = _config_module._build_nous_featured_set(
                             live_ids,
                             selected_model_id=_picker_selected_model_id,
                         )
                         ordered_ids = featured_ids + extras_ids
                         raw_models = [
-                            {"id": f"@nous:{mid}", "label": _format_nous_label(mid)}
+                            {"id": f"@nous:{mid}", "label": _config_module._format_nous_label(mid)}
                             for mid in ordered_ids
                         ]
                     elif not live_fetch_failed:
@@ -2196,7 +2181,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                         # empty in this degraded state. This matches pre-#1538
                         # behaviour for environments without hermes_cli (test
                         # envs, package mismatches, isolated WebUI builds).
-                        raw_models = copy.deepcopy(_PROVIDER_MODELS.get("nous", []))
+                        raw_models = copy.deepcopy(_config_module._PROVIDER_MODELS.get("nous", []))
 
                     if raw_models:
                         _append_picker_group(
@@ -2229,11 +2214,11 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     else:
                         # Fallback: fetch /models directly from the configured
                         # base URL. Looks for the URL in either
-                        # `cfg["providers"]["lmstudio"]["base_url"]` or
-                        # `cfg["model"]["base_url"]` (via _get_provider_base_url),
+                        # `_config_module.cfg["providers"]["lmstudio"]["base_url"]` or
+                        # `_config_module.cfg["model"]["base_url"]` (via _config_module._get_provider_base_url),
                         # so the historical model-block config shape still works.
-                        lm_cfg = _get_provider_cfg("lmstudio")
-                        lm_base_url = _get_provider_base_url("lmstudio") or ""
+                        lm_cfg = _config_module._get_provider_cfg("lmstudio")
+                        lm_base_url = _config_module._get_provider_base_url("lmstudio") or ""
                         lm_api_key = str(lm_cfg.get("api_key") or "").strip()
                         if lm_base_url:
                             headers = {"User-Agent": "OpenAI/Python 1.0"}
@@ -2256,18 +2241,18 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     if raw_models:
                         _append_picker_group(provider_name, pid, raw_models)
                 elif (
-                    pid in _PROVIDER_MODELS
-                    or pid in _PROVIDER_DISPLAY
+                    pid in _config_module._PROVIDER_MODELS
+                    or pid in _config_module._PROVIDER_DISPLAY
                     or pid in _canonical_to_raw_provider_key
-                    or _is_plugin_model_provider(pid)
+                    or _config_module._is_plugin_model_provider(pid)
                 ):
                     # Look up provider_cfg using the original raw key from
                     # config.yaml so that mixed-case / underscore keys like
                     # ``CLIPpoxy`` or ``snake_case_provider`` still resolve
                     # (#2245).  Fall back to the canonical pid for providers
-                    # that appear in _PROVIDER_MODELS but not in cfg.
+                    # that appear in _config_module._PROVIDER_MODELS but not in _config_module.cfg.
                     _raw_key = _canonical_to_raw_provider_key.get(pid, pid)
-                    provider_cfg = _get_provider_cfg(_raw_key)
+                    provider_cfg = _config_module._get_provider_cfg(_raw_key)
                     raw_models = []
 
                     # User-configured model allowlists are explicit local
@@ -2279,18 +2264,18 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     # that as an allowlist collapsed the Copilot picker to
                     # whichever model had local settings. Only Copilot skips the
                     # config-models allowlist branch and asks Hermes CLI for the
-                    # live catalog first (static _PROVIDER_MODELS is fallback only).
+                    # live catalog first (static _config_module._PROVIDER_MODELS is fallback only).
                     _uses_models_as_settings_map = pid == "copilot"
                     if (
                         not _uses_models_as_settings_map
                         and isinstance(provider_cfg, dict)
                         and "models" in provider_cfg
                     ):
-                        raw_models = _configured_model_options(provider_cfg["models"])
+                        raw_models = _config_module._configured_model_options(provider_cfg["models"])
 
                     if not raw_models:
                         if pid == "moa":
-                            raw_models = _moa_preset_models_from_config(cfg)
+                            raw_models = _moa_preset_models_from_config(_config_module.cfg)
                         elif pid == "opencode-go":
                             # Skip live /v1/models probe for OpenCode Go — it
                             # returns models from the public catalog that are
@@ -2304,7 +2289,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                             )
 
                     if not raw_models:
-                        raw_models = copy.deepcopy(_PROVIDER_MODELS.get(pid, []))
+                        raw_models = copy.deepcopy(_config_module._PROVIDER_MODELS.get(pid, []))
 
                     detected_models = auto_detected_models_by_provider.get(pid, [])
                     if detected_models and not raw_models:
@@ -2314,7 +2299,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                     detected_models = auto_detected_models_by_provider.get(pid)
                     if detected_models:
                         models_for_group = copy.deepcopy(detected_models)
-                    elif auto_detected_models and (pid == "custom" or _is_known_model_provider(pid)):
+                    elif auto_detected_models and (pid == "custom" or _config_module._is_known_model_provider(pid)):
                         # Don't fall back to the global auto_detected_models
                         # list for the bare "custom" PID when the active
                         # provider is something concrete (e.g. ai-gateway,
@@ -2335,13 +2320,13 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                         # any future unknown id renders as a phantom provider
                         # carrying the active endpoint's entire model catalog.
                         # Such ids are dropped upstream by
-                        # _is_known_model_provider() in the pool-detection
+                        # _config_module._is_known_model_provider() in the pool-detection
                         # loop; this omission is belt-and-braces matching the
                         # #1572/#7372 "omit rather than misattribute" posture.
                         models_for_group = []
                     if models_for_group:
                         # Per-group deep copy so subsequent mutation by
-                        # _deduplicate_model_ids() (which prefixes ids with
+                        # _config_module._deduplicate_model_ids() (which prefixes ids with
                         # @provider_id:) does not bleed into other groups
                         # that also fall through to this branch (#1511 root
                         # cause: multiple unconfigured providers all sharing
@@ -2386,8 +2371,8 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             # the wrong surface to surface it; we'd rather skip injection
             # and emit a warning so the underlying config issue is logged.
             _looks_like_provider_id = (
-                str(default_model).strip().lower().replace("_", "-") in _PROVIDER_DISPLAY
-                or _canonicalise_provider_id(default_model) in _PROVIDER_DISPLAY
+                str(default_model).strip().lower().replace("_", "-") in _config_module._PROVIDER_DISPLAY
+                or _config_module._canonicalise_provider_id(default_model) in _config_module._PROVIDER_DISPLAY
             )
             if _looks_like_provider_id:
                 logger.warning(
@@ -2406,7 +2391,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 if _norm_model_id(default_model) not in all_ids_norm:
                     label = _get_label_for_model(default_model, groups)
                     target_display = (
-                        _PROVIDER_DISPLAY.get(active_provider, active_provider or "").lower()
+                        _config_module._PROVIDER_DISPLAY.get(active_provider, active_provider or "").lower()
                         if active_provider
                         else ""
                     )
@@ -2428,7 +2413,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # Post-process: ensure model IDs are globally unique across groups.
         # When multiple providers expose the same bare model ID, prefix
         # collisions with @provider_id: so the frontend can distinguish them.
-        _deduplicate_model_ids(groups)
+        _config_module._deduplicate_model_ids(groups)
 
         # Defense-in-depth: drop any optgroup that ended up with zero models
         # — those are pure UI noise. A zero-model group typically means a
@@ -2452,15 +2437,15 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             _pool = auth_store.get("credential_pool", {}) if isinstance(auth_store, dict) else {}
             if isinstance(_pool, dict):
                 for _pid in _pool:
-                    _providers_with_keys.add(_resolve_provider_alias(str(_pid)))
+                    _providers_with_keys.add(_config_module._resolve_provider_alias(str(_pid)))
         except Exception:
             pass
         try:
-            _cfg_providers = cfg.get("providers", {})
+            _cfg_providers = _config_module.cfg.get("providers", {})
             if isinstance(_cfg_providers, dict):
                 for _pk, _pv in _cfg_providers.items():
                     if isinstance(_pv, dict) and (_pv.get("api_key") or _pv.get("key_env")):
-                        _providers_with_keys.add(_resolve_provider_alias(str(_pk)))
+                        _providers_with_keys.add(_config_module._resolve_provider_alias(str(_pk)))
         except Exception:
             pass
 
@@ -2478,7 +2463,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # 12. Include model aliases so the WebUI frontend can resolve them.
         model_aliases: dict[str, str] = {}
         try:
-            raw_aliases = cfg.get("model", {}).get("aliases", {})
+            raw_aliases = _config_module.cfg.get("model", {}).get("aliases", {})
             if isinstance(raw_aliases, dict):
                 model_aliases = {str(k).strip(): str(v).strip() for k, v in raw_aliases.items() if k and v}
         except Exception:
@@ -2496,36 +2481,36 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
     # Mark that a build may be in progress BEFORE acquiring the lock.
     # If another thread has already started the cold path, we will wait for
     # its result rather than running the cold path concurrently.
-    should_wait = _cache_build_in_progress
+    should_wait = MODEL_CATALOG_STATE.cache_build_in_progress
     force_refresh_started_at = time.monotonic() if force_refresh else None
 
     # Check config mtime OUTSIDE the lock so this cheap check doesn't serialize
     # concurrent requests.  Must come before any config reads in the cold path.
     try:
-        _current_mtime = Path(_get_config_path()).stat().st_mtime
+        _current_mtime = Path(_config_module._get_config_path()).stat().st_mtime
     except OSError:
         _current_mtime = 0.0
-    _cfg_changed = _current_mtime != _cfg_mtime
+    _cfg_changed = _current_mtime != _config_module._cfg_mtime
 
     # Disk load BEFORE lock: ~0.1ms, lets concurrent requests skip entirely.
     # Then acquire lock and check memory cache.  Cold path runs inside the lock
     # so only one thread rebuilds while others wait.
     disk_groups = None
     stale_disk_groups = None
-    if _available_models_cache is None and not force_refresh:
-        disk_groups = _load_models_cache_from_disk()
+    if MODEL_CATALOG_STATE.available_models_cache is None and not force_refresh:
+        disk_groups = _config_module._load_models_cache_from_disk()
         if disk_groups is None:
-            stale_disk_groups = _load_stale_models_cache_from_disk()
+            stale_disk_groups = _config_module._load_stale_models_cache_from_disk()
     elif force_refresh:
-        stale_disk_groups = _load_stale_models_cache_from_disk()
+        stale_disk_groups = _config_module._load_stale_models_cache_from_disk()
 
-    with _available_models_cache_lock:
+    with MODEL_CATALOG_STATE.available_models_cache_lock:
         # If another thread is already building, wait for its result instead
         # of re-entering the cold path (avoids duplicate 10s zai load_pool calls).
         if should_wait:
             wait_timeout = 60.0
             if force_refresh and force_refresh_started_at is not None:
-                if _LIVE_REBUILD_BUDGET_SECONDS <= 0:
+                if MODEL_CATALOG_STATE.live_rebuild_budget_seconds <= 0:
                     # The legacy synchronous path is explicitly unbounded. A
                     # forced refresh follower should keep coalescing behind
                     # that live rebuild instead of giving up after 60s and
@@ -2534,36 +2519,36 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
                 else:
                     wait_timeout = max(
                         0.0,
-                        _LIVE_REBUILD_BUDGET_SECONDS - (time.monotonic() - force_refresh_started_at),
+                        MODEL_CATALOG_STATE.live_rebuild_budget_seconds - (time.monotonic() - force_refresh_started_at),
                     )
-            _cache_build_cv.wait_for(
-                lambda: not _cache_build_in_progress,
+            MODEL_CATALOG_STATE.cache_build_cv.wait_for(
+                lambda: not MODEL_CATALOG_STATE.cache_build_in_progress,
                 timeout=wait_timeout
             )
-            cached = _get_fresh_memory_models_cache(time.monotonic())
+            cached = _config_module._get_fresh_memory_models_cache(time.monotonic())
             if (
                 cached is not None
                 and (
                     not force_refresh
                     or (
                         force_refresh_started_at is not None
-                        and _available_models_live_rebuild_ts >= force_refresh_started_at
+                        and MODEL_CATALOG_STATE.available_models_live_rebuild_ts >= force_refresh_started_at
                     )
                 )
             ):
                 return cached
-            if force_refresh and _LIVE_REBUILD_BUDGET_SECONDS > 0 and _cache_build_in_progress:
+            if force_refresh and MODEL_CATALOG_STATE.live_rebuild_budget_seconds > 0 and MODEL_CATALOG_STATE.cache_build_in_progress:
                 if stale_disk_groups is not None:
                     return copy.deepcopy(stale_disk_groups)
                 return copy.deepcopy(_static_models_catalog_without_live_probes())
 
         # Reload config if changed
         if _cfg_changed:
-            reload_config()
-            _available_models_cache = None
-            _available_models_cache_ts = 0.0
-            _available_models_live_rebuild_ts = 0.0
-            _available_models_cache_source_fingerprint = None
+            _config_module.reload_config()
+            MODEL_CATALOG_STATE.available_models_cache = None
+            MODEL_CATALOG_STATE.available_models_cache_ts = 0.0
+            MODEL_CATALOG_STATE.available_models_live_rebuild_ts = 0.0
+            MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = None
             _sync_models_cache_provenance()
             _invalidate_models_build_locked()
             disk_groups = None
@@ -2571,13 +2556,13 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
 
         # Serve from memory cache if fresh
         now = time.monotonic()
-        cached = _get_fresh_memory_models_cache(now)
+        cached = _config_module._get_fresh_memory_models_cache(now)
         if cached is not None:
             if not force_refresh:
                 return cached
             if (
                 force_refresh_started_at is not None
-                and _available_models_live_rebuild_ts >= force_refresh_started_at
+                and MODEL_CATALOG_STATE.available_models_live_rebuild_ts >= force_refresh_started_at
             ):
                 return cached
 
@@ -2587,35 +2572,35 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         if (
             force_refresh
             and force_refresh_started_at is not None
-            and _cache_build_in_progress
+            and MODEL_CATALOG_STATE.cache_build_in_progress
         ):
             remaining_budget = None
-            if _LIVE_REBUILD_BUDGET_SECONDS > 0:
+            if MODEL_CATALOG_STATE.live_rebuild_budget_seconds > 0:
                 remaining_budget = max(
                     0.0,
-                    _LIVE_REBUILD_BUDGET_SECONDS - (time.monotonic() - force_refresh_started_at),
+                    MODEL_CATALOG_STATE.live_rebuild_budget_seconds - (time.monotonic() - force_refresh_started_at),
                 )
             if remaining_budget is None or remaining_budget > 0:
-                _cache_build_cv.wait_for(
-                    lambda: not _cache_build_in_progress,
+                MODEL_CATALOG_STATE.cache_build_cv.wait_for(
+                    lambda: not MODEL_CATALOG_STATE.cache_build_in_progress,
                     timeout=remaining_budget,
                 )
-                cached = _get_fresh_memory_models_cache(time.monotonic())
+                cached = _config_module._get_fresh_memory_models_cache(time.monotonic())
                 if (
                     cached is not None
-                    and _available_models_live_rebuild_ts >= force_refresh_started_at
+                    and MODEL_CATALOG_STATE.available_models_live_rebuild_ts >= force_refresh_started_at
                 ):
                     return cached
-            if _cache_build_in_progress and _LIVE_REBUILD_BUDGET_SECONDS > 0:
+            if MODEL_CATALOG_STATE.cache_build_in_progress and MODEL_CATALOG_STATE.live_rebuild_budget_seconds > 0:
                 if stale_disk_groups is not None:
                     return copy.deepcopy(stale_disk_groups)
                 return copy.deepcopy(_static_models_catalog_without_live_probes())
 
         # Cold path: disk cache hit — use it (fast, no lock contention)
         if disk_groups is not None and not force_refresh:
-            _available_models_cache = disk_groups
-            _available_models_cache_ts = now
-            _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
+            MODEL_CATALOG_STATE.available_models_cache = disk_groups
+            MODEL_CATALOG_STATE.available_models_cache_ts = now
+            MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = _config_module._models_cache_source_fingerprint()
             _sync_models_cache_provenance()
             return copy.deepcopy(disk_groups)
 
@@ -2631,7 +2616,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # model. Serve a network-free minimal catalog instead and let a later
         # human request do the real live rebuild.
         if prefer_cache:
-            # NOTE (Greptile P1): do NOT touch _cache_build_in_progress here.
+            # NOTE (Greptile P1): do NOT touch MODEL_CATALOG_STATE.cache_build_in_progress here.
             # This branch never set the flag (only the cold path below does),
             # and `should_wait` is sampled outside the lock (line ~4964). A
             # concurrent cold-path caller can flip the flag to True after our
@@ -2642,11 +2627,12 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             return copy.deepcopy(_minimal_static_models_catalog())
 
         # Cold path: full rebuild — only one thread reaches here at a time
-        with _cache_build_cv:
-            _models_cache_build_generation += 1
-            build_generation = _models_cache_build_generation
-            _active_models_cache_build_generation = build_generation
-            _cache_build_in_progress = True
+        with MODEL_CATALOG_STATE.cache_build_cv:
+            MODEL_CATALOG_STATE.models_cache_build_generation += 1
+            build_generation = MODEL_CATALOG_STATE.models_cache_build_generation
+            MODEL_CATALOG_STATE.active_models_cache_build_generation = build_generation
+            MODEL_CATALOG_STATE.cache_build_in_progress = True
+            publish_legacy_model_catalog_state(_config_module)
 
         # Capture the active per-request profile (#3957). The live provider
         # probe inside the rebuild resolves credentials from os.environ /
@@ -2654,61 +2640,52 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # the detached worker thread below inherits NEITHER, so it must be
         # captured here (on the request thread, where the TLS is valid) and
         # re-bound on the worker. Empty / default for single-profile installs.
-        from contextlib import nullcontext as _nullcontext
+        from api.config.hooks import get_config_runtime_hooks
 
-        _active_profile_name = ""
-        _prof_env_request = None
-        _prof_scope_worker = None
-        try:
-            from api.profiles import (
-                get_active_profile_name as _gapn,
-                profile_env_for_active_request as _prof_env_request,
-                profile_scope_for_detached_worker as _prof_scope_worker,
-            )
-            _active_profile_name = (_gapn() or "").strip()
-        except Exception:
-            _prof_env_request = None
-            _prof_scope_worker = None
+        _runtime_hooks = get_config_runtime_hooks()
+        _active_profile_name = (_runtime_hooks.active_profile_name() or "").strip()
 
         # Legacy synchronous (unbounded) rebuild — opt-in via budget<=0.
-        if _LIVE_REBUILD_BUDGET_SECONDS <= 0:
+        if MODEL_CATALOG_STATE.live_rebuild_budget_seconds <= 0:
             try:
                 # Foreground thread already carries the request-profile TLS;
                 # apply the mirrored profile env (no-op for default) for the
                 # live probe because provider_model_ids() still has raw
                 # os.getenv()/HERMES_HOME readers on this synchronous path.
-                _sync_scope = (
-                    _prof_env_request("models rebuild (sync)")
-                    if _prof_env_request is not None
-                    else _nullcontext()
+                _sync_scope = _runtime_hooks.active_profile_scope(
+                    "models rebuild (sync)"
                 )
                 with _sync_scope:
-                    result = _invoke_models_rebuild(_build_available_models_uncached)
+                    result = _config_module._invoke_models_rebuild(
+                        _build_available_models_uncached
+                    )
             except BaseException:
                 # Always reset the flag so waiting threads don't block for 60s
-                with _cache_build_cv:
-                    if _active_models_cache_build_generation == build_generation:
-                        _active_models_cache_build_generation = None
-                        _cache_build_in_progress = False
-                        _cache_build_cv.notify_all()
+                with MODEL_CATALOG_STATE.cache_build_cv:
+                    if MODEL_CATALOG_STATE.active_models_cache_build_generation == build_generation:
+                        MODEL_CATALOG_STATE.active_models_cache_build_generation = None
+                        MODEL_CATALOG_STATE.cache_build_in_progress = False
+                        MODEL_CATALOG_STATE.cache_build_cv.notify_all()
+                        publish_legacy_model_catalog_state(_config_module)
                 raise
-            with _cache_build_cv:
-                if _active_models_cache_build_generation == build_generation:
+            with MODEL_CATALOG_STATE.cache_build_cv:
+                if MODEL_CATALOG_STATE.active_models_cache_build_generation == build_generation:
                     published_at = time.monotonic()
-                    _available_models_cache = result
-                    _available_models_cache_ts = published_at
-                    _available_models_live_rebuild_ts = published_at
-                    _available_models_cache_source_fingerprint = (
-                        _models_cache_source_fingerprint()
+                    MODEL_CATALOG_STATE.available_models_cache = result
+                    MODEL_CATALOG_STATE.available_models_cache_ts = published_at
+                    MODEL_CATALOG_STATE.available_models_live_rebuild_ts = published_at
+                    MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = (
+                        _config_module._models_cache_source_fingerprint()
                     )
                     _sync_models_cache_provenance()
                     try:
-                        _save_models_cache_to_disk(result)
+                        _config_module._save_models_cache_to_disk(result)
                     finally:
-                        if _active_models_cache_build_generation == build_generation:
-                            _active_models_cache_build_generation = None
-                            _cache_build_in_progress = False
-                            _cache_build_cv.notify_all()
+                        if MODEL_CATALOG_STATE.active_models_cache_build_generation == build_generation:
+                            MODEL_CATALOG_STATE.active_models_cache_build_generation = None
+                            MODEL_CATALOG_STATE.cache_build_in_progress = False
+                            MODEL_CATALOG_STATE.cache_build_cv.notify_all()
+                publish_legacy_model_catalog_state(_config_module)
             return copy.deepcopy(result)
 
         # ── Bounded rebuild (defense-in-depth) ───────────────────────────────
@@ -2719,7 +2696,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         # thread for tens of seconds (the wakeup-turn / chat-start hang).
         #
         # Run the rebuild on a daemon worker; the foreground waits at most
-        # _LIVE_REBUILD_BUDGET_SECONDS.
+        # MODEL_CATALOG_STATE.live_rebuild_budget_seconds.
         #
         # WITHIN budget (the normal fast case): the FOREGROUND publishes the
         # result synchronously and only then returns — preserving the exact
@@ -2733,7 +2710,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         #
         # ``_publish_models_result`` / ``box["published"]`` ensure exactly one
         # publisher even at the budget boundary (no double write, no lost
-        # refresh). The worker only touches _cache_build_cv after the
+        # refresh). The worker only touches MODEL_CATALOG_STATE.cache_build_cv after the
         # foreground releases the RLock by returning, so no lock inversion.
         build_done = threading.Event()
         budget_exceeded = threading.Event()
@@ -2741,38 +2718,35 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         box: dict = {}
 
         def _publish_models_result(result):
-            global _cache_build_in_progress, _available_models_cache
-            global _available_models_cache_ts, _available_models_live_rebuild_ts
-            global _available_models_cache_source_fingerprint
-            global _active_models_cache_build_generation
-            with _cache_build_cv:
-                if _active_models_cache_build_generation != build_generation:
+            with MODEL_CATALOG_STATE.cache_build_cv:
+                if MODEL_CATALOG_STATE.active_models_cache_build_generation != build_generation:
                     return
                 published_at = time.monotonic()
-                _available_models_cache = result
-                _available_models_cache_ts = published_at
-                _available_models_live_rebuild_ts = published_at
-                _available_models_cache_source_fingerprint = (
-                    _models_cache_source_fingerprint()
+                MODEL_CATALOG_STATE.available_models_cache = result
+                MODEL_CATALOG_STATE.available_models_cache_ts = published_at
+                MODEL_CATALOG_STATE.available_models_live_rebuild_ts = published_at
+                MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = (
+                    _config_module._models_cache_source_fingerprint()
                 )
                 _sync_models_cache_provenance()
                 try:
-                    _save_models_cache_to_disk(result)
+                    _config_module._save_models_cache_to_disk(result)
                 except Exception:
                     logger.debug("models cache disk save failed", exc_info=True)
                 finally:
-                    _active_models_cache_build_generation = None
-                    _cache_build_in_progress = False
-                    _cache_build_cv.notify_all()
+                    MODEL_CATALOG_STATE.active_models_cache_build_generation = None
+                    MODEL_CATALOG_STATE.cache_build_in_progress = False
+                    MODEL_CATALOG_STATE.cache_build_cv.notify_all()
+                    publish_legacy_model_catalog_state(_config_module)
 
         def _clear_build_in_progress():
-            global _cache_build_in_progress, _active_models_cache_build_generation
-            with _cache_build_cv:
-                if _active_models_cache_build_generation != build_generation:
+            with MODEL_CATALOG_STATE.cache_build_cv:
+                if MODEL_CATALOG_STATE.active_models_cache_build_generation != build_generation:
                     return
-                _active_models_cache_build_generation = None
-                _cache_build_in_progress = False
-                _cache_build_cv.notify_all()
+                MODEL_CATALOG_STATE.active_models_cache_build_generation = None
+                MODEL_CATALOG_STATE.cache_build_in_progress = False
+                MODEL_CATALOG_STATE.cache_build_cv.notify_all()
+                publish_legacy_model_catalog_state(_config_module)
 
         def _claim_publish() -> bool:
             """Return True iff the caller won the right to publish."""
@@ -2788,14 +2762,14 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             # os.environ, so without this it would probe the default profile's
             # credentials and, over budget, publish the rebuilt catalog to the
             # DEFAULT profile's disk cache. No-op for the default profile.
-            _worker_scope = (
-                _prof_scope_worker(_active_profile_name, "models rebuild (worker)")
-                if _prof_scope_worker is not None
-                else _nullcontext()
+            _worker_scope = _runtime_hooks.detached_profile_scope(
+                _active_profile_name, "models rebuild (worker)"
             )
             with _worker_scope:
                 try:
-                    box["result"] = _invoke_models_rebuild(_build_available_models_uncached)
+                    box["result"] = _config_module._invoke_models_rebuild(
+                        _build_available_models_uncached
+                    )
                 except Exception as exc:  # noqa: BLE001 — propagated to caller
                     box["error"] = exc
                 finally:
@@ -2819,7 +2793,7 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
         )
         _worker.start()
 
-        if build_done.wait(timeout=_LIVE_REBUILD_BUDGET_SECONDS):
+        if build_done.wait(timeout=MODEL_CATALOG_STATE.live_rebuild_budget_seconds):
             # Build finished within budget — foreground publishes
             # synchronously, exactly like the legacy path.
             if "error" in box:
@@ -2849,12 +2823,12 @@ def get_available_models(*, prefer_cache: bool = False, force_refresh: bool = Fa
             "fallback, refreshing catalog out-of-band"
         )
         if _should_warn_budget("live_rebuild_budget_exceeded"):
-            logger.warning(_budget_log_msg, _LIVE_REBUILD_BUDGET_SECONDS)
+            logger.warning(_budget_log_msg, MODEL_CATALOG_STATE.live_rebuild_budget_seconds)
         else:
-            logger.info(_budget_log_msg, _LIVE_REBUILD_BUDGET_SECONDS)
+            logger.info(_budget_log_msg, MODEL_CATALOG_STATE.live_rebuild_budget_seconds)
         # ``stale_disk_groups`` is shape-valid but failed the strict metadata
         # checks required for authoritative cold-path use. It was read before
-        # acquiring _available_models_cache_lock so this over-budget fallback
+        # acquiring MODEL_CATALOG_STATE.available_models_cache_lock so this over-budget fallback
         # does not extend the lock hold while the worker is ready to publish.
         if stale_disk_groups is not None:
             return copy.deepcopy(stale_disk_groups)
@@ -2880,3 +2854,5 @@ __config_exports__ = (
     "_read_visible_codex_cache_model_ids",
     "get_available_models",
 )
+
+__all__ = __config_exports__

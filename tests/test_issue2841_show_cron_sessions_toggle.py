@@ -44,21 +44,21 @@ def test_cron_hidden_with_explicit_false():
 # --- api/config.py string-scan ---
 
 def test_show_cron_sessions_in_defaults():
-    src = _read("api/config_parts/settings_persistence.py")
+    src = _read("api/config/settings.py")
     assert '"show_cron_sessions": False' in src, (
         '"show_cron_sessions": False must appear in _SETTINGS_DEFAULTS'
     )
 
 
 def test_show_webhook_sessions_in_defaults():
-    src = _read("api/config_parts/settings_persistence.py")
+    src = _read("api/config/settings.py")
     assert '"show_webhook_sessions": False' in src, (
         '"show_webhook_sessions": False must appear in _SETTINGS_DEFAULTS'
     )
 
 
 def test_show_cron_sessions_in_bool_keys():
-    src = _read("api/config_parts/settings_persistence.py")
+    src = _read("api/config/settings.py")
     assert '"show_cron_sessions"' in src, (
         '"show_cron_sessions" must appear in _SETTINGS_BOOL_KEYS'
     )
@@ -69,7 +69,7 @@ def test_show_cron_sessions_in_bool_keys():
 
 
 def test_show_webhook_sessions_in_bool_keys():
-    src = _read("api/config_parts/settings_persistence.py")
+    src = _read("api/config/settings.py")
     assert '"show_webhook_sessions"' in src, (
         '"show_webhook_sessions" must appear in _SETTINGS_BOOL_KEYS'
     )

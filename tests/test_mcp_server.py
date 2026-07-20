@@ -628,7 +628,7 @@ class TestApiPassword:
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Locks the canonical-helper relocation: mcp_server.py and api/routes.py both
-# now import _profiles_match from api/profiles.py. If anyone re-introduces a
+# now import _profiles_match from api/profiles/__init__.py. If anyone re-introduces a
 # local copy in either module, both the identity check and the input-matrix
 # parametrize trip immediately.
 
@@ -636,12 +636,12 @@ async def test_profiles_match_single_source_of_truth():
     """All three module names resolve to the same canonical object.
 
     This locks the relocation: mcp_server.py and api/routes.py both import
-    _profiles_match from api/profiles.py rather than carrying a local copy.
+    _profiles_match from api/profiles/__init__.py rather than carrying a local copy.
     Re-introducing a local definition in either module trips this test
     immediately.
 
     Imported here in a clean module-import context (not via _reimport_mcp,
-    which would re-execute api/profiles.py and produce a distinct function
+    which would re-execute api/profiles/__init__.py and produce a distinct function
     object that's behaviorally identical but fails the `is` check).
 
     NOTE: We swap-in fresh modules but RESTORE the originals at exit so
@@ -724,7 +724,7 @@ async def test_profiles_match_input_matrix(a, b):
 # is that if the canonical helpers cached the profile on first read at import
 # time, a --profile foo flag passed at startup would bind too late.
 #
-# Today the helpers read _active_profile lazily (api/profiles.py:173 reads
+# Today the helpers read _active_profile lazily (api/profiles/__init__.py:173 reads
 # the module global at every call) so the override is safe. This test locks
 # the behaviour: setting _active_profile = 'foo' before the first list call
 # produces results filtered to 'foo', not the default.

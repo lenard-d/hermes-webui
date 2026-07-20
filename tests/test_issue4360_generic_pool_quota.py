@@ -366,7 +366,7 @@ class TestGetProviderQuotaLocalPool(unittest.TestCase):
 
     def test_allowlist_providers_bypass_local_pool(self):
         """get_provider_quota uses probe path for allowlist providers, not local pool."""
-        with patch("api.providers._provider_account_usage_status") as mock_probe:
+        with patch("api.providers.account_usage._provider_account_usage_status") as mock_probe:
             with _fake_credential_pool(return_value=None) as mock_load_pool:
                 mock_probe.return_value = {
                     "ok": True,
@@ -379,7 +379,7 @@ class TestGetProviderQuotaLocalPool(unittest.TestCase):
 
     def test_allowlist_anthropic_uses_probe_path(self):
         """get_provider_quota uses probe path for anthropic, not local pool."""
-        with patch("api.providers._provider_account_usage_status") as mock_probe:
+        with patch("api.providers.account_usage._provider_account_usage_status") as mock_probe:
             with _fake_credential_pool(return_value=None) as mock_load_pool:
                 mock_probe.return_value = {
                     "ok": True,
@@ -393,7 +393,7 @@ class TestGetProviderQuotaLocalPool(unittest.TestCase):
     def test_openrouter_uses_api_key_path_not_local_pool(self):
         """get_provider_quota uses openrouter API-key path, not local pool."""
         with _fake_credential_pool(return_value=None) as mock_load_pool:
-            with patch("api.providers._get_provider_api_key", return_value=None):
+            with patch("api.providers.account_usage._get_provider_api_key", return_value=None):
                 result = get_provider_quota("openrouter")
                 assert result["status"] == "no_key"
                 mock_load_pool.assert_not_called()

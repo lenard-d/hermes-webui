@@ -13,7 +13,7 @@ import pytest
 
 def test_ssrf_trusted_hosts_variable_exists():
     """The _ssrf_trusted_hosts set must be built from custom_providers config."""
-    with open("api/config_parts/model_catalog.py") as f:
+    with open("api/config/model_catalog.py") as f:
         src = f.read()
     assert "_ssrf_trusted_hosts" in src
     assert "_ssrf_trusted_hosts: set[str] = set()" in src
@@ -21,7 +21,7 @@ def test_ssrf_trusted_hosts_variable_exists():
 
 def test_ssrf_trusted_hosts_populated_from_custom_providers():
     """Trusted hosts are extracted by iterating custom_providers[].base_url."""
-    with open("api/config_parts/model_catalog.py") as f:
+    with open("api/config/model_catalog.py") as f:
         src = f.read()
     # Must read custom_providers from cfg
     assert 'cfg.get("custom_providers"' in src
@@ -35,7 +35,7 @@ def test_ssrf_trusted_hosts_populated_from_custom_providers():
 
 def test_ssrf_check_uses_trusted_hosts():
     """The SSRF check must consult _ssrf_trusted_hosts before blocking."""
-    with open("api/config_parts/model_catalog.py") as f:
+    with open("api/config/model_catalog.py") as f:
         src = f.read()
     # The is_known_local check must include _ssrf_trusted_hosts
     assert "in _ssrf_trusted_hosts" in src
@@ -43,7 +43,7 @@ def test_ssrf_check_uses_trusted_hosts():
 
 def test_ssrf_known_local_still_present():
     """Original hardcoded allowlist must still be present (no regression)."""
-    with open("api/config_parts/model_catalog.py") as f:
+    with open("api/config/model_catalog.py") as f:
         src = f.read()
     for keyword in ("ollama", "localhost", "127.0.0.1", "lmstudio", "lm-studio"):
         assert keyword in src, f"Missing hardcoded allowlist entry: {keyword}"
@@ -51,7 +51,7 @@ def test_ssrf_known_local_still_present():
 
 def test_ssrf_block_still_present():
     """SSRF ValueError must still be raised for unknown private IPs."""
-    with open("api/config_parts/model_catalog.py") as f:
+    with open("api/config/model_catalog.py") as f:
         src = f.read()
     assert 'SSRF: resolved hostname to private IP' in src
 

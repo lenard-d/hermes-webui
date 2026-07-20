@@ -12,12 +12,12 @@ from typing import Optional
 
 import yaml
 
-from api.profiles_parts.facade import profiles_api
+from api import profiles as _profiles_module
 
 
 def _validate_profile_name(name: str):
     """Validate the logical profile identifier."""
-    api = profiles_api()
+    api = _profiles_module
     if name == "default":
         raise ValueError(
             "Cannot create a profile named 'default' -- it is the built-in profile."
@@ -31,13 +31,13 @@ def _validate_profile_name(name: str):
 
 def _profiles_root() -> Path:
     """Return the canonical root containing named profiles."""
-    api = profiles_api()
+    api = _profiles_module
     return (api._DEFAULT_HERMES_HOME / "profiles").resolve()
 
 
 def _resolve_named_profile_home(name: str) -> Path:
     """Resolve a validated name beneath the canonical profiles root."""
-    api = profiles_api()
+    api = _profiles_module
     api._validate_profile_name(name)
     profiles_root = api._profiles_root()
     candidate = (profiles_root / name).resolve()
@@ -51,7 +51,7 @@ def _create_profile_fallback(
     clone_config: bool = False,
 ) -> Path:
     """Create a profile directory when hermes_cli is unavailable."""
-    api = profiles_api()
+    api = _profiles_module
     profile_dir = api._DEFAULT_HERMES_HOME / "profiles" / name
     if profile_dir.exists():
         raise FileExistsError(f"Profile '{name}' already exists.")
@@ -78,12 +78,12 @@ def _resolve_env_var_for_provider(provider: Optional[str]) -> Optional[str]:
     """Return the provider-specific secret environment variable name."""
     if not provider:
         return None
-    return profiles_api()._PROVIDER_ENV_MAP.get(str(provider).strip().lower())
+    return _profiles_module._PROVIDER_ENV_MAP.get(str(provider).strip().lower())
 
 
 def _upsert_dotenv_line(env_path: Path, key: str, value: str) -> None:
     """Replace or append one key in a dotenv file."""
-    api = profiles_api()
+    api = _profiles_module
     env_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         lines = (
@@ -124,7 +124,7 @@ def _write_api_key_to_dotenv(
     model_provider: Optional[str] = None,
 ) -> None:
     """Persist a provider credential only in the profile's protected .env."""
-    api = profiles_api()
+    api = _profiles_module
     env_var = api._resolve_env_var_for_provider(model_provider)
     if not env_var:
         env_var = "HERMES_API_KEY"
@@ -149,7 +149,7 @@ def _write_endpoint_to_config(
     """Persist a base URL while deliberately excluding API keys."""
     if not base_url:
         return
-    api = profiles_api()
+    api = _profiles_module
     config_path = profile_dir / "config.yaml"
     cfg = {}
     if config_path.exists():
@@ -191,7 +191,7 @@ def _split_webui_provider_model_value(
     model_provider: Optional[str],
 ) -> tuple[Optional[str], Optional[str]]:
     """Normalize an internal ``@provider:model`` picker value."""
-    api = profiles_api()
+    api = _profiles_module
     model = api._clean_profile_config_value(default_model, "default_model")
     provider = api._clean_profile_config_value(model_provider, "model_provider")
     if model and model.startswith("@") and ":" in model:
@@ -216,7 +216,7 @@ def _profile_model_selection_exists(
     model_provider: Optional[str],
 ) -> bool:
     """Return whether a default model/provider exists in the catalog."""
-    api = profiles_api()
+    api = _profiles_module
     if not default_model and not model_provider:
         return True
     if not isinstance(available_models, dict):
@@ -267,7 +267,7 @@ def _validate_profile_model_selection(
     available_models: Optional[dict] = None,
 ) -> None:
     """Reject profile defaults absent from the server model catalog."""
-    api = profiles_api()
+    api = _profiles_module
     if not default_model and not model_provider:
         return
     catalog = (
@@ -298,7 +298,7 @@ def _write_model_defaults_to_config(
     model_provider: Optional[str] = None,
 ) -> None:
     """Persist validated default model/provider fields."""
-    api = profiles_api()
+    api = _profiles_module
     default_model, model_provider = api._split_webui_provider_model_value(
         default_model, model_provider
     )
@@ -337,7 +337,7 @@ def create_profile_api(
     model_provider: str = None,
 ) -> dict:
     """Create, configure, and return one profile through a single transaction."""
-    api = profiles_api()
+    api = _profiles_module
     if api._is_isolated_profile_mode():
         raise PermissionError(
             "Profile creation is not allowed in isolated profile mode."
@@ -429,7 +429,7 @@ def create_profile_api(
 
 def delete_profile_api(name: str) -> dict:
     """Delete a validated non-root profile, switching away first if needed."""
-    api = profiles_api()
+    api = _profiles_module
     if api._is_isolated_profile_mode():
         raise PermissionError(
             "Profile deletion is not allowed in isolated profile mode."

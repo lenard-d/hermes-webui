@@ -132,7 +132,7 @@ def test_576_restore_happens_after_load_session():
 
 def test_585_get_available_models_calls_reload_config():
     """api/config.py: get_available_models() must do a mtime-based reload check."""
-    config_src = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+    config_src = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
         encoding="utf-8"
     )
     fn_start = config_src.find("def get_available_models(")

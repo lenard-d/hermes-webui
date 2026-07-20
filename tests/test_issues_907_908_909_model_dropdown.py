@@ -140,7 +140,7 @@ class TestIssue909InjectedModelLabel:
         config_src = (
             Path(__file__).resolve().parent.parent
             / "api"
-            / "config_parts"
+            / "config"
             / "model_catalog.py"
         ).read_text()
         # The raw label-building pattern should be replaced by the helper

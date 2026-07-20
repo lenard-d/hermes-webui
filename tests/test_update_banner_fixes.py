@@ -2663,7 +2663,7 @@ class TestUpdateCompareSource:
 
 class TestWhatsNewSummaryToggle:
     def test_settings_default_and_persistence_allow_whats_new_summary_toggle(self):
-        src = read('api/config_parts/settings_persistence.py')
+        src = read('api/config/settings.py')
         assert '"whats_new_summary_enabled": False' in src
         bool_keys_start = src.find('_SETTINGS_BOOL_KEYS')
         assert bool_keys_start != -1

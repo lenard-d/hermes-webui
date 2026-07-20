@@ -82,34 +82,27 @@ def test_delete_fallback_observes_facade_shutil_patch(monkeypatch, tmp_path):
     assert removed == [str(profile_dir)]
 
 
-def test_reloaded_profile_facades_keep_their_own_runtime_policy(monkeypatch, tmp_path):
-    """Part implementations must resolve the facade that exported each call."""
+def test_reloaded_profile_package_reuses_the_canonical_runtime_owner(tmp_path):
+    """Reloading the entrypoint must not manufacture a second runtime owner."""
     import api.profiles as original
 
     fresh = _reload_profiles_module(tmp_path / ".hermes")
-    monkeypatch.setattr(original, "_BLOCKED_RUNTIME_ENV_KEYS", {"ORIGINAL_ONLY"})
-    monkeypatch.setattr(fresh, "_BLOCKED_RUNTIME_ENV_KEYS", {"FRESH_ONLY"})
-    candidate = {"ORIGINAL_ONLY": "old", "FRESH_ONLY": "new", "SHARED": "ok"}
-
-    assert original.filter_runtime_env_for_gateway_parity(candidate) == {
-        "FRESH_ONLY": "new",
-        "SHARED": "ok",
-    }
-    assert fresh.filter_runtime_env_for_gateway_parity(candidate) == {
-        "ORIGINAL_ONLY": "old",
-        "SHARED": "ok",
-    }
+    assert (
+        fresh.filter_runtime_env_for_gateway_parity
+        is original.filter_runtime_env_for_gateway_parity
+    )
 
 
-def test_switch_profile_allows_valid_profile_name():
-    with tempfile.TemporaryDirectory() as td:
-        temp_root = Path(td)
-        base = temp_root / ".hermes"
-        profile_dir = base / "profiles" / "demo"
-        profile_dir.mkdir(parents=True)
+def test_switch_profile_allows_valid_profile_name(monkeypatch, tmp_path):
+    import api.profiles as profiles
 
-        profiles = _reload_profiles_module(base)
-        result = profiles.switch_profile("demo")
+    base = tmp_path / ".hermes"
+    profile_dir = base / "profiles" / "demo"
+    profile_dir.mkdir(parents=True)
+    monkeypatch.setattr(profiles, "_DEFAULT_HERMES_HOME", base)
+    monkeypatch.setattr(profiles, "_INITIAL_HERMES_HOME", str(base))
+    monkeypatch.setattr(profiles, "_INITIAL_ISOLATED_PROFILE_OPT_IN", "")
 
-        assert result["active"] == "demo"
-        assert Path(os.environ["HERMES_HOME"]).resolve() == profile_dir.resolve()
+    result = profiles.switch_profile("demo", process_wide=False)
+
+    assert result["active"] == "demo"

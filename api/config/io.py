@@ -8,11 +8,11 @@ seams for profile paths, cache state, env readers, and model-cache invalidation.
 
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
-from typing import Protocol, cast
+from typing import Protocol
 
-from api.config_parts.facade import config_api
+from api import config as _config_module
 
 
 class ConfigIOAPI(Protocol):
@@ -48,10 +48,6 @@ class ConfigIOAPI(Protocol):
     def get_config(self) -> dict: ...
 
 
-def _config_api() -> ConfigIOAPI:
-    return cast(ConfigIOAPI, cast(ModuleType, config_api()))
-
-
 def _thread_local_env_value(name: str, default: str = "") -> str:
     """Return thread-local profile env first, then process env when allowed."""
     import os
@@ -59,7 +55,7 @@ def _thread_local_env_value(name: str, default: str = "") -> str:
     env_name = str(name or "").strip()
     if not env_name:
         return default or ""
-    api = _config_api()
+    api = _config_module
     thread_env = getattr(api._thread_ctx, "env", {})
     if isinstance(thread_env, dict) and env_name in thread_env:
         thread_value = thread_env.get(env_name)
@@ -75,7 +71,7 @@ def _expand_env_vars(obj):
     """Recursively expand ``${VAR}`` references through profile-scoped env."""
     import re
 
-    api = _config_api()
+    api = _config_module
     if isinstance(obj, str):
         return re.sub(
             r"\${([^}]+)}",
@@ -101,7 +97,7 @@ def _fingerprint_config(data: dict) -> str:
 
 def _cfg_has_in_memory_overrides() -> bool:
     """Return whether the compatibility facade carries an in-memory override."""
-    api = _config_api()
+    api = _config_module
     if (
         api._cfg_fingerprint is not None
         and api._fingerprint_config(api._cfg_cache) != api._cfg_fingerprint
@@ -115,23 +111,17 @@ def _cfg_has_in_memory_overrides() -> bool:
 
 def _get_config_path() -> Path:
     """Return ``config.yaml`` for the active profile or explicit override."""
-    import os
-
-    api = _config_api()
-    env_override = os.getenv("HERMES_CONFIG_PATH")
+    api = _config_module
+    env_override = api._thread_local_env_value("HERMES_CONFIG_PATH")
     if env_override:
         return Path(env_override).expanduser()
-    try:
-        from api.profiles import get_active_hermes_home
-
-        return get_active_hermes_home() / "config.yaml"
-    except ImportError:
-        return api._DEFAULT_HERMES_HOME / "config.yaml"
+    hermes_home = api._thread_local_env_value("HERMES_HOME")
+    return Path(hermes_home or api._DEFAULT_HERMES_HOME).expanduser() / "config.yaml"
 
 
 def _apply_config_defaults(config_data: dict) -> None:
     """Populate documented default-only config keys in-place."""
-    api = _config_api()
+    api = _config_module
     agent_cfg = config_data.get("agent")
     if not isinstance(agent_cfg, dict):
         agent_cfg = {}
@@ -154,7 +144,7 @@ def _apply_config_defaults(config_data: dict) -> None:
 
 def reload_config_if_stale() -> None:
     """Refresh ``config.yaml`` once for concurrent stale read paths."""
-    api = _config_api()
+    api = _config_module
     with api._cfg_lock:
         config_path = api._get_config_path()
         try:
@@ -175,7 +165,7 @@ def reload_config_if_stale() -> None:
 
 def get_config() -> dict:
     """Return the active cached config, honoring facade-level overrides."""
-    api = _config_api()
+    api = _config_module
     config_path = api._get_config_path()
     try:
         current_mtime = config_path.stat().st_mtime
@@ -196,7 +186,7 @@ def get_config() -> dict:
 
 def get_webui_session_save_mode(config_data: dict | None = None) -> str:
     """Return the validated first-turn session persistence mode."""
-    api = _config_api()
+    api = _config_module
     active_cfg = config_data if isinstance(config_data, dict) else api.cfg
     webui_cfg = active_cfg.get("webui", {}) if isinstance(active_cfg, dict) else {}
     if not isinstance(webui_cfg, dict):
@@ -211,7 +201,7 @@ def get_webui_session_save_mode(config_data: dict | None = None) -> str:
 
 def is_unified_session_db_enabled(config_data: dict | None = None) -> bool:
     """Return the dormant unified-session-db feature flag."""
-    active_cfg = config_data if isinstance(config_data, dict) else _config_api().cfg
+    active_cfg = config_data if isinstance(config_data, dict) else _config_module.cfg
     experimental = (
         active_cfg.get("experimental", {}) if isinstance(active_cfg, dict) else {}
     )
@@ -222,7 +212,7 @@ def is_unified_session_db_enabled(config_data: dict | None = None) -> bool:
 
 def _refresh_config_cache(config_path: Path | None = None) -> None:
     """Refresh facade-owned config state; caller must hold ``_cfg_lock``."""
-    api = _config_api()
+    api = _config_module
     if config_path is None:
         config_path = api._get_config_path()
     api._cfg_cache.clear()
@@ -265,9 +255,28 @@ def _refresh_config_cache(config_path: Path | None = None) -> None:
 
 def reload_config() -> None:
     """Force a reload from the active profile's config path."""
-    api = _config_api()
+    api = _config_module
     with api._cfg_lock:
         api._refresh_config_cache(api._get_config_path())
+
+
+def update_config(mutator: Callable[[dict], bool | None]) -> bool:
+    """Atomically read, mutate, and persist the active ``config.yaml``.
+
+    The callback runs while the config lock is held and should return ``False``
+    when no write is needed. Runtime cache refresh happens after releasing the
+    non-reentrant lock.
+    """
+    api = _config_module
+    config_path = api._get_config_path()
+    with api._cfg_lock:
+        config_data = api._load_yaml_config_file(config_path)
+        changed = mutator(config_data)
+        if changed is False:
+            return False
+        api._save_yaml_config_file(config_path, config_data)
+    api.reload_config()
+    return True
 
 
 def _load_yaml_config_file_raw(config_path: Path, *, _copy: bool = True) -> dict:
@@ -281,7 +290,7 @@ def _load_yaml_config_file_raw(config_path: Path, *, _copy: bool = True) -> dict
     except OSError:
         return {}
 
-    api = _config_api()
+    api = _config_module
     cache_key = str(config_path)
     stat_key = (stat.st_mtime_ns, stat.st_size)
     with api._yaml_file_cache_lock:
@@ -305,7 +314,7 @@ def _load_yaml_config_file_raw(config_path: Path, *, _copy: bool = True) -> dict
 
 def _load_yaml_config_file(config_path: Path) -> dict:
     """Load YAML and expand env references against the current profile scope."""
-    api = _config_api()
+    api = _config_module
     raw = api._load_yaml_config_file_raw(config_path, _copy=False)
     if not raw:
         return {}
@@ -315,7 +324,7 @@ def _load_yaml_config_file(config_path: Path) -> dict:
 
 def get_config_for_profile_home(profile_home: Path | str | None) -> dict:
     """Read config for a known profile home without mutating global cache state."""
-    api = _config_api()
+    api = _config_module
     if not profile_home:
         return api.get_config()
     try:
@@ -323,14 +332,15 @@ def get_config_for_profile_home(profile_home: Path | str | None) -> dict:
     except Exception:
         return api.get_config()
     try:
-        from api.profiles import get_active_hermes_home
-
-        if Path(get_active_hermes_home()).expanduser() == target:
+        if api._get_config_path().parent == target:
             return api.get_config()
     except Exception:
         pass
     try:
-        if api._get_config_path().parent == target:
+        from api.config.hooks import get_config_runtime_hooks
+
+        active_home = get_config_runtime_hooks().active_profile_home()
+        if active_home and Path(active_home).expanduser() == target:
             return api.get_config()
     except Exception:
         pass
@@ -345,7 +355,7 @@ def _config_for_yaml_save(config_data: dict) -> dict:
     """Return YAML-safe config without runtime-expanded built-in defaults."""
     if not isinstance(config_data, dict):
         return {}
-    api = _config_api()
+    api = _config_module
     data = copy.deepcopy(config_data)
     agent_cfg = data.get("agent")
     if isinstance(agent_cfg, dict):
@@ -371,7 +381,7 @@ def _save_yaml_config_file(config_path: Path, config_data: dict) -> None:
         import yaml as yaml_module
     except ImportError as exc:
         raise RuntimeError("PyYAML is required to write Hermes config.yaml") from exc
-    api = _config_api()
+    api = _config_module
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         yaml_module.safe_dump(

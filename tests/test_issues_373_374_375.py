@@ -8,11 +8,11 @@ Tests for issues #373, #374, and #375.
 import pathlib
 from tests.frontend_asset_contract import family_source
 
-from api.model_catalog import FALLBACK_MODELS, PROVIDER_MODELS
+from api.config.static_catalog import FALLBACK_MODELS, PROVIDER_MODELS
 
 REPO = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
-CONFIG_PY    = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY    = (REPO / "api" / "config" / "static_catalog.py").read_text(encoding="utf-8")
 ROUTES_PY    = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 LIVE_MODELS_PY = (REPO / "api" / "routes_parts" / "live_models.py").read_text(encoding="utf-8")
 MESSAGES_JS  = family_source("messages")
@@ -91,7 +91,7 @@ class TestStaleModelListCleanup:
 
     def test_gpt4o_removed_from_fallback_models(self):
         """_FALLBACK_MODELS must not contain gpt-4o (issue #374)."""
-        fallback_block_start = CONFIG_PY.find("_FALLBACK_MODELS = [")
+        fallback_block_start = CONFIG_PY.find("FALLBACK_MODELS = [")
         fallback_block_end = CONFIG_PY.find("]", fallback_block_start)
         fallback_block = CONFIG_PY[fallback_block_start:fallback_block_end]
         assert "gpt-4o" not in fallback_block, (
@@ -100,7 +100,7 @@ class TestStaleModelListCleanup:
 
     def test_o3_removed_from_fallback_models(self):
         """_FALLBACK_MODELS must not contain o3 (issue #374)."""
-        fallback_block_start = CONFIG_PY.find("_FALLBACK_MODELS = [")
+        fallback_block_start = CONFIG_PY.find("FALLBACK_MODELS = [")
         fallback_block_end = CONFIG_PY.find("]", fallback_block_start)
         fallback_block = CONFIG_PY[fallback_block_start:fallback_block_end]
         assert '"o3"' not in fallback_block and "'o3'" not in fallback_block, (

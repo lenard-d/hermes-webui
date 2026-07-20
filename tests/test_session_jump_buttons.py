@@ -8,7 +8,7 @@ INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")
 PANELS_JS = family_source("panels")
-CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (REPO / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 

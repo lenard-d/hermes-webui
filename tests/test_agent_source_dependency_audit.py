@@ -133,8 +133,8 @@ def test_audit_reports_runtime_auxiliary_and_model_metadata_imports():
     assert ("api/streaming_parts/attachments.py", "agent.auxiliary_client") in anchors
     assert ("api/streaming_parts/title_generation.py", "agent.auxiliary_client") in anchors
     assert ("api/streaming.py", "agent.model_metadata") in anchors
-    assert ("api/config_parts/model_catalog.py", "hermes_cli.models") in anchors
-    assert ("api/provider_parts/account_usage.py", "agent.account_usage") in anchors
+    assert ("api/config/model_catalog.py", "hermes_cli.models") in anchors
+    assert ("api/providers/account_usage.py", "agent.account_usage") in anchors
 
 
 def test_audit_embedded_worker_import_line_anchors_are_source_lines():
@@ -143,7 +143,7 @@ def test_audit_embedded_worker_import_line_anchors_are_source_lines():
     account_usage = next(
         finding
         for finding in provider_findings
-        if finding["path"] == "api/provider_parts/account_usage.py"
+        if finding["path"] == "api/providers/account_usage.py"
         and finding["anchor"] == "agent.account_usage"
     )
 
@@ -189,7 +189,7 @@ def test_audit_keeps_client_package_candidates_visible():
     assert ("api/streaming_parts/webui_prefill.py", "hermes_constants") in anchors
     assert ("api/routes_parts/skills.py", "agent.skill_utils") in anchors
     assert ("api/routes.py", "hermes_cli.plugins") in anchors
-    assert ("api/provider_parts/account_usage.py", "agent.credential_pool") in anchors
+    assert ("api/providers/account_usage.py", "agent.credential_pool") in anchors
 
 
 def test_markdown_output_is_utf8_safe_on_windows_stdout():

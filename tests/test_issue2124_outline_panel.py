@@ -13,7 +13,7 @@ OUTLINE_JS  = (STATIC / "outline.js").read_text(encoding="utf-8")
 STYLE_CSS   = family_source("style")
 BOOT_JS     = family_source("boot")
 PANELS_JS   = family_source("panels")
-CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 

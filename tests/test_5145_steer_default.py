@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(
     encoding="utf-8"
 )
 BOOT_JS = family_source("boot")

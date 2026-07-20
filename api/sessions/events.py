@@ -19,9 +19,9 @@ def _profile_is_root_alias(profile: str | None) -> bool:
     if name == "default":
         return True
     try:
-        from api.profiles import _is_root_profile
+        from api.profiles import is_root_profile
 
-        return bool(_is_root_profile(name))
+        return bool(is_root_profile(name))
     except Exception:
         return False
 
