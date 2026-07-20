@@ -14,6 +14,7 @@ from tests.frontend_asset_contract import family_source
 
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -406,9 +407,22 @@ def test_emit_during_busy_turn_dual_emits_to_both():
 # ---------------------------------------------------------------------------
 
 def test_routes_registers_session_stream_endpoint():
-    src = (REPO_ROOT / "api" / "routes.py").read_text()
-    assert "/api/session/stream" in src
-    assert "_handle_session_sse_stream" in src
+    import api.routes as route_facade
+    from api.http.routes import workspace_queries
+
+    handler = object()
+    parsed = SimpleNamespace(path="/api/session/stream", query="session_id=session-1")
+    expected = object()
+    calls = []
+    ctx = dict(vars(route_facade))
+    ctx["_handle_session_sse_stream"] = lambda actual_handler, actual_parsed: (
+        calls.append((actual_handler, actual_parsed)) or expected
+    )
+
+    result = workspace_queries.handle_get(handler, parsed, ctx)
+
+    assert result is expected
+    assert calls == [(handler, parsed)]
 
 
 def test_routes_session_sse_uses_session_channel_subscribe():
