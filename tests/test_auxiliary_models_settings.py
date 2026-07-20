@@ -20,7 +20,6 @@ PANELS_JS = family_source("panels")
 PANEL_STATE_JS = (ROOT / "static" / "modules" / "panels" / "state.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
-STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 NODE = shutil.which("node")
 
 

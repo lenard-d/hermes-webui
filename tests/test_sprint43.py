@@ -18,7 +18,9 @@ import sys
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-GATEWAY_WATCHER_PY = (REPO_ROOT / "api" / "gateway_watcher.py").read_text(encoding="utf-8")
+GATEWAY_WATCHER_PY = (
+    REPO_ROOT / "api" / "agent_ops" / "session_watcher.py"
+).read_text(encoding="utf-8")
 CONFIG_PY = (REPO_ROOT / "api" / "config" / "model_catalog.py").read_text(
     encoding="utf-8"
 )
@@ -30,7 +32,9 @@ PROFILES_PY = (REPO_ROOT / "api" / "profiles" / "__init__.py").read_text(encodin
 PROFILES_RUNTIME_PY = (REPO_ROOT / "api" / "profiles" / "runtime.py").read_text(
     encoding="utf-8"
 )
-STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING_PACKAGE_PY = (
+    REPO_ROOT / "api" / "streaming" / "__init__.py"
+).read_text(encoding="utf-8")
 WORKSPACE_REGISTRY_PY = (
     REPO_ROOT / "api" / "workspace" / "registry.py"
 ).read_text(encoding="utf-8")
@@ -122,9 +126,9 @@ class TestBareExceptLogging(unittest.TestCase):
     MODULES_REQUIRING_LOGGER = [
         ("api/auth/cookies_password.py", AUTH_PY),
         ("api/config/model_catalog.py", CONFIG_PY),
-        ("api/gateway_watcher.py", GATEWAY_WATCHER_PY),
+        ("api/agent_ops/session_watcher.py", GATEWAY_WATCHER_PY),
         ("api/profiles/__init__.py", PROFILES_PY),
-        ("api/streaming.py", STREAMING_PY),
+        ("api/streaming/__init__.py", STREAMING_PACKAGE_PY),
         ("api/workspace/registry.py", WORKSPACE_REGISTRY_PY),
         ("api/state_sync.py", STATE_SYNC_PY),
         ("api/routes.py", ROUTES_PY),

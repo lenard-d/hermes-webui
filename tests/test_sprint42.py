@@ -2,11 +2,8 @@
 Sprint 42 Tests: SessionDB injection into AIAgent for WebUI sessions (PR #356).
 
 Covers:
-- streaming.py: SessionDB is initialized inside _run_agent_streaming (import present)
-- streaming.py: try/except guards SessionDB init so failures are non-fatal
-- streaming.py: session_db= kwarg is passed to AIAgent constructor
-- streaming.py: SessionDB init failure prints a WARNING (not silently swallowed)
-- streaming.py: SessionDB init is placed before AIAgent construction
+- streaming/agent_cache.py: SessionDB construction and non-fatal failure handling
+- runs/local.py: SessionDB injection into AIAgent before construction
 """
 from tests.frontend_asset_contract import family_source
 import ast
@@ -19,7 +16,12 @@ import unittest
 from unittest import mock
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+AGENT_CACHE_PY = (
+    REPO_ROOT / "api" / "streaming" / "agent_cache.py"
+).read_text(encoding="utf-8")
+POST_COMPRESSION_CONTEXT_PY = (
+    REPO_ROOT / "api" / "streaming" / "post_compression_context.py"
+).read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
     REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
@@ -35,7 +37,6 @@ LOCAL_EVENTS_PY = (
 
 REPO = REPO_ROOT  # alias used by #427 tests
 _SESSIONS_JS = REPO_ROOT / 'static' / 'sessions.js'
-_STREAMING_PY = REPO_ROOT / 'api' / 'streaming.py'
 _MESSAGES_JS = REPO_ROOT / 'static' / 'messages.js'
 _UI_JS = REPO_ROOT / 'static' / 'ui.js'
 
@@ -45,14 +46,14 @@ def _read_sessions_js():
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSessionDBInjection(unittest.TestCase):
-    """Verify SessionDB is initialized and passed to AIAgent in streaming.py."""
+    """Verify the cache owner builds SessionDB and the run owner injects it."""
 
     def test_hermes_state_import_present(self):
         """SessionDB must be imported from hermes_state inside _run_agent_streaming."""
         self.assertIn(
             "from hermes_state import SessionDB",
-            STREAMING_PY,
-            "SessionDB import missing from streaming.py (PR #356)",
+            AGENT_CACHE_PY,
+            "SessionDB import missing from the streaming agent-cache owner (PR #356)",
         )
 
     def test_session_db_kwarg_passed_to_agent(self):
@@ -65,11 +66,10 @@ class TestSessionDBInjection(unittest.TestCase):
 
     def test_sessiondb_init_in_try_except(self):
         """SessionDB init must be wrapped in try/except for non-fatal failure handling."""
-        # Check that SessionDB init is wrapped in the helper used by streaming.
-        helper_start = STREAMING_PY.find("def _build_session_db_for_stream")
-        helper_end = STREAMING_PY.find("\n\ndef _attempt_credential_self_heal", helper_start)
-        self.assertGreater(helper_start, -1, "session DB helper missing in streaming.py")
-        helper_src = STREAMING_PY[helper_start:helper_end]
+        helper_start = AGENT_CACHE_PY.find("def _build_session_db_for_stream")
+        helper_end = AGENT_CACHE_PY.find("\n\ndef ", helper_start + 1)
+        self.assertGreater(helper_start, -1, "session DB helper missing in agent_cache.py")
+        helper_src = AGENT_CACHE_PY[helper_start:helper_end]
         pattern = (
             r"def _build_session_db_for_stream"
             r"[\s\S]*?try:\s*\n[\s\S]*?from hermes_state import SessionDB[\s\S]*?return SessionDB\(db_path=state_db_path\)[\s\S]*?except Exception as _db_err:"
@@ -82,9 +82,9 @@ class TestSessionDBInjection(unittest.TestCase):
 
     def test_sessiondb_retry_only_targets_transient_sqlite_errors(self):
         """Permanent constructor errors must leave the retry loop immediately."""
-        helper_start = STREAMING_PY.find("def _build_session_db_for_stream")
-        helper_end = STREAMING_PY.find("\n\ndef _attempt_credential_self_heal", helper_start)
-        helper_src = STREAMING_PY[helper_start:helper_end]
+        helper_start = AGENT_CACHE_PY.find("def _build_session_db_for_stream")
+        helper_end = AGENT_CACHE_PY.find("\n\ndef ", helper_start + 1)
+        helper_src = AGENT_CACHE_PY[helper_start:helper_end]
         self.assertIn("except sqlite3.OperationalError as _db_err", helper_src)
         self.assertIn('"locked" in _db_err_text or "busy" in _db_err_text', helper_src)
         self.assertIn("raise _last_error or RuntimeError", helper_src)
@@ -93,7 +93,7 @@ class TestSessionDBInjection(unittest.TestCase):
         """A failure initializing SessionDB must print a WARNING (not silently drop the error)."""
         self.assertIn(
             "WARNING: SessionDB init failed",
-            STREAMING_PY,
+            AGENT_CACHE_PY,
             "SessionDB init failure must log a WARNING message (PR #356)",
         )
 
@@ -581,7 +581,7 @@ class TestRuntimeRouteInjection(unittest.TestCase):
         with mock.patch.object(streaming, "get_session", return_value=fake_session), \
              mock.patch.object(streaming, "_get_ai_agent", return_value=CapturingAgent), \
              mock.patch.object(streaming, "resolve_model_provider", return_value=("gpt-5.4", "openai-codex", None)), \
-             mock.patch.object(streaming, "get_config", return_value={"clarify": {"timeout": 300}}), \
+             mock.patch("api.streaming.agent_loader.get_config", return_value={"clarify": {"timeout": 300}}), \
              mock.patch("api.config._resolve_cli_toolsets", return_value=[]), \
              mock.patch("api.clarify.submit_pending", side_effect=fake_submit_pending), \
              mock.patch.dict(sys.modules, {
@@ -607,7 +607,7 @@ class TestSessionDBAST(unittest.TestCase):
     """AST-level checks: verify the try/except is not inside _ENV_LOCK (deadlock guard)."""
 
     def setUp(self):
-        self.tree = ast.parse(STREAMING_PY)
+        self.tree = ast.parse(AGENT_CACHE_PY)
 
     def test_sessiondb_try_not_inside_env_lock(self):
         """The try block that wraps SessionDB init must NOT be inside a 'with _ENV_LOCK:' block.
@@ -819,10 +819,10 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
     history before saving the session, including reinserting dropped
     reasoning-only assistant segments.
     """
-    facade_src = STREAMING_PY
+    owner_src = POST_COMPRESSION_CONTEXT_PY
     run_src = LOCAL_RUN_PY
-    assert "def _restore_reasoning_metadata(" in facade_src, \
-        "streaming.py must define a helper to restore prior reasoning metadata"
+    assert "def _restore_reasoning_metadata(" in owner_src, \
+        "post_compression_context.py must own prior reasoning restoration"
     assert "_next_context_messages" in run_src and "s.context_messages" in run_src, \
         "local_run.py must restore prior reasoning metadata into model context"
     assert "s.messages = _merge_display_messages_after_agent_result(" in run_src, \
