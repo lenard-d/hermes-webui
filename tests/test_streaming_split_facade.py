@@ -406,3 +406,67 @@ def test_compression_anchor_public_helpers_keep_streaming_module_identity():
     )
 
     assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_new_turn_context_observes_facade_decisions(monkeypatch):
+    history = [{"role": "assistant", "content": "compacted task"}]
+    monkeypatch.setattr(
+        streaming,
+        "_drop_checkpointed_current_user_from_context",
+        lambda messages, text: history,
+    )
+    monkeypatch.setattr(streaming, "_is_casual_fresh_chat_message", lambda text: True)
+    monkeypatch.setattr(
+        streaming,
+        "_has_task_resume_compaction_marker",
+        lambda messages: messages is history,
+    )
+
+    assert streaming._new_turn_context_from_messages([], "hello") == []
+
+
+def test_session_turn_context_observes_facade_history_selector(monkeypatch):
+    selected = [{"role": "user", "content": "selected"}]
+    calls = []
+    monkeypatch.setattr(streaming, "_session_context_messages", lambda session: selected)
+    monkeypatch.setattr(
+        streaming,
+        "_new_turn_context_from_messages",
+        lambda messages, text: calls.append((messages, text)) or messages,
+    )
+
+    session = object()
+    assert streaming._context_messages_for_new_turn(session, "prompt") is selected
+    assert calls == [(selected, "prompt")]
+
+
+def test_truncation_watermark_fallback_observes_facade_clock(monkeypatch):
+    session = type(
+        "Session",
+        (),
+        {
+            "truncation_watermark": 1.0,
+            "messages": [{"role": "user", "content": "current"}],
+        },
+    )()
+    monkeypatch.setattr(streaming.time, "time", lambda: 321.5)
+
+    streaming._advance_truncation_watermark_after_commit(session)
+
+    assert session.truncation_watermark == 321.5
+
+
+def test_turn_context_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._save_streaming_checkpoint,
+        streaming._normalize_fresh_chat_text,
+        streaming._is_casual_fresh_chat_message,
+        streaming._has_task_resume_compaction_marker,
+        streaming._new_turn_context_from_messages,
+        streaming._context_messages_for_new_turn,
+        streaming._stream_writeback_is_current,
+        streaming._stream_writeback_can_supersede_recovery_marker,
+        streaming._advance_truncation_watermark_after_commit,
+    )
+
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
