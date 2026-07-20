@@ -1,5 +1,6 @@
-import { loadSession } from './lifecycle.js';
-import { _clearHandoffStorageForSession, _sessionListQueryString } from './message-loading.js';
+import { loadSession } from './session-lifecycle-port.js';
+import { _clearHandoffStorageForSession } from './handoff-lifecycle.js';
+import { _sessionListQueryString } from './sidebar-session-opening.js';
 import { renderSessionList } from './session-list-render-port.js';
 import { renderSessionListFromCache } from './sidebar-render-port.js';
 import { _sessionResponseRetainsWorktree, _sessionSnapshotById, _worktreeResponseCount, _worktreeSessionCount } from './sidebar-cache.js';

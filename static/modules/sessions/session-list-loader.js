@@ -1,6 +1,6 @@
 import { _SESSION_LIST_BOOT_TIMEOUT_MS, sessionListCoordination } from './session-list-coordination.js';
-import { _clearSessionSourceTabCounts, _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled, _sessionListQueryString } from './message-loading.js';
-import { sessionDiscoveryBindings } from './session-discovery.js';
+import { _clearSessionSourceTabCounts, _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled, _sessionListQueryString } from './sidebar-session-opening.js';
+import { sessionSearchBindings } from './session-search.js';
 import { _applySessionListPayload, _isSessionListUserInteracting, _schedulePendingSessionListApply } from './session-list-reconciliation.js';
 import { sessionListViewBindings } from './session-list-skeleton.js';
 import { sidebarStateBindings } from './sidebar-store.js';
@@ -111,7 +111,7 @@ async function _runRenderSessionListRefresh(opts, _gen){
   // marking for this response even if list gen checks already passed.
   const unreadGen = (typeof _cronPollGeneration === 'number') ? _cronPollGeneration : 0;
   try{
-    if(!($('sessionSearch').value||'').trim()) sessionDiscoveryBindings._contentSearchResults = [];
+    if(!($('sessionSearch').value||'').trim()) sessionSearchBindings._contentSearchResults = [];
     const sessionListQS = _sessionListQueryString();
     // #5394: the sidebar session-list GET is idempotent, so 502/503/504 retry
     // must be unconditional. Previously retries/retryStatuses were boot-gated, so

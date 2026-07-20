@@ -18,12 +18,14 @@ from pathlib import Path
 
 import pytest
 
-from tests.frontend_asset_contract import family_source
-
-
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_SRC = family_source("sessions")
 NODE = shutil.which("node")
+
+
+def _owner_source(name: str) -> str:
+    return (
+        REPO / "static" / "modules" / "sessions" / name
+    ).read_text(encoding="utf-8")
 
 
 def _extract_function(source: str, name: str) -> str:
@@ -89,11 +91,21 @@ def _extract_function(source: str, name: str) -> str:
     raise AssertionError(f"Could not extract function {name}")
 
 
-LOAD_SESSION_SRC = _extract_function(SESSIONS_SRC, "loadSession")
-ENSURE_MESSAGES_LOADED_SRC = _extract_function(SESSIONS_SRC, "_ensureMessagesLoaded")
-INFLIGHT_HAS_VISIBLE_STATE_SRC = _extract_function(SESSIONS_SRC, "_inflightHasVisibleLiveState")
-SELECT_LIVE_RECOVERY_INFLIGHT_SRC = _extract_function(SESSIONS_SRC, "_selectLiveRecoveryInflight")
-RESTORE_LOADED_SESSION_SRC = _extract_function(SESSIONS_SRC, "_restoreLoadedSession")
+LOAD_SESSION_SRC = _extract_function(
+    _owner_source("existing-session-load.js"), "loadSession"
+)
+ENSURE_MESSAGES_LOADED_SRC = _extract_function(
+    _owner_source("transcript-loading.js"), "_ensureMessagesLoaded"
+)
+INFLIGHT_HAS_VISIBLE_STATE_SRC = _extract_function(
+    _owner_source("session-live-recovery.js"), "_inflightHasVisibleLiveState"
+)
+SELECT_LIVE_RECOVERY_INFLIGHT_SRC = _extract_function(
+    _owner_source("session-live-recovery.js"), "_selectLiveRecoveryInflight"
+)
+RESTORE_LOADED_SESSION_SRC = _extract_function(
+    _owner_source("session-load-recovery.js"), "_restoreLoadedSession"
+)
 
 
 def _normalise_ws(s: str) -> str:
@@ -103,14 +115,14 @@ def _normalise_ws(s: str) -> str:
 def test_loadsession_has_generation_token_and_forwards_to_ensure_messages_loaded():
     load_body = LOAD_SESSION_SRC
     restore_body = RESTORE_LOADED_SESSION_SRC
-    assert "_loadSessionGeneration" in load_body, (
+    assert "sessionLoadState.begin(sid)" in load_body, (
         "loadSession() must use a global generation counter so superseded loads "
         "can be rejected by continuation ownership checks"
     )
-    assert "const _loadGeneration = ++_loadSessionGeneration" in load_body, (
+    assert "const _loadGeneration=sessionLoadState.begin(sid)" in load_body, (
         "loadSession() must increment and capture per-call generation"
     )
-    assert "const _isCurrentLoad = () => _loadingSessionId === sid && _loadSessionGeneration === _loadGeneration" in load_body
+    assert "const _isCurrentLoad=()=>sessionLoadState.isCurrent(sid,_loadGeneration)" in load_body
     assert "loadGeneration:_loadGeneration" in restore_body, (
         "_restoreLoadedSession() must thread loadSession's generation into "
         "_ensureMessagesLoaded()"
@@ -140,11 +152,11 @@ def test_loadsession_has_generation_token_and_forwards_to_ensure_messages_loaded
 
 def test_ensure_messages_loaded_ownership_guard_pre_and_post_await():
     body = ENSURE_MESSAGES_LOADED_SRC
-    assert "_loadSessionGeneration" in body, "_ensureMessagesLoaded should read generation"
+    assert "sessionLoadState.generation" in body, "_ensureMessagesLoaded should read generation"
     assert "const _loadGeneration = Number.isFinite(opts.loadGeneration) ? Number(opts.loadGeneration) : null" in body
     norm = _normalise_ws(body)
     assert (
-        "_loadGeneration===null||_loadSessionGeneration===_loadGeneration" in norm
+        "_loadGeneration===null||sessionLoadState.generation===_loadGeneration" in norm
     ), "_ensureMessagesLoaded must compare generation token"
     assert norm.count("if(!_ownsLoad())return;") >= 2, (
         "_ensureMessagesLoaded needs pre/post await ownership guards"
@@ -188,10 +200,10 @@ function snapshotState() {
     sid: S.session && S.session.session_id,
     messages: Array.isArray(S.messages) ? S.messages.map((m) => (m && m.role ? String(m.content || '') : null)).filter(Boolean) : [],
     toolCalls: Array.isArray(S.toolCalls) ? S.toolCalls.slice() : [],
-    truncated: _messagesTruncated,
-    oldestIdx: _oldestIdx,
-    loadingSid: _loadingSessionId,
-    loadingGeneration: _loadSessionGeneration,
+    truncated: transcriptWindowState.messagesTruncated,
+    oldestIdx: transcriptWindowState.oldestIdx,
+    loadingSid: sessionLoadState.loadingSessionId,
+    loadingGeneration: sessionLoadState.generation,
     msgInner: _msgInner.innerHTML,
     toastCalls: toastCalls.slice(),
     rearmCalls,
@@ -213,27 +225,31 @@ function createEnvironment() {
     busy: false,
     activeStreamId: null,
   };
-  globalThis._loadingSessionId = null;
-  globalThis._loadingOlder = false;
-  globalThis._loadSessionGeneration = 0;
-  globalThis._pendingCarryForwardSnapshot = null;
-  globalThis._messagesTruncated = false;
-  globalThis._oldestIdx = 0;
+  globalThis.sessionLoadState = {
+    loadingSessionId: null,
+    generation: 0,
+    pendingCarryForwardSnapshot: null,
+    begin(sid) {
+      this.loadingSessionId = sid;
+      this.generation += 1;
+      return this.generation;
+    },
+    isCurrent(sid, generation) {
+      return this.loadingSessionId === sid && this.generation === generation;
+    },
+  };
+  globalThis.transcriptWindowState = {
+    loadingOlder: false,
+    messagesTruncated: false,
+    oldestIdx: 0,
+    msgLimitMax: 500,
+  };
   globalThis._messageRenderWindowSize = 0;
   globalThis._messageReloadLimitForSession = () => 2;
-  // sessions.js module-level const, referenced by _ensureMessagesLoaded's
-  // boundedReloadLimit ceiling check (#6152/#6154). Not one of the extracted
-  // functions, so define it in the harness (matching the real value) or the
-  // reload-width path resolves it as undefined -> boundedReloadLimit=null ->
-  // the fetch URL drops msg_limit/expand_renderable and mismatches the
-  // enqueued buildMessageUrl(), stalling the ordered api() harness.
-  globalThis._MSG_LIMIT_MAX = 500;
-  // #6177: _msgLimitMax is a module-scope `let` (live server-advertised ceiling,
-  // defaulting to _MSG_LIMIT_MAX). It's read by _ensureMessagesLoaded's
-  // boundedReloadLimit and _loadOlderMessages's useBeforePaging; the harness
-  // injects only the extracted functions, not module-level lets, so define it
-  // here or those reads resolve undefined -> wrong fetch URL -> ordered-api stall.
-  globalThis._msgLimitMax = 500;
+  // transcript-window-state.js constant used by transcript-loading.js after
+  // the response updates the live ceiling. The extracted function keeps the
+  // focused owner's dependency explicit in this harness.
+  globalThis.MESSAGE_LIMIT_FALLBACK = 500;
   globalThis._currentMessageRenderWindowSize = () => 1;
   globalThis._messageRenderableMessageCount = () => 2;
 

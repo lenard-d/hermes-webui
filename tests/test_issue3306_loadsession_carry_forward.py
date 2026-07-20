@@ -17,37 +17,47 @@ then consume it in `_ensureMessagesLoaded()` ahead of the live S.messages
 This file is the targeted source-text pin in the same style as
 tests/test_issue3162_ensure_messages_loaded.py.
 """
-from tests.frontend_asset_contract import family_source
-
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_JS = family_source("sessions")
+SESSIONS_DIR = REPO / "static" / "modules" / "sessions"
 
 
-def _function_body(start_marker: str, end_marker: str) -> str:
-    start = SESSIONS_JS.index(start_marker)
-    end = SESSIONS_JS.index(end_marker, start)
-    return SESSIONS_JS[start:end]
+def _owner_source(name: str) -> str:
+    return (SESSIONS_DIR / name).read_text(encoding="utf-8")
+
+
+LOAD_SESSION_JS = _owner_source("existing-session-load.js")
+LOAD_STATE_JS = _owner_source("session-load-state.js")
+TRANSCRIPT_LOADING_JS = _owner_source("transcript-loading.js")
+OLDER_MESSAGE_PAGINATION_JS = _owner_source("older-message-pagination.js")
+SIDEBAR_SESSION_EVENTS_JS = _owner_source("sidebar-session-events.js")
+
+
+def _function_body(source: str, start_marker: str, end_marker: str) -> str:
+    start = source.index(start_marker)
+    end = source.index(end_marker, start)
+    return source[start:end]
 
 
 def _load_session_clear_block() -> str:
     """The if(currentSid!==sid||forceReload){...} block in loadSession()."""
-    start = SESSIONS_JS.index("async function loadSession(sid)")
-    clear_start = SESSIONS_JS.index("if (currentSid !== sid || forceReload) {", start)
-    clear_end = SESSIONS_JS.index("// Phase 1: Load metadata only", clear_start)
-    return SESSIONS_JS[clear_start:clear_end]
+    start = LOAD_SESSION_JS.index("async function loadSession(sid)")
+    clear_start = LOAD_SESSION_JS.index("if (currentSid !== sid || forceReload) {", start)
+    clear_end = LOAD_SESSION_JS.index("// Phase 1: Load metadata only", clear_start)
+    return LOAD_SESSION_JS[clear_start:clear_end]
 
 
 def _ensure_messages_loaded_body() -> str:
     return _function_body(
+        TRANSCRIPT_LOADING_JS,
         "async function _ensureMessagesLoaded(sid",
-        "function _messageComparableText",
+        "export const transcriptLoading",
     )
 
 
 def test_pending_carry_forward_snapshot_declared_at_module_scope():
-    assert "let _pendingCarryForwardSnapshot" in SESSIONS_JS, (
+    assert "let _pendingCarryForwardSnapshot" in LOAD_STATE_JS, (
         "module-level _pendingCarryForwardSnapshot is the bridge between "
         "loadSession()'s pre-clear snapshot and _ensureMessagesLoaded()'s "
         "carry-forward call — required by #3306 fix"
@@ -58,7 +68,7 @@ def test_loadsession_snapshots_messages_before_clearing():
     body = _load_session_clear_block()
     # The assignment to _pendingCarryForwardSnapshot must appear before the
     # `S.messages = [];` clear inside the if-block.
-    assign_idx = body.find("_pendingCarryForwardSnapshot =")
+    assign_idx = body.find("sessionLoadState.pendingCarryForwardSnapshot =")
     clear_idx = body.find("S.messages = [];")
     assert assign_idx != -1, (
         "#3306: loadSession() must snapshot S.messages into "
@@ -83,13 +93,13 @@ def test_loadsession_snapshot_gated_on_force_reload_of_active_session():
 
 def test_ensure_messages_loaded_consumes_snapshot_then_clears_it():
     body = _ensure_messages_loaded_body()
-    assert "_pendingCarryForwardSnapshot" in body, (
+    assert "sessionLoadState.pendingCarryForwardSnapshot" in body, (
         "#3306: _ensureMessagesLoaded() must consult _pendingCarryForwardSnapshot "
         "when calling _carryForwardEphemeralTurnFields"
     )
     # And must reset it afterwards so subsequent non-force loads don't reuse
     # a stale snapshot.
-    assert "_pendingCarryForwardSnapshot = null" in body, (
+    assert "sessionLoadState.pendingCarryForwardSnapshot = null" in body, (
         "#3306: _ensureMessagesLoaded() must reset _pendingCarryForwardSnapshot "
         "to null after consuming it, to avoid leaking stale ephemeral fields "
         "into a later unrelated load"
@@ -98,13 +108,15 @@ def test_ensure_messages_loaded_consumes_snapshot_then_clears_it():
 
 def _load_older_messages_body() -> str:
     return _function_body(
+        OLDER_MESSAGE_PAGINATION_JS,
         "async function _loadOlderMessages() {",
-        "async function _ensureAllMessagesLoaded",
+        "export const olderMessagePagination",
     )
 
 
 def _start_gateway_sse_body() -> str:
     return _function_body(
+        SIDEBAR_SESSION_EVENTS_JS,
         "function startGatewaySSE(){",
         "function stopGatewaySSE",
     )

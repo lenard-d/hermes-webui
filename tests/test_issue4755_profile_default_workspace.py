@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import (
+    family_source,
+    normalize_session_source_for_harnesses,
+)
 
 import json
 import shutil
@@ -13,7 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = ROOT / "static" / "sessions.js"
+NEW_SESSION_JS = ROOT / "static" / "modules" / "sessions" / "new-session.js"
 NODE = shutil.which("node")
 
 node_test = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -81,7 +84,10 @@ def _run_node(script: str) -> dict:
 
 
 def _new_session_driver(session_workspace: str, default_workspace: str, switch_workspace: str | None) -> str:
-    new_session = _extract_async_function(family_source("sessions"), "newSession")
+    source = normalize_session_source_for_harnesses(
+        NEW_SESSION_JS.read_text(encoding="utf-8")
+    )
+    new_session = _extract_async_function(source, "newSession")
     return textwrap.dedent(
         f"""
         let captured=null;

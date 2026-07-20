@@ -16,7 +16,21 @@ import time
 from unittest.mock import patch, MagicMock
 
 REPO = pathlib.Path(__file__).parent.parent
-SESSIONS_JS = family_source("sessions")
+EXISTING_SESSION_LOAD_JS = (
+    REPO / "static" / "modules" / "sessions" / "existing-session-load.js"
+).read_text(encoding="utf-8")
+SESSION_LOAD_RECOVERY_JS = (
+    REPO / "static" / "modules" / "sessions" / "session-load-recovery.js"
+).read_text(encoding="utf-8")
+TRANSCRIPT_LOADING_JS = (
+    REPO / "static" / "modules" / "sessions" / "transcript-loading.js"
+).read_text(encoding="utf-8")
+OLDER_MESSAGE_PAGINATION_JS = (
+    REPO / "static" / "modules" / "sessions" / "older-message-pagination.js"
+).read_text(encoding="utf-8")
+TRANSCRIPT_WINDOW_STATE_JS = (
+    REPO / "static" / "modules" / "sessions" / "transcript-window-state.js"
+).read_text(encoding="utf-8")
 WORKSPACE_JS = family_source("workspace")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
@@ -73,7 +87,7 @@ class TestLoadSessionIdleOverlap:
         positions = []
         start = 0
         while True:
-            idx = SESSIONS_JS.find(idle_marker, start)
+            idx = SESSION_LOAD_RECOVERY_JS.find(idle_marker, start)
             if idx < 0:
                 break
             positions.append(idx)
@@ -85,7 +99,7 @@ class TestLoadSessionIdleOverlap:
             # conditional preserveScroll arg in the idle branch; the workspace
             # refresh now routes through a first-paint deferral helper instead of
             # a direct loadDir('.') call).
-            block = SESSIONS_JS[pos : pos + 950]
+            block = SESSION_LOAD_RECOVERY_JS[pos : pos + 950]
             has_deferred_workspace = "_deferWorkspaceRefreshForSession(sid);" in block
             # #3326 added an optional {preserveScroll} arg to the idle-path render
             # call; match the call form rather than the bare `renderMessages()`.
@@ -443,39 +457,38 @@ class TestMessagePaginationBackend:
 
 
 class TestMessagePaginationFrontend:
-    """Frontend sessions.js must use msg_limit for initial load and expose
-    _loadOlderMessages for scroll-to-top lazy loading."""
+    """Focused transcript owners preserve initial and older-window loading."""
 
     def test_ensure_messages_uses_msg_limit(self):
         """_ensureMessagesLoaded must send msg_limit parameter."""
-        fn_start = SESSIONS_JS.find("async function _ensureMessagesLoaded")
-        fn_end = SESSIONS_JS.find("\n}", fn_start) + 2
-        fn_body = SESSIONS_JS[fn_start:fn_end]
+        fn_start = TRANSCRIPT_LOADING_JS.find("async function _ensureMessagesLoaded")
+        fn_end = TRANSCRIPT_LOADING_JS.find("\n}", fn_start) + 2
+        fn_body = TRANSCRIPT_LOADING_JS[fn_start:fn_end]
 
         assert "msg_limit=" in fn_body, (
             "_ensureMessagesLoaded should include msg_limit parameter in the API call"
         )
-        assert "_INITIAL_MSG_LIMIT" in fn_body, (
-            "_ensureMessagesLoaded should use _INITIAL_MSG_LIMIT constant"
+        assert "INITIAL_MESSAGE_LIMIT" in fn_body, (
+            "_ensureMessagesLoaded should use the transcript-window initial limit"
         )
 
     def test_truncation_tracking(self):
         """_messagesTruncated must be set from the server response."""
-        assert "_messagesTruncated" in SESSIONS_JS
-        assert "_messages_truncated" in SESSIONS_JS
+        assert "transcriptWindowState.messagesTruncated" in TRANSCRIPT_LOADING_JS
+        assert "_messages_truncated" in TRANSCRIPT_LOADING_JS
 
     def test_oldest_idx_tracking(self):
         """_oldestIdx must be tracked for index-based cursor paging."""
-        assert "_oldestIdx" in SESSIONS_JS, (
-            "sessions.js must track _oldestIdx for index-based cursor paging"
+        assert "oldestIdx" in TRANSCRIPT_WINDOW_STATE_JS, (
+            "the transcript-window owner must track the index cursor"
         )
-        assert "_messages_offset" in SESSIONS_JS, (
-            "sessions.js must read _messages_offset from server response"
+        assert "_messages_offset" in TRANSCRIPT_LOADING_JS, (
+            "the transcript-loading owner must read _messages_offset"
         )
 
     def test_load_older_messages_function_exists(self):
         """_loadOlderMessages must be defined for scroll-to-top loading."""
-        assert "async function _loadOlderMessages" in SESSIONS_JS
+        assert "async function _loadOlderMessages" in OLDER_MESSAGE_PAGINATION_JS
 
     def test_load_older_uses_cumulative_tail_limit(self):
         """_loadOlderMessages requests a larger authoritative tail window via msg_limit.
@@ -484,20 +497,20 @@ class TestMessagePaginationFrontend:
         body as the race-fallback request when the suffix-continuity check
         fails.
         """
-        fn_start = SESSIONS_JS.find("async function _loadOlderMessages")
-        fn_end = SESSIONS_JS.find("\n}", fn_start) + 2
-        fn_body = SESSIONS_JS[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
         assert "requestedLimit" in fn_body
         assert "S.messages || []" in fn_body
         assert "msg_limit=${requestedLimit}" in fn_body
         assert "tailMatches" in fn_body
         # Race fallback still issues the legacy msg_before page request.
-        assert "msg_before=${_oldestIdx}" in fn_body
+        assert "msg_before=${transcriptWindowState.oldestIdx}" in fn_body
 
     def test_ensure_all_messages_function_exists(self):
         """_ensureAllMessagesLoaded must exist for operations needing full history."""
-        assert "async function _ensureAllMessagesLoaded" in SESSIONS_JS
+        assert "async function _ensureAllMessagesLoaded" in OLDER_MESSAGE_PAGINATION_JS
 
     def test_scroll_to_top_triggers_loading(self):
         """Scroll event handler must trigger _loadOlderMessages near top when opt-in is enabled."""
@@ -516,10 +529,11 @@ class TestMessagePaginationFrontend:
     def test_oldest_idx_reset_on_session_switch(self):
         """_oldestIdx must be reset to 0 on session switch."""
         # Find the loadSession reset block
-        idx = SESSIONS_JS.find("_messagesTruncated = false;\n    _oldestIdx = 0;")
-        assert idx >= 0, (
-            "_oldestIdx must be reset to 0 alongside _messagesTruncated on session switch"
+        reset_block = (
+            "transcriptWindowState.messagesTruncated = false;\n"
+            "      transcriptWindowState.oldestIdx = 0;"
         )
+        assert reset_block in EXISTING_SESSION_LOAD_JS
 
 
 # ── 5. Session-switch cancellation safety ───────────────────────────────────
@@ -538,16 +552,16 @@ class TestSessionSwitchCancellation:
 
     def test_load_older_checks_loading_session_id(self):
         """_loadOlderMessages must check _loadingSessionId after await."""
-        fn_start = SESSIONS_JS.find("async function _loadOlderMessages")
-        fn_end = SESSIONS_JS.find("\n}", fn_start) + 2
-        fn_body = SESSIONS_JS[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
-        assert "_loadingSessionId" in fn_body, (
-            "_loadOlderMessages must check _loadingSessionId after the API "
+        assert "sessionLoadState.loadingSessionId" in fn_body, (
+            "_loadOlderMessages must check the load-state owner after the API "
             "call returns to detect session-switch race conditions."
         )
         # The guard should be: if _loadingSessionId !== null && _loadingSessionId !== sid
-        assert "_loadingSessionId !== null" in fn_body or "_loadingSessionId!==null" in fn_body, (
+        assert "sessionLoadState.loadingSessionId !== null" in fn_body, (
             "_loadOlderMessages should bail out if a new session load started "
             "while the older-messages request was in flight."
         )
@@ -560,14 +574,14 @@ class TestSessionSwitchCancellation:
         # that was inserted between _oldestIdx and _loadingOlder) doesn't break the test.
         switch_arm = re.search(
             r"if \(currentSid !== sid \|\| forceReload\) \{(.*?)\n  \}",
-            SESSIONS_JS,
+            EXISTING_SESSION_LOAD_JS,
             re.DOTALL,
         )
         assert switch_arm, "loadSession's session-switch reset arm not found"
         block = switch_arm.group(1)
-        assert "_messagesTruncated = false;" in block
-        assert "_oldestIdx = 0;" in block
-        assert "_loadingOlder = false;" in block, (
+        assert "transcriptWindowState.messagesTruncated = false;" in block
+        assert "transcriptWindowState.oldestIdx = 0;" in block
+        assert "transcriptWindowState.loadingOlder = false;" in block, (
             "loadSession must reset _loadingOlder=false on session switch "
             "to prevent a stale _loadOlderMessages lock from blocking the "
             "new session's scroll-to-top loading."
@@ -580,12 +594,12 @@ class TestSessionSwitchCancellation:
         runs BEFORE `S.messages = nextMessages`.
         If the session changed, we return early — no mutation.
         """
-        fn_start = SESSIONS_JS.find("async function _loadOlderMessages")
-        fn_end = SESSIONS_JS.find("\n}", fn_start) + 2
-        fn_body = SESSIONS_JS[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
         # Guard must appear before S.messages mutation
-        guard_idx = fn_body.find("_loadingSessionId")
+        guard_idx = fn_body.find("sessionLoadState.loadingSessionId")
         mutation_idx = fn_body.find("S.messages = nextMessages")
         assert guard_idx >= 0 and mutation_idx >= 0 and guard_idx < mutation_idx, (
             "The _loadingSessionId guard must appear BEFORE the S.messages "
@@ -596,30 +610,30 @@ class TestSessionSwitchCancellation:
         """loadSession must reset _messagesTruncated on session switch."""
         switch_arm = re.search(
             r"if \(currentSid !== sid \|\| forceReload\) \{(.*?)\n  \}",
-            SESSIONS_JS,
+            EXISTING_SESSION_LOAD_JS,
             re.DOTALL,
         )
         assert switch_arm, "loadSession's session-switch reset arm not found"
         block = switch_arm.group(1)
-        assert "_messagesTruncated = false;" in block, (
+        assert "transcriptWindowState.messagesTruncated = false;" in block, (
             "_messagesTruncated must be reset to false on session switch "
             "to prevent the scroll-to-top handler from trying to load "
             "older messages from the previous session."
         )
-        assert "_oldestIdx = 0;" in block
-        assert "_loadingOlder = false;" in block
+        assert "transcriptWindowState.oldestIdx = 0;" in block
+        assert "transcriptWindowState.loadingOlder = false;" in block
 
     def test_oldest_idx_reset_prevents_wrong_cursor(self):
         """_oldestIdx=0 after switch prevents passing stale cursor to API."""
         # If _oldestIdx carried over from session A (e.g. _oldestIdx=70),
         # and session B only has 10 messages, msg_before=70 would return empty.
         # Resetting to 0 ensures session B starts fresh.
-        fn_start = SESSIONS_JS.find("async function _loadOlderMessages")
-        fn_end = SESSIONS_JS.find("\n}", fn_start) + 2
-        fn_body = SESSIONS_JS[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
         # _loadOlderMessages checks _oldestIdx <= 0 early and exits
-        assert "_oldestIdx <= 0" in fn_body, (
+        assert "transcriptWindowState.oldestIdx <= 0" in fn_body, (
             "_loadOlderMessages should bail out if _oldestIdx <= 0, "
             "which is the reset value after session switch."
         )
@@ -633,9 +647,9 @@ class TestSessionSwitchCancellation:
         onto the new session's S.messages. The S.session.session_id check
         closes that window.
         """
-        fn_start = SESSIONS_JS.find("async function _loadOlderMessages")
-        fn_end = SESSIONS_JS.find("\n}", fn_start) + 2
-        fn_body = SESSIONS_JS[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
         assert "S.session.session_id !== sid" in fn_body, (
             "_loadOlderMessages must compare S.session.session_id against "
@@ -663,12 +677,9 @@ class TestScrollPositionPreservation:
 
     def test_uses_correct_scrollable_container(self):
         """_loadOlderMessages must use $('messages') not $('msgInner')."""
-        SESSIONS_JS = pathlib.Path(__file__).parent.parent / "static" / "sessions.js"
-        src = family_source("sessions")
-
-        fn_start = src.find("async function _loadOlderMessages")
-        fn_end = src.find("\n}", fn_start) + 2
-        fn_body = src[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
         assert "$('messages')" in fn_body, (
             "_loadOlderMessages should use $('messages') as the scrollable container "
@@ -681,12 +692,9 @@ class TestScrollPositionPreservation:
 
     def test_resets_scroll_pinned_after_restore(self):
         """_scrollPinned must be false after older-history scroll anchoring."""
-        SESSIONS_JS = pathlib.Path(__file__).parent.parent / "static" / "sessions.js"
-        src = family_source("sessions")
-
-        fn_start = src.find("async function _loadOlderMessages")
-        fn_end = src.find("\n}", fn_start) + 2
-        fn_body = src[fn_start:fn_end]
+        fn_start = OLDER_MESSAGE_PAGINATION_JS.find("async function _loadOlderMessages")
+        fn_end = OLDER_MESSAGE_PAGINATION_JS.find("\n}", fn_start) + 2
+        fn_body = OLDER_MESSAGE_PAGINATION_JS[fn_start:fn_end]
 
         assert "_scrollPinned = false" in fn_body, (
             "Older-history paging must leave the transcript unpinned so the next "

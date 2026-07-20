@@ -34,13 +34,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import normalize_session_source_for_harnesses
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+SESSION_LOAD_JS = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "existing-session-load.js"
+)
 
 
 def _read_sessions_js() -> str:
-    return family_source("sessions")
+    return normalize_session_source_for_harnesses(
+        SESSION_LOAD_JS.read_text(encoding="utf-8")
+    )
 
 
 def _load_session_body() -> str:

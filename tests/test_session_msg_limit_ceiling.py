@@ -12,7 +12,6 @@ direct test coverage (driving the handler end-to-end would require a live
 session + state.db; the helper is the unit under test).
 """
 from __future__ import annotations
-from tests.frontend_asset_contract import family_source
 
 from api.sessions import session_message_window
 
@@ -85,7 +84,10 @@ from pathlib import Path
 _SESSION_QUERIES_SRC = (
     Path(__file__).resolve().parents[1] / "api" / "http" / "routes" / "session_queries.py"
 ).read_text(encoding="utf-8")
-_SESSIONS_JS = family_source("sessions")
+_SESSIONS_MODULES = Path(__file__).resolve().parents[1] / "static" / "modules" / "sessions"
+_TRANSCRIPT_WINDOW_STATE_JS = (_SESSIONS_MODULES / "transcript-window-state.js").read_text(encoding="utf-8")
+_TRANSCRIPT_LOADING_JS = (_SESSIONS_MODULES / "transcript-loading.js").read_text(encoding="utf-8")
+_OLDER_MESSAGE_PAGINATION_JS = (_SESSIONS_MODULES / "older-message-pagination.js").read_text(encoding="utf-8")
 
 
 def test_backend_exposes_msg_limit_max_in_session_response():
@@ -102,12 +104,12 @@ def test_frontend_declares_live_ceiling_at_module_scope_with_fallback():
     with the static fallback, so the reload-width paths read a DEFINED value
     before the first /api/session response lands — otherwise a cold load reads
     `undefined`, drops msg_limit, and full-loads every session."""
-    assert "let _msgLimitMax = _MSG_LIMIT_MAX;" in _SESSIONS_JS
+    assert "export let _msgLimitMax = MESSAGE_LIMIT_FALLBACK;" in _TRANSCRIPT_WINDOW_STATE_JS
     # refreshed from the response metadata, falling back when the server omits it
-    assert "_msgLimitMax = data.session._msg_limit_max || _MSG_LIMIT_MAX;" in _SESSIONS_JS
+    assert "transcriptWindowState.msgLimitMax = data.session._msg_limit_max || MESSAGE_LIMIT_FALLBACK;" in _TRANSCRIPT_LOADING_JS
 
 
 def test_frontend_reload_width_paths_read_the_live_ceiling():
     """Both reload-width decisions read the live `_msgLimitMax`, not the mirror."""
-    assert "reloadLimit <= _msgLimitMax" in _SESSIONS_JS       # _ensureMessagesLoaded
-    assert "requestedLimit >= _msgLimitMax" in _SESSIONS_JS    # _loadOlderMessages
+    assert "reloadLimit <= transcriptWindowState.msgLimitMax" in _TRANSCRIPT_LOADING_JS
+    assert "requestedLimit >= transcriptWindowState.msgLimitMax" in _OLDER_MESSAGE_PAGINATION_JS

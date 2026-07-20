@@ -11,7 +11,7 @@ def _source(rel: str) -> str:
 
 
 def test_new_session_reuses_inflight_request_before_posting_again():
-    src = family_source("sessions")
+    src = _source("static/modules/sessions/new-session.js")
     assert "let _newSessionInFlight=null" in src
     assert "if(_newSessionInFlight){" in src
     assert "return _newSessionInFlight;" in src, (
@@ -23,7 +23,7 @@ def test_new_session_reuses_inflight_request_before_posting_again():
 
 
 def test_new_session_sets_visible_pending_state_for_cold_catalog_wait():
-    src = family_source("sessions")
+    src = _source("static/modules/sessions/new-session.js")
     assert "function _setNewSessionPending(pending)" in src
     assert "btn.disabled=!!pending" in src
     assert "btn.setAttribute('aria-busy',pending?'true':'false')" in src

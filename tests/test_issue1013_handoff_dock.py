@@ -16,6 +16,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 SESSIONS_JS = family_source("sessions")
+HANDOFF_LIFECYCLE_JS = (
+    ROOT / "static" / "modules" / "sessions" / "handoff-lifecycle.js"
+).read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 HANDOFF_SUMMARY = (ROOT / "api" / "routes_parts" / "handoff_summary.py").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
@@ -206,25 +209,25 @@ def test_handoff_summary_prompt_uses_you_and_你():
 
 def test_generating_handoff_summary_marks_session_as_handled():
     """Summary success uses a max(dismissed/handled) baseline for future checks."""
-    generate_start = SESSIONS_JS.index("async function _generateHandoffSummary")
-    resolve_start = SESSIONS_JS.index("function _resolveSessionModelForDisplaySoon", generate_start)
-    generate_body = SESSIONS_JS[generate_start:resolve_start]
+    generate_start = HANDOFF_LIFECYCLE_JS.index("async function _generateHandoffSummary")
+    generate_end = HANDOFF_LIFECYCLE_JS.index("\nexport const handoffLifecycle", generate_start)
+    generate_body = HANDOFF_LIFECYCLE_JS[generate_start:generate_end]
 
-    dismiss_start = SESSIONS_JS.index("function _dismissHandoffHint")
-    generate_start_after_dismiss = SESSIONS_JS.index("async function _generateHandoffSummary", dismiss_start)
-    dismiss_body = SESSIONS_JS[dismiss_start:generate_start_after_dismiss]
+    dismiss_start = HANDOFF_LIFECYCLE_JS.index("function _dismissHandoffHint")
+    dismiss_end = HANDOFF_LIFECYCLE_JS.index("function _buildHandoffSummaryToolMessage", dismiss_start)
+    dismiss_body = HANDOFF_LIFECYCLE_JS[dismiss_start:dismiss_end]
 
     assert "_getHandoffSince(sid)" in generate_body
     assert "_setHandoffSummaryHandledAt(sid, Date.now() / 1000)" in generate_body
     assert "_hasMatchingHandoffSummary" not in generate_body
     assert "_setHandoffDismissedAt(" in dismiss_body
     assert "_setHandoffSummaryHandledAt(" not in dismiss_body
-    assert "_HANDOFF_SUFFIX_SUMMARY_HANDLED_AT" in SESSIONS_JS
+    assert "_HANDOFF_SUFFIX_SUMMARY_HANDLED_AT" in HANDOFF_LIFECYCLE_JS
     assert "setHandoffUi({" in generate_body
     assert "phase: 'done'" not in generate_body
-    assert "_getHandoffSince(sid)" in SESSIONS_JS
-    assert "_HANDOFF_SUFFIX_SUMMARY_HANDLED_AT" in SESSIONS_JS
-    assert "_HANDOFF_SUFFIX_DISMISSED_AT" in SESSIONS_JS
+    assert "_getHandoffSince(sid)" in HANDOFF_LIFECYCLE_JS
+    assert "_HANDOFF_SUFFIX_SUMMARY_HANDLED_AT" in HANDOFF_LIFECYCLE_JS
+    assert "_HANDOFF_SUFFIX_DISMISSED_AT" in HANDOFF_LIFECYCLE_JS
 
 
 def test_handoff_hints_use_max_baseline_since():

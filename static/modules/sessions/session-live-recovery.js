@@ -1,4 +1,4 @@
-import { _messageComparableText } from './message-timeline.js';
+import { _messageComparableText } from './current-turn-transcript.js';
 
 export function _inflightHasVisibleLiveState(inflight){
   if(!inflight||typeof inflight!=='object') return false;

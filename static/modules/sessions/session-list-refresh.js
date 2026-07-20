@@ -1,9 +1,8 @@
 import { sessionLoadState } from './session-load-state.js';
-import { loadSession } from './lifecycle.js';
-import { _isExternalSession } from './message-loading.js';
+import { loadSession } from './session-lifecycle-port.js';
+import { _isExternalSession } from './session-source.js';
 import { renderSessionListFromCache } from './sidebar-render-port.js';
 import { renderSessionList } from './session-list-render-port.js';
-import { _scheduleSessionEventsRefresh } from './sidebar-session-events.js';
 
 const _streamingPollMs = 30000;
 const _sessionTimeRefreshMs = 60000;
@@ -260,7 +259,9 @@ async function refreshSessionList(reason='manual', opts={}){
     _sessionListRefreshInFlight = false;
     const pendingRequest = _sessionListRefreshPendingRequest;
     _sessionListRefreshPendingRequest = null;
-    if(pendingRequest) _scheduleSessionEventsRefresh(pendingRequest.reason, pendingRequest.opts);
+    if(pendingRequest){
+      setTimeout(()=>{void refreshSessionList(pendingRequest.reason, pendingRequest.opts);},300);
+    }
   }
 }
 

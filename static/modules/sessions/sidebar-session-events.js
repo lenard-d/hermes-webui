@@ -1,5 +1,6 @@
 import { _sessionEventProfilesMatch } from './session-profile-scope.js';
-import { _externalImportPayload, _isCliImportRefreshPrefixMatch, _isCliSession, _isExternalSession, _isMessagingSession } from './message-loading.js';
+import { _isCliSession, _isExternalSession, _isMessagingSession } from './session-source.js';
+import { _externalImportPayload, _isCliImportRefreshPrefixMatch } from './sidebar-session-opening.js';
 import { sidebarStateBindings } from './sidebar-store.js';
 import { renderSessionList } from './session-list-render-port.js';
 import { _mergeSessionListRefreshOptions, refreshSessionList } from './session-list-refresh.js';
@@ -43,6 +44,7 @@ function _scheduleSessionEventsRefresh(reason, opts={}){
     void refreshSessionList(request.reason||'event', request.opts);
   }, 300);
 }
+
 
 function _sessionEventTargetsActiveSession(payload){
   const eventSessionId = payload && typeof payload.session_id === 'string' ? payload.session_id : '';

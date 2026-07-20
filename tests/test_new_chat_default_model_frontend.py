@@ -1,7 +1,9 @@
 from pathlib import Path
 from tests.frontend_asset_contract import family_source
 
-SESSIONS_JS = family_source("sessions")
+SESSIONS_JS = (
+    Path("static/modules/sessions/new-session.js").read_text(encoding="utf-8")
+)
 MESSAGES_JS = family_source("messages")
 CHANGELOG = Path("CHANGELOG.md").read_text(encoding="utf-8")
 

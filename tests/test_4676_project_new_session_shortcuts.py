@@ -42,7 +42,7 @@ def test_quick_create_button_attaches_filter_align_and_request_path():
     assert "project-chip-quick-create" in helper
     assert "_setActiveProjectFilter(project.project_id)" in helper
     assert "newSession(false,{project_id:project.project_id})" in helper
-    assert "if(_newSessionInFlight)" in helper
+    assert "if(isNewSessionInFlight())" in helper
     assert "_setActiveProjectFilter(previousProject)" in helper
     assert "btn.ondblclick" in helper
     assert "btn.oncontextmenu" in helper
@@ -270,6 +270,7 @@ globalThis._newSessionInFlight = params.newSessionInFlightReject
   : (params.newSessionInFlight
       ? Promise.resolve(params.newSessionInFlight)
       : null);
+globalThis.isNewSessionInFlight = () => Boolean(globalThis._newSessionInFlight);
 
 eval(extractFunction(sessionsSrc, '_attachProjectQuickCreateButton'));
 

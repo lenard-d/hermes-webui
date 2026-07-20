@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import normalize_session_source_for_harnesses
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
+NEW_SESSION_JS_PATH = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "new-session.js"
+)
 NODE = shutil.which("node")
 
 
@@ -187,7 +189,9 @@ def driver_path(tmp_path_factory):
 def _run_case(driver_path, payload):
     result = subprocess.run(
         [NODE, driver_path, json.dumps(payload)],
-        input=family_source("sessions"),
+        input=normalize_session_source_for_harnesses(
+            NEW_SESSION_JS_PATH.read_text(encoding="utf-8")
+        ),
         capture_output=True,
         text=True,
         timeout=30,

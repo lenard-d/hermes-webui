@@ -1,6 +1,9 @@
 // Public sidebar facade. Mutable state, navigation, selection, motion, cached
 // projections, and row actions each have a dedicated owner module.
-import { _archiveSession, _copySessionLink, _openSessionActionMenu, closeSessionActionMenu } from './sidebar-actions.js';
+import { _openSessionActionMenu } from './sidebar-actions.js';
+import { _archiveSession } from './session-archive-actions.js';
+import { closeSessionActionMenu } from './session-action-menu.js';
+import { _copySessionLink } from './session-portability-actions.js';
 import { _setActiveSessionUrl } from './session-navigation.js';
 import { toggleSessionSelectMode } from './sidebar-selection.js';
 

@@ -5,7 +5,7 @@ These tests exist specifically to prevent those bugs from silently returning.
 Each test is tagged with the sprint/commit where the bug was found and fixed.
 """
 import json
-from tests.frontend_asset_contract import family_source, module_family_paths
+from tests.frontend_asset_contract import family_source
 import os
 import pathlib
 import re
@@ -24,14 +24,9 @@ LIVE_TOOLS_SRC = (
 CONTENT_EVENTS_SRC = (
     REPO_ROOT / "static" / "modules" / "messages" / "content-events.js"
 ).read_text(encoding="utf-8")
-SESSION_LIFECYCLE_SRC = next(
-    path for path in module_family_paths("sessions")
-    if path.name == "lifecycle.js"
+RESTORE_LOADED_SESSION_SRC = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "session-load-recovery.js"
 ).read_text(encoding="utf-8")
-RESTORE_LOADED_SESSION_SRC = SESSION_LIFECYCLE_SRC[
-    SESSION_LIFECYCLE_SRC.index("async function _restoreLoadedSession"):
-    SESSION_LIFECYCLE_SRC.index("async function loadSession")
-]
 
 from tests._pytest_port import BASE
 
@@ -485,7 +480,7 @@ def test_loadSession_inflight_restores_live_tool_cards(cleanup_test_sessions):
     When missing, tool cards disappeared on switch-away even though the session
     was still processing.
     """
-    src = SESSION_LIFECYCLE_SRC
+    src = RESTORE_LOADED_SESSION_SRC
     # INFLIGHT branch must call appendLiveToolCard
     # Anchor on the Phase-2 INFLIGHT restore branch (the later occurrence); #3899
     # added an earlier if(INFLIGHT[sid]){ idle-reset block, so .find() would

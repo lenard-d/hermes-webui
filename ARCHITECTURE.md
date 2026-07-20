@@ -984,9 +984,10 @@ The main directly loaded families are:
 4. `workspace.js`, then ordered `workspace_parts/` for navigation, preview/editor,
    and upload behavior.
 5. `static/modules/sessions/index.js`, a native-module entrypoint whose semantic
-   owners include lifecycle, drafts, unread/visit persistence, runtime recovery,
-   list rendering, discovery, and management. Its compatibility domain is
-   published only by the entrypoint.
+   owners cover new/existing-session lifecycle, transcript loading and paging,
+   handoffs, drafts, unread/visit persistence, runtime recovery, discovery,
+   sidebar rendering and gestures, projects, and session management. Its
+   compatibility domain is published only by the entrypoint.
 6. `static/modules/commands/index.js`, a native-module entrypoint over a
    directed graph for catalog/dispatch, remote metadata, autocomplete,
    dropdown presentation, and semantic command handlers. `registry.js` is the
@@ -1017,13 +1018,22 @@ projection/recovery owner `session-live-recovery.js`. `session-unread.js` owns
 persisted viewed/completion markers, while `session-visit.js` commits a visit across
 unread, polling snapshot, and sidebar projection as one transaction. Source and
 profile identity normalization live in `session-source.js` and
-`session-profile-scope.js`. The sidebar follows the same ownership model:
-`sidebar-store.js` is the sole mutable list-state owner; navigation, selection,
-motion, cache, row actions, and stream events live in dedicated modules; and
-session-list loading, reconciliation, refresh, and skeleton rendering have
-separate lifecycle owners. `sidebar-state.js` and `session-list.js` are stable
-public facades only. Small render ports keep state and action owners independent
-of concrete DOM renderers without creating reverse imports. A domain stays intact
+`session-profile-scope.js`. New-session creation, existing-session load,
+load recovery, profile application, and post-load model projection each have a
+dedicated owner behind the small `lifecycle.js` facade. Transcript loading,
+older-message paging, current-turn projection, handoff state, and transcript
+window state are likewise independent owners; `message-loading.js` and
+`message-timeline.js` remain compatibility facades only.
+
+The sidebar follows the same ownership model: `sidebar-store.js` is the sole
+mutable list-state owner; search, lineage, child attachment, time projection,
+row labels, session opening, virtualization, gestures, row presentation, and
+list orchestration live in dedicated modules. Action menus, rename, archive,
+portability, project, removal, and navigation behavior have separate mutation
+owners. `session-discovery.js`, `sidebar-interactions.js`, `sidebar-renderer.js`,
+`sidebar-state.js`, `session-list.js`, and `management.js` are stable public
+facades only. Small render ports keep state and action owners independent of
+concrete DOM renderers without creating reverse imports. A domain stays intact
 when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
 `config/model_catalog.py` and

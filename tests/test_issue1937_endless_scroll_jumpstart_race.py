@@ -28,13 +28,12 @@ flag check inside its post-await body would be a no-op.  The generation
 token is the canonical pattern for invalidating async continuations and
 is what this regression suite locks in.
 """
-from tests.frontend_asset_contract import family_source
-
-
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_JS = family_source("sessions")
+SESSIONS_MODULES = REPO / "static" / "modules" / "sessions"
+TRANSCRIPT_WINDOW_STATE_JS = (SESSIONS_MODULES / "transcript-window-state.js").read_text(encoding="utf-8")
+OLDER_MESSAGE_PAGINATION_JS = (SESSIONS_MODULES / "older-message-pagination.js").read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -63,8 +62,8 @@ def _function_body(src: str, name: str) -> str:
 
 def test_generation_token_declared_at_module_scope():
     """``_messagesGeneration`` exists as a module-scoped mutable counter."""
-    assert "let _messagesGeneration = 0;" in SESSIONS_JS, (
-        "static/sessions.js must declare `let _messagesGeneration = 0;` so "
+    assert "let messagesGeneration = 0;" in TRANSCRIPT_WINDOW_STATE_JS, (
+        "transcript-window-state.js must own a module-scoped generation token so "
         "_loadOlderMessages can snapshot/re-check it across its `await`. "
         "See #1937."
     )
@@ -72,14 +71,12 @@ def test_generation_token_declared_at_module_scope():
 
 def test_generation_bump_helper_exists():
     """A single helper bumps the generation; both consumers route through it."""
-    assert "function _bumpMessagesGeneration()" in SESSIONS_JS, (
-        "static/sessions.js must define `_bumpMessagesGeneration()` so "
+    assert "bumpGeneration(){" in TRANSCRIPT_WINDOW_STATE_JS, (
+        "transcript-window-state.js must expose `bumpGeneration()` so "
         "wholesale-replace sites have a single, named pivot to call. See #1937."
     )
-    body = _function_body(SESSIONS_JS, "_bumpMessagesGeneration")
-    assert "_messagesGeneration" in body, (
-        "_bumpMessagesGeneration must mutate _messagesGeneration"
-    )
+    assert "messagesGeneration=(messagesGeneration+1)|0;" in TRANSCRIPT_WINDOW_STATE_JS
+    assert "get generation(){ return messagesGeneration; }" in TRANSCRIPT_WINDOW_STATE_JS
 
 
 # ---------------------------------------------------------------------------
@@ -88,8 +85,8 @@ def test_generation_bump_helper_exists():
 
 def test_load_older_snapshots_generation_before_await():
     """Snapshot must be captured BEFORE the `await api(...)` call."""
-    body = _function_body(SESSIONS_JS, "_loadOlderMessages")
-    snapshot_idx = body.index("const startGeneration = _messagesGeneration;")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_loadOlderMessages")
+    snapshot_idx = body.index("const startGeneration = transcriptWindowState.generation;")
     await_idx = body.index("await api(")
     assert snapshot_idx < await_idx, (
         "_loadOlderMessages must snapshot _messagesGeneration before its "
@@ -100,8 +97,8 @@ def test_load_older_snapshots_generation_before_await():
 
 def test_load_older_aborts_when_generation_changed():
     """Post-await guard must compare against the snapshot and abort."""
-    body = _function_body(SESSIONS_JS, "_loadOlderMessages")
-    assert "if (_messagesGeneration !== startGeneration) return;" in body, (
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_loadOlderMessages")
+    assert "if (transcriptWindowState.generation !== startGeneration) return;" in body, (
         "_loadOlderMessages must bail out (without prepending) when the "
         "generation token changed during its await — that is the signal "
         "that S.messages was wholesale-replaced under it. See #1937."
@@ -110,8 +107,8 @@ def test_load_older_aborts_when_generation_changed():
 
 def test_load_older_generation_check_runs_before_replace():
     """Generation check must come BEFORE the `S.messages = nextMessages` mutation."""
-    body = _function_body(SESSIONS_JS, "_loadOlderMessages")
-    guard_idx = body.index("if (_messagesGeneration !== startGeneration) return;")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_loadOlderMessages")
+    guard_idx = body.index("if (transcriptWindowState.generation !== startGeneration) return;")
     replace_idx = body.index("S.messages = nextMessages;")
     assert guard_idx < replace_idx, (
         "Generation guard must short-circuit BEFORE the message-array mutation. "
@@ -126,8 +123,8 @@ def test_load_older_generation_check_runs_before_replace():
 def test_ensure_all_bumps_generation_before_replace():
     """Bump must happen BEFORE the wholesale `S.messages =` replace so racing prefetch sees it."""
     import re
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
-    bump_idx = body.rindex("_bumpMessagesGeneration()")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
+    bump_idx = body.rindex("transcriptWindowState.bumpGeneration()")
     # Match the wholesale replace by its LHS, not the RHS variable name — #3306
     # added an ephemeral-field carry-forward so the RHS is now `_msgsToAssign`
     # rather than the literal `msgs`. The invariant we protect is bump-before-replace.
@@ -143,13 +140,13 @@ def test_ensure_all_bumps_generation_before_replace():
 
 def test_ensure_all_claims_loading_older_mutex():
     """The body must hold `_loadingOlder = true` so no NEW prefetch starts mid-replace."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
-    assert "_loadingOlder = true;" in body, (
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
+    assert "transcriptWindowState.loadingOlder = true;" in body, (
         "_ensureAllMessagesLoaded must claim the _loadingOlder mutex so "
         "the entry-gate in _loadOlderMessages short-circuits new prefetches "
         "while ensure-all is mid-replace. See #1937."
     )
-    assert "_loadingOlder = false;" in body, (
+    assert "transcriptWindowState.loadingOlder = false;" in body, (
         "_ensureAllMessagesLoaded must release the _loadingOlder mutex in "
         "its finally-block. Otherwise endless-scroll silently breaks after "
         "every Start-jump."
@@ -158,9 +155,9 @@ def test_ensure_all_claims_loading_older_mutex():
 
 def test_ensure_all_releases_mutex_in_finally():
     """Mutex release must live inside a `finally` so errors don't leak the lock."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
     finally_idx = body.index("} finally {")
-    release_idx = body.index("_loadingOlder = false;", finally_idx)
+    release_idx = body.index("transcriptWindowState.loadingOlder = false;", finally_idx)
     assert release_idx > finally_idx, (
         "_loadingOlder release must be inside the finally-block to survive "
         "thrown errors during the wholesale replace. See #1937."
@@ -169,10 +166,10 @@ def test_ensure_all_releases_mutex_in_finally():
 
 def test_ensure_all_yields_when_prefetch_in_flight():
     """When a prefetch holds the mutex, ensure-all must wait, not wholesale-replace alongside it."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
     # Look for the yield-loop on _loadingOlder before the mutex claim.
-    yield_idx = body.index("while (_loadingOlder)")
-    claim_idx = body.index("_loadingOlder = true;")
+    yield_idx = body.index("while (transcriptWindowState.loadingOlder)")
+    claim_idx = body.index("transcriptWindowState.loadingOlder = true;")
     assert yield_idx < claim_idx, (
         "_ensureAllMessagesLoaded must yield (poll _loadingOlder) BEFORE "
         "claiming the mutex itself, so an in-flight prefetch's finally-"
@@ -183,12 +180,12 @@ def test_ensure_all_yields_when_prefetch_in_flight():
 
 def test_ensure_all_bumps_generation_during_wait_phase():
     """Bumping during the wait poisons any in-flight prefetch immediately, even before ensure-all gets the mutex."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
     # Find the _loadingOlder branch that runs when a prefetch is in flight,
     # and verify it bumps the generation before the wait loop.
-    branch_idx = body.index("if (_loadingOlder) {")
-    wait_idx = body.index("while (_loadingOlder)", branch_idx)
-    bump_in_branch = body.index("_bumpMessagesGeneration()", branch_idx)
+    branch_idx = body.index("if (transcriptWindowState.loadingOlder) {")
+    wait_idx = body.index("while (transcriptWindowState.loadingOlder)", branch_idx)
+    bump_in_branch = body.index("transcriptWindowState.bumpGeneration()", branch_idx)
     assert branch_idx < bump_in_branch < wait_idx, (
         "When a prefetch is in flight at entry, _ensureAllMessagesLoaded "
         "must bump the generation BEFORE the wait loop so the in-flight "
@@ -199,8 +196,8 @@ def test_ensure_all_bumps_generation_during_wait_phase():
 
 def test_ensure_all_resets_oldest_idx():
     """After wholesale-replacing with the full history, _oldestIdx must reset to 0."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
-    assert "_oldestIdx = 0;" in body, (
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
+    assert "transcriptWindowState.oldestIdx = 0;" in body, (
         "_ensureAllMessagesLoaded must reset _oldestIdx to 0 — without it, "
         "a subsequent prefetch could send `msg_before=<stale-idx>` and "
         "request older messages that are already in the now-full transcript."
@@ -210,7 +207,7 @@ def test_ensure_all_resets_oldest_idx():
 def test_ensure_all_guards_against_session_switch_mid_await():
     """Same-session check must run after await — old version skipped this."""
     import re
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
     await_idx = body.index("await api(")
     sid_check_idx = body.index("S.session.session_id !== sid", await_idx)
     # #3306 renamed the replace RHS from `msgs` to `_msgsToAssign` (carry-forward);

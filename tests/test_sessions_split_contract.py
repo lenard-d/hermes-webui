@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import re
 import subprocess
-from pathlib import Path
 
 from tests.test_sessions_split_support import (
     REPO_ROOT,
@@ -54,6 +54,36 @@ def test_sessions_modules_are_individually_parseable_and_entrypoint_typechecks()
         capture_output=True,
         text=True,
     )
+
+
+def test_session_owner_import_graph_is_acyclic():
+    modules = {path.name: path for path in sessions_part_paths()}
+    graph = {}
+    for name, path in modules.items():
+        source = path.read_text(encoding="utf-8")
+        graph[name] = [
+            dependency
+            for dependency in re.findall(r"from\s+['\"]\./([^'\"]+\.js)['\"]", source)
+            if dependency in modules
+        ]
+
+    visited = set()
+    active = []
+
+    def visit(name):
+        if name in active:
+            cycle = " -> ".join((*active[active.index(name) :], name))
+            raise AssertionError(f"session owner import cycle: {cycle}")
+        if name in visited:
+            return
+        active.append(name)
+        for dependency in graph[name]:
+            visit(dependency)
+        active.pop()
+        visited.add(name)
+
+    for name in modules:
+        visit(name)
 
 
 def test_sessions_modules_publish_semantic_interfaces_and_one_legacy_seam():

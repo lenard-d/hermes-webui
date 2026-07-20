@@ -6,8 +6,6 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from tests.test_sessions_split_support import SESSIONS_SOURCE
-
 from api.sessions.anchor_scene import journal_projection as anchor_journal_owner
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -20,10 +18,27 @@ RUN_JOURNAL_JS = (
 SESSION_RUNTIME_JS = (
     REPO_ROOT / "static" / "modules" / "sessions" / "session-live-recovery.js"
 ).read_text(encoding="utf-8")
+EXISTING_SESSION_LOAD_JS = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "existing-session-load.js"
+).read_text(encoding="utf-8")
+SESSION_LOAD_RECOVERY_JS = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "session-load-recovery.js"
+).read_text(encoding="utf-8")
+CURRENT_TURN_TRANSCRIPT_PATH = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "current-turn-transcript.js"
+)
+CURRENT_TURN_TRANSCRIPT_IMPORT = (
+    "const {"
+    "_dropCurrentTurnAssistantMessages,"
+    "_ensureInflightLiveAssistantMessage,"
+    "_mergeInflightTailMessages,"
+    "_prepareRunningLiveTail,"
+    "_projectInflightMessagesForActivityBursts"
+    "}=await import(" + json.dumps(CURRENT_TURN_TRANSCRIPT_PATH.as_uri()) + ");"
+)
 STREAM_PROGRESS_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
 ).read_text(encoding="utf-8")
-SESSIONS_JS = SESSIONS_SOURCE
 UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
@@ -96,10 +111,11 @@ const upsertLiveToolCall=tracker.upsert;
 
 
 def _load_session_flow_body() -> str:
+    """Return only the two focused lifecycle functions that own session loading."""
     return "\n".join(
         (
-            _function_body(SESSIONS_JS, "loadSession"),
-            _function_body(SESSIONS_JS, "_restoreLoadedSession"),
+            _function_body(EXISTING_SESSION_LOAD_JS, "loadSession"),
+            _function_body(SESSION_LOAD_RECOVERY_JS, "_restoreLoadedSession"),
         )
     )
 
@@ -224,16 +240,19 @@ def test_load_session_same_sid_noop_does_not_mask_pending_switch_back():
     # The same-session no-op now opens a block so re-selecting the already-open
     # session can clear a stale unread dot before returning (#4946). The
     # protected ownership invariant is unchanged: the guard still requires
-    # (!_loadingSessionId || _loadingSessionId===sid) and still early-returns
-    # before _loadingSessionId=sid.
-    guard = "if(currentSid===sid&&!forceReload&&(!_loadingSessionId||_loadingSessionId===sid)){"
+    # an unclaimed load owner or the same sid, and still early-returns before
+    # the load-state owner claims this sid.
+    guard = (
+        "if(currentSid===sid&&!forceReload&&"
+        "(!sessionLoadState.loadingSessionId||sessionLoadState.loadingSessionId===sid)){"
+    )
     assert guard in compact, (
         "same-session no-op must be owned by the current load target: "
         "another in-flight sid must not suppress a pending switch-back"
     )
-    assert "_loadingSessionId===sid" in guard
+    assert "sessionLoadState.loadingSessionId===sid" in guard
     guard_pos = compact.find(guard)
-    load_claim_pos = compact.find("_loadingSessionId=sid", guard_pos)
+    load_claim_pos = compact.find("sessionLoadState.begin(sid)", guard_pos)
     assert load_claim_pos != -1
     assert guard_pos < load_claim_pos
     # The guarded block must still early-return for the same-session no-op,
@@ -392,12 +411,9 @@ def test_running_reattach_refreshes_single_live_assistant_from_server_progress()
     render one `_live` assistant instead of duplicating or deleting progress.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 let base = [
@@ -436,7 +452,7 @@ assert.strictEqual(merged.filter(m => m.role === 'assistant').length, 1);
 assert.strictEqual(merged[merged.length - 1]._live, true);
 assert.strictEqual(merged[merged.length - 1].content, 'First progress.\\n\\nSecond progress.');
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -449,12 +465,9 @@ def test_running_reattach_rebuilds_live_assistant_from_last_text_before_activity
     switch or token causes the text segment to reappear.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 let base = [{{role:'user', content:'go'}}];
@@ -474,7 +487,7 @@ assert.strictEqual(merged.filter(m => m.role === 'assistant').length, 1);
 assert.strictEqual(merged[merged.length - 1]._live, true);
 assert.strictEqual(merged[merged.length - 1].content, 'Recovered progress text.');
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -483,12 +496,9 @@ def test_running_reattach_projects_live_text_into_activity_burst_segments():
     timeline even when the DOM snapshot is unavailable.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 const inflight = {{
@@ -511,7 +521,7 @@ assert.strictEqual(projected[2]._activityBurstId, 2);
 assert.strictEqual(projected[3].content, 'Tail progress.');
 assert.strictEqual(projected[3]._activityBurstId, 2);
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -526,12 +536,9 @@ def test_running_reattach_reprojects_segmented_live_tail_without_duplicate_prefi
     visible process text.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 const fullText = 'First progress.\\n\\nSecond progress.\\n\\nTail progress.';
@@ -558,7 +565,7 @@ assert.deepStrictEqual(
   [1, 2, 3]
 );
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -570,12 +577,9 @@ def test_running_reattach_keeps_segmented_tail_when_last_segment_is_not_accumula
     the prior live segments are still the source of truth and must be preserved.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 const inflight = {{
@@ -597,7 +601,7 @@ assert.deepStrictEqual(
   ['First progress.', 'Second progress.']
 );
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -606,12 +610,9 @@ def test_running_reattach_aliases_empty_activity_bursts_to_previous_text_segment
     attached to a burst id that has no visible assistant segment.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 const inflight = {{
@@ -635,7 +636,7 @@ const inflight = {{
     assert.strictEqual(inflight.toolCalls[0].activityBurstId, 1);
     assert.strictEqual(inflight.toolCalls[0].activitySegmentSeq, 1);
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -645,12 +646,9 @@ def test_running_reattach_backfills_tool_segment_seq_for_burst_anchors():
     so tool cards land next to their triggering text, not at the tail.
     """
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 const inflight = {{
@@ -676,7 +674,7 @@ assert.strictEqual(projected[1]._liveSegmentSeq, 1);
     assert.strictEqual(inflight.toolCalls[0].activitySegmentSeq, 1);
     assert.strictEqual(inflight.toolCalls[1].activitySegmentSeq, 2);
     """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -791,12 +789,9 @@ def test_project_inflight_with_no_visible_anchor_maps_tools_to_run_anchor_segmen
     """Without a visible burst anchor, in-flight tools should still map to the first
     segment instead of falling back to the last segment in render order."""
     assert NODE, "node not on PATH"
-    start = SESSIONS_JS.find("function _messageComparableText")
-    end = SESSIONS_JS.find("// Load older messages", start)
-    assert start != -1 and end != -1
-    helper_src = SESSIONS_JS[start:end]
+    helper_src = CURRENT_TURN_TRANSCRIPT_IMPORT
     script = f"""
-const assert = require('assert');
+import assert from 'node:assert';
 {helper_src}
 
 const inflight = {{
@@ -818,7 +813,7 @@ assert.strictEqual(projected[1].content, 'First progress line');
 assert.strictEqual(projected[1]._liveSegmentSeq, 1);
 assert.strictEqual(inflight.toolCalls[0].activitySegmentSeq, 1);
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -948,19 +943,9 @@ def test_merge_inflight_tail_preserves_all_segmented_live_progress():
     groups whose burst ids point to those anchors pile up at the bottom.
     """
     assert NODE, "node not on PATH"
-    helper_start = SESSIONS_JS.index("function _currentTailUserMessage")
-    fn_start = SESSIONS_JS.index("function _mergeInflightTailMessages")
-    fn_end = SESSIONS_JS.index("// Load older messages", fn_start)
-    tail_user_helpers = SESSIONS_JS[helper_start:fn_start]
-    merge_fn = SESSIONS_JS[fn_start:fn_end]
     script = f"""
-const assert = require('assert');
-function _messageComparableText(m) {{ return String((m&&m.content)||'').trim(); }}
-function _sameTranscriptMessage(a,b) {{
-  return !!(a&&b&&a.role===b.role&&_messageComparableText(a)===_messageComparableText(b));
-}}
-{tail_user_helpers}
-{merge_fn}
+import assert from 'node:assert';
+{CURRENT_TURN_TRANSCRIPT_IMPORT}
 const base = [{{role:'user', content:'go'}}];
 const inflight = [
   {{role:'user', content:'go'}},
@@ -974,15 +959,15 @@ assert.deepStrictEqual(
   ['first progress', 'second progress', 'third progress']
 );
 """
-    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, "--input-type=module", "-e", script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
 def test_load_session_does_not_advance_replay_cursor_from_session_journal_summary():
-    body = _function_body(SESSIONS_JS, "loadSession")
+    body = _function_body(EXISTING_SESSION_LOAD_JS, "loadSession")
     assert "INFLIGHT[sid].lastRunJournalSeq=journalSeq;" not in body
     assert "const journalSeq=_runJournalSeqFromSession(S.session);" not in body
-    assert "function _runJournalSeqFromSession" not in SESSIONS_JS
+    assert "function _runJournalSeqFromSession" not in EXISTING_SESSION_LOAD_JS
 
 
 def test_session_switch_reattach_discards_tail_cache_for_full_journal_replay():
@@ -1036,8 +1021,8 @@ def test_live_recovery_prefers_newer_durable_run_journal_snapshot():
     script = "\n".join(
         [
             "const assert=require('assert');",
-            _function_decl(SESSIONS_JS, "_inflightHasVisibleLiveState"),
-            _function_decl(SESSIONS_JS, "_selectLiveRecoveryInflight"),
+            _function_decl(SESSION_RUNTIME_JS, "_inflightHasVisibleLiveState"),
+            _function_decl(SESSION_RUNTIME_JS, "_selectLiveRecoveryInflight"),
             """
 const local = {
   streamId:'stream-1',
@@ -1117,8 +1102,8 @@ def test_run_journal_recovery_persists_stream_scoped_event_cursor():
     script = "\n".join(
         [
             "const assert=require('assert');",
-            _function_decl(SESSIONS_JS, "_serverLiveSnapshotToolId"),
-            _function_decl(SESSIONS_JS, "_serverLiveSnapshotInflight"),
+            _function_decl(SESSION_RUNTIME_JS, "_serverLiveSnapshotToolId"),
+            _function_decl(SESSION_RUNTIME_JS, "_serverLiveSnapshotInflight"),
             """
 const inflight = _serverLiveSnapshotInflight({
   stream_id:'stream-1',
@@ -1262,10 +1247,10 @@ def test_equal_seq_recovery_preserves_full_durable_tool_args(monkeypatch):
     script = "\n".join(
         [
             "const assert=require('assert');",
-            _function_decl(SESSIONS_JS, "_serverLiveSnapshotToolId"),
-            _function_decl(SESSIONS_JS, "_serverLiveSnapshotInflight"),
-            _function_decl(SESSIONS_JS, "_inflightHasVisibleLiveState"),
-            _function_decl(SESSIONS_JS, "_selectLiveRecoveryInflight"),
+            _function_decl(SESSION_RUNTIME_JS, "_serverLiveSnapshotToolId"),
+            _function_decl(SESSION_RUNTIME_JS, "_serverLiveSnapshotInflight"),
+            _function_decl(SESSION_RUNTIME_JS, "_inflightHasVisibleLiveState"),
+            _function_decl(SESSION_RUNTIME_JS, "_selectLiveRecoveryInflight"),
             f"const snapshot={json.dumps(snapshot)};",
             f"const longCommand={json.dumps(long_command)};",
             f"const completionEnrichedCommand={json.dumps(completion_enriched_command)};",
@@ -1306,9 +1291,9 @@ def test_runtime_journal_scene_fallback_ignores_foreign_stream_snapshots():
     script = "\n".join(
         [
             "const assert=require('assert');",
-            _function_decl(SESSIONS_JS, "_anchorActivitySceneStreamId"),
-            _function_decl(SESSIONS_JS, "_anchorActivitySceneMatchesStream"),
-            _function_decl(SESSIONS_JS, "_runtimeJournalAnchorActivitySceneForSession"),
+            _function_decl(SESSION_RUNTIME_JS, "_anchorActivitySceneStreamId"),
+            _function_decl(SESSION_RUNTIME_JS, "_anchorActivitySceneMatchesStream"),
+            _function_decl(SESSION_RUNTIME_JS, "_runtimeJournalAnchorActivitySceneForSession"),
             """
 const activeScene = {
   version:'activity_scene_v1',

@@ -4,9 +4,10 @@ import { sessionRunRegistry } from './session-run-registry.js';
 const _sessionStreamingById=sessionRunRegistry.streamingById;
 import { _isServerIdleSessionRow, _isSessionEffectivelyStreaming, _isSessionLocallyStreaming, _markPollingCompletionUnreadTransitions, _purgeStaleInflightEntries, _reconcileActiveSessionIdleStateFromList, _rememberSessionListSource } from './session-run-state.js';
 import { _forgetObservedStreamingSession, _recordSessionProfileCount } from './session-unread.js';
-import { _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled } from './message-loading.js';
+import { _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled } from './sidebar-session-opening.js';
 import { _optimisticallyRemovedSessionIds, _sessionAttentionSoundState, sidebarStateBindings } from './sidebar-store.js';
-import { _pruneLineageReportCacheToVisibleSessions, sessionDiscoveryBindings } from './session-discovery.js';
+import { _pruneLineageReportCacheToVisibleSessions } from './session-lineage-report.js';
+import { sessionTimeBindings } from './session-time.js';
 import { _activeSessionIdForSidebar } from './session-navigation.js';
 import { renderSessionListFromCache } from './sidebar-render-port.js';
 import { _scheduleActiveSessionIdleReload, ensureActiveSessionExternalRefreshPoll, ensureSessionTimeRefreshPoll, startStreamingPoll, stopStreamingPoll } from './session-list-refresh.js';
@@ -213,10 +214,10 @@ function _applySessionListPayload(sessData, projData, opts){
   // _serverTimeDelta = client - server, so (Date.now() - _serverTimeDelta)
   // gives an approximation of the current server time.
   if (typeof sessData.server_time === 'number' && sessData.server_time > 0) {
-    sessionDiscoveryBindings._serverTimeDelta = Date.now() - (sessData.server_time * 1000);
+    sessionTimeBindings._serverTimeDelta = Date.now() - (sessData.server_time * 1000);
   }
   if (typeof sessData.server_tz === 'string') {
-    sessionDiscoveryBindings._serverTz = sessData.server_tz;
+    sessionTimeBindings._serverTz = sessData.server_tz;
   }
   const serverSessions=_optimisticallyRemovedSessionIds.size
     ? (sessData.sessions||[]).filter(s=>s&&!_optimisticallyRemovedSessionIds.has(s.session_id))

@@ -273,7 +273,13 @@ class TestSpinnerCss:
 class TestProfileSessionListFlip:
     """Verify session-list refreshes use row-level FLIP motion."""
 
-    JS = family_source("sessions")
+    JS = "".join(
+        (
+            family_source("sessions"),
+            (REPO_ROOT / "static" / "modules" / "sessions" / "sidebar-row-presentation.js").read_text(encoding="utf-8"),
+            (REPO_ROOT / "static" / "modules" / "sessions" / "sidebar-list-orchestrator.js").read_text(encoding="utf-8"),
+        )
+    )
     CSS = family_source("style")
 
     def test_profile_refresh_flips_new_rows(self):
@@ -290,7 +296,7 @@ class TestProfileSessionListFlip:
 
     def test_profile_refresh_drops_queued_reflow_before_playing_flip(self):
         owner = (
-            REPO_ROOT / "static" / "modules" / "sessions" / "sidebar-renderer.js"
+            REPO_ROOT / "static" / "modules" / "sessions" / "sidebar-list-orchestrator.js"
         ).read_text(encoding="utf-8")
         function_start = owner.index("function renderSessionListFromCache()")
         tail_start = owner.index(

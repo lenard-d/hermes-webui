@@ -233,24 +233,26 @@ def test_update_flows_keep_explicit_longer_timeouts():
 
 def test_session_message_loads_keep_explicit_longer_timeouts():
     """Large state.db installs can take longer than the generic 30s API timeout."""
-    src = _source(SESSIONS_JS)
+    sessions_modules = ROOT / "static" / "modules" / "sessions"
+    transcript_loading = (sessions_modules / "transcript-loading.js").read_text(encoding="utf-8")
+    older_message_pagination = (sessions_modules / "older-message-pagination.js").read_text(encoding="utf-8")
     assert (
         "api(\n"
         "      `/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0${reloadLimitParam}${expandParam}`,\n"
         "      {timeoutMs:120000}\n"
         "    )"
-    ) in src
+    ) in transcript_loading
     # _loadOlderMessages now picks between two strategies (tail-growth vs
     # msg_before paging) via a useBeforePaging ternary, but both keep the long
     # timeoutMs:120000. Assert each URL + timeout survives in the source.
     assert (
-        "`/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0&msg_before=${_oldestIdx}&msg_limit=${_INITIAL_MSG_LIMIT}`,\n"
+        "`/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0&msg_before=${transcriptWindowState.oldestIdx}&msg_limit=${_INITIAL_MSG_LIMIT}`,\n"
         "          {timeoutMs:120000}"
-    ) in src
+    ) in older_message_pagination
     assert (
         "`/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0&msg_limit=${requestedLimit}`,\n"
         "          {timeoutMs:120000}"
-    ) in src
+    ) in older_message_pagination
 
 
 def test_passive_background_polls_suppress_timeout_toasts():

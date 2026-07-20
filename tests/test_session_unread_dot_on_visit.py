@@ -27,33 +27,51 @@ Two invariants flagged in review are protected here and MUST NOT regress:
       renderSessionListFromCache(), which recomputes each row's aggregated
       unread authoritatively rather than doing ad-hoc DOM surgery (concern b).
 """
-from tests.frontend_asset_contract import family_source
 import json
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = family_source("sessions")
+SESSIONS_DIR = ROOT / "static" / "modules" / "sessions"
+
+
+def _owner_source(name: str) -> str:
+    return (SESSIONS_DIR / name).read_text(encoding="utf-8")
+
+
+LOAD_SESSION_JS = _owner_source("existing-session-load.js")
+SESSION_VISIT_JS = _owner_source("session-visit.js")
+SESSION_RUN_REGISTRY_JS = _owner_source("session-run-registry.js")
+SESSION_RUN_STATE_JS = _owner_source("session-run-state.js")
+SESSION_UNREAD_JS = _owner_source("session-unread.js")
+TRANSCRIPT_LOADING_JS = _owner_source("transcript-loading.js")
+
+FUNCTION_OWNERS = {
+    "_acknowledgeSessionVisit": SESSION_VISIT_JS,
+    "_syncSessionListSnapshotOnVisit": SESSION_RUN_REGISTRY_JS,
+    "_isSessionEffectivelyStreaming": SESSION_RUN_STATE_JS,
+    "_isSessionLocallyStreaming": SESSION_RUN_STATE_JS,
+    "_markPollingCompletionUnreadTransitions": SESSION_RUN_STATE_JS,
+    "_ensureMessagesLoaded": TRANSCRIPT_LOADING_JS,
+}
 
 
 def _load_session_block() -> str:
-    start = SESSIONS_JS.index("async function loadSession(sid")
-    end = SESSIONS_JS.index("function _resolveSessionModelForDisplaySoon", start)
-    return SESSIONS_JS[start:end]
+    return _extract("loadSession", source=LOAD_SESSION_JS, is_async=True)
 
 
-def _function_block(name: str, next_marker: str) -> str:
-    start = SESSIONS_JS.index(f"function {name}")
-    end = SESSIONS_JS.index(next_marker, start + 1)
-    return SESSIONS_JS[start:end]
+def _function_block(source: str, name: str, next_marker: str) -> str:
+    start = source.index(f"function {name}")
+    end = source.index(next_marker, start + 1)
+    return source[start:end]
 
 
 # ── Structural anchors ──────────────────────────────────────────────────────
 
 def test_visit_ack_helpers_exist():
-    assert "function _acknowledgeSessionVisit(sid, messageCount = 0, lastMessageAt = 0)" in SESSIONS_JS
-    assert "function _syncSessionListSnapshotOnVisit(sid, messageCount, lastMessageAt)" in SESSIONS_JS
-    assert "function _sessionVisitHasUnreadState(sid)" in SESSIONS_JS
+    assert "function _acknowledgeSessionVisit(sid, messageCount = 0, lastMessageAt = 0)" in SESSION_VISIT_JS
+    assert "function _syncSessionListSnapshotOnVisit(sid, messageCount, lastMessageAt)" in SESSION_RUN_REGISTRY_JS
+    assert "function _sessionVisitHasUnreadState(sid)" in SESSION_UNREAD_JS
 
 
 def test_acknowledge_visit_syncs_viewed_snapshot_and_repaints():
@@ -69,7 +87,7 @@ def test_load_session_acknowledges_visit_before_and_after_message_load():
     block = _load_session_block()
     # Metadata-arrival acknowledgment.
     first_ack = block.find("_acknowledgeSessionVisit(\n    S.session.session_id,")
-    loading_clear = block.find("if (_isCurrentLoad()) _loadingSessionId = null;\n\n  // Re-acknowledge")
+    loading_clear = block.find("if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;\n\n  // Re-acknowledge")
     second_ack = block.find("_acknowledgeSessionVisit(", loading_clear)
 
     assert first_ack != -1, "loadSession must acknowledge the visit when metadata arrives"
@@ -87,7 +105,7 @@ def test_post_load_reack_is_guarded_by_active_view():
     # correctly marked unread — an UNCONDITIONAL post-load ack would wrongly
     # clear that hidden-tab-completion marker.
     block = _load_session_block()
-    loading_clear = block.find("if (_isCurrentLoad()) _loadingSessionId = null;\n\n  // Re-acknowledge")
+    loading_clear = block.find("if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;\n\n  // Re-acknowledge")
     guard = block.find("_isSessionActivelyViewedForList(sid)", loading_clear)
     second_ack = block.find("_acknowledgeSessionVisit(", loading_clear)
     assert guard != -1 and guard < second_ack, (
@@ -98,7 +116,7 @@ def test_post_load_reack_is_guarded_by_active_view():
 
 def test_same_session_reselect_clears_stale_unread():
     block = _load_session_block()
-    guard = block.find("if(currentSid===sid && !forceReload && (!_loadingSessionId || _loadingSessionId===sid)){")
+    guard = block.find("if(currentSid===sid && !forceReload && (!sessionLoadState.loadingSessionId || sessionLoadState.loadingSessionId===sid)){")
     unread_check = block.find("_sessionVisitHasUnreadState(sid)", guard)
     acknowledge = block.find("_acknowledgeSessionVisit(", unread_check)
     ret = block.find("return;", acknowledge)
@@ -120,15 +138,19 @@ def test_completion_paths_keep_focus_gate_for_hidden_tab_completions():
     unread, so the background + polling completion paths must keep using the
     focus-gated _isSessionActivelyViewedForList, not a focus-independent variant.
     """
-    background = _function_block("_markSessionCompletionUnreadIfBackground", "function _clearSessionCompletionUnread")
+    background = _function_block(
+        SESSION_UNREAD_JS,
+        "_markSessionCompletionUnreadIfBackground",
+        "function _clearSessionCompletionUnread",
+    )
     assert "_isSessionActivelyViewedForList(sid)" in background, (
         "background completion must keep the focus-gated read check so a hidden-tab "
         "completion is not prematurely marked read"
     )
 
-    polling_start = SESSIONS_JS.index("function _markPollingCompletionUnreadTransitions(sessions)")
-    polling_end = SESSIONS_JS.index("const staleRuntimeStateSids", polling_start)
-    polling = SESSIONS_JS[polling_start:polling_end]
+    polling_start = SESSION_RUN_STATE_JS.index("function _markPollingCompletionUnreadTransitions(sessions)")
+    polling_end = SESSION_RUN_STATE_JS.index("const staleRuntimeStateSids", polling_start)
+    polling = SESSION_RUN_STATE_JS[polling_start:polling_end]
     assert "!_isSessionActivelyViewedForList(sid)" in polling, (
         "polling completion must keep the focus-gated read check so a hidden-tab "
         "completion is not prematurely marked read"
@@ -137,20 +159,21 @@ def test_completion_paths_keep_focus_gate_for_hidden_tab_completions():
 
 # ── Functional behavior via node ────────────────────────────────────────────
 
-def _extract(name: str) -> str:
+def _extract(name: str, *, source: str | None = None, is_async: bool = False) -> str:
     """Extract a top-level `function name(...) { ... }` definition by brace match."""
-    marker = f"function {name}("
-    start = SESSIONS_JS.index(marker)
-    brace = SESSIONS_JS.index("{", start)
+    source = source or FUNCTION_OWNERS.get(name, SESSION_UNREAD_JS)
+    marker = f"{'async ' if is_async else ''}function {name}("
+    start = source.index(marker)
+    brace = source.index("{", start)
     depth = 0
-    for i in range(brace, len(SESSIONS_JS)):
-        ch = SESSIONS_JS[i]
+    for i in range(brace, len(source)):
+        ch = source[i]
         if ch == "{":
             depth += 1
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return SESSIONS_JS[start:i + 1]
+                return source[start:i + 1]
     raise AssertionError(f"could not brace-match {name}")
 
 
@@ -262,6 +285,7 @@ function _markSessionCompletionUnread(sid, count) {{
 const document = {{ visibilityState: 'visible', hasFocus: () => true }};
 let _loadingSessionId = null;
 const _allSessionsScope = null;
+const sidebarStateBindings = {{_allSessionsScope: null, _showAllProfiles: false}};
 const _sessionListSourceById = new Map();
 {get_counts}
 {save_counts}
@@ -303,14 +327,8 @@ console.log(JSON.stringify({{flagged}}));
 # ── Functional: hidden-tab completion during message load stays unread ───────
 
 def _extract_async(name: str) -> str:
-    """Like _extract, but preserve an `async` prefix so `await` bodies stay valid."""
-    body = _extract(name)
-    idx = SESSIONS_JS.rindex("async ", 0, SESSIONS_JS.index(body))
-    # Only treat it as async if the `async ` keyword immediately precedes it.
-    if SESSIONS_JS[idx:idx + len("async ")] == "async " and \
-       SESSIONS_JS[idx:].startswith("async function " + name):
-        return "async " + body
-    return body
+    """Extract an async definition from its focused owner."""
+    return _extract(name, is_async=True)
 
 
 def _hidden_completion_script(*, hidden: bool) -> str:
@@ -341,14 +359,18 @@ const SESSION_VIEWED_COUNTS_KEY = 'v';
 const SESSION_COMPLETION_UNREAD_KEY = 'u';
 let _sessionViewedCounts = null;
 let _sessionCompletionUnread = null;
-let _messagesTruncated = false;
-let _oldestIdx = 0;
 let _messageRenderWindowSize = 0;
-const _MSG_LIMIT_MAX = 500;
-let _msgLimitMax = _MSG_LIMIT_MAX;
-let _pendingCarryForwardSnapshot = null;
-let _loadingSessionId = 'open';
-let _loadSessionGeneration = 0;
+const MESSAGE_LIMIT_FALLBACK = 500;
+const transcriptWindowState = {{
+  messagesTruncated: false,
+  oldestIdx: 0,
+  msgLimitMax: MESSAGE_LIMIT_FALLBACK,
+}};
+const sessionLoadState = {{
+  loadingSessionId: 'open',
+  generation: 0,
+  pendingCarryForwardSnapshot: null,
+}};
 const window = {{}};
 // Tab starts VISIBLE+FOCUSED: the load begins while the user is watching.
 let _visibility = 'visible';

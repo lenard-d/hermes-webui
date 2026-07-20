@@ -523,8 +523,11 @@ changing run admission, execution, journaling, or session persistence.
 **Status: Native module graph implemented; deepening in progress.** Boot,
 commands, sessions, messages, panels, and UI now load as native ES-module
 graphs with a narrow compatibility surface and transitive service-worker asset
-inventory. Large orchestration modules are being reviewed for real semantic
-seams; coherent locale data remains intentionally unsplit.
+inventory. The sessions graph now has explicit lifecycle, transcript, discovery,
+sidebar-rendering, action, project, and management owners behind small public
+facades; leaf ports keep its owner graph acyclic. Large orchestration modules
+are being reviewed for real semantic seams; coherent locale data remains
+intentionally unsplit.
 
 - choose one native ES-module loading pattern
 - migrate one bounded domain first, retaining a narrow compatibility adapter
