@@ -1,6 +1,9 @@
-"""Compatibility alias for :mod:`api.runs.local`."""
+"""Legacy import for local run orchestration.
 
-import sys
-from api.runs import local as _owner
+The implementation and all mutable runtime ownership live in
+:mod:`api.runs.local` and the sibling run-domain owners.
+"""
 
-sys.modules[__name__] = _owner
+from api.runs import run_agent_streaming
+
+__all__ = ["run_agent_streaming"]

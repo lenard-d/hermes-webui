@@ -93,7 +93,7 @@ def test_all_sessions_reports_internal_index_stages(tmp_path, monkeypatch):
 
 def test_issue1855_target_routes_are_wired_to_diagnostics(monkeypatch):
     import api.config as config
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
 
     src = Path("api/routes.py").read_text(encoding="utf-8")
 

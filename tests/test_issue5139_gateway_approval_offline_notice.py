@@ -76,11 +76,11 @@ def _run_gateway_warning_case(unavailable_reason: str, tmp_path, monkeypatch) ->
 
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
-            with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
-                 patch("api.gateway_chat.gateway_approval_unavailable_reason", return_value=unavailable_reason), \
+            with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
+                 patch("api.runs.gateway.gateway_approval_unavailable_reason", return_value=unavailable_reason), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=session), \
-                 patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway.get_session", return_value=session), \
+                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-warning",
                     msg_text="hi",
@@ -158,8 +158,8 @@ def test_gateway_chat_keeps_unsupported_warning_for_404_capabilities_probe(tmp_p
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=session), \
-                 patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway.get_session", return_value=session), \
+                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-404",
                     msg_text="hi",
@@ -220,8 +220,8 @@ def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe(t
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
             with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=session), \
-                 patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway.get_session", return_value=session), \
+                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-timeout",
                     msg_text="hi",

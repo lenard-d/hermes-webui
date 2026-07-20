@@ -75,7 +75,7 @@ def test_start_session_turn_uses_direct_path_by_default(_stub_routes, monkeypatc
     monkeypatch.delenv("HERMES_WEBUI_RUNTIME_ADAPTER", raising=False)
 
     calls = {"adapter": 0}
-    from api import runtime_adapter as ra_mod
+    from api.runs import adapter as ra_mod
 
     real_build = ra_mod.build_runtime_adapter
 
@@ -100,7 +100,7 @@ def test_start_session_turn_routes_through_adapter_when_enabled(
     process-wakeup path."""
     monkeypatch.setenv("HERMES_WEBUI_RUNTIME_ADAPTER", "legacy-journal")
 
-    from api import runtime_adapter as ra_mod
+    from api.runs import adapter as ra_mod
 
     invoked = {"adapter": 0, "start_run": 0}
 

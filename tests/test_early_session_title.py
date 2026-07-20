@@ -1,6 +1,5 @@
 from tests.frontend_asset_contract import family_source
 
-from pathlib import Path
 from types import SimpleNamespace
 
 
@@ -48,7 +47,7 @@ def test_prepare_chat_start_sets_provisional_title_in_eager_save_mode(tmp_path, 
         saved.append({"title": self.title, "messages": list(self.messages)})
 
     monkeypatch.setattr(Session, "save", fake_save)
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
     monkeypatch.setattr(turn_admission, "get_webui_session_save_mode", lambda: "eager")
 
     s = Session(session_id="test-eager-early-title", title="Untitled")
@@ -94,7 +93,7 @@ def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeyp
     import api.config as config
     from api.sessions.store import Session
     import api.routes as routes
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
 
     monkeypatch.setattr(Session, "save", lambda self, *a, **k: None)
     monkeypatch.setattr(turn_admission, "set_last_workspace", lambda workspace: None)

@@ -1,6 +1,34 @@
-"""Compatibility alias for :mod:`api.runs.adapter`."""
+"""Legacy imports for the run runtime-adapter seam.
 
-import sys
-from api.runs import adapter as _owner
+New code should import :mod:`api.runs.adapter`.
+"""
 
-sys.modules[__name__] = _owner
+from api.runs.adapter import (
+    ControlResult,
+    LegacyJournalRuntimeAdapter,
+    RunnerRuntimeAdapter,
+    RunEventStream,
+    RunStartResult,
+    RunStatus,
+    RuntimeAdapter,
+    StartRunRequest,
+    build_runtime_adapter,
+    runtime_adapter_enabled,
+    runtime_adapter_mode,
+    runtime_adapter_runner_enabled,
+)
+
+__all__ = [
+    "ControlResult",
+    "LegacyJournalRuntimeAdapter",
+    "RunnerRuntimeAdapter",
+    "RunEventStream",
+    "RunStartResult",
+    "RunStatus",
+    "RuntimeAdapter",
+    "StartRunRequest",
+    "build_runtime_adapter",
+    "runtime_adapter_enabled",
+    "runtime_adapter_mode",
+    "runtime_adapter_runner_enabled",
+]

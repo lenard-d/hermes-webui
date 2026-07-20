@@ -7,7 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from api import config, turn_admission
+from api import config
+from api.runs import admission as turn_admission
 
 
 @pytest.fixture(autouse=True)

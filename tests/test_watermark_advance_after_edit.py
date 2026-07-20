@@ -21,7 +21,7 @@ from types import SimpleNamespace
 
 import api.sessions.store as models
 import api.routes as routes
-import api.turn_admission as turn_admission
+from api.runs import admission as turn_admission
 from api.sessions.store import Session
 
 

@@ -42,8 +42,8 @@ def test_streaming_source_code_gates_on_stream_goal_related():
     streaming_py = (
         Path(__file__).resolve().parents[1]
         / "api"
-        / "streaming_parts"
-        / "local_run.py"
+        / "runs"
+        / "local.py"
     ).read_text()
 
     # Must import STREAM_GOAL_RELATED
@@ -71,8 +71,8 @@ def test_streaming_sets_pending_goal_continuation_on_goal_continue():
     streaming_py = (
         Path(__file__).resolve().parents[1]
         / "api"
-        / "streaming_parts"
-        / "local_run.py"
+        / "runs"
+        / "local.py"
     ).read_text()
 
     assert "PENDING_GOAL_CONTINUATION" in streaming_py, (
@@ -92,7 +92,7 @@ def test_turn_admission_marks_continuation_and_explicit_goal_streams(
 ):
     """Both goal entry paths publish the accepted stream as goal-related."""
     import api.config as config
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
 
     class Session:
         session_id = f"goal-admission-{explicit_goal}"

@@ -174,7 +174,7 @@ def test_session_journal_rejects_hostile_cursor_without_replay(tmp_path, monkeyp
         created_at=100.0,
     )
     monkeypatch.setattr(
-        "api.run_journal.find_run_summary",
+        "api.runs.journal.find_run_summary",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("invalid cursor should not scan summaries")),
     )
 
@@ -191,7 +191,7 @@ def test_session_journal_rejects_hostile_cursor_without_replay(tmp_path, monkeyp
 
 
 def test_session_journal_blank_summary_session_stays_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr("api.run_journal.find_run_summary", lambda *_args, **_kwargs: {"session_id": ""})
+    monkeypatch.setattr("api.runs.journal.find_run_summary", lambda *_args, **_kwargs: {"session_id": ""})
 
     replay = read_session_run_events("session_1", after_event_id="run_missing:1", session_dir=tmp_path)
 
@@ -219,7 +219,7 @@ def test_session_journal_rejects_oversized_line_before_decode(tmp_path, monkeypa
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = '{"event_id":"run_a:1","seq":1,"run_id":"run_a","session_id":"session_1","event":"done","type":"done","payload":{"text":"' + ("x" * 5000) + '"}}\n'
     path.write_bytes(payload.encode("utf-8"))
-    monkeypatch.setattr("api.run_journal.json.loads", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("oversized line should not decode")))
+    monkeypatch.setattr("api.runs.journal.json.loads", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("oversized line should not decode")))
 
     limited = read_session_run_events("session_1", after_event_id="run_a:1", session_dir=tmp_path, max_bytes=1024)
 

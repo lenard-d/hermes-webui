@@ -469,7 +469,7 @@ def test_routes_register_goal_endpoint_and_kickoff_stream():
 def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_path):
     from api import config
     from api import routes
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
 
     class FakeSession:
         session_id = "sid-goal-related-gateway"

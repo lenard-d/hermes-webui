@@ -61,6 +61,20 @@ def _run_path(session_id: str, run_id: str, session_dir: Path | None = None) -> 
     return root / RUN_JOURNAL_DIR_NAME / sid / f"{rid}.jsonl"
 
 
+def run_journal_path(
+    session_id: str,
+    run_id: str,
+    *,
+    session_dir: Path | None = None,
+) -> Path:
+    """Return the validated path for one run journal.
+
+    Session recovery can inspect journal visibility through this read-only seam
+    without duplicating the run owner's path and identifier rules.
+    """
+    return _run_path(session_id, run_id, session_dir=session_dir)
+
+
 def _lock_for(path: Path) -> threading.Lock:
     key = (str(path.parent), path.name, str(os.getpid()))
     with _WRITER_LOCKS_GUARD:

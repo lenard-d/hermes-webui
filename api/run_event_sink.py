@@ -1,6 +1,5 @@
-"""Compatibility alias for :mod:`api.runs.event_sink`."""
+"""Legacy import for the run-owned event publication sink."""
 
-import sys
-from api.runs import event_sink as _owner
+from api.runs.event_sink import RunEventSink
 
-sys.modules[__name__] = _owner
+__all__ = ["RunEventSink"]

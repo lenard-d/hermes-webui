@@ -1,6 +1,19 @@
-"""Compatibility alias for :mod:`api.runs.agent_runtime`."""
+"""Legacy imports for the run-owned agent runtime guard.
 
-import sys
-from api.runs import agent_runtime as _owner
+New code should import :mod:`api.runs.agent_runtime`.  This module deliberately
+re-exports only the supported compatibility surface and owns no runtime state.
+"""
 
-sys.modules[__name__] = _owner
+from api.runs.agent_runtime import (
+    AgentRuntimeChangedError,
+    ensure_agent_runtime_current,
+    get_ai_agent_class,
+    require_ai_agent_class,
+)
+
+__all__ = [
+    "AgentRuntimeChangedError",
+    "ensure_agent_runtime_current",
+    "get_ai_agent_class",
+    "require_ai_agent_class",
+]

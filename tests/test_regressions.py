@@ -641,7 +641,7 @@ def test_chat_start_persists_pending_turn_metadata_for_reload_recovery(
     """R15c: chat/start must expose enough pending-turn metadata for a reload to
     rebuild the in-flight conversation instead of showing a blank session.
     """
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
 
     class Session:
         title = "Existing"

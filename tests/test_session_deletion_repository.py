@@ -31,7 +31,7 @@ def _patch_cleanup_collaborators(monkeypatch, tmp_path):
         lambda sid: calls.append(("turn_journal", sid)),
     )
     monkeypatch.setattr(
-        "api.run_journal.delete_run_journal",
+        "api.runs.delete_run_journal",
         lambda sid: calls.append(("run_journal", sid)),
     )
     monkeypatch.setattr(

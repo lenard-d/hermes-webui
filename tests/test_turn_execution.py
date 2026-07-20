@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from api import turn_execution
+from api.runs import execution as turn_execution
 from api.turn_journal import (
     append_turn_journal_event,
     append_turn_journal_event_for_stream,

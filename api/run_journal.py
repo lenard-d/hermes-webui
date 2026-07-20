@@ -1,6 +1,33 @@
-"""Compatibility alias for :mod:`api.runs.journal`."""
+"""Legacy imports for the run-owned durable event journal.
 
-import sys
-from api.runs import journal as _owner
+New code should import :mod:`api.runs.journal`.  No cache, writer lock, or
+sequence state is duplicated here.
+"""
 
-sys.modules[__name__] = _owner
+from api.runs.journal import (
+    RUN_JOURNAL_DIR_NAME,
+    RunJournalWriter,
+    append_run_event,
+    bound_run_journal_snapshot_args,
+    delete_run_journal,
+    find_run_summary,
+    latest_run_summary,
+    read_run_events,
+    read_session_run_events,
+    session_journal_fingerprint,
+    stale_interrupted_event,
+)
+
+__all__ = [
+    "RUN_JOURNAL_DIR_NAME",
+    "RunJournalWriter",
+    "append_run_event",
+    "bound_run_journal_snapshot_args",
+    "delete_run_journal",
+    "find_run_summary",
+    "latest_run_summary",
+    "read_run_events",
+    "read_session_run_events",
+    "session_journal_fingerprint",
+    "stale_interrupted_event",
+]

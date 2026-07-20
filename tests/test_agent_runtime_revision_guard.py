@@ -60,7 +60,7 @@ from pathlib import Path
 import subprocess
 
 import api.streaming as streaming
-from api import agent_runtime
+from api.runs import agent_runtime
 
 agent_dir = Path(__file__).parent / "hermes-agent"
 assert agent_runtime._AGENT_DIR == agent_dir.resolve()
@@ -123,7 +123,7 @@ else:
 
 def test_initial_non_git_source_preserves_supported_runtime(monkeypatch):
     """Non-Git installs cannot be compared, so they preserve existing behavior."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     monkeypatch.setattr(agent_runtime, "_AGENT_REVISION", None)
     monkeypatch.setattr(
@@ -139,7 +139,7 @@ def test_untracked_loaded_module_inside_outer_git_repo_is_non_git(
     monkeypatch, tmp_path: Path
 ):
     """An enclosing unrelated Git repo must not identify an installed module."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     outer_repo = tmp_path / "outer-repo"
     module_dir = outer_repo / "installed" / "hermes-agent"
@@ -173,7 +173,7 @@ def test_untracked_loaded_module_inside_outer_git_repo_is_non_git(
 
 def test_untracked_module_pathspec_metacharacters_are_literal(monkeypatch, tmp_path: Path):
     """Git pathspec syntax must not turn an untracked module into a tracked match."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     outer_repo = tmp_path / "outer-repo"
     tracked_dir = outer_repo / "installed" / "agent"
@@ -203,7 +203,7 @@ def test_untracked_module_pathspec_metacharacters_are_literal(monkeypatch, tmp_p
 
 def test_revision_identity_comes_from_loaded_agent_module(monkeypatch, tmp_path: Path):
     """The configured discovery path must not override the loaded module path."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     configured_dir = tmp_path / "configured-agent"
     loaded_dir = tmp_path / "loaded-agent"
@@ -234,7 +234,7 @@ def test_revision_identity_comes_from_loaded_agent_module(monkeypatch, tmp_path:
 
 def test_known_revision_becoming_unreadable_fails_closed(monkeypatch):
     """Losing a previously-known revision is indistinguishable from source drift."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     monkeypatch.setattr(agent_runtime, "_AGENT_REVISION", "known-revision")
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def test_known_revision_becoming_unreadable_fails_closed(monkeypatch):
 
 def test_import_recapture_cannot_downgrade_known_revision(monkeypatch, tmp_path: Path):
     """A second unreadable revision read must not erase a known identity."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     source_dir = tmp_path / "loaded-agent"
     source_dir.mkdir()
@@ -277,7 +277,7 @@ def test_in_memory_agent_swap_does_not_mimic_source_revision_change(
     monkeypatch, tmp_path: Path
 ):
     """Only the bound checkout revision, not ``sys.modules`` swaps, defines staleness."""
-    from api import agent_runtime
+    from api.runs import agent_runtime
 
     agent_dir = tmp_path / "loaded-agent"
     agent_dir.mkdir()
@@ -321,7 +321,7 @@ def test_runner_local_bypasses_webui_agent_barrier(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "api.runtime_adapter.runtime_adapter_runner_enabled",
+        "api.runs.adapter.runtime_adapter_runner_enabled",
         lambda: True,
     )
 
@@ -330,12 +330,13 @@ def test_runner_local_bypasses_webui_agent_barrier(monkeypatch):
 
 def test_runner_flag_does_not_bypass_webui_owned_hidden_turns(monkeypatch):
     """Runner/gateway modes do not transfer ownership of legacy hidden turns."""
-    from api import agent_runtime, routes
+    from api import routes
+    from api.runs import agent_runtime
 
     monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda _cfg: True)
     monkeypatch.setattr(routes, "get_config", lambda: {})
     monkeypatch.setattr(
-        "api.runtime_adapter.runtime_adapter_runner_enabled",
+        "api.runs.adapter.runtime_adapter_runner_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
@@ -357,7 +358,8 @@ def test_runner_flag_does_not_bypass_webui_owned_hidden_turns(monkeypatch):
 
 def test_chat_start_rejects_stale_runtime_before_session_materialization(monkeypatch):
     """A stale local runtime must not claim, create, or mutate session state."""
-    from api import agent_runtime, routes
+    from api import routes
+    from api.runs import agent_runtime
 
     monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda _cfg: False)
     monkeypatch.setattr(routes, "get_config", lambda: {})
@@ -407,8 +409,8 @@ def test_runner_owned_start_run_does_not_enter_local_stream_barrier(monkeypatch)
 
     session = types.SimpleNamespace(session_id="session-1", profile=None)
     monkeypatch.setenv("HERMES_WEBUI_RUNTIME_ADAPTER", "runner-local")
-    monkeypatch.setattr("api.runtime_adapter.runtime_adapter_enabled", lambda: False)
-    monkeypatch.setattr("api.runtime_adapter.runtime_adapter_runner_enabled", lambda: True)
+    monkeypatch.setattr("api.runs.adapter.runtime_adapter_enabled", lambda: False)
+    monkeypatch.setattr("api.runs.adapter.runtime_adapter_runner_enabled", lambda: True)
     monkeypatch.setattr(routes, "_runtime_runner_client_factory", lambda: RunnerClient())
     monkeypatch.setattr(
         routes,
@@ -447,7 +449,7 @@ def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gatew
     from api import config
     from api.sessions import store as models
     from api import routes
-    from api import turn_admission
+    from api.runs import admission as turn_admission
 
     gateway_reads = []
     revision_checks = []
@@ -600,8 +602,8 @@ def test_gateway_owned_start_run_bypasses_local_runtime_barrier(monkeypatch):
 
     session = types.SimpleNamespace(session_id="session-1", profile=None)
     captured = {}
-    monkeypatch.setattr("api.runtime_adapter.runtime_adapter_enabled", lambda: False)
-    monkeypatch.setattr("api.runtime_adapter.runtime_adapter_runner_enabled", lambda: False)
+    monkeypatch.setattr("api.runs.adapter.runtime_adapter_enabled", lambda: False)
+    monkeypatch.setattr("api.runs.adapter.runtime_adapter_runner_enabled", lambda: False)
     monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda _cfg: True)
     monkeypatch.setattr(routes, "get_config", lambda: {})
     monkeypatch.setattr(
@@ -651,7 +653,7 @@ def test_hidden_turn_routes_reject_stale_runtime_before_session_creation(
     monkeypatch.setattr(routes, "webui_gateway_chat_enabled", lambda _cfg: True)
     monkeypatch.setattr(routes, "get_config", lambda: {})
     monkeypatch.setattr(
-        "api.runtime_adapter.runtime_adapter_runner_enabled",
+        "api.runs.adapter.runtime_adapter_runner_enabled",
         lambda: True,
     )
     monkeypatch.setattr(

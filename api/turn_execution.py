@@ -1,6 +1,5 @@
-"""Compatibility alias for :mod:`api.runs.execution`."""
+"""Legacy import for the run-owned worker lifecycle."""
 
-import sys
-from api.runs import execution as _owner
+from api.runs.execution import TurnExecution
 
-sys.modules[__name__] = _owner
+__all__ = ["TurnExecution"]

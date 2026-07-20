@@ -1,6 +1,5 @@
-"""Compatibility alias for :mod:`api.runs.channels`."""
+"""Legacy imports for the run-owned stream channel."""
 
-import sys
-from api.runs import channels as _owner
+from api.runs.channels import StreamChannel, create_stream_channel
 
-sys.modules[__name__] = _owner
+__all__ = ["StreamChannel", "create_stream_channel"]

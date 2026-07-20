@@ -1098,7 +1098,7 @@ class TestCheckpointOrdering:
         _run_agent_streaming: checkpoint stop appears before
         _last_resort_sync_from_core."""
         import inspect
-        from api.streaming_parts import local_run
+        from api.runs import local as local_run
 
         source = inspect.getsource(local_run.run_agent_streaming)
 
@@ -1693,7 +1693,7 @@ class TestWslPageCacheRace:
         s.active_stream_id = stream_id
 
         # Simulate first read raising IOError, then succeeding.
-        import api.run_journal as run_journal
+        from api.runs import journal as run_journal
         real = run_journal.read_run_events
         attempts = {"n": 0}
 

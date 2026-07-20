@@ -2471,7 +2471,7 @@ def _run_journal_has_visible_output(session, stream_id: str | None) -> bool:
     if not stream_id:
         return False
     try:
-        from api.run_journal import read_run_events
+        from api.runs import read_run_events
         journal = read_run_events(session.session_id, stream_id)
     except Exception:
         return False
@@ -2502,7 +2502,7 @@ def _run_journal_terminal_state(session, stream_id: str | None) -> str | None:
     if not stream_id:
         return None
     try:
-        from api.run_journal import latest_run_summary
+        from api.runs import latest_run_summary
         summary = latest_run_summary(session.session_id, stream_id)
     except Exception:
         return None
@@ -2524,9 +2524,9 @@ def _journal_is_still_arriving(session, stream_id: str | None) -> bool:
     if not stream_id:
         return False
     try:
-        from api.run_journal import _run_path, latest_run_summary
+        from api.runs import latest_run_summary, run_journal_path
 
-        path = _run_path(session.session_id, stream_id)
+        path = run_journal_path(session.session_id, stream_id)
         summary = latest_run_summary(session.session_id, stream_id)
         if summary.get('terminal'):
             return False
@@ -2562,7 +2562,7 @@ def _append_journaled_partial_output(
         return False
 
     try:
-        from api.run_journal import read_run_events
+        from api.runs import read_run_events
         journal = read_run_events(session.session_id, stream_id)
     except Exception:
         logger.debug(

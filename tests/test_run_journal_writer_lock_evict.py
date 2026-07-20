@@ -7,7 +7,7 @@ objects behind, so a long-lived gateway leaked one entry per deleted run
 forever. These tests pin that delete now drops the matching cache entries while
 leaving unrelated sessions' locks intact.
 """
-import api.run_journal as run_journal
+from api.runs import journal as run_journal
 from api.run_journal import RunJournalWriter, delete_run_journal
 
 

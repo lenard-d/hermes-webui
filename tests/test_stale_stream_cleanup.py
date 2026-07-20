@@ -9,7 +9,7 @@ import pytest
 
 import api.config as config
 import api.routes as routes
-import api.turn_admission as turn_admission
+from api.runs import admission as turn_admission
 
 REPO = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (REPO / "api" / "routes.py").read_text(encoding="utf-8")

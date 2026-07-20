@@ -251,11 +251,11 @@ def test_gateway_runs_api_submission():
 
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway", "HERMES_WEBUI_GATEWAY_USE_RUNS_API": "1"}):
-            with patch("api.gateway_chat.gateway_supports_approval", lambda *_args, **_kwargs: True), \
-                 patch("api.gateway_chat._run_gateway_runs_api_streaming", fake_runs_streaming), \
-                 patch("api.gateway_chat._gateway_reasoning_effort_for_request", return_value="high"), \
-                 patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
+            with patch("api.runs.gateway.gateway_supports_approval", lambda *_args, **_kwargs: True), \
+                 patch("api.runs.gateway._run_gateway_runs_api_streaming", fake_runs_streaming), \
+                 patch("api.runs.gateway._gateway_reasoning_effort_for_request", return_value="high"), \
+                 patch("api.runs.gateway.get_session", return_value=mock_session), \
+                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess1",
                     msg_text="hi",
@@ -517,9 +517,9 @@ def test_gateway_runs_api_cancel_does_not_emit_empty_response():
 
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway", "HERMES_WEBUI_GATEWAY_USE_RUNS_API": "1"}):
-            with patch("api.gateway_chat.gateway_supports_approval", return_value=True), \
-                 patch("api.gateway_chat._run_gateway_runs_api_streaming", side_effect=fake_runs_streaming), \
-                 patch("api.gateway_chat.get_session", return_value=mock_session):
+            with patch("api.runs.gateway.gateway_supports_approval", return_value=True), \
+                 patch("api.runs.gateway._run_gateway_runs_api_streaming", side_effect=fake_runs_streaming), \
+                 patch("api.runs.gateway.get_session", return_value=mock_session):
                 _run_gateway_chat_streaming(
                     session_id="sess-cancel",
                     msg_text="stop",
@@ -566,8 +566,8 @@ def test_gateway_approval_response_relay():
 
     with patch("api.routes.get_session", return_value=mock_session), \
          patch("api.runner_client.HttpRunnerClient._request_json", new=fake_request_json), \
-         patch("api.gateway_chat._gateway_base_url", return_value="http://gw:8642"), \
-         patch("api.gateway_chat._gateway_api_key", return_value=""):
+         patch("api.runs.gateway._gateway_base_url", return_value="http://gw:8642"), \
+         patch("api.runs.gateway._gateway_api_key", return_value=""):
         from api.routes import _handle_approval_respond
         _handle_approval_respond(handler, body)
 
@@ -596,8 +596,8 @@ def test_gateway_approval_response_relay_failure_returns_502():
 
     with patch("api.routes.get_session", return_value=mock_session), \
          patch("api.runner_client.HttpRunnerClient.respond_approval", side_effect=RunnerClientError("relay failed")), \
-         patch("api.gateway_chat._gateway_base_url", return_value="http://gw:8642"), \
-         patch("api.gateway_chat._gateway_api_key", return_value=""):
+         patch("api.runs.gateway._gateway_base_url", return_value="http://gw:8642"), \
+         patch("api.runs.gateway._gateway_api_key", return_value=""):
         from api.routes import _handle_approval_respond
         _handle_approval_respond(handler, body)
 
@@ -625,8 +625,8 @@ def test_gateway_approval_response_invalid_gateway_base_returns_502():
     body = {"session_id": "sess-relay", "choice": "once", "approval_id": "appr-x"}
 
     with patch("api.routes.get_session", return_value=mock_session), \
-         patch("api.gateway_chat._gateway_base_url", return_value="file:///tmp/not-http"), \
-         patch("api.gateway_chat._gateway_api_key", return_value=""):
+         patch("api.runs.gateway._gateway_base_url", return_value="file:///tmp/not-http"), \
+         patch("api.runs.gateway._gateway_api_key", return_value=""):
         from api.routes import _handle_approval_respond
         _handle_approval_respond(handler, body)
 
@@ -690,7 +690,7 @@ def test_gateway_empty_response_no_approval_banner(tmp_path, monkeypatch):
 
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
-            with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
+            with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen):
                 _run_gateway_chat_streaming(
                     session_id="sess-fb",
@@ -763,10 +763,10 @@ def test_gateway_chat_completions_path_unchanged():
 
     try:
         with patch.dict("os.environ", {"HERMES_WEBUI_CHAT_BACKEND": "gateway"}):
-            with patch("api.gateway_chat.gateway_supports_approval", return_value=False), \
+            with patch("api.runs.gateway.gateway_supports_approval", return_value=False), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=mock_session), \
-                 patch("api.gateway_chat.merge_session_messages_append_only", return_value=[]):
+                 patch("api.runs.gateway.get_session", return_value=mock_session), \
+                 patch("api.runs.gateway.merge_session_messages_append_only", return_value=[]):
                 _run_gateway_chat_streaming(
                     session_id="sess-ok",
                     msg_text="hello",

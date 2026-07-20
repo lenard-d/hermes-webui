@@ -50,7 +50,7 @@ def test_streaming_finally_does_not_discard_pending_goal_continuation():
 def test_turn_admission_consumes_goal_marker_only_after_it_claims_the_session(monkeypatch):
     """A rejected duplicate start must not steal the next goal continuation."""
     import api.config as config
-    import api.turn_admission as turn_admission
+    from api.runs import admission as turn_admission
 
     class Session:
         session_id = "goal-continuation-admission"

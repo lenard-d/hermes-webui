@@ -14,13 +14,13 @@ from unittest import mock
 import pytest
 
 import api.config as config
-import api.gateway_chat as gateway_chat
+from api.runs import gateway as gateway_chat
 import api.sessions.store as models
 import api.profiles as profiles
 import api.providers as providers
 import api.routes as routes
 import api.streaming as streaming
-import api.turn_execution as turn_execution
+from api.runs import execution as turn_execution
 from api.sessions.store import PROCESS_WAKEUP_PAUSE_ERROR, Session
 
 

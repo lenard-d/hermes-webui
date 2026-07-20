@@ -84,7 +84,7 @@ def isolated_attachment_session(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "delete_cli_session", lambda _sid: True)
     for target in (
         "api.turn_journal.delete_turn_journal",
-        "api.run_journal.delete_run_journal",
+        "api.runs.delete_run_journal",
         "api.background_process.forget_bg_task_completion_dedup",
         "api.terminal.close_terminal",
     ):

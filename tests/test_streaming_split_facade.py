@@ -6,7 +6,7 @@ import sys
 from api import streaming
 from api.streaming_parts import gateway_routing_metadata
 from api.streaming_parts import live_controls
-from api.streaming_parts import local_run
+from api.runs import local as local_run
 from api.streaming_parts import payloads
 from api.streaming_parts import runtime_resolution
 from api.streaming_parts.bindings import streaming_api
@@ -802,7 +802,7 @@ def test_live_controls_module_imports_without_streaming_facade():
     assert result.returncode == 0, result.stderr
 
 
-def test_local_run_facade_delegates_through_canonical_module(monkeypatch):
+def test_streaming_facade_delegates_through_canonical_local_run(monkeypatch):
     calls = []
 
     def fake_run(api, *args, **kwargs):

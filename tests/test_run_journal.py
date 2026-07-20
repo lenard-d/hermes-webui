@@ -53,7 +53,7 @@ def test_run_journal_default_fsyncs_terminal_events_only(tmp_path, monkeypatch):
     path.touch()
     fsync_calls = []
     monkeypatch.delenv("HERMES_WEBUI_RUN_JOURNAL_FSYNC", raising=False)
-    monkeypatch.setattr("api.run_journal.os.fsync", lambda fd: fsync_calls.append(fd))
+    monkeypatch.setattr("api.runs.journal.os.fsync", lambda fd: fsync_calls.append(fd))
 
     append_run_event("session_1", "run_1", "token", {"text": "ok"}, session_dir=tmp_path)
 
@@ -70,7 +70,7 @@ def test_run_journal_eager_fsync_mode_fsyncs_non_terminal_events(tmp_path, monke
     path.touch()
     fsync_calls = []
     monkeypatch.setenv("HERMES_WEBUI_RUN_JOURNAL_FSYNC", "eager")
-    monkeypatch.setattr("api.run_journal.os.fsync", lambda fd: fsync_calls.append(fd))
+    monkeypatch.setattr("api.runs.journal.os.fsync", lambda fd: fsync_calls.append(fd))
 
     append_run_event("session_1", "run_1", "token", {"text": "ok"}, session_dir=tmp_path)
 
@@ -136,7 +136,7 @@ def test_summary_keeps_logical_terminal_state_when_stream_end_follows(tmp_path):
 def test_stale_interrupted_event_reports_non_terminal_journal(tmp_path, monkeypatch):
     append_run_event("session_1", "run_1", "token", {"text": "partial"}, session_dir=tmp_path)
 
-    monkeypatch.setattr("api.run_journal._default_session_dir", lambda: tmp_path)
+    monkeypatch.setattr("api.runs.journal._default_session_dir", lambda: tmp_path)
     event = stale_interrupted_event("session_1", "run_1")
     assert event is not None
 
@@ -153,6 +153,6 @@ def test_stale_interrupted_event_reports_non_terminal_journal(tmp_path, monkeypa
 def test_stale_interrupted_event_skips_terminal_journal(tmp_path, monkeypatch):
     append_run_event("session_1", "run_1", "done", {"session": {}}, session_dir=tmp_path)
 
-    monkeypatch.setattr("api.run_journal._default_session_dir", lambda: tmp_path)
+    monkeypatch.setattr("api.runs.journal._default_session_dir", lambda: tmp_path)
 
     assert stale_interrupted_event("session_1", "run_1") is None

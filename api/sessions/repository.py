@@ -743,7 +743,7 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
                 )
 
             try:
-                from api.runs.journal import delete_run_journal
+                from api.runs import delete_run_journal
 
                 delete_run_journal(sid)
             except Exception:

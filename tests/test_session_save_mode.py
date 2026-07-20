@@ -8,7 +8,7 @@ import api.config as config
 import api.sessions.store as models
 import api.sessions.recovery as session_recovery
 import api.streaming as streaming
-import api.turn_admission as turn_admission
+from api.runs import admission as turn_admission
 import api.turn_journal as turn_journal
 from api.sessions.store import Session, new_session
 

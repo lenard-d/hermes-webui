@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import urllib.error
 
-import api.gateway_chat as gateway_chat
+from api.runs import gateway as gateway_chat
 import api.sessions.store as models
 import api.streaming as streaming
 from api.config import PENDING_GOAL_CONTINUATION, STREAMS, create_stream_channel
@@ -1487,9 +1487,9 @@ def test_gateway_runs_api_body_includes_session_id():
 
     try:
         with patch.dict("os.environ", env, clear=True):
-            with patch("api.gateway_chat.gateway_supports_approval", return_value=True), \
+            with patch("api.runs.gateway.gateway_supports_approval", return_value=True), \
                      patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                     patch("api.gateway_chat.get_session", return_value=MagicMock(
+                     patch("api.runs.gateway.get_session", return_value=MagicMock(
                          session_id="sess-optin",
                          active_stream_id=stream_id, workspace="/tmp",
                      profile=None, context_messages=[], messages=[],
@@ -1554,7 +1554,7 @@ def test_gateway_runs_api_classifies_terminal_provider_error(tmp_path, monkeypat
             "HERMES_WEBUI_GATEWAY_USE_RUNS_API": "1",
             "HERMES_WEBUI_GATEWAY_BASE_URL": "http://gateway.local",
         }, clear=True), \
-             patch("api.gateway_chat.gateway_supports_approval", return_value=True), \
+             patch("api.runs.gateway.gateway_supports_approval", return_value=True), \
              patch("urllib.request.urlopen", side_effect=fake_urlopen):
             _run_gateway_chat_streaming(
                 session_id=s.session_id,
@@ -1608,9 +1608,9 @@ def test_gateway_worker_skips_runs_api_when_opt_in_absent():
 
     try:
         with patch.dict("os.environ", env_without_opt_in, clear=True):
-            with patch("api.gateway_chat.gateway_supports_approval", return_value=True), \
+            with patch("api.runs.gateway.gateway_supports_approval", return_value=True), \
                  patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-                 patch("api.gateway_chat.get_session", return_value=MagicMock(
+                 patch("api.runs.gateway.get_session", return_value=MagicMock(
                      session_id="sess-optin", _loaded_metadata_only=False,
                      active_stream_id=stream_id, workspace="/tmp",
                      profile=None, context_messages=[], messages=[],

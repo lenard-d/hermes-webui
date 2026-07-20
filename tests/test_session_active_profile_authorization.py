@@ -376,7 +376,7 @@ def test_chat_stream_status_keeps_same_profile_stream_visible(monkeypatch):
 
 
 def test_chat_cancel_blocks_foreign_owned_stream_before_cancel_call(monkeypatch):
-    from api import runtime_adapter
+    from api.runs import adapter as runtime_adapter
     from api import config
     handler = _FakeHandler()
     foreign = _SimpleSession("foreign_session", profile="other")
@@ -412,7 +412,7 @@ def test_chat_cancel_blocks_foreign_owned_stream_before_cancel_call(monkeypatch)
 
 def test_chat_cancel_same_profile_stream_still_passes_through(monkeypatch):
     from api import config
-    from api import runtime_adapter
+    from api.runs import adapter as runtime_adapter
     handler = _FakeHandler()
     visible = _SimpleSession("visible_session", profile="default")
     calls = {"cancel": 0}
@@ -441,7 +441,7 @@ def test_chat_cancel_same_profile_stream_still_passes_through(monkeypatch):
 
 
 def test_chat_stream_blocks_foreign_owned_dead_stream_before_replay(monkeypatch):
-    from api import runtime_adapter
+    from api.runs import adapter as runtime_adapter
     handler = _FakeHandler()
     foreign = _SimpleSession("foreign_session", profile="other")
 

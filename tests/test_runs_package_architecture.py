@@ -21,23 +21,50 @@ def test_config_runtime_aliases_share_the_run_owner_objects():
     assert config.ACTIVE_RUNS is runtime_state.ACTIVE_RUNS
 
 
-def test_legacy_run_modules_resolve_to_their_canonical_owners():
+def test_legacy_run_modules_reexport_canonical_symbols_without_aliasing_modules():
     pairs = {
-        "api.runtime_state": "api.runs.runtime_state",
-        "api.turn_admission": "api.runs.admission",
-        "api.turn_execution": "api.runs.execution",
-        "api.run_event_sink": "api.runs.event_sink",
-        "api.run_journal": "api.runs.journal",
-        "api.stream_channel": "api.runs.channels",
-        "api.agent_runtime": "api.runs.agent_runtime",
-        "api.runtime_adapter": "api.runs.adapter",
-        "api.gateway_chat": "api.runs.gateway",
-        "api.background": "api.runs.background",
-        "api.streaming_parts.local_run": "api.runs.local",
+        "api.runtime_state": ("api.runs.runtime_state", "RUNTIME_STATE"),
+        "api.turn_admission": ("api.runs.admission", "start_local_turn"),
+        "api.turn_execution": ("api.runs.execution", "TurnExecution"),
+        "api.run_event_sink": ("api.runs.event_sink", "RunEventSink"),
+        "api.run_journal": ("api.runs.journal", "RunJournalWriter"),
+        "api.stream_channel": ("api.runs.channels", "StreamChannel"),
+        "api.agent_runtime": ("api.runs.agent_runtime", "require_ai_agent_class"),
+        "api.runtime_adapter": ("api.runs.adapter", "build_runtime_adapter"),
+        "api.gateway_chat": ("api.runs.gateway", "gateway_chat_config_status"),
+        "api.background": ("api.runs.background", "track_background"),
+        "api.streaming_parts.local_run": ("api.runs.local", "run_agent_streaming"),
     }
 
-    for legacy_name, owner_name in pairs.items():
-        assert importlib.import_module(legacy_name) is importlib.import_module(owner_name)
+    for legacy_name, (owner_name, symbol) in pairs.items():
+        legacy = importlib.import_module(legacy_name)
+        owner = importlib.import_module(owner_name)
+        assert legacy is not owner
+        assert legacy.__name__ == legacy_name
+        assert getattr(legacy, symbol) is getattr(owner, symbol)
+
+
+def test_legacy_runtime_state_exports_share_owner_state():
+    legacy = importlib.import_module("api.runtime_state")
+    owner = importlib.import_module("api.runs.runtime_state")
+
+    for name in (
+        "RUNTIME_STATE",
+        "STREAMS",
+        "STREAM_SESSION_OWNERS",
+        "CANCEL_FLAGS",
+        "AGENT_INSTANCES",
+        "ACTIVE_RUNS",
+    ):
+        assert getattr(legacy, name) is getattr(owner, name)
+
+
+def test_legacy_background_exports_share_owner_registries():
+    legacy = importlib.import_module("api.background")
+    owner = importlib.import_module("api.runs.background")
+
+    assert legacy._BACKGROUND_TASKS is owner._BACKGROUND_TASKS
+    assert legacy._BTW_TRACKING is owner._BTW_TRACKING
 
 
 def test_run_domain_does_not_import_http_route_modules():
@@ -60,8 +87,8 @@ def test_run_domain_does_not_import_http_route_modules():
 
 def test_background_turn_starters_depend_on_the_run_interface():
     paths = (
-        REPO_ROOT / "api" / "background_process.py",
-        REPO_ROOT / "api" / "background_process_parts" / "deferred_wakeups.py",
+        REPO_ROOT / "api" / "background_process" / "process_coordination.py",
+        REPO_ROOT / "api" / "background_process" / "deferred_wakeups.py",
     )
 
     for source_path in paths:
@@ -70,14 +97,19 @@ def test_background_turn_starters_depend_on_the_run_interface():
         assert "from api.routes import start_session_turn" not in source
 
 
-def test_runs_package_exports_only_high_level_turn_entry_points():
+def test_runs_package_exports_supported_cross_domain_interface():
     import api.runs as runs
 
     assert set(runs.__all__) == {
         "LocalTurnRequest",
         "TurnExecution",
         "checkpoint_user_message",
+        "delete_run_journal",
+        "latest_run_summary",
         "prepare_session_for_turn",
+        "read_run_events",
+        "run_agent_streaming",
+        "run_journal_path",
         "start_local_turn",
         "start_session_turn",
     }

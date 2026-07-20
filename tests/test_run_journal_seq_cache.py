@@ -10,7 +10,7 @@ import threading
 
 import pytest  # noqa: F401  # top-level import keeps pytest collection unambiguous
 
-from api import run_journal
+from api.runs import journal as run_journal
 
 
 def test_append_run_event_seeds_seq_once_and_stays_gapless(tmp_path, monkeypatch):
