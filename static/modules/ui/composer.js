@@ -1,6 +1,6 @@
 import { _clearActivityElapsedTimer, scrollIfPinned } from './activity-and-scroll.js';
 import { _copyText } from './clipboard.js';
-import { isCompressionUiRunning } from './live-activity.js';
+import { isCompressionUiRunning } from './compression-ui.js';
 import { _dynamicModelLabels, _inlineMediaHtmlForRef, _isSafeDataImageUri, _mdImageHtml } from './media-and-quota.js';
 import { syncModelChip } from './model-catalog.js';
 import { _applyModelToDropdown } from './model-state.js';

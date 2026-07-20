@@ -17,7 +17,13 @@ import * as reconnectBanner from './reconnect-banner.js';
 import * as textToSpeech from './text-to-speech.js';
 import * as todoState from './todo-state.js';
 import * as healthAndUpdates from './health-and-updates.js';
+import * as cliToolPresentation from './cli-tool-presentation.js';
+import * as compressionUi from './compression-ui.js';
+import * as handoffUi from './handoff-ui.js';
 import * as liveActivity from './live-activity.js';
+import * as liveRunStatus from './live-run-status.js';
+import * as messageRenderCache from './message-render-cache.js';
+import * as messageScrollSnapshot from './message-scroll-snapshot.js';
 import * as mediaAndQuota from './media-and-quota.js';
 import * as modelCatalog from './model-catalog.js';
 import * as modelSelection from './model-selection.js';
@@ -59,11 +65,17 @@ const modules = Object.assign(Object.create(null), {
   textToSpeech,
   todoState,
   healthAndUpdates,
+  cliToolPresentation,
+  compressionUi,
+  handoffUi,
   presentation,
   transparentWorklog,
   topbarPresentation,
   anchorScenes,
   liveActivity,
+  liveRunStatus,
+  messageRenderCache,
+  messageScrollSnapshot,
   renderSupport,
   renderer,
   toolWorklog,

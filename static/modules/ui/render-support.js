@@ -1,7 +1,9 @@
 import { _followMessagesAfterDomReplace, scrollIfPinned, scrollToBottom } from './activity-and-scroll.js';
 import { _deferClearProgrammaticScroll, _firstValidTimestampSeconds, _lastMessageClientHeight, _lastScrollTop, _maybeShowNewMessageScrollCue, _messageUserUnpinned, _nearBottomCount, _programmaticScroll, _programmaticScrollSetAt, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _scrollPinned } from './composer-controls.js';
 import { _stripAttachedFilesMarkerForDisplay } from './composer.js';
-import { _captureMessageScrollSnapshot, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _desktopAnchorRealignDelta, _restoreMessageScrollSnapshot, _restorePinnedMessageScrollSnapshot, _sessionHtmlCache, _sessionHtmlCacheSid, _toolArgsSnapshot } from './live-activity.js';
+import { _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
+import { _sessionHtmlCache, _sessionHtmlCacheSid } from './message-render-cache.js';
+import { _captureMessageScrollSnapshot, _desktopAnchorRealignDelta, _restoreMessageScrollSnapshot, _restorePinnedMessageScrollSnapshot } from './message-scroll-snapshot.js';
 import { _isTouchLikeMessageViewport, _messageViewportIntersectsRenderedRow, _remountMessageViewportAnchor, _restoreMessageViewportAnchor } from './navigation.js';
 import { isTransparentStream } from './activity-presentation.js';
 import { _assistantAnchorSceneFinalAnswerText, _stripLeadingAssistantThinkingMarkup } from './assistant-turn-presentation.js';

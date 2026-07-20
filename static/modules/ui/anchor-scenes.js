@@ -1,6 +1,8 @@
 import { _ensureLiveActivityBaseline, _setActivityElapsedStartedAt, _startActivityElapsedTimer, scrollIfPinned } from './activity-and-scroll.js';
 import { _messageUserUnpinned, _syncTransparentEventTimestamp } from './composer-controls.js';
-import { _captureMessageScrollSnapshot, _moveLiveRunStatusToTurnEnd, _sessionHtmlCache, _transparentRevealKey, _transparentRevealedTurns } from './live-activity.js';
+import { _moveLiveRunStatusToTurnEnd } from './live-run-status.js';
+import { _sessionHtmlCache, _transparentRevealKey, _transparentRevealedTurns } from './message-render-cache.js';
+import { _captureMessageScrollSnapshot } from './message-scroll-snapshot.js';
 import { _attachCopyButton, _captureWorklogDetailDisclosureState, _decorateTransparentEventRow, _restoreWorklogDetailDisclosureState, _setTransparentCardOpen, _syncTransparentEventControls, _wireTransparentHeaderToggle, chatActivityMode, isCompactWorklogMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
 import { _assistantAnchorSceneFinalAnswerText, _assistantTurnBlocks, _createAssistantTurn, msgContent } from './assistant-turn-presentation.js';
 import { _restoreMessageScrollSnapshotSameFrame } from './render-support.js';

@@ -1,6 +1,6 @@
 import { showToast } from './composer.js';
 import { refreshSession } from './health-and-updates.js';
-import { _compressionMessageAnchorKey, _isContextCompactionMessage, _isPreservedCompressionTaskListMessage } from './live-activity.js';
+import { _compressionMessageAnchorKey, _isContextCompactionMessage, _isPreservedCompressionTaskListMessage } from './compression-ui.js';
 import { _clearRenderCache, _clearUserRowIntrinsicHeightCache, _currentMessageRenderWindowSize, _scheduleMessageVirtualizedRender } from './navigation.js';
 import { _assistantMessageHasVisibleContent, _isRecoveryControlMessage, _messageHasReasoningPayload, msgContent } from './assistant-turn-presentation.js';
 import { syncTopbar } from './topbar-presentation.js';

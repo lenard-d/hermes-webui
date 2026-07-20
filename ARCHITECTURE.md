@@ -709,6 +709,13 @@ The main directly loaded families are:
    composer-control bucket is split by ownership: `toolsets-controls.js`,
    `mobile-composer-config.js`, `message-scroll-follow.js`, and
    `activity-timing.js`; `composer-controls.js` is only their stable import facade.
+   Live transcript support is likewise owned by focused modules:
+   `live-run-status.js` owns the active-run footer and timers,
+   `compression-ui.js` owns compression lifecycle and cards, `handoff-ui.js`
+   owns cross-channel summary state, `message-render-cache.js` owns transcript
+   cache identity, `cli-tool-presentation.js` owns CLI result projection, and
+   `message-scroll-snapshot.js` owns scroll capture and restoration.
+   `live-activity.js` remains only as the stable compatibility seam.
 4. `workspace.js`, then ordered `workspace_parts/` for navigation, preview/editor,
    and upload behavior.
 5. `static/modules/sessions/index.js`, a native-module entrypoint whose semantic

@@ -1,5 +1,5 @@
 import { _stripVisibleAssistantEchoFromThinking } from './activity-and-scroll.js';
-import { _isMarkerOnlyAssistantCompressionMessage } from './live-activity.js';
+import { _isMarkerOnlyAssistantCompressionMessage } from './compression-ui.js';
 import { $, S, assistantDisplayName, esc } from './state.js';
 
 function msgContent(m){

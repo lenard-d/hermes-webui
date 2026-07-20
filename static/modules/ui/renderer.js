@@ -4,7 +4,12 @@ import { _clearCompressionElapsedTimer, _deferClearProgrammaticScroll, _fmtToken
 import { _stripAttachedFilesMarkerForDisplay } from './composer.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
 import { _liveAssistantSegmentTextLength } from './live-turn-recovery.js';
-import { _assistantToolAnchorIdxForMessage, _captureMessageScrollSnapshot, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _collectHandoffSummaryStates, _compressionAnchorIndex, _compressionCardsNode, _compressionReferenceCardHtml, _compressionStateForCurrentSession, _formatMessageFooterTimestamp, _handoffCardsNode, _handoffStateForCurrentSession, _isContextCompactionMessage, _isMarkerOnlyAssistantCompressionMessage, _isPreservedCompressionTaskListMessage, _latestCompressionReferenceMessage, _latestPreservedCompressionTaskListMessages, _messageRenderCacheSignature, _preservedCompressionTaskListCardsHtml, _sessionHtmlCache, _sessionHtmlCacheSid, _shouldShowSettledCompressionReference, _syncLiveRunStatusAfterRender, _toolArgsSnapshot, clearCompressionUi, renderCompressionUi } from './live-activity.js';
+import { _assistantToolAnchorIdxForMessage, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
+import { _compressionAnchorIndex, _compressionCardsNode, _compressionReferenceCardHtml, _compressionStateForCurrentSession, _formatMessageFooterTimestamp, _isContextCompactionMessage, _isMarkerOnlyAssistantCompressionMessage, _isPreservedCompressionTaskListMessage, _latestCompressionReferenceMessage, _latestPreservedCompressionTaskListMessages, _preservedCompressionTaskListCardsHtml, _shouldShowSettledCompressionReference, clearCompressionUi, renderCompressionUi } from './compression-ui.js';
+import { _collectHandoffSummaryStates, _handoffCardsNode, _handoffStateForCurrentSession } from './handoff-ui.js';
+import { _syncLiveRunStatusAfterRender } from './live-run-status.js';
+import { _messageRenderCacheSignature, _sessionHtmlCache, _sessionHtmlCacheSid } from './message-render-cache.js';
+import { _captureMessageScrollSnapshot } from './message-scroll-snapshot.js';
 import { _initMediaPlaybackObserver, _renderAttachmentHtml } from './media-and-quota.js';
 import { _applySessionNavigationPrefs, _applyUserRowIntrinsicHeight, _getCachedRender, _questionJumpButtonHtml, _rememberRenderedUserRowIntrinsicHeights, _updateMessageVirtualMeasurements, _userMessageDomId, _wireMessageWindowLoadEarlierButton } from './navigation.js';
 import { _captureWorklogDetailDisclosureState, _decorateTransparentEventRow, _rehydrateTransparentStreamDom, _restoreWorklogDetailDisclosureState, _syncTransparentEventControls, _thinkingActivityNode, _thinkingCardHtml, _transparentToolStatus, isCompactWorklogMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
@@ -14,7 +19,7 @@ import { $, INFLIGHT, S, _activeCompressionRecoveryPayload, _compressionRecovery
 import { _syncToolCallGroupSummary, _toolWorklogListEl, buildToolCard } from './tool-worklog.js';
 import { _appendWorklogStep, _applyTransparentRowFading, _materializeDeferredWorklogRows, _rehydrateDeferredWorklogsFromCache, _renderTransparentTurnFooter, _transparentTurnCollapsedStates, _wireTransparentTurnToggle, _worklogReasonHtmlFromAnchor } from './transparent-worklog.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
-import { compatibilityBindings as liveActivityBindings } from './live-activity.js';
+import { compatibilityBindings as messageRenderCacheBindings } from './message-render-cache.js';
 import { compatibilityBindings as stateBindings } from './state.js';
 
 // Transcript DOM rebuild owner. renderMessages() intentionally remains one
@@ -81,7 +86,7 @@ function renderMessages(options){
     if(cached&&cached.msgCount===msgCount&&cached.renderWindowKey===renderWindowKey&&cached.signature===renderSignature){
       inner.innerHTML=cached.html;
       stateBindings._messageVirtualWindowKey=renderWindowKey;
-      liveActivityBindings._sessionHtmlCacheSid=sid;
+      messageRenderCacheBindings._sessionHtmlCacheSid=sid;
       _rehydrateTransparentStreamDom(inner);
       _rehydrateDeferredWorklogsFromCache(inner);
       _wireMessageWindowLoadEarlierButton();
@@ -1564,7 +1569,7 @@ function renderMessages(options){
   // Apply persisted playback speed after media nodes are rendered.
   if(typeof _applyMediaPlaybackPreferences==='function') _applyMediaPlaybackPreferences(inner);
   // Populate session cache so switching back here skips a full rebuild.
-  liveActivityBindings._sessionHtmlCacheSid=sid;
+  messageRenderCacheBindings._sessionHtmlCacheSid=sid;
   // Skip caching while the just-settled keep-open token is armed: that render
   // force-opens the settled worklog for height-stability, and caching it would
   // persist the forced-open DOM across session switches / restores, overriding a

@@ -1,4 +1,4 @@
-import { _compressionStateForCurrentSession } from './live-activity.js';
+import { _compressionStateForCurrentSession } from './compression-ui.js';
 import { S } from './state.js';
 
 function _fmtTokens(n){if(!n||n<0)return'0';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'k';return String(n);}

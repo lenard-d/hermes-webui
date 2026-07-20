@@ -3,7 +3,7 @@ import { ensureActivityGroup } from './anchor-scenes.js';
 import { _firstValidTimestampSeconds, _messageUserUnpinned, _nearBottomCount, _scrollPinned, _timestampSeconds } from './composer-controls.js';
 import { renderMd } from './composer.js';
 import { _postProcessWithAnchorSuppression, _renderThinkingInto } from './content-postprocessing.js';
-import { _autoCompressionWorklogNode } from './live-activity.js';
+import { _autoCompressionWorklogNode } from './compression-ui.js';
 import { _decorateTransparentEventRow, _restoreWorklogDetailDisclosureState, _syncTransparentEventControls, _thinkingActivityNode, _transparentToolStatus, _worklogDetailHashKey, isTransparentStream } from './activity-presentation.js';
 import { _assistantTurnBlocks } from './assistant-turn-presentation.js';
 import { $, S, esc } from './state.js';
