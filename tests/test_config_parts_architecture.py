@@ -1,10 +1,11 @@
 """Architecture contracts for the real :mod:`api.config` package."""
 
+import threading
 from dataclasses import replace
 from pathlib import Path
 
 import api.config as config
-from api import runtime_state, stream_channel
+from api import agent_cache, runtime_state, session_state, stream_channel
 from api.config import (
     catalog_state,
     environment,
@@ -48,6 +49,44 @@ def test_config_entrypoint_uses_public_runtime_and_channel_adapters():
     assert config.RUNTIME_STATE is runtime_state.RUNTIME_STATE
     assert config.ACTIVE_RUNS is runtime_state.ACTIVE_RUNS
     assert config.StreamChannel is stream_channel.StreamChannel
+    assert config.SESSIONS is session_state.SESSIONS
+    assert config.SESSION_AGENT_LOCKS is session_state.SESSION_AGENT_LOCKS
+    assert config.SESSION_AGENT_CACHE is agent_cache.SESSION_AGENT_CACHE
+    assert config.SESSION_AGENT_CACHE_LOCK is agent_cache.SESSION_AGENT_CACHE_LOCK
+    assert config._evict_session_agent is agent_cache.evict_session_agent
+
+
+def test_agent_cache_owner_honors_legacy_facade_replacements(monkeypatch):
+    replacement_cache = {}
+    replacement_lock = threading.Lock()
+    monkeypatch.setattr(config, "SESSION_AGENT_CACHE", replacement_cache)
+    monkeypatch.setattr(config, "SESSION_AGENT_CACHE_LOCK", replacement_lock)
+    monkeypatch.setattr(config, "SESSION_AGENT_CACHE_MAX", 3)
+
+    with agent_cache.locked_agent_cache() as live_cache:
+        assert live_cache is replacement_cache
+        live_cache["session"] = (object(), "signature")
+
+    assert config.SESSION_AGENT_CACHE["session"][1] == "signature"
+    assert agent_cache.agent_cache_max() == 3
+
+
+def test_session_lock_owner_preserves_identity_across_rotation():
+    old_session_id = "config-owner-old"
+    new_session_id = "config-owner-new"
+    held_lock = session_state.session_agent_lock(old_session_id)
+    try:
+        session_state.alias_session_agent_lock(
+            old_session_id,
+            new_session_id,
+            held_lock,
+        )
+        assert config._get_session_agent_lock(old_session_id) is held_lock
+        assert config._get_session_agent_lock(new_session_id) is held_lock
+    finally:
+        with session_state.SESSION_AGENT_LOCKS_LOCK:
+            session_state.SESSION_AGENT_LOCKS.pop(old_session_id, None)
+            session_state.SESSION_AGENT_LOCKS.pop(new_session_id, None)
 
 
 def test_model_catalog_state_has_one_canonical_owner():

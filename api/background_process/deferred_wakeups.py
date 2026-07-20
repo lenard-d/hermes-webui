@@ -11,6 +11,12 @@ from __future__ import annotations
 import logging
 import threading
 
+from api.runtime_state import ACTIVE_RUNS, ACTIVE_RUNS_LOCK
+from api.session_state import (
+    DEFERRED_PROCESS_WAKEUPS,
+    DEFERRED_PROCESS_WAKEUPS_LOCK,
+    PENDING_BG_TASK_COMPLETIONS,
+)
 
 logger = logging.getLogger("api.background_process")
 
@@ -23,11 +29,9 @@ def record_deferred_wakeup(
     """Persist one wakeup idempotently for later redelivery."""
     if not session_id or not wakeup_prompt:
         return False
-    from api import config as _cfg
-
     try:
-        with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
-            entries = _cfg.DEFERRED_PROCESS_WAKEUPS.setdefault(session_id, [])
+        with DEFERRED_PROCESS_WAKEUPS_LOCK:
+            entries = DEFERRED_PROCESS_WAKEUPS.setdefault(session_id, [])
             if process_id and any(
                 entry.get("process_id") == process_id for entry in entries
             ):
@@ -49,11 +53,9 @@ def claim_deferred_wakeups(session_id: str) -> list[dict]:
     """Atomically remove and return every deferred wakeup for ``session_id``."""
     if not session_id:
         return []
-    from api import config as _cfg
-
     try:
-        with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
-            return _cfg.DEFERRED_PROCESS_WAKEUPS.pop(session_id, []) or []
+        with DEFERRED_PROCESS_WAKEUPS_LOCK:
+            return DEFERRED_PROCESS_WAKEUPS.pop(session_id, []) or []
     except Exception:
         logger.debug(
             "claim_deferred_wakeups failed for session %s",
@@ -65,11 +67,9 @@ def claim_deferred_wakeups(session_id: str) -> list[dict]:
 
 def session_has_active_turn(session_id: str) -> bool:
     """Return whether the runtime owner reports a live turn for the session."""
-    from api import config as _cfg
-
     try:
-        with _cfg.ACTIVE_RUNS_LOCK:
-            for metadata in (_cfg.ACTIVE_RUNS or {}).values():
+        with ACTIVE_RUNS_LOCK:
+            for metadata in (ACTIVE_RUNS or {}).values():
                 if (
                     isinstance(metadata, dict)
                     and metadata.get("session_id") == session_id
@@ -90,20 +90,18 @@ def drain_for_session(session_id: str) -> int:
     """
     if not session_id:
         return 0
-    from api import config as _cfg
-
     try:
         if session_has_active_turn(session_id):
             return 0
-        with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
-            if not _cfg.DEFERRED_PROCESS_WAKEUPS.get(session_id):
+        with DEFERRED_PROCESS_WAKEUPS_LOCK:
+            if not DEFERRED_PROCESS_WAKEUPS.get(session_id):
                 return 0
 
         entries = claim_deferred_wakeups(session_id)
         if not entries:
             return 0
         try:
-            _cfg.PENDING_BG_TASK_COMPLETIONS.discard(session_id)
+            PENDING_BG_TASK_COMPLETIONS.discard(session_id)
         except Exception:
             logger.debug(
                 "PENDING discard failed for session %s",

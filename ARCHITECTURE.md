@@ -64,6 +64,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       auth.py              Optional password authentication, signed cookies, passkeys/WebAuthn
       background_process.py Compatibility facade for background-run coordination
       background_process_parts/ Completion-event and deferred-wakeup lifecycle owners
+      agent_cache.py       Canonical reusable-agent cache and eviction lifecycle
       config/              Compatibility package plus config I/O, discovery, routing,
                            settings, reasoning, snapshot, and catalog-state owners
         environment.py     Profile-scoped thread environment and restoration invariant
@@ -75,6 +76,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         model_cache.py     Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
         session_limits.py  Bounded compact-session cache policy
         toolsets.py        CLI toolset normalization and platform resolution
+      session_state.py     Process-local session coordination, lock, and wakeup state
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       http/                Explicit HTTP composition root and semantic transport owners
         router.py          Method dispatch across independently importable route groups
@@ -393,12 +395,14 @@ larger migration remains incremental:
   package entrypoint re-exports these Interfaces and resolves mutable facade
   state at call time where profile switching or compatibility monkeypatches
   require it.
-- `api/agent_cache.py` is the temporary one-operation Adapter for cached-agent
-  eviction. It prevents `api.config` from reaching into session lifecycle
-  internals while cache storage remains on the compatibility facade. Remove the
-  Adapter and move operation plus storage together under `api.runs` after the
-  unchanged route and test callers stop importing the cache through
-  `api.config`.
+- `api/agent_cache.py` owns the reusable-agent cache, its lock and operator cap,
+  and the complete eviction transaction. `api/session_state.py` owns the
+  process-local compact-session cache, session mutation locks, goal/process
+  continuation markers, and background-wakeup registries. `api.config`
+  re-exports the canonical objects by identity for compatibility, but no longer
+  owns these unrelated runtime lifecycles. Owner operations resolve explicit
+  legacy facade replacements at call time so existing integration monkeypatches
+  remain valid during the migration.
 - `api/insights.py` owns usage aggregation across the WebUI session index and
   Hermes `state.db`. Its Interface accepts query text and storage collaborators
   and returns a payload; the route wrapper only supplies those values and

@@ -8,6 +8,7 @@ import random
 import sqlite3
 import time
 
+from api.agent_cache import locked_agent_cache
 from api.config import CANCEL_FLAGS
 from api.sessions.lifecycle import (
     commit_session_memory,
@@ -203,10 +204,7 @@ def _attempt_credential_self_heal(
             read_auth_json,
             resolve_runtime_provider_with_anthropic_env_lock,
         )
-        from api.config import (
-            SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK,
-            invalidate_credential_pool_cache,
-        )
+        from api.config import invalidate_credential_pool_cache
         from hermes_cli.runtime_provider import resolve_runtime_provider
 
         # 1. Re-read auth.json (triggers a fresh credential scan)
@@ -217,8 +215,8 @@ def _attempt_credential_self_heal(
 
         # 2. Evict the cached agent for this session
         _evicted_entry = None
-        with SESSION_AGENT_CACHE_LOCK:
-            _evicted_entry = SESSION_AGENT_CACHE.pop(session_id, None)
+        with locked_agent_cache() as session_agent_cache:
+            _evicted_entry = session_agent_cache.pop(session_id, None)
         if _evicted_entry is not None:
             _close_cached_agent_entry_at_session_boundary(session_id, _evicted_entry)
 

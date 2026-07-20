@@ -10,11 +10,11 @@ import urllib.request
 from typing import Any
 
 from api.config import (
-    PENDING_GOAL_CONTINUATION,
     coerce_reasoning_effort_for_model,
     gateway_approval_unavailable_reason,
     gateway_supports_approval,
 )
+from api.session_state import PENDING_GOAL_CONTINUATION
 from api.helpers import _redact_text, redact_session_data
 from api.sessions import (
     clear_process_wakeup_pause,

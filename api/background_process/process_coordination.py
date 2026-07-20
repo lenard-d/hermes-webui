@@ -64,6 +64,13 @@ from api.process_event_utils import (
     requeue_async_delegation_event,
     schedule_async_delegation_claim_retry,
 )
+from api.session_state import (
+    BG_TASK_COMPLETE_EVENTS_SEEN,
+    BG_TASK_COMPLETE_EVENTS_SEEN_LOCK,
+    PENDING_BG_TASK_COMPLETIONS,
+    PROCESS_SESSION_INDEX,
+    PROCESS_SESSION_INDEX_LOCK,
+)
 
 logger = logging.getLogger(__name__)
 _PROCESS_RECOVERY_DONE = False
@@ -395,8 +402,6 @@ def process_one(
     stop_event: threading.Event | None = None,
 ) -> None:
     """Route a single completion_queue event to the matching WebUI session."""
-    from api import config as _cfg
-
     # Hoist the process-registry import once per event: it was imported in
     # three separate blocks below (session_key recovery, env-immune owner
     # cross-check, upstream is_completion_consumed dedupe) on every completion
@@ -450,8 +455,8 @@ def process_one(
         return
     session_id = ""
     if session_key:
-        with _cfg.PROCESS_SESSION_INDEX_LOCK:
-            session_id = _cfg.PROCESS_SESSION_INDEX.get(session_key) or ""
+        with PROCESS_SESSION_INDEX_LOCK:
+            session_id = PROCESS_SESSION_INDEX.get(session_key) or ""
     if not session_id and not origin_ui_session_id:
         # No mapping — could be a cron/gateway process that uses the same
         # registry but a non-WebUI session_key. Durable delegation events stay
@@ -537,15 +542,15 @@ def process_one(
     # (session_id, process_id) pair via THIS module, skip the duplicate. Two
     # _move_to_finished() callers (kill_process racing the reader thread) can
     # occasionally enqueue twice despite the process_registry guard.
-    with _cfg.BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
-        seen = _cfg.BG_TASK_COMPLETE_EVENTS_SEEN.setdefault(session_id, set())
+    with BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
+        seen = BG_TASK_COMPLETE_EVENTS_SEEN.setdefault(session_id, set())
         if process_id and process_id in seen:
             return
         if process_id:
             seen.add(process_id)
     payload = build_payload(evt, session_id)
     emit_coalesced(session_id, payload)
-    _cfg.PENDING_BG_TASK_COMPLETIONS.add(session_id)
+    PENDING_BG_TASK_COMPLETIONS.add(session_id)
     # Mark the event consumed in the agent's process registry so the REAL
     # merged PR #2279's next-turn drain
     # (api/streaming._drain_webui_process_notifications) treats this process_id
@@ -685,19 +690,15 @@ def register_process_session(session_key: str, session_id: str) -> None:
     """
     if not session_key or not session_id:
         return
-    from api import config as _cfg
-
-    with _cfg.PROCESS_SESSION_INDEX_LOCK:
-        _cfg.PROCESS_SESSION_INDEX[str(session_key)] = str(session_id)
+    with PROCESS_SESSION_INDEX_LOCK:
+        PROCESS_SESSION_INDEX[str(session_key)] = str(session_id)
 
 
 def unregister_process_session(session_key: str) -> None:
     if not session_key:
         return
-    from api import config as _cfg
-
-    with _cfg.PROCESS_SESSION_INDEX_LOCK:
-        _cfg.PROCESS_SESSION_INDEX.pop(str(session_key), None)
+    with PROCESS_SESSION_INDEX_LOCK:
+        PROCESS_SESSION_INDEX.pop(str(session_key), None)
 
 
 def forget_bg_task_completion_dedup(session_id: str) -> None:
@@ -709,7 +710,5 @@ def forget_bg_task_completion_dedup(session_id: str) -> None:
     """
     if not session_id:
         return
-    from api import config as _cfg
-
-    with _cfg.BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
-        _cfg.BG_TASK_COMPLETE_EVENTS_SEEN.pop(str(session_id), None)
+    with BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
+        BG_TASK_COMPLETE_EVENTS_SEEN.pop(str(session_id), None)

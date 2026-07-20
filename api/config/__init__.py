@@ -13,15 +13,12 @@ Discovery order for all paths:
 # while implementation owners live in focused sibling modules.
 # ruff: noqa: F401, F405
 
-import collections
 import copy
 import importlib
 import logging
 import os
 import sys
 import threading
-import time
-import weakref
 from pathlib import Path
 
 # ── Basic layout ──────────────────────────────────────────────────────────────
@@ -622,8 +619,7 @@ def get_index_html_path() -> Path:
 
 _INDEX_HTML_PATH = get_index_html_path()
 
-# ── Thread synchronisation ───────────────────────────────────────────────────
-LOCK = threading.Lock()
+# ── Process-local session coordination ───────────────────────────────────────
 # Max compact Session objects held in the in-memory LRU (issue #3506, #4765).
 # Lighter than the agent cache (no live agent runtime), but still bounded so a
 # long-running self-hosted install cannot accumulate every session it ever
@@ -638,8 +634,28 @@ from api.config.session_limits import (
     SESSIONS_MAX,
     get_sessions_cache_max,
 )
+from api.session_state import (
+    BG_TASK_COMPLETE_EVENTS_SEEN,
+    BG_TASK_COMPLETE_EVENTS_SEEN_LOCK,
+    CHAT_LOCK,
+    DEFERRED_PROCESS_WAKEUPS,
+    DEFERRED_PROCESS_WAKEUPS_LOCK,
+    LOCK,
+    PENDING_BG_TASK_COMPLETIONS,
+    PENDING_GOAL_CONTINUATION,
+    PROCESS_SESSION_INDEX,
+    PROCESS_SESSION_INDEX_LOCK,
+    SERVER_START_TIME,
+    SESSIONS,
+    SESSION_AGENT_LOCKS,
+    SESSION_AGENT_LOCKS_LOCK,
+    SESSION_CHANNEL_IDLE_TTL_SECS,
+    SESSION_CHANNEL_SUBSCRIBER_GRACE_SECS,
+    alias_session_agent_lock,
+    session_agent_lock,
+)
 
-CHAT_LOCK = threading.Lock()
+_get_session_agent_lock = session_agent_lock
 
 
 from api.stream_channel import StreamChannel, create_stream_channel  # noqa: F401 - compatibility exports
@@ -660,12 +676,6 @@ from api.runtime_state import (
     STREAMS_LOCK,  # noqa: F401 - compatibility export
 )
 
-
-PENDING_GOAL_CONTINUATION: set = (
-    set()
-)  # session_ids awaiting a goal continuation turn (#1932)
-
-
 # Gateway approval routing consumes this small public Interface.  Cache storage
 # remains private to its semantic owner.
 from api.config.gateway_capabilities import (
@@ -675,55 +685,7 @@ from api.config.gateway_capabilities import (
     invalidate_gateway_caps,
 )
 
-# ── notify_on_complete agent-wakeup wiring ─────────────────────────────────
-# When terminal(notify_on_complete=true, background=true) fires, the process
-# registry pushes a completion event onto tools.process_registry.completion_queue.
-# A drain task spawned at WebUI startup (api.background_process) reads that
-# queue and emits an SSE `process_complete` event to the matching session.
-# PROCESS_SESSION_INDEX maps the per-process "session_key" (set in the spawned
-# subprocess via HERMES_SESSION_KEY) back to the WebUI session_id that owns it,
-# so the drain task can route the event to the right SSE channel.
-# PENDING_BG_TASK_COMPLETIONS mirrors PENDING_GOAL_CONTINUATION: server-side
-# marker discarded atomically by routes.py when the frontend re-POSTs the
-# wakeup_prompt as the next user turn. (process_complete event, agent wakeup fix)
-PROCESS_SESSION_INDEX: dict = {}  # process_registry session_key -> WebUI session_id
-PROCESS_SESSION_INDEX_LOCK = threading.Lock()
-PENDING_BG_TASK_COMPLETIONS: set = (
-    set()
-)  # session_ids awaiting a process_complete wakeup turn
-BG_TASK_COMPLETE_EVENTS_SEEN: dict = {}  # session_id -> set[process_id] for idempotency
-BG_TASK_COMPLETE_EVENTS_SEEN_LOCK = threading.Lock()
-
-# Defer-path fix (fast-bg-task wakeup race): when a completion arrives while a
-# turn is active, Option Z's drain branch CANNOT start a turn (would 409). The
-# pre-existing PENDING_BG_TASK_COMPLETIONS marker was a bare session_id flag —
-# the wakeup_prompt was DISCARDED, and the only consumer (PR #2279 next-turn
-# drain) reads completion_queue, which the Option Z drain thread already
-# emptied. So for an autonomous agent (no next user turn) the deferred wakeup
-# was lost forever. DEFERRED_PROCESS_WAKEUPS persists the actual prompt(s) so a
-# turn-teardown idle-hook (api/streaming) can redeliver them once the session
-# goes idle — symmetric with the idle branch (idle now → fire now; busy now →
-# fire at turn-end). Atomic claim (pop under lock) guarantees single delivery:
-# whoever claims first (teardown hook OR next-turn drain) fires; the other
-# finds nothing → no double-fire, no wakeup loop.
-DEFERRED_PROCESS_WAKEUPS: dict = {}  # session_id -> list[{"process_id", "wakeup_prompt"}]
-DEFERRED_PROCESS_WAKEUPS_LOCK = threading.Lock()
-
-# ── Persistent per-session SSE channel (Option X) ──────────────────────────
-# A long-lived SSE channel scoped to a WebUI session_id rather than a single
-# agent turn (stream_id). Subscribed to by the frontend on session mount,
-# torn down on session unmount, and refcounted across tabs. Used to deliver
-# events (currently process_complete) that fire while no agent turn is
-# active — bridging the gap that PR #2242 + #2279 left when STREAMS has
-# already been torn down. The registry lives in api.background_process; this
-# constant is the idle-cap before the reaper collects an unsubscribed
-# channel. 4h is a defensive ceiling against zombie connections; the
-# subscribers-empty grace path (60s) handles ordinary tab-close traffic.
-SESSION_CHANNEL_IDLE_TTL_SECS: int = 14400  # 4 hours
-SESSION_CHANNEL_SUBSCRIBER_GRACE_SECS: int = 60  # subscribers-empty grace
-
 LAST_RUN_FINISHED_AT: float | None = None
-SERVER_START_TIME = time.time()
 
 
 # Keep the long-standing ``api.config`` import and monkeypatch surface while the
@@ -762,83 +724,16 @@ runtime_progress_snapshot = _runtime_registry.runtime_progress_snapshot
 begin_runtime_cancel = _runtime_registry.begin_runtime_cancel
 finish_runtime_run = _runtime_registry.finish_runtime_run
 
-# Agent cache: reuse AIAgent across messages in the same WebUI session so that
-# _user_turn_count survives between turns.  This mirrors the gateway's
-# _agent_cache pattern and is required for injectionFrequency: "first-turn".
-# LRU cache with size limit to prevent memory bloat.
-# All cache operations (get, set, move_to_end, popitem) are protected by
-# SESSION_AGENT_CACHE_LOCK for thread safety in multi-threaded ASGI servers.
-SESSION_AGENT_CACHE: collections.OrderedDict = collections.OrderedDict()  # LRU cache
-# Each cached agent pins a full conversation transcript in RAM, so this cap is
-# the dominant lever on WebUI resident memory (issue #3506). The default is kept
-# deliberately modest -- large/long sessions can each weigh tens of MB, so 50
-# live agents could pin >1 GB on a heavily multiplexed install. Operators can
-# tune it via HERMES_WEBUI_AGENT_CACHE_MAX without editing source.
-SESSION_AGENT_CACHE_MAX = _env_int("HERMES_WEBUI_AGENT_CACHE_MAX", 25)
-SESSION_AGENT_CACHE_LOCK = threading.Lock()
-
-
-# Temporary compatibility seam for established imports. Remove this lazy
-# adapter once callers use the ``api.runs`` cached-agent Interface directly.
-# The import stays inside the call because the sessions package still consumes
-# config cache constants during its own initialization.
-def _evict_session_agent(session_id: str) -> None:
-    from api.agent_cache import evict_session_agent as owner_evict_session_agent
-
-    owner_evict_session_agent(session_id)
-
-
-evict_session_agent = _evict_session_agent
-
-
-# ── Per-session agent locks ───────────────────────────────────────────────────
-SESSION_AGENT_LOCKS: weakref.WeakValueDictionary[str, threading.Lock] = (
-    weakref.WeakValueDictionary()
+# The reusable-agent owner spans run and session packages.  Compatibility
+# exports below are aliases to the canonical objects, not copied state.
+from api.agent_cache import (
+    SESSION_AGENT_CACHE,
+    SESSION_AGENT_CACHE_LOCK,
+    SESSION_AGENT_CACHE_MAX,
+    evict_session_agent,
 )
-SESSION_AGENT_LOCKS_LOCK = threading.Lock()
 
-
-def _get_session_agent_lock(session_id: str) -> threading.Lock:
-    """Return the per-session Lock used to serialize all Session mutations.
-
-    Lock lifecycle invariant:
-      - A Lock is created lazily and remains discoverable while any holder or
-        waiter keeps a strong reference. Weak registry entries disappear only
-        after the last overlapping operation releases its reference.
-      - During context compression the agent may rotate session_id.  The
-        streaming thread migrates the lock entry atomically under
-        SESSION_AGENT_LOCKS_LOCK: it aliases the new session_id to the *same*
-        Lock object (see streaming.py compression block). Both aliases remain
-        weakly discoverable while old- or new-id waiters still exist.
-      - Lock contract: hold for the in-memory mutation + s.save() only; never
-        across network I/O (LLM calls, HTTP requests).
-    """
-    with SESSION_AGENT_LOCKS_LOCK:
-        lock = SESSION_AGENT_LOCKS.get(session_id)
-        if lock is None:
-            lock = threading.Lock()
-            SESSION_AGENT_LOCKS[session_id] = lock
-        return lock
-
-
-session_agent_lock = _get_session_agent_lock
-
-
-def alias_session_agent_lock(
-    old_session_id: str,
-    new_session_id: str,
-    held_lock: threading.Lock,
-) -> None:
-    """Bind a compression continuation to the already-held session owner."""
-    with SESSION_AGENT_LOCKS_LOCK:
-        old_owner = SESSION_AGENT_LOCKS.get(old_session_id)
-        new_owner = SESSION_AGENT_LOCKS.get(new_session_id)
-        if old_owner is not None and old_owner is not held_lock:
-            raise RuntimeError("old session id has another lock owner")
-        if new_owner is not None and new_owner is not held_lock:
-            raise RuntimeError("new session id has another lock owner")
-        SESSION_AGENT_LOCKS[old_session_id] = held_lock
-        SESSION_AGENT_LOCKS[new_session_id] = held_lock
+_evict_session_agent = evict_session_agent
 
 
 # ── Settings persistence ─────────────────────────────────────────────────────
@@ -888,8 +783,6 @@ coerce_provider_cost_budget = _coerce_provider_cost_budget
 save_settings = _settings_persistence.save_settings
 
 _settings_persistence._apply_startup_settings()
-# ── SESSIONS in-memory cache (LRU OrderedDict) ───────────────────────────────
-SESSIONS: collections.OrderedDict = collections.OrderedDict()
 
 # Run the provider-model seeder once at import time. Must be at the END of the
 # module because _seed_provider_models_from_core() calls _get_label_for_model,

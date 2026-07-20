@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import time
 
+from api.agent_cache import locked_agent_cache
 from api.sessions import edit_session, get_session
 
 from api.runs.agent_cache import (
@@ -42,12 +43,12 @@ def _handle_chat_steer(handler, body: dict) -> bool:
         return bad(handler, "text required")
 
     evicted_cached_entry = None
-    with _cfg.SESSION_AGENT_CACHE_LOCK:
-        cached = _cfg.SESSION_AGENT_CACHE.get(sid)
+    with locked_agent_cache() as session_agent_cache:
+        cached = session_agent_cache.get(sid)
         if cached:
             agent = cached[0]
             if not _cached_agent_matches_session(agent, sid):
-                evicted_cached_entry = _cfg.SESSION_AGENT_CACHE.pop(sid, None)
+                evicted_cached_entry = session_agent_cache.pop(sid, None)
                 logger.warning(
                     '[webui] Evicted cached agent before steer due to mismatched session identity: cache_key=%s agent_session_id=%s',
                     sid,
@@ -158,8 +159,8 @@ def cancel_stream(stream_id: str) -> bool:
 
     if agent is None and active_run_session_id:
         try:
-            with _live_config.SESSION_AGENT_CACHE_LOCK:
-                cached = _live_config.SESSION_AGENT_CACHE.get(active_run_session_id)
+            with locked_agent_cache() as session_agent_cache:
+                cached = session_agent_cache.get(active_run_session_id)
             if cached and _cached_agent_matches_session(cached[0], active_run_session_id):
                 agent = cached[0]
         except Exception:

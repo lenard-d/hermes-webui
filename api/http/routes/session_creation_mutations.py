@@ -116,15 +116,12 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
                 # the request thread is safe.
                 def _commit_prev_session_memory(_sid=prev_session_id):
                     try:
+                        from api.agent_cache import locked_agent_cache
                         from api.sessions import commit_session_memory
-                        from api.config import (
-                            SESSION_AGENT_CACHE,
-                            SESSION_AGENT_CACHE_LOCK,
-                        )
 
                         prev_agent = None
-                        with SESSION_AGENT_CACHE_LOCK:
-                            _cached = SESSION_AGENT_CACHE.get(_sid)
+                        with locked_agent_cache() as session_agent_cache:
+                            _cached = session_agent_cache.get(_sid)
                             if _cached:
                                 prev_agent = _cached[0]
                         commit_session_memory(_sid, agent=prev_agent)

@@ -8,7 +8,7 @@ import threading
 from collections import OrderedDict
 from pathlib import Path
 
-from api.config import SETTINGS_FILE, _get_config_path
+from api.config import SETTINGS_FILE, get_config_path
 from api.profiles import _profiles_match, get_active_hermes_home
 from .cache import get_session
 from .state_db import (
@@ -44,7 +44,7 @@ def _active_profile_config_path() -> Path:
     try:
         return Path(get_active_hermes_home()) / "config.yaml"
     except Exception:
-        return _get_config_path()
+        return get_config_path()
 
 def _numeric_count(value) -> int:
     try:

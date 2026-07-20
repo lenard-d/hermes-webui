@@ -17,9 +17,11 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from api.config import (
+    get_webui_session_save_mode,
+)
+from api.session_state import (
     PENDING_BG_TASK_COMPLETIONS,
     PENDING_GOAL_CONTINUATION,
-    get_webui_session_save_mode,
 )
 from .channels import create_stream_channel
 from .runtime_state import (

@@ -7,7 +7,7 @@ import os
 import queue
 import time
 
-from api.config import PROCESS_SESSION_INDEX, PROCESS_SESSION_INDEX_LOCK
+from api.session_state import PROCESS_SESSION_INDEX, PROCESS_SESSION_INDEX_LOCK
 from api.process_event_utils import (
     claim_async_delegation_delivery,
     complete_async_delegation_delivery,

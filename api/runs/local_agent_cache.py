@@ -7,6 +7,9 @@ import json
 import logging
 from dataclasses import dataclass
 
+from api.agent_cache import agent_cache_max, locked_agent_cache
+from api.runtime_state import ACTIVE_RUNS, ACTIVE_RUNS_LOCK
+
 from .agent_cache import (
     _adopt_session_db_for_cached_agent,
     _agent_cache_api_key_sig,
@@ -43,8 +46,6 @@ def _register_agent(session_id: str, agent) -> None:
 
 def _active_session_ids() -> set[str]:
     try:
-        from api.config import ACTIVE_RUNS, ACTIVE_RUNS_LOCK
-
         with ACTIVE_RUNS_LOCK:
             return {
                 session_id
@@ -88,12 +89,6 @@ def acquire_local_agent(
         logger.debug("[webui] Created ephemeral agent for session %s", session_id)
         return CachedLocalAgent(agent, None, session_db)
 
-    from api.config import (
-        SESSION_AGENT_CACHE,
-        SESSION_AGENT_CACHE_LOCK,
-        SESSION_AGENT_CACHE_MAX,
-    )
-
     credential_pool = runtime.get("credential_pool")
     signature = _cache_signature(
         identity=[
@@ -118,15 +113,15 @@ def acquire_local_agent(
 
     agent = None
     identity_mismatch = None
-    with SESSION_AGENT_CACHE_LOCK:
-        cached = SESSION_AGENT_CACHE.get(session_id)
+    with locked_agent_cache() as session_agent_cache:
+        cached = session_agent_cache.get(session_id)
         if cached and cached[1] == signature:
             candidate = cached[0]
             if _cached_agent_matches_session(candidate, session_id):
                 agent = candidate
-                SESSION_AGENT_CACHE.move_to_end(session_id)
+                session_agent_cache.move_to_end(session_id)
             else:
-                identity_mismatch = SESSION_AGENT_CACHE.pop(session_id, None)
+                identity_mismatch = session_agent_cache.pop(session_id, None)
                 logger.warning(
                     "[webui] Evicted cached agent with mismatched session identity: "
                     "cache_key=%s agent_session_id=%s",
@@ -146,8 +141,8 @@ def acquire_local_agent(
             )
 
     if agent is not None and not _refresh_cached_agent_runtime(agent, kwargs):
-        with SESSION_AGENT_CACHE_LOCK:
-            stale = SESSION_AGENT_CACHE.pop(session_id, None)
+        with locked_agent_cache() as session_agent_cache:
+            stale = session_agent_cache.pop(session_id, None)
         if stale is not None:
             try:
                 _close_cached_agent_entry_at_session_boundary(session_id, stale)
@@ -191,17 +186,17 @@ def acquire_local_agent(
     _register_agent(session_id, agent)
     active_sessions = _active_session_ids()
     evicted = []
-    with SESSION_AGENT_CACHE_LOCK:
-        SESSION_AGENT_CACHE[session_id] = (agent, signature)
-        SESSION_AGENT_CACHE.move_to_end(session_id)
-        while len(SESSION_AGENT_CACHE) > SESSION_AGENT_CACHE_MAX:
+    with locked_agent_cache() as session_agent_cache:
+        session_agent_cache[session_id] = (agent, signature)
+        session_agent_cache.move_to_end(session_id)
+        while len(session_agent_cache) > agent_cache_max():
             evictable = next(
-                (sid for sid in SESSION_AGENT_CACHE if sid not in active_sessions),
+                (sid for sid in session_agent_cache if sid not in active_sessions),
                 None,
             )
             if evictable is None:
                 break
-            evicted.append((evictable, SESSION_AGENT_CACHE.pop(evictable)))
+            evicted.append((evictable, session_agent_cache.pop(evictable)))
     for evicted_session_id, entry in evicted:
         try:
             evicted_agent = entry[0] if isinstance(entry, tuple) else None

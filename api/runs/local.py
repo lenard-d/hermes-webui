@@ -21,20 +21,25 @@ from typing import Callable
 
 from api.compression_anchor import visible_messages_for_anchor
 from api.compression_recovery import stamp_compression_exhausted_recovery
+from api.agent_cache import locked_agent_cache
 from api.config import (
-    LOCK,
-    PENDING_GOAL_CONTINUATION,
-    SESSIONS,
     clear_thread_env,
-    _get_session_agent_lock,
-    _main_model_request_overrides,
-    alias_session_agent_lock,
     attach_runtime_agent,
+    main_model_request_overrides,
     model_with_provider_context,
     resolve_model_provider,
     update_active_run,
     warm_models_catalog_provenance_if_cold,
 )
+from api.session_state import (
+    LOCK,
+    PENDING_GOAL_CONTINUATION,
+    SESSIONS,
+    alias_session_agent_lock,
+    session_agent_lock as _get_session_agent_lock,
+)
+
+_main_model_request_overrides = main_model_request_overrides
 from api.helpers import redact_session_data
 from api.metering import meter
 from api.model_context import (
@@ -1192,14 +1197,13 @@ def run_agent_streaming(
                         _evict_sessions_over_cap()  # #4765: safe LRU eviction (never active/unsaved)
                     # Migrate cached agent to the new session ID so the turn
                     # count survives context compression.
-                    from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
                     _skipped_agent_migration_entry = None
-                    with SESSION_AGENT_CACHE_LOCK:
-                        _cached_entry = SESSION_AGENT_CACHE.pop(old_sid, None)
+                    with locked_agent_cache() as session_agent_cache:
+                        _cached_entry = session_agent_cache.pop(old_sid, None)
                         if _cached_entry:
                             _cached_agent = _cached_entry[0]
                             if _cached_agent_matches_session(_cached_agent, new_sid):
-                                SESSION_AGENT_CACHE[new_sid] = _cached_entry
+                                session_agent_cache[new_sid] = _cached_entry
                             else:
                                 _skipped_agent_migration_entry = _cached_entry
                                 logger.warning(
@@ -1356,10 +1360,9 @@ def run_agent_streaming(
                                 except Exception:
                                     logger.debug("Failed to interrupt replacement agent")
                                 return
-                            from api.config import SESSION_AGENT_CACHE as _SAC, SESSION_AGENT_CACHE_LOCK as _SAC_L
-                            with _SAC_L:
-                                _SAC[session_id] = (agent, _agent_sig)
-                                _SAC.move_to_end(session_id)
+                            with locked_agent_cache() as session_agent_cache:
+                                session_agent_cache[session_id] = (agent, _agent_sig)
+                                session_agent_cache.move_to_end(session_id)
                             # Retry the conversation once with fresh credentials
                             _self_healed = True
                             event_translator.token_sent = False
@@ -2567,10 +2570,9 @@ def run_agent_streaming(
                         except Exception:
                             logger.debug("Failed to interrupt replacement agent")
                         return
-                    from api.config import SESSION_AGENT_CACHE as _SAC2, SESSION_AGENT_CACHE_LOCK as _SAC2_L
-                    with _SAC2_L:
-                        _SAC2[session_id] = (_heal_agent, _agent_sig)
-                        _SAC2.move_to_end(session_id)
+                    with locked_agent_cache() as session_agent_cache:
+                        session_agent_cache[session_id] = (_heal_agent, _agent_sig)
+                        session_agent_cache.move_to_end(session_id)
                     # Retry the conversation
                     event_translator.token_sent = False
                     try:

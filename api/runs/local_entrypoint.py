@@ -6,7 +6,8 @@ SSE transport only carries the events that the run publishes.
 
 from __future__ import annotations
 
-from api.config import _get_session_agent_lock, resolve_model_provider
+from api.config import resolve_model_provider
+from api.session_state import session_agent_lock
 from api.sessions.store import get_session
 
 from .agent_cache import _attempt_credential_self_heal, _build_session_db_for_stream
@@ -52,7 +53,7 @@ def run_agent_streaming(
             get_session=get_session,
             get_ai_agent=_get_ai_agent,
             resolve_model_provider=resolve_model_provider,
-            get_session_agent_lock=_get_session_agent_lock,
+            get_session_agent_lock=session_agent_lock,
             build_session_db_for_stream=_build_session_db_for_stream,
             attempt_credential_self_heal=_attempt_credential_self_heal,
             load_webui_prefill_context=_load_webui_prefill_context,

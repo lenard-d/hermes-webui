@@ -9,6 +9,11 @@ import time
 from typing import Optional
 
 from api.sessions import collect_expired_session_channels
+from api.session_state import (
+    BG_TASK_COMPLETE_EVENTS_SEEN,
+    BG_TASK_COMPLETE_EVENTS_SEEN_LOCK,
+    PENDING_BG_TASK_COMPLETIONS,
+)
 
 from .completion_events import EMIT_COALESCE_LOCK, LAST_EMIT_TS
 from .process_coordination import process_one, recover_processes_for_webui
@@ -43,16 +48,14 @@ def _reaper_loop() -> None:
             # Completion dedup state outlives a channel in the headless case.
             # Once delivery is no longer pending the registry's consumed marker
             # is the durable idempotency owner, so the process-local set can go.
-            from api import config as _cfg
-
-            with _cfg.BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
+            with BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
                 delivered = [
                     session_id
-                    for session_id in _cfg.BG_TASK_COMPLETE_EVENTS_SEEN
-                    if session_id not in _cfg.PENDING_BG_TASK_COMPLETIONS
+                    for session_id in BG_TASK_COMPLETE_EVENTS_SEEN
+                    if session_id not in PENDING_BG_TASK_COMPLETIONS
                 ]
                 for session_id in delivered:
-                    _cfg.BG_TASK_COMPLETE_EVENTS_SEEN.pop(session_id, None)
+                    BG_TASK_COMPLETE_EVENTS_SEEN.pop(session_id, None)
         except Exception:
             logger.warning("SessionChannel reaper iteration failed", exc_info=True)
         if _REAPER_STOP.wait(_REAPER_INTERVAL_SECS):

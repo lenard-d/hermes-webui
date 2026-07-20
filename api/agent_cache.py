@@ -1,23 +1,77 @@
-"""Temporary owner for cached-agent eviction at a session boundary.
+"""Canonical process-local cache for reusable Hermes Agent instances.
 
-The cache storage remains on :mod:`api.config` while legacy route and test
-callers still import it there. Once those callers move to a dedicated cache
-interface, this operation and its storage can move together under ``api.runs``.
+The cache spans the HTTP/session and local-run packages, so its storage and
+eviction transaction live at this neutral seam.  ``api.config`` re-exports the
+same objects for compatibility; it no longer owns their lifecycle.
 """
 
+from __future__ import annotations
+
+import collections
+import contextlib
 import logging
+import os
+import sys
+import threading
 
 
 logger = logging.getLogger(__name__)
 
 
+def _positive_env_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 1 else default
+
+
+SESSION_AGENT_CACHE: collections.OrderedDict = collections.OrderedDict()
+SESSION_AGENT_CACHE_MAX = _positive_env_int("HERMES_WEBUI_AGENT_CACHE_MAX", 25)
+SESSION_AGENT_CACHE_LOCK = threading.Lock()
+
+
+def compatibility_cache_state() -> tuple[collections.OrderedDict, object]:
+    """Return cache objects, honoring explicit legacy-facade replacements.
+
+    Mutable object identity normally makes the owner and facade identical.
+    A small number of integrations historically replaced the facade objects
+    wholesale.  Resolve those replacements at operation time until that public
+    monkeypatch contract can be retired deliberately.
+    """
+    config_api = sys.modules.get("api.config")
+    if config_api is None:
+        return SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
+    return (
+        getattr(config_api, "SESSION_AGENT_CACHE", SESSION_AGENT_CACHE),
+        getattr(config_api, "SESSION_AGENT_CACHE_LOCK", SESSION_AGENT_CACHE_LOCK),
+    )
+
+
+def agent_cache_max() -> int:
+    """Return the live cache cap, including compatibility-facade overrides."""
+    config_api = sys.modules.get("api.config")
+    candidate = (
+        getattr(config_api, "SESSION_AGENT_CACHE_MAX", SESSION_AGENT_CACHE_MAX)
+        if config_api is not None
+        else SESSION_AGENT_CACHE_MAX
+    )
+    return candidate if isinstance(candidate, int) and candidate >= 1 else SESSION_AGENT_CACHE_MAX
+
+
+@contextlib.contextmanager
+def locked_agent_cache():
+    """Yield the live cache while holding its matching compatibility lock."""
+    cache, cache_lock = compatibility_cache_state()
+    with cache_lock:
+        yield cache
+
+
 def evict_session_agent(session_id: str) -> None:
     """Drop one cached agent without closing a live worker's SessionDB."""
-    from api import config as config_api
-
     agent = None
-    with config_api.SESSION_AGENT_CACHE_LOCK:
-        entry = config_api.SESSION_AGENT_CACHE.pop(session_id, None)
+    with locked_agent_cache() as cache:
+        entry = cache.pop(session_id, None)
         if entry is not None:
             agent = entry[0] if isinstance(entry, tuple) else None
     if agent is None:
@@ -27,10 +81,12 @@ def evict_session_agent(session_id: str) -> None:
     # SessionDB until the active run finishes.
     run_active = False
     try:
-        with config_api.ACTIVE_RUNS_LOCK:
+        from api.runtime_state import ACTIVE_RUNS, ACTIVE_RUNS_LOCK
+
+        with ACTIVE_RUNS_LOCK:
             run_active = any(
                 (entry or {}).get("session_id") == session_id
-                for entry in (config_api.ACTIVE_RUNS or {}).values()
+                for entry in (ACTIVE_RUNS or {}).values()
             )
     except Exception:
         run_active = False
@@ -72,4 +128,12 @@ def evict_session_agent(session_id: str) -> None:
             )
 
 
-__all__ = ["evict_session_agent"]
+__all__ = [
+    "SESSION_AGENT_CACHE",
+    "SESSION_AGENT_CACHE_LOCK",
+    "SESSION_AGENT_CACHE_MAX",
+    "agent_cache_max",
+    "compatibility_cache_state",
+    "evict_session_agent",
+    "locked_agent_cache",
+]
