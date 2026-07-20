@@ -24,12 +24,16 @@ from pathlib import Path
 from urllib.parse import urlparse  # noqa: F401
 
 from api.agent_ops import get_active_profile_gateway_running_pid  # noqa: F401
-from api.config import REPO_ROOT, STREAMS, STREAMS_LOCK  # noqa: F401
+from api.config import (  # noqa: F401
+    REPO_ROOT,
+    STREAMS,
+    STREAMS_LOCK,
+    get_agent_source_dir,
+)
 
-try:
-    from api.config import _AGENT_DIR
-except ImportError:
-    _AGENT_DIR = None
+# Preserve the package-level monkeypatch seam while sourcing its initial value
+# through the config owner's public interface.
+_AGENT_DIR = get_agent_source_dir()
 from api.agent_ops import restart_active_profile_gateway  # noqa: F401
 from api.profiles import get_active_profile_name  # noqa: F401
 from .policy import (  # noqa: F401
@@ -109,7 +113,7 @@ logger = logging.getLogger(__name__)
 # Version identity is process-stable and is passed once to the policy owner.
 WEBUI_VERSION: str = _detect_webui_version()
 
-from api.config.hooks import install_config_runtime_hooks
+from api.config import install_config_runtime_hooks
 
 install_config_runtime_hooks(webui_version=lambda: WEBUI_VERSION)
 AGENT_VERSION: str = _detect_agent_version()

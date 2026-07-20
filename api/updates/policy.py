@@ -9,12 +9,9 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-from api.config import REPO_ROOT as _DEFAULT_REPO_ROOT
+from api.config import REPO_ROOT as _DEFAULT_REPO_ROOT, get_agent_source_dir
 
-try:
-    from api.config import _AGENT_DIR as _DEFAULT_AGENT_DIR
-except ImportError:
-    _DEFAULT_AGENT_DIR = None
+_DEFAULT_AGENT_DIR = get_agent_source_dir()
 from . import repository as _repository
 
 _build_compare_url = _repository._build_compare_url

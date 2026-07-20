@@ -337,9 +337,9 @@ def _clear_anthropic_env_values(hermes_home: Path) -> None:
     cannot leave or partially clear stale Anthropic fallbacks.
     """
     try:
-        from api.providers import _write_env_file
+        from api.providers import write_env_file
 
-        _write_env_file(
+        write_env_file(
             Path(hermes_home) / ".env",
             {key: None for key in _ANTHROPIC_ENV_KEYS},
         )

@@ -10,7 +10,7 @@ and cached skill/cron module paths.  Mutable compatibility state remains on
 import json
 import os
 import re
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -155,7 +155,7 @@ def _profile_secret_env_names(profile_home_path: Path) -> set[str]:
     """Return credential names to scrub before applying one profile's env."""
     api = _profiles_module
     names: set[str] = set()
-    from api.config.provider_credentials import provider_credential_env_vars
+    from api.config import provider_credential_env_vars
 
     names.update(provider_credential_env_vars())
     names.update(api._agent_registry_credential_env_names())
@@ -269,7 +269,7 @@ def profile_env_for_background_worker(
             return
 
         try:
-            from api.config import _clear_thread_env, _set_thread_env, _thread_ctx
+            from api.config import thread_env_scope
             from api.streaming import _ENV_LOCK
 
             profile_home_path = Path(api.get_hermes_home_for_profile(profile))
@@ -292,9 +292,9 @@ def profile_env_for_background_worker(
         old_runtime_env: dict[str, Optional[str]] = {}
         old_hermes_home = None
         had_hermes_home = False
-        previous_thread_env = getattr(_thread_ctx, "env", {}).copy()
-        previous_block_process_env = bool(
-            getattr(_thread_ctx, "block_process_env_fallback", False)
+        thread_env_stack = ExitStack()
+        thread_env_stack.enter_context(
+            thread_env_scope(thread_env, block_process_env_fallback=True)
         )
         secret_scope_mod = None
         scope_token = None
@@ -302,8 +302,6 @@ def profile_env_for_background_worker(
         home_override_mod = None
         home_override_token = None
         try:
-            _set_thread_env(**thread_env)
-            _thread_ctx.block_process_env_fallback = True
             secret_scope_mod = api._resolve_secret_scope_module()
             if secret_scope_mod is not None:
                 try:
@@ -351,11 +349,10 @@ def profile_env_for_background_worker(
                     secret_scope_mod.reset_secret_scope(scope_token)
                 except Exception:
                     pass
-            _thread_ctx.block_process_env_fallback = previous_block_process_env
-            if previous_thread_env:
-                _set_thread_env(**previous_thread_env)
-            else:
-                _clear_thread_env()
+            # Release config-owned thread state before restoring process-wide
+            # compatibility state.  The latter may involve third-party module
+            # hooks, so it must not be able to strand a request-local override.
+            thread_env_stack.close()
             with _ENV_LOCK:
                 for key, old_value in old_runtime_env.items():
                     if old_value is None:
@@ -386,7 +383,7 @@ def profile_env_for_active_request_readonly(
             yield
             return
         try:
-            from api.config import _clear_thread_env, _set_thread_env, _thread_ctx
+            from api.config import thread_env_scope
 
             profile_home_path = Path(api.get_hermes_home_for_profile(profile))
             runtime_env = api.get_profile_runtime_env(profile_home_path)
@@ -413,17 +410,15 @@ def profile_env_for_active_request_readonly(
 
         thread_env = dict(safe_runtime_env)
         thread_env["HERMES_HOME"] = str(profile_home_path)
-        previous_thread_env = getattr(_thread_ctx, "env", {}).copy()
-        previous_block_process_env = bool(
-            getattr(_thread_ctx, "block_process_env_fallback", False)
+        thread_env_stack = ExitStack()
+        thread_env_stack.enter_context(
+            thread_env_scope(thread_env, block_process_env_fallback=True)
         )
         home_override_token = None
         secret_scope_mod = None
         scope_token = None
         has_scope = False
         try:
-            _set_thread_env(**thread_env)
-            _thread_ctx.block_process_env_fallback = True
             secret_scope_mod = api._resolve_secret_scope_module()
             if secret_scope_mod is not None:
                 try:
@@ -451,11 +446,7 @@ def profile_env_for_active_request_readonly(
                         purpose,
                         exc_info=True,
                     )
-            _thread_ctx.block_process_env_fallback = previous_block_process_env
-            if previous_thread_env:
-                _set_thread_env(**previous_thread_env)
-            else:
-                _clear_thread_env()
+            thread_env_stack.close()
 
     return scope()
 

@@ -510,9 +510,9 @@ def save_settings(settings: dict) -> dict:
     raw_pw = settings.pop("_set_password", None)
     if raw_pw and isinstance(raw_pw, str) and raw_pw.strip():
         # Use PBKDF2 from auth module (600k iterations) -- never raw SHA-256
-        from api.auth import _hash_password
+        from api.auth import hash_password
 
-        current["password_hash"] = _hash_password(raw_pw.strip())
+        current["password_hash"] = hash_password(raw_pw.strip())
         _password_changed = True
     # Handle _clear_password: explicitly disable auth
     if settings.pop("_clear_password", False):
@@ -652,9 +652,9 @@ def save_settings(settings: dict) -> dict:
     # Invalidate the in-memory password hash cache so the next call to
     # get_password_hash() picks up the new value from disk immediately.
     if _password_changed:
-        from api.auth import _invalidate_password_hash_cache
+        from api.auth import invalidate_password_hash_cache
 
-        _invalidate_password_hash_cache()
+        invalidate_password_hash_cache()
     # Update runtime defaults so new sessions use them immediately
     if "default_workspace" in current:
         cfg.DEFAULT_WORKSPACE = cfg.resolve_default_workspace(

@@ -17,21 +17,19 @@ from types import SimpleNamespace
 from typing import Any
 
 from api.config import (
-    _custom_provider_slug_from_name,
-    _pool_entry_payloads,
-    _thread_local_env_value,
+    OAUTH_PROVIDER_IDS as _OAUTH_PROVIDERS,
+    PROVIDER_CREDENTIAL_ENV_VARS as _PROVIDER_CREDENTIAL_ENV_VARS,  # noqa: F401 - compatibility export
+    PROVIDER_ENV_VAR_ALIASES as _PROVIDER_ENV_VAR_ALIASES,
+    PROVIDER_ENV_VARS as _PROVIDER_ENV_VAR,
+    SELF_HOSTED_PROVIDER_IDS as _SELF_HOSTED_PROVIDER_IDS,  # noqa: F401 - compatibility export
+    credential_pool_entries as _pool_entry_payloads,
+    custom_provider_slug_from_name as _custom_provider_slug_from_name,
+    effective_provider_env_var,
     get_config,
-)
-
-from api.config.provider_credentials import (
-    _OAUTH_PROVIDERS,
-    _PROVIDER_CREDENTIAL_ENV_VARS,  # noqa: F401 - package compatibility export
-    _PROVIDER_ENV_VAR,
-    _PROVIDER_ENV_VAR_ALIASES,
-    _SELF_HOSTED_PROVIDER_IDS,  # noqa: F401 - package compatibility export
     provider_credential_env_vars as _provider_credential_env_vars,  # noqa: F401
+    profile_env_value as _thread_local_env_value,
+    provider_has_explicit_pool_credentials as _has_explicit_pool_credentials,
 )
-from api.config.plugin_providers import effective_provider_env_var
 logger = logging.getLogger(__name__)
 
 
@@ -478,7 +476,6 @@ def _provider_has_key(provider_id: str) -> bool:
     # filters gh-cli / GITHUB_TOKEN ambient entries so copilot doesn't
     # appear just because `gh` is installed.
     try:
-        from api.config import _has_explicit_pool_credentials
         if _has_explicit_pool_credentials(provider_id):
             return True
     except ImportError:

@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 
 from api.config import MAX_UPLOAD_BYTES, STATE_DIR
-from api.profiles import _profiles_match, get_active_profile_name
+from api.profiles import get_active_profile_name, profiles_match
 from api.sessions import get_session, session_write_owner
 from api.workspace import (
     make_anchored_dir,
@@ -103,7 +103,7 @@ def session_visible_to_active_profile(session) -> bool:
     profile = getattr(session, "profile", None)
     if not isinstance(profile, str):
         profile = None
-    return _profiles_match(profile, get_active_profile_name())
+    return profiles_match(profile, get_active_profile_name())
 
 
 def _visible_session(session_id: str):

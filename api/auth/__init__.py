@@ -103,6 +103,11 @@ from .passkeys import (
     rp_context,
 )
 
+# Public password-settings interface.  Keep the historical private exports for
+# compatibility while config persistence calls the auth owner semantically.
+hash_password = _hash_password
+invalidate_password_hash_cache = _invalidate_password_hash_cache
+
 
 def login_rate_allowed(client_ip):
     """Return whether the client may attempt login through the public auth API."""

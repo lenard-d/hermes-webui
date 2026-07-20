@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from api.config import _get_config_path, invalidate_models_cache, reload_config, save_settings
+from api.config import get_config_path, invalidate_models_cache, reload_config, save_settings
 
 from .catalog import (
     SUPPORTED_PROVIDER_SETUPS,
@@ -86,7 +86,7 @@ def apply_onboarding_setup(body: dict) -> dict:
         metadata, base_url, "base_url is required for custom endpoints"
     )
 
-    config_path = Path(_get_config_path())
+    config_path = get_config_path()
     if config_path.exists() and not body.get("confirm_overwrite"):
         return {
             "error": "config_exists",
@@ -145,7 +145,7 @@ def apply_self_hosted_provider_setup(body: dict) -> dict:
     _validate_provider_endpoint(
         metadata, base_url, "base_url is required for this provider"
     )
-    config_path = Path(_get_config_path())
+    config_path = get_config_path()
     config = load_yaml_config(config_path)
     providers = config.setdefault("providers", {})
     if not isinstance(providers, dict):

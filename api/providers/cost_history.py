@@ -24,8 +24,10 @@ try:
 except ImportError:  # pragma: no cover - Windows-only import fallback
     fcntl = None  # type: ignore[assignment]
 
-from api.config import _coerce_provider_cost_budget
-from api.config.static_catalog import PROVIDER_DISPLAY as _PROVIDER_DISPLAY
+from api.config import (
+    PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
+    coerce_provider_cost_budget as _coerce_provider_cost_budget,
+)
 from api.providers.account_usage import (
     _OPENROUTER_KEY_URL,
     _PROVIDER_QUOTA_TIMEOUT_SECONDS,

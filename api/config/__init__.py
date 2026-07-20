@@ -31,6 +31,7 @@ import urllib.error
 import urllib.request
 import uuid
 import weakref
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -40,9 +41,15 @@ from urllib.parse import parse_qs, urlparse
 import api.paths as _paths
 from api.config.plugin_providers import (
     effective_provider_display_name as _effective_provider_display_name,
+    effective_provider_env_var,
     is_plugin_model_provider as _is_plugin_model_provider,
+    plugin_model_provider_ids,
     plugin_model_provider_profiles as _plugin_model_provider_profiles,
 )
+
+effective_provider_display_name = _effective_provider_display_name
+is_plugin_model_provider = _is_plugin_model_provider
+plugin_model_provider_profiles = _plugin_model_provider_profiles
 
 HOME = _paths.HOME
 _hermes_home_has_webui_state = _paths._hermes_home_has_webui_state
@@ -111,6 +118,16 @@ verify_hermes_imports = _path_env.verify_hermes_imports
 _AGENT_DIR = _discover_agent_dir()
 PYTHON_EXE = _discover_python(_AGENT_DIR)
 
+
+def get_agent_source_dir() -> Path | None:
+    """Return the discovered Hermes Agent source directory, when available."""
+    return _AGENT_DIR
+
+
+def is_hermes_agent_available() -> bool:
+    """Return whether Hermes Agent source was discovered during startup."""
+    return _HERMES_FOUND
+
 # ── Inject agent dir into sys.path so Hermes modules are importable ──────────
 
 # When users (or CI builds) run `pip install --target .` or
@@ -144,6 +161,7 @@ _thread_ctx = threading.local()
 from api.config import io as _config_io
 
 _thread_local_env_value = _config_io._thread_local_env_value
+profile_env_value = _thread_local_env_value
 _expand_env_vars = _config_io._expand_env_vars
 
 
@@ -157,6 +175,11 @@ _cfg_fingerprint: str | None = None  # serialized snapshot from the last disk lo
 _fingerprint_config = _config_io._fingerprint_config
 _cfg_has_in_memory_overrides = _config_io._cfg_has_in_memory_overrides
 _get_config_path = _config_io._get_config_path
+
+
+def get_config_path() -> Path:
+    """Return the active profile's authoritative ``config.yaml`` path."""
+    return _get_config_path()
 
 
 _WEBUI_SESSION_SAVE_MODES = {"deferred", "eager"}
@@ -215,6 +238,7 @@ _yaml_file_cache_lock = threading.Lock()
 
 _load_yaml_config_file_raw = _config_io._load_yaml_config_file_raw
 _load_yaml_config_file = _config_io._load_yaml_config_file
+load_yaml_config_file = _load_yaml_config_file
 
 
 get_config_for_profile_home = _config_io.get_config_for_profile_home
@@ -351,6 +375,9 @@ def _resolve_cli_toolsets(cfg=None):
         # Fallback: read raw list from config (MCP toolsets will be missing)
         return _normalize_cli_toolsets(cfg.get("platform_toolsets", {}).get("cli", _DEFAULT_TOOLSETS))
 
+
+resolve_cli_toolsets = _resolve_cli_toolsets
+
 # ── Model / provider discovery ───────────────────────────────────────────────
 
 from api.config.static_catalog import (
@@ -359,6 +386,15 @@ from api.config.static_catalog import (
     PROVIDER_DISPLAY,
     PROVIDER_MODELS,
 )
+from api.config.provider_credentials import (
+    _OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS,
+    _PROVIDER_CREDENTIAL_ENV_VARS as PROVIDER_CREDENTIAL_ENV_VARS,
+    _PROVIDER_ENV_VAR as PROVIDER_ENV_VARS,
+    _PROVIDER_ENV_VAR_ALIASES as PROVIDER_ENV_VAR_ALIASES,
+    _SELF_HOSTED_PROVIDER_IDS as SELF_HOSTED_PROVIDER_IDS,
+    provider_credential_env_vars,
+)
+from api.config.hooks import install_config_runtime_hooks
 
 _FALLBACK_MODELS = copy.deepcopy(FALLBACK_MODELS)
 _PROVIDER_ALIASES = dict(PROVIDER_ALIASES)
@@ -369,6 +405,7 @@ from api.config import provider_discovery as _provider_discovery
 
 _get_anthropic_fallback_env_vars = _provider_discovery._get_anthropic_fallback_env_vars
 _resolve_provider_alias = _provider_discovery._resolve_provider_alias
+resolve_provider_alias = _resolve_provider_alias
 
 
 _is_known_model_provider = _provider_discovery._is_known_model_provider
@@ -376,6 +413,7 @@ _is_known_model_provider = _provider_discovery._is_known_model_provider
 
 _custom_provider_slug_from_name = _provider_discovery._custom_provider_slug_from_name
 _custom_provider_entries = _provider_discovery._custom_provider_entries
+custom_provider_entries = _custom_provider_entries
 _configured_model_ids = _provider_discovery._configured_model_ids
 _configured_model_options = _provider_discovery._configured_model_options
 _named_custom_provider_slugs = _provider_discovery._named_custom_provider_slugs
@@ -402,6 +440,7 @@ _legacy_custom_api_key_env_name = (
     _provider_discovery._legacy_custom_api_key_env_name
 )
 _lookup_custom_api_key_env = _provider_discovery._lookup_custom_api_key_env
+lookup_custom_api_key_env = _lookup_custom_api_key_env
 _named_custom_provider_slug_for_base_url = (
     _provider_discovery._named_custom_provider_slug_for_base_url
 )
@@ -419,6 +458,7 @@ _AMBIENT_GH_CLI_MARKERS = _provider_discovery._AMBIENT_GH_CLI_MARKERS
 _AMBIENT_GH_ENV_SOURCES = _provider_discovery._AMBIENT_GH_ENV_SOURCES
 _is_ambient_gh_cli_entry = _provider_discovery._is_ambient_gh_cli_entry
 _format_ollama_label = _provider_discovery._format_ollama_label
+format_ollama_model_label = _format_ollama_label
 _format_nous_label = _provider_discovery._format_nous_label
 _NOUS_FEATURED_THRESHOLD = _provider_discovery._NOUS_FEATURED_THRESHOLD
 _NOUS_FEATURED_TARGET = _provider_discovery._NOUS_FEATURED_TARGET
@@ -426,6 +466,8 @@ _MODEL_PICKER_OVERFLOW_THRESHOLD = (
     _provider_discovery._MODEL_PICKER_OVERFLOW_THRESHOLD
 )
 _MODEL_PICKER_VISIBLE_TARGET = _provider_discovery._MODEL_PICKER_VISIBLE_TARGET
+MODEL_PICKER_OVERFLOW_THRESHOLD = _MODEL_PICKER_OVERFLOW_THRESHOLD
+MODEL_PICKER_VISIBLE_TARGET = _MODEL_PICKER_VISIBLE_TARGET
 _OPENROUTER_FREE_TIER_AUGMENT_CAP = (
     _provider_discovery._OPENROUTER_FREE_TIER_AUGMENT_CAP
 )
@@ -440,6 +482,18 @@ _split_picker_overflow_models = (
 )
 _apply_provider_prefix = _provider_discovery._apply_provider_prefix
 _deduplicate_model_ids = _provider_discovery._deduplicate_model_ids
+
+# Public provider-catalog interface.  Historical underscored names remain for
+# compatibility, while cross-package callers use these semantic owner exports.
+custom_provider_slug_from_name = _custom_provider_slug_from_name
+format_nous_model_label = _format_nous_label
+build_nous_featured_models = _build_nous_featured_set
+
+
+def provider_display_name(provider_id: str) -> str:
+    """Return a stable display label for a provider identifier."""
+    normalized = str(provider_id or "").strip().lower()
+    return _PROVIDER_DISPLAY.get(normalized, normalized.replace("-", " ").title())
 
 #      api/config.py for SSRF host trust.
 _LOCAL_SERVER_PROVIDERS = {
@@ -483,6 +537,8 @@ _parse_provider_qualified_model_id = (
 _get_provider_base_url = _provider_routing._get_provider_base_url
 _get_providers_cfg = _provider_routing._get_providers_cfg
 _get_provider_cfg = _provider_routing._get_provider_cfg
+
+configured_provider_base_url = _get_provider_base_url
 
 
 def resolve_model_provider(model_id: str, *, explicitly_picked: bool = False) -> tuple:
@@ -1124,6 +1180,7 @@ set_reasoning_display = _model_settings.set_reasoning_display
 set_reasoning_effort = _model_settings.set_reasoning_effort
 _public_advanced_model_options = _model_settings._public_advanced_model_options
 _is_openai_family_provider = _model_settings._is_openai_family_provider
+is_openai_family_provider = _is_openai_family_provider
 _normalize_openai_family_model_id = _model_settings._normalize_openai_family_model_id
 _legacy_openai_service_tier_overrides = (
     _model_settings._legacy_openai_service_tier_overrides
@@ -1137,9 +1194,11 @@ _main_model_supports_service_tier = (
 _model_supports_fast_tier_for_provider = (
     _model_settings._model_supports_fast_tier_for_provider
 )
+model_supports_fast_tier_for_provider = _model_supports_fast_tier_for_provider
 _annotate_fast_tier_model_groups = _model_settings._annotate_fast_tier_model_groups
 _public_main_service_tier = _model_settings._public_main_service_tier
 _main_model_request_overrides = _model_settings._main_model_request_overrides
+main_model_request_overrides = _main_model_request_overrides
 _apply_advanced_model_options = _model_settings._apply_advanced_model_options
 set_hermes_default_model = _model_settings.set_hermes_default_model
 AUXILIARY_TASK_CATALOG = _model_settings.AUXILIARY_TASK_CATALOG
@@ -1228,6 +1287,16 @@ for _models_cache_export in (
 del _models_cache_export
 
 from api.config.model_catalog import *  # noqa: F403 - package compatibility exports
+
+# Public model-catalog interface used by the provider package.  Aliasing the
+# owner callables preserves the established monkeypatch identities without
+# copying catalog state into a second module.
+credential_pool_entries = _pool_entry_payloads
+provider_has_explicit_pool_credentials = _has_explicit_pool_credentials
+model_label = _get_label_for_model
+live_provider_model_ids = _read_live_provider_model_ids
+models_from_live_provider_ids = _models_from_live_provider_ids
+visible_codex_cache_model_ids = _read_visible_codex_cache_model_ids
 
 _sync_models_cache_provenance_impl = _sync_models_cache_provenance
 
@@ -1583,6 +1652,8 @@ def _evict_session_agent(session_id: str) -> None:
         except Exception:
             logger.debug("Failed to close _session_db on eviction for %s", session_id, exc_info=True)
 
+evict_session_agent = _evict_session_agent
+
 # ── Thread-local env context ─────────────────────────────────────────────────
 # (_thread_ctx + _thread_local_env_value are defined near the top of this module,
 # above the config-file section, so _expand_env_vars can reference them at the
@@ -1595,6 +1666,37 @@ def _set_thread_env(**kwargs):
 
 def _clear_thread_env():
     _thread_ctx.env = {}
+
+
+def is_process_env_fallback_blocked() -> bool:
+    """Return whether the current config scope rejects process-env fallback."""
+    return bool(getattr(_thread_ctx, "block_process_env_fallback", False))
+
+
+@contextmanager
+def thread_env_scope(
+    env: dict[str, str], *, block_process_env_fallback: bool = False
+):
+    """Temporarily install one thread-local configuration environment.
+
+    The config foundation owns both the mutable thread-local state and its
+    restoration invariant.  Profile orchestration supplies only the resolved
+    environment and cannot retain or directly mutate the owner's storage.
+    """
+    previous_env = dict(getattr(_thread_ctx, "env", {}))
+    previous_block = bool(
+        getattr(_thread_ctx, "block_process_env_fallback", False)
+    )
+    _set_thread_env(**dict(env))
+    _thread_ctx.block_process_env_fallback = bool(block_process_env_fallback)
+    try:
+        yield
+    finally:
+        _thread_ctx.block_process_env_fallback = previous_block
+        if previous_env:
+            _set_thread_env(**previous_env)
+        else:
+            _clear_thread_env()
 
 
 # ── Per-session agent locks ───────────────────────────────────────────────────
@@ -1625,6 +1727,9 @@ def _get_session_agent_lock(session_id: str) -> threading.Lock:
             lock = threading.Lock()
             SESSION_AGENT_LOCKS[session_id] = lock
         return lock
+
+
+session_agent_lock = _get_session_agent_lock
 
 
 def alias_session_agent_lock(
@@ -1671,6 +1776,12 @@ _SETTINGS_TTS_ENGINE_RE = _settings_persistence._SETTINGS_TTS_ENGINE_RE
 _SETTINGS_WRITE_VERSION = 0
 _SETTINGS_WRITE_LOCK = threading.Lock()
 
+
+def get_settings_write_version() -> int:
+    """Return the process-local settings publication version."""
+    with _SETTINGS_WRITE_LOCK:
+        return _SETTINGS_WRITE_VERSION
+
 _normalize_appearance = _settings_persistence._normalize_appearance
 _read_raw_settings_file = _settings_persistence._read_raw_settings_file
 _extract_persisted_speech_keys = (
@@ -1684,6 +1795,7 @@ load_settings = _settings_persistence.load_settings
 _atomic_write_settings_text = _settings_persistence._atomic_write_settings_text
 _current_umask = _settings_persistence._current_umask
 _coerce_provider_cost_budget = _settings_persistence._coerce_provider_cost_budget
+coerce_provider_cost_budget = _coerce_provider_cost_budget
 save_settings = _settings_persistence.save_settings
 
 _settings_persistence._apply_startup_settings()

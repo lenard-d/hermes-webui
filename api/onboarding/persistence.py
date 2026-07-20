@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from api.providers import _write_env_file as write_env_values
+from api.providers import write_env_file as write_env_values
 
 from .catalog import SUPPORTED_PROVIDER_SETUPS
 

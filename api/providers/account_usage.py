@@ -24,9 +24,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from api.config import get_config
-from api.config.provider_credentials import _PROVIDER_CREDENTIAL_ENV_VARS
-from api.config.static_catalog import PROVIDER_DISPLAY as _PROVIDER_DISPLAY
+from api.config import (
+    PROVIDER_CREDENTIAL_ENV_VARS as _PROVIDER_CREDENTIAL_ENV_VARS,
+    PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
+    get_agent_source_dir,
+    get_config,
+    is_process_env_fallback_blocked,
+)
 from api.providers.credentials import (
     _get_provider_api_key,
     _load_env_file,
@@ -749,11 +753,7 @@ def _agent_fetch_account_usage(provider: str, *, base_url: str | None = None, ap
 
 def _account_usage_subprocess_env(home: Path, provider: str, api_key: str | None) -> dict[str, str]:
     env = dict(os.environ)
-    try:
-        from api.config import _thread_ctx
-    except Exception:
-        _thread_ctx = None
-    if bool(getattr(_thread_ctx, "block_process_env_fallback", False)):
+    if is_process_env_fallback_blocked():
         # Rely on the centralized profile scrub set (api.profiles), which unions
         # the WebUI provider env vars + the agent auth registry + the non-registry
         # agent credential fallback (CUSTOM_API_KEY, AWS/Bedrock family). Falling
@@ -761,8 +761,8 @@ def _account_usage_subprocess_env(home: Path, provider: str, api_key: str | None
         # fails. (#3961 — don't leave a partial local AWS set here.)
         _strip = set(_PROVIDER_CREDENTIAL_ENV_VARS)
         try:
-            from api.profiles import _profile_secret_env_names, get_active_hermes_home
-            _strip.update(_profile_secret_env_names(get_active_hermes_home()))
+            from api.profiles import get_active_hermes_home, profile_secret_env_names
+            _strip.update(profile_secret_env_names(get_active_hermes_home()))
         except Exception:
             _strip.update({"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"})
         for env_name in _strip:
@@ -781,13 +781,10 @@ def _account_usage_subprocess_env(home: Path, provider: str, api_key: str | None
     if env_var and api_key:
         env[env_var] = api_key
 
-    try:
-        from api.config import _AGENT_DIR
-    except Exception:
-        _AGENT_DIR = None
+    agent_dir = get_agent_source_dir()
     pythonpath_parts: list[str] = []
-    if _AGENT_DIR:
-        pythonpath_parts.append(str(_AGENT_DIR))
+    if agent_dir:
+        pythonpath_parts.append(str(agent_dir))
     existing_pythonpath = env.get("PYTHONPATH", "")
     if existing_pythonpath:
         pythonpath_parts.append(existing_pythonpath)

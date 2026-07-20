@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
-
 from api.auth import is_auth_enabled
 from api.config import (
     DEFAULT_MODEL,
     DEFAULT_WORKSPACE,
-    _HERMES_FOUND,
-    _PROVIDER_DISPLAY,
-    _get_config_path,
     get_available_models,
     get_config,
+    get_config_path,
+    is_hermes_agent_available,
     load_settings,
+    provider_display_name,
     save_settings,
     verify_hermes_imports,
 )
@@ -65,9 +63,10 @@ def status_from_runtime(config: dict, imports_ok: bool) -> dict:
                 provider, config, env_values
             ) or provider_oauth_authenticated(provider, hermes_home)
 
-    chat_ready = bool(_HERMES_FOUND and imports_ok and ready)
+    hermes_found = is_hermes_agent_available()
+    chat_ready = bool(hermes_found and imports_ok and ready)
     note_args: list[str] = []
-    if not _HERMES_FOUND or not imports_ok:
+    if not hermes_found or not imports_ok:
         state = "agent_unavailable"
         note_key = "onboarding_notice_system_unavailable"
         note = (
@@ -77,9 +76,7 @@ def status_from_runtime(config: dict, imports_ok: bool) -> dict:
     elif chat_ready:
         state = "ready"
         note_key = "onboarding_notice_system_ready"
-        provider_name = _PROVIDER_DISPLAY.get(
-            provider, provider.title() if provider else "Hermes"
-        )
+        provider_name = provider_display_name(provider) if provider else "Hermes"
         note = f"Hermes is minimally configured and ready to chat via {provider_name}."
     elif configured:
         state = "provider_incomplete"
@@ -148,7 +145,7 @@ def get_onboarding_status() -> dict:
     config = get_config()
     imports_ok, missing, errors = verify_hermes_imports()
     runtime = status_from_runtime(config, imports_ok)
-    config_path = Path(_get_config_path())
+    config_path = get_config_path()
     provider = extract_current_provider(config)
     non_wizard_provider = bool(
         provider and provider not in SUPPORTED_PROVIDER_SETUPS
@@ -176,7 +173,7 @@ def get_onboarding_status() -> dict:
             "bot_name": settings.get("bot_name") or "Hermes",
         },
         "system": {
-            "hermes_found": bool(_HERMES_FOUND),
+            "hermes_found": is_hermes_agent_available(),
             "imports_ok": bool(imports_ok),
             "missing_modules": missing,
             "import_errors": errors,

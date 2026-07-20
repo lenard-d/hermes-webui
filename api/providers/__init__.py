@@ -37,37 +37,38 @@ except ImportError:  # pragma: no cover - exercised only where fcntl is unavaila
     fcntl = None  # type: ignore[assignment]
 
 from api.config import (
-    _coerce_provider_cost_budget,  # noqa: F401 -- cost-history facade dependency
-    _custom_provider_slug_from_name,
-    _get_label_for_model,  # noqa: F401 -- compatibility re-export
-    _models_from_live_provider_ids,
-    _pool_entry_payloads,  # noqa: F401 -- credential-store facade dependency
-    _read_live_provider_model_ids,
-    _read_visible_codex_cache_model_ids,
-    _thread_local_env_value,
-    get_config,
-    invalidate_models_cache,
-)
-from api.config.static_catalog import (
     PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
     PROVIDER_MODELS as _PROVIDER_MODELS,
-)
-from api.config.plugin_providers import (
+    build_nous_featured_models as _build_nous_featured_set,
+    coerce_provider_cost_budget as _coerce_provider_cost_budget,
+    configured_provider_base_url as _get_provider_base_url,
+    credential_pool_entries as _pool_entry_payloads,
+    custom_provider_slug_from_name as _custom_provider_slug_from_name,
     effective_provider_display_name,
     effective_provider_env_var,  # noqa: F401 -- credential-store facade dependency
+    get_config,
+    invalidate_models_cache,
     is_plugin_model_provider,
+    live_provider_model_ids as _read_live_provider_model_ids,
+    model_label as _get_label_for_model,  # noqa: F401 -- compatibility re-export
+    models_from_live_provider_ids as _models_from_live_provider_ids,
     plugin_model_provider_ids,
+    profile_env_value as _thread_local_env_value,
+    provider_has_explicit_pool_credentials as _has_explicit_pool_credentials,
+    format_nous_model_label as _format_nous_label,
+    install_config_runtime_hooks,
+    visible_codex_cache_model_ids as _read_visible_codex_cache_model_ids,
 )
 from api.providers.account_usage import *  # noqa: F403 - compatibility exports
 from api.providers.cost_history import *  # noqa: F403 - compatibility exports
 from api.providers.credentials import *  # noqa: F403 - compatibility exports
 
+write_env_file = _write_env_file  # noqa: F405 - public credential-persistence owner
+
 logger = logging.getLogger(__name__)
 
 
 atexit.register(_close_account_usage_probe_workers)  # noqa: F405
-
-from api.config.hooks import install_config_runtime_hooks
 
 install_config_runtime_hooks(
     provider_has_credential=_provider_has_key,  # noqa: F405
@@ -362,8 +363,6 @@ def get_providers() -> dict[str, Any]:
                 live_ids = _provider_model_ids("nous") or []
                 if live_ids:
                     # Lazy-import to avoid circular dep with api.config.
-                    from api.config import _format_nous_label, _build_nous_featured_set
-
                     featured_ids, _extras = _build_nous_featured_set(live_ids)
                     models = [
                         {"id": f"@nous:{mid}", "label": _format_nous_label(mid)}
@@ -418,7 +417,6 @@ def get_providers() -> dict[str, Any]:
 
         is_self_hosted = pid in _SELF_HOSTED_PROVIDER_IDS
         try:
-            from api.config import _get_provider_base_url
             provider_base_url = _get_provider_base_url(pid) if is_self_hosted else None
         except Exception:
             provider_base_url = None
@@ -475,7 +473,6 @@ def get_providers() -> dict[str, Any]:
             # Fallback: check credential pool (key added via hermes auth add)
             if not cp_has_key:
                 try:
-                    from api.config import _has_explicit_pool_credentials
                     if _has_explicit_pool_credentials(cp_id):
                         cp_has_key = True
                 except ImportError:

@@ -366,6 +366,9 @@ def _profiles_match(row_profile, active_profile) -> bool:
     return False
 
 
+profiles_match = _profiles_match
+
+
 def get_active_profile_name() -> str:
     """Return the currently active profile name.
 
@@ -559,6 +562,7 @@ get_profile_runtime_env = _runtime_scope.get_profile_runtime_env
 filter_runtime_env_for_gateway_parity = _runtime_scope.filter_runtime_env_for_gateway_parity
 _agent_registry_credential_env_names = _runtime_scope._agent_registry_credential_env_names
 _profile_secret_env_names = _runtime_scope._profile_secret_env_names
+profile_secret_env_names = _profile_secret_env_names
 _apply_profile_env_to_process = _runtime_scope._apply_profile_env_to_process
 _resolve_secret_scope_module = _runtime_scope._resolve_secret_scope_module
 _resolve_hermes_home_override = _runtime_scope._resolve_hermes_home_override
@@ -853,6 +857,7 @@ from api.profiles import management as _management
 _validate_profile_name = _management._validate_profile_name
 validate_profile_name = _management._validate_profile_name
 _profiles_root = _management._profiles_root
+profiles_root = _profiles_root
 _resolve_named_profile_home = _management._resolve_named_profile_home
 _create_profile_fallback = _management._create_profile_fallback
 _resolve_env_var_for_provider = _management._resolve_env_var_for_provider
@@ -861,6 +866,7 @@ _write_api_key_to_dotenv = _management._write_api_key_to_dotenv
 _write_endpoint_to_config = _management._write_endpoint_to_config
 _clean_profile_config_value = _management._clean_profile_config_value
 _split_webui_provider_model_value = _management._split_webui_provider_model_value
+split_webui_provider_model_value = _split_webui_provider_model_value
 _strip_webui_provider_prefix = _management._strip_webui_provider_prefix
 _profile_model_selection_exists = _management._profile_model_selection_exists
 _get_available_models_for_profile_validation = (
@@ -880,7 +886,7 @@ def reload_profile_environment(home: Path) -> None:
 def _install_config_profile_hooks() -> None:
     import importlib
 
-    from api.config.hooks import install_config_runtime_hooks
+    from api.config import install_config_runtime_hooks
 
     install_config_runtime_hooks(
         active_profile_name=lambda: importlib.import_module(__name__).get_active_profile_name(),

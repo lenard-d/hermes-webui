@@ -505,9 +505,9 @@ def _request_profile_matches_bound(bound_profile: str | None) -> bool:
     if not bound_profile:
         return True
     try:
-        from api.profiles import get_active_profile_name, _profiles_match
+        from api.profiles import get_active_profile_name, profiles_match
 
-        return _profiles_match(bound_profile, get_active_profile_name())
+        return profiles_match(bound_profile, get_active_profile_name())
     except Exception:
         return False
 
