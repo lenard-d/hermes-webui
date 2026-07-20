@@ -82,7 +82,7 @@ def test_materializing_cron_session_preserves_non_cli_identity(monkeypatch):
 
 def test_cron_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path):
     """A hidden archived sidecar must still mark the state.db cron projection archived."""
-    import api.sessions.store as models
+    from api.sessions import external, records
 
     sid = "cron_job123_20260618"
     db_path = tmp_path / "state.db"
@@ -122,12 +122,13 @@ def test_cron_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path)
         ' "updated_at": 2.0, "archived": true, "messages": []}' % sid,
         encoding="utf-8",
     )
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "_profile_has_user_projects", lambda: False)
-    monkeypatch.setattr(models, "ensure_cron_project", lambda **_: "cron-project")
-    models.clear_sidecar_metadata_cache()
+    monkeypatch.setattr(external, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(external, "_profile_has_user_projects", lambda: False)
+    monkeypatch.setattr(external, "ensure_cron_project", lambda **_: "cron-project")
+    external.clear_sidecar_metadata_cache()
 
-    rows = models._load_cli_sessions_uncached(
+    rows = external._load_cli_sessions_uncached(
         tmp_path,
         db_path,
         "default",
@@ -142,7 +143,7 @@ def test_cron_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path)
 
 def test_webhook_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path):
     """Archived webhook sidecars must not reappear as unarchived state.db rows."""
-    import api.sessions.store as models
+    from api.sessions import external, records
 
     sid = "webhook_archive_20260618"
     db_path = tmp_path / "state.db"
@@ -211,10 +212,12 @@ def test_webhook_state_projection_preserves_archived_sidecar(monkeypatch, tmp_pa
         ' "updated_at": 2.0, "archived": true, "messages": []}' % sid,
         encoding="utf-8",
     )
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    models.clear_sidecar_metadata_cache()
+    monkeypatch.setattr(external, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(external, "ensure_webhook_project", lambda: "webhook-project")
+    external.clear_sidecar_metadata_cache()
 
-    rows = models._load_cli_sessions_uncached(
+    rows = external._load_cli_sessions_uncached(
         tmp_path,
         db_path,
         "default",

@@ -2,10 +2,9 @@
 
 When ``_load_cli_sessions_uncached`` passed ``exclude_sources=None`` to
 ``read_importable_agent_session_rows``, the 20-row window filled with cron
-entries, hiding Discord/Telegram sessions entirely.  The fix narrows the
-exclusion to ``("cron",)`` so cron rows stay out of the main pass (the cron
-second-pass recovers them independently) while ``source='webui'`` rows remain
-visible for sidecar-less recovery.
+entries, hiding Discord/Telegram sessions entirely. The main pass now excludes
+background sources, while source-specific passes recover those rows separately
+and ``source='webui'`` rows remain visible for sidecar-less recovery.
 """
 
 import pathlib
@@ -13,7 +12,7 @@ import sqlite3
 import time
 from unittest import mock
 
-import api.sessions.store as models
+from api.sessions import external
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -99,12 +98,15 @@ def test_discord_sessions_not_squeezed_out_by_cron(tmp_path):
     _make_state_db(db, cron_count=15, discord_count=5)
 
     with (
-        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.store.get_last_workspace", return_value=tmp_path),
-        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-project-id"),
-        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
+        mock.patch.object(external, "get_last_workspace", return_value=tmp_path),
+        mock.patch.object(external, "ensure_cron_project", return_value="cron-project-id"),
     ):
-        result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        result = external._load_cli_sessions_uncached(
+            tmp_path,
+            db,
+            _cli_profile=None,
+            include_claude_code=False,
+        )
 
     source_tags = {s["source_tag"] for s in result}
     session_ids = {s["session_id"] for s in result}
@@ -123,24 +125,20 @@ def test_cron_sessions_recovered_by_second_pass(tmp_path):
     _make_state_db(db, cron_count=15, discord_count=5)
 
     with (
-        mock.patch(
-            "api.sessions.store.read_importable_agent_session_rows",
-            wraps=models.read_importable_agent_session_rows,
-        ) as read_rows,
-        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.store.get_last_workspace", return_value=tmp_path),
-        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-project-id"),
-        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
+        mock.patch.object(external, "get_last_workspace", return_value=tmp_path),
+        mock.patch.object(external, "ensure_cron_project", return_value="cron-project-id"),
     ):
-        result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        result = external._load_cli_sessions_uncached(
+            tmp_path,
+            db,
+            _cli_profile=None,
+            include_claude_code=False,
+        )
 
-    cron_sessions = [s for s in result if s["source_tag"] == "cron"]
-    assert len(cron_sessions) > 0, "Cron sessions should be recovered by the second pass"
-    assert len(read_rows.call_args_list) == 3
-    assert read_rows.call_args_list[1].kwargs["exclude_sources"] is None
-    assert read_rows.call_args_list[1].kwargs["include_sources"] == ("cron",)
-    assert read_rows.call_args_list[2].kwargs["exclude_sources"] is None
-    assert read_rows.call_args_list[2].kwargs["include_sources"] == ("webhook",)
+    cron_ids = {s["session_id"] for s in result if s["source_tag"] == "cron"}
+    assert {sid.rsplit("_", 1)[0] for sid in cron_ids} == {
+        f"cron_job_{i:04d}" for i in range(15)
+    }
 
 
 def test_webui_sidecarless_sessions_not_excluded(tmp_path):
@@ -198,12 +196,15 @@ def test_webui_sidecarless_sessions_not_excluded(tmp_path):
     conn.close()
 
     with (
-        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.store.get_last_workspace", return_value=tmp_path),
-        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-project-id"),
-        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
+        mock.patch.object(external, "get_last_workspace", return_value=tmp_path),
+        mock.patch.object(external, "ensure_cron_project", return_value="cron-project-id"),
     ):
-        result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        result = external._load_cli_sessions_uncached(
+            tmp_path,
+            db,
+            _cli_profile=None,
+            include_claude_code=False,
+        )
 
     webui_ids = {s["session_id"] for s in result if s["source_tag"] == "webui"}
     assert "webui_orphan_001" in webui_ids, (

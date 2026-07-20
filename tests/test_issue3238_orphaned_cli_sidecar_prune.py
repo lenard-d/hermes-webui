@@ -49,52 +49,52 @@ def _make_state_db(path: Path, session_ids):
 
 
 def test_agent_session_row_exists_true_for_present_row(tmp_path, monkeypatch):
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
     _make_state_db(home / "state.db", ["sess-present"])
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: home / "state.db")
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: home / "state.db")
 
-    assert models.agent_session_row_exists("sess-present") is True
+    assert state_db.agent_session_row_exists("sess-present") is True
 
 
 def test_agent_session_row_exists_false_for_deleted_row(tmp_path, monkeypatch):
     """The core fix: a session id that is NOT in state.db is reported gone."""
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
     _make_state_db(home / "state.db", ["other-session"])
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: home / "state.db")
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: home / "state.db")
 
-    assert models.agent_session_row_exists("sess-deleted") is False
+    assert state_db.agent_session_row_exists("sess-deleted") is False
 
 
 def test_agent_session_row_exists_safe_true_when_db_missing(tmp_path, monkeypatch):
     """No agent DB on this instance -> never claim a row is gone (no data loss)."""
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     monkeypatch.setattr(
-        models, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
+        state_db, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
     )
-    assert models.agent_session_row_exists("anything") is True
+    assert state_db.agent_session_row_exists("anything") is True
 
 
 def test_agent_session_row_exists_empty_id_is_false(tmp_path, monkeypatch):
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
     _make_state_db(home / "state.db", ["x"])
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: home / "state.db")
-    assert models.agent_session_row_exists("") is False
-    assert models.agent_session_row_exists(None) is False
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: home / "state.db")
+    assert state_db.agent_session_row_exists("") is False
+    assert state_db.agent_session_row_exists(None) is False
 
 
 def test_agent_session_row_exists_handles_missing_sessions_table(tmp_path, monkeypatch):
     """A state.db without a `sessions` table degrades to safe-True."""
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
@@ -103,56 +103,56 @@ def test_agent_session_row_exists_handles_missing_sessions_table(tmp_path, monke
     conn.execute("CREATE TABLE unrelated (x TEXT)")
     conn.commit()
     conn.close()
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: db)
-    assert models.agent_session_row_exists("whatever") is True
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: db)
+    assert state_db.agent_session_row_exists("whatever") is True
 
 
 def test_agent_session_rows_existing_returns_present_subset(tmp_path, monkeypatch):
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
     _make_state_db(home / "state.db", ["sess-a", "sess-b"])
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: home / "state.db")
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: home / "state.db")
 
-    existing = models.agent_session_rows_existing(
+    existing = state_db.agent_session_rows_existing(
         ["sess-a", "sess-b", "sess-missing", "", None]
     )
     assert existing == frozenset({"sess-a", "sess-b"})
 
 
 def test_agent_session_rows_existing_safe_when_db_missing(tmp_path, monkeypatch):
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     monkeypatch.setattr(
-        models, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
+        state_db, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
     )
     wanted = ["orphan-a", "orphan-b"]
-    assert models.agent_session_rows_existing(wanted) == frozenset(wanted)
+    assert state_db.agent_session_rows_existing(wanted) == frozenset(wanted)
 
 
 def test_agent_session_rows_existing_batches_over_500_ids(tmp_path, monkeypatch):
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
     ids = [f"sess-{i:04d}" for i in range(600)]
     _make_state_db(home / "state.db", ids[:300])
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: home / "state.db")
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: home / "state.db")
 
-    existing = models.agent_session_rows_existing(ids)
+    existing = state_db.agent_session_rows_existing(ids)
     assert existing == frozenset(ids[:300])
 
 
 def test_agent_session_rows_existing_normalizes_whitespace_in_probe_ids(tmp_path, monkeypatch):
-    from api.sessions import store as models
+    from api.sessions import state_db
 
     home = tmp_path / "home"
     home.mkdir()
     _make_state_db(home / "state.db", ["cli-padded"])
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: home / "state.db")
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: home / "state.db")
 
-    existing = models.agent_session_rows_existing(["  cli-padded  "])
+    existing = state_db.agent_session_rows_existing(["  cli-padded  "])
     assert existing == frozenset({"cli-padded"})
 
 
