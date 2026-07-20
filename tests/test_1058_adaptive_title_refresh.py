@@ -323,7 +323,7 @@ class TestRunBackgroundTitleRefresh:
         s = self._make_session_obj(title='Old Title')
 
         def save(*args, **kwargs):
-            assert not lock.held, "Session.save() must run outside api.models.LOCK"
+            assert not lock.held, "Session.save() must run outside api.sessions.store.LOCK"
 
         s.save = save
         fake_sessions = {'sid': s}

@@ -2,9 +2,9 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
-from api.models import SESSIONS, Session
+from api.sessions.store import SESSIONS, Session
 
 
 def _capture_post(monkeypatch, body):
@@ -183,7 +183,7 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
 
 
 def test_delete_active_session_fails_closed_with_conflict(tmp_path, monkeypatch):
-    from api.session_repository import SessionActiveError
+    from api.sessions.repository import SessionActiveError
 
     _isolate_session_store(tmp_path, monkeypatch)
     sid = "activedeleteconflict1"

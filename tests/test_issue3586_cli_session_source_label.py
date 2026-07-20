@@ -9,7 +9,7 @@ import sqlite3
 import time
 import unittest.mock
 
-import api.models as models
+import api.sessions.store as models
 
 
 def _make_state_db(path, sessions):
@@ -86,8 +86,8 @@ def _call_uncached(tmp_path, sessions):
 
     # Patch out side-effects that touch the real filesystem.
     with (
-        unittest.mock.patch('api.models.get_claude_code_sessions', return_value=[]),
-        unittest.mock.patch('api.models.ensure_cron_project', return_value='cron-project-id'),
+        unittest.mock.patch('api.sessions.store.get_claude_code_sessions', return_value=[]),
+        unittest.mock.patch('api.sessions.store.ensure_cron_project', return_value='cron-project-id'),
     ):
         return models._load_cli_sessions_uncached(hermes_home, db, None)
 

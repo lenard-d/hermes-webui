@@ -21,7 +21,7 @@ import json
 
 import pytest
 
-import api.models as M
+import api.sessions.store as M
 
 
 @pytest.fixture

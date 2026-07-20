@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         _session_is_subagent_view_only,
         logger,
     )
-    from api.session_repository import edit_session
+    from api.sessions.repository import edit_session
 
 
 def _build_handoff_summary_tool_message(
@@ -248,7 +248,7 @@ def _handle_handoff_summary(handler, body):
         except (TypeError, ValueError):
             return bad(handler, "since must be a unix timestamp (number)")
 
-    from api.models import get_cli_session_messages, count_conversation_rounds, CONVERSATION_ROUND_THRESHOLD
+    from api.sessions.store import get_cli_session_messages, count_conversation_rounds, CONVERSATION_ROUND_THRESHOLD
 
     if _session_is_subagent_view_only(sid):
         return bad(handler, "Subagent sessions are view-only and cannot be summarized from WebUI", 400)
@@ -396,7 +396,7 @@ def _handle_handoff_summary(handler, body):
     def _resolve_handoff_channel_label():
         channel_label = None
         try:
-            from api.models import get_session as _get_session, get_cli_sessions
+            from api.sessions.store import get_session as _get_session, get_cli_sessions
 
             session_meta = _get_session(sid)
             channel_label = (
@@ -511,7 +511,7 @@ def _handle_handoff_summary(handler, body):
         resolved_provider = None
         resolved_base_url = None
         try:
-            from api.models import get_session
+            from api.sessions.store import get_session
             s_obj = get_session(sid)
             resolved_model = getattr(s_obj, "model", None)
         except Exception:

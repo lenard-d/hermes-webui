@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
 import api.worktrees as worktrees
 
@@ -53,7 +53,7 @@ def _make_minimal_git_repo(tmp_path):
 
 def test_remove_clean_worktree_succeeds(tmp_path):
     import subprocess
-    from api.models import Session
+    from api.sessions.store import Session
 
     main = _make_minimal_git_repo(tmp_path)
     wt_path = tmp_path / "wt_clean"
@@ -84,7 +84,7 @@ def test_remove_locked_worktree_succeeds_without_force(tmp_path):
     refuses with \"use 'remove -f -f' to override or unlock first\" and every
     WebUI-created worktree is unremovable from the UI."""
     import subprocess
-    from api.models import Session
+    from api.sessions.store import Session
 
     main = _make_minimal_git_repo(tmp_path)
     wt_path = tmp_path / "wt_locked"
@@ -123,7 +123,7 @@ def test_remove_never_locked_worktree_unlock_is_fail_soft(tmp_path):
     never locked still succeeds (unlock exits non-zero, _run_git is
     check=False, remove proceeds)."""
     import subprocess
-    from api.models import Session
+    from api.sessions.store import Session
 
     main = _make_minimal_git_repo(tmp_path)
     wt_path = tmp_path / "wt_neverlocked"
@@ -153,7 +153,7 @@ def test_remove_never_locked_worktree_unlock_is_fail_soft(tmp_path):
 
 
 def test_remove_clean_worktree_does_not_force(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
 
     worktree_path = tmp_path / "wt_clean"
     worktree_path.mkdir()
@@ -191,7 +191,7 @@ def test_remove_clean_worktree_does_not_force(tmp_path, monkeypatch):
 
 
 def test_remove_dirty_worktree_without_force_is_rejected(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
 
     worktree_path = tmp_path / "wt_dirty"
     worktree_path.mkdir()
@@ -220,7 +220,7 @@ def test_remove_dirty_worktree_without_force_is_rejected(tmp_path, monkeypatch):
 
 
 def test_remove_untracked_worktree_without_force_is_rejected(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
 
     worktree_path = tmp_path / "wt_untracked"
     worktree_path.mkdir()
@@ -249,7 +249,7 @@ def test_remove_untracked_worktree_without_force_is_rejected(tmp_path, monkeypat
 
 
 def test_remove_ahead_worktree_without_force_is_rejected(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
 
     worktree_path = tmp_path / "wt_ahead"
     worktree_path.mkdir()
@@ -278,7 +278,7 @@ def test_remove_ahead_worktree_without_force_is_rejected(tmp_path, monkeypatch):
 
 
 def test_remove_force_warns_and_uses_git_force(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
 
     worktree_path = tmp_path / "wt_force"
     worktree_path.mkdir()
@@ -318,7 +318,7 @@ def test_remove_force_warns_and_uses_git_force(tmp_path, monkeypatch):
 
 
 def test_remove_worktree_not_exists(tmp_path):
-    from api.models import Session
+    from api.sessions.store import Session
 
     s = Session(
         session_id="testgone",
@@ -335,7 +335,7 @@ def test_remove_worktree_not_exists(tmp_path):
 
 
 def test_remove_worktree_no_path_raises(tmp_path):
-    from api.models import Session
+    from api.sessions.store import Session
 
     s = Session(
         session_id="testnowt",
@@ -355,7 +355,7 @@ def test_remove_worktree_no_path_raises(tmp_path):
 
 def test_remove_worktree_route_succeeds(tmp_path, monkeypatch):
     import subprocess
-    from api.models import Session
+    from api.sessions.store import Session
 
     main = _make_minimal_git_repo(tmp_path)
     wt_path = tmp_path / "wt_route"
@@ -387,7 +387,7 @@ def test_remove_worktree_route_succeeds(tmp_path, monkeypatch):
 
 
 def test_remove_missing_session_returns_404(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
 
     _isolate_session_store(tmp_path, monkeypatch)
 

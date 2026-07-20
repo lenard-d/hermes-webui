@@ -84,8 +84,9 @@ def test_anchor_scene_visible_semantics_preserves_empty_tool_args():
 
 
 def test_anchor_scene_persistence_round_trip_outside_provider_messages(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -170,8 +171,9 @@ def test_anchor_scene_persistence_rejects_cross_profile_write(tmp_path, monkeypa
     loads by id with no profile scoping, so the handler must apply the same
     _session_visible_to_active_profile guard GET /api/session uses — returning 404
     and leaving anchor_activity_scenes untouched (no cross-profile write)."""
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -313,8 +315,9 @@ def test_anchor_scene_hydration_rejects_stale_index_fallback_when_final_answer_m
 
 
 def test_anchor_scene_persistence_rejects_invalid_scene(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -352,8 +355,9 @@ def test_anchor_scene_persistence_rejects_invalid_scene(tmp_path, monkeypatch):
 
 
 def test_anchor_scene_persistence_prefers_unique_ref_over_stale_index(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -408,8 +412,9 @@ def test_anchor_scene_persistence_prefers_unique_ref_over_stale_index(tmp_path, 
 
 
 def test_anchor_scene_persistence_rejects_duplicate_client_ref_over_stale_index(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -459,8 +464,9 @@ def test_anchor_scene_persistence_rejects_duplicate_client_ref_over_stale_index(
 
 
 def test_anchor_scene_persistence_converts_window_index_to_full_index(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -517,8 +523,9 @@ def test_anchor_scene_persistence_converts_window_index_to_full_index(tmp_path, 
 
 
 def test_anchor_scene_persistence_rejects_unmatched_ref_without_index(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -563,8 +570,9 @@ def test_anchor_scene_persistence_rejects_unmatched_ref_without_index(tmp_path, 
 
 
 def test_anchor_scene_persistence_rejects_ref_miss_stale_index_mismatch(tmp_path, monkeypatch):
-    from api import models, routes
-    from api.models import Session
+    from api.sessions import store as models
+    from api import routes
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -2100,7 +2108,8 @@ def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics
     -> persisted anchor_activity_scenes record
     -> _hydrate_anchor_activity_scenes(...)._anchor_activity_scene.
     """
-    from api import models, routes
+    from api.sessions import store as models
+    from api import routes
     from api.run_journal import RunJournalWriter
 
     session_dir = tmp_path / "sessions"

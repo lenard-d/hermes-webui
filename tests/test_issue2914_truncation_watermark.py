@@ -7,7 +7,7 @@ def _msg(role: str, content: str, ts: float, mid: str) -> dict:
 
 
 def test_reconciled_messages_skip_state_tail_after_sidecar_truncation():
-    from api.models import Session, reconciled_state_db_messages_for_session
+    from api.sessions.store import Session, reconciled_state_db_messages_for_session
 
     sidecar = [
         _msg("user", "first", 1.0, "sidecar-u1"),
@@ -31,7 +31,7 @@ def test_reconciled_messages_skip_state_tail_after_sidecar_truncation():
 
 
 def test_empty_sidecar_truncation_watermark_blocks_state_replay():
-    from api.models import Session, reconciled_state_db_messages_for_session
+    from api.sessions.store import Session, reconciled_state_db_messages_for_session
 
     state_db = [
         _msg("user", "only prompt", 1.0, "state-u1"),
@@ -47,9 +47,9 @@ def test_empty_sidecar_truncation_watermark_blocks_state_replay():
 
 
 def test_undo_persists_truncation_watermark_at_new_tail(monkeypatch, tmp_path):
-    import api.models as models
-    from api.models import Session
-    from api.session_ops import undo_last
+    import api.sessions.store as models
+    from api.sessions.store import Session
+    from api.sessions.operations import undo_last
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -87,9 +87,9 @@ def test_truncate_endpoint_also_truncates_context_messages(monkeypatch, tmp_path
     from io import BytesIO
     from types import SimpleNamespace
 
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -147,9 +147,9 @@ def test_truncate_endpoint_compaction_leading_context_row(monkeypatch, tmp_path)
     from io import BytesIO
     from types import SimpleNamespace
 
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -207,8 +207,8 @@ def test_truncate_endpoint_compaction_leading_context_row(monkeypatch, tmp_path)
 
 def test_truncate_without_context_messages_truncation_leaks_to_agent(monkeypatch, tmp_path):
     """Prove the bug: if context_messages is NOT truncated, agent sees old rows."""
-    import api.models as models
-    from api.models import Session
+    import api.sessions.store as models
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -240,7 +240,7 @@ def test_truncate_without_context_messages_truncation_leaks_to_agent(monkeypatch
         session.messages = session.messages[:keep]
         # Intentionally NOT truncating context_messages (the old buggy behavior)
         try:
-            from api.session_ops import _truncation_watermark_for
+            from api.sessions.operations import _truncation_watermark_for
             session.truncation_watermark = _truncation_watermark_for(session.messages)
         except Exception:
             session.truncation_watermark = 0.0
@@ -268,9 +268,9 @@ def test_edit_then_new_turn_then_undo_leaks_original_via_state_db(monkeypatch, t
     Root cause: watermark filters m_ts > watermark, but original "triangle"
     has ts=100 < watermark=200, so it passes through.
     """
-    import api.models as models
-    from api.models import Session, reconciled_state_db_messages_for_session
-    from api.session_ops import undo_last
+    import api.sessions.store as models
+    from api.sessions.store import Session, reconciled_state_db_messages_for_session
+    from api.sessions.operations import undo_last
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -388,8 +388,8 @@ def test_save_does_not_auto_clear_truncation_watermark(monkeypatch, tmp_path):
     watermark — that would let state.db replay the rows the user deliberately
     removed.
     """
-    import api.models as models
-    from api.models import Session
+    import api.sessions.store as models
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -433,8 +433,8 @@ def test_streaming_finalize_preserves_new_turns_after_edit(monkeypatch, tmp_path
     3. Turn 2: agent returns [pre-edit + Turn 1 + Turn 2] → finalize → save
     4. Assert context_messages after Turn 2 contains Turn 1 + Turn 2
     """
-    import api.models as models
-    from api.models import Session
+    import api.sessions.store as models
+    from api.sessions.store import Session
     from api.streaming import (
         _restore_reasoning_metadata,
         _dedupe_replayed_context_messages,
@@ -525,8 +525,8 @@ def test_streaming_finalize_does_not_leak_original_after_edit(monkeypatch, tmp_p
     3. Turn 2: agent returns [pre-edit + Turn 1 + Turn 2] → finalize
     4. Assert context_messages after Turn 2 contains Turn 1 + Turn 2
     """
-    import api.models as models
-    from api.models import Session
+    import api.sessions.store as models
+    from api.sessions.store import Session
     from api.streaming import (
         _restore_reasoning_metadata,
         _dedupe_replayed_context_messages,
@@ -619,8 +619,8 @@ def test_edit_does_not_leak_original_message_into_context_via_reconcile(monkeypa
     4. Reconcile state.db (which has both "triangle" and "square") with sidecar
     5. Assert "triangle" does NOT appear in merged context
     """
-    import api.models as models
-    from api.models import Session, reconciled_state_db_messages_for_session
+    import api.sessions.store as models
+    from api.sessions.store import Session, reconciled_state_db_messages_for_session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -688,7 +688,7 @@ def test_above_watermark_state_row_merges_once_sidecar_advances():
     above-watermark skip while the sidecar has NOT advanced past the watermark.
     Codex regression-gate finding on #3102 (v0.51.197).
     """
-    from api.models import merge_session_messages_append_only as merge
+    from api.sessions.store import merge_session_messages_append_only as merge
 
     # Session edited at watermark=2.0, then advanced: sidecar tail is now 4.1.
     sidecar = [
@@ -715,7 +715,7 @@ def test_above_watermark_deleted_tail_still_filtered_when_sidecar_not_advanced()
     and the sidecar tail is still at/below the watermark, a stale deleted-tail row
     in state.db ABOVE the watermark must NOT reappear.
     """
-    from api.models import merge_session_messages_append_only as merge
+    from api.sessions.store import merge_session_messages_append_only as merge
 
     sidecar = [
         _msg("user", "q1", 1.0, "s-u1"),

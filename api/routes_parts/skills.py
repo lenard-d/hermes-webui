@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from api.config import _get_config_path, _load_yaml_config_file
-    from api.models import get_session
+    from api.sessions.store import get_session
     from api.routes import logger
 
 def _active_skills_dir() -> Path:

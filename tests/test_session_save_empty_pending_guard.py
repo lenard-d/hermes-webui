@@ -3,8 +3,8 @@
 import json
 
 import api.config as config
-import api.models as models
-from api.models import Session
+import api.sessions.store as models
+from api.sessions.store import Session
 
 
 def test_empty_active_pending_save_cannot_overwrite_existing_messages(tmp_path, monkeypatch):

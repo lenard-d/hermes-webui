@@ -3,8 +3,8 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import api.config as config
-import api.models as models
-from api.models import Session, get_session
+import api.sessions.store as models
+from api.sessions.store import Session, get_session
 
 
 def test_get_session_evicts_cached_object_with_wrong_session_id(tmp_path, monkeypatch):

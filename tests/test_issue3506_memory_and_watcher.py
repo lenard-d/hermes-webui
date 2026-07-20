@@ -4,7 +4,7 @@ A user on a large install (615 sessions / 40k messages in state.db) reported the
 WebUI Python process climbing from ~100 MB to ~1.5 GB RSS over 3 days and holding
 180%+ CPU at idle. Three independent contributors were confirmed in the code:
 
-  1. ``api.session_lifecycle._sessions`` grew without bound — keys were inserted
+  1. ``api.sessions.lifecycle._sessions`` grew without bound — keys were inserted
      on ``register_agent`` / ``mark_turn_completed`` but never deleted, so every
      unique session_id the WebUI ever touched leaked a permanent entry.
   2. ``SESSION_AGENT_CACHE_MAX`` / ``SESSIONS_MAX`` were hard-coded with no way
@@ -30,7 +30,7 @@ from pathlib import Path
 # ─────────────────────────── Fix 1: lifecycle leak ───────────────────────────
 
 def _fresh_lifecycle():
-    lifecycle = importlib.import_module("api.session_lifecycle")
+    lifecycle = importlib.import_module("api.sessions.lifecycle")
     lifecycle = importlib.reload(lifecycle)
     reset = getattr(lifecycle, "_reset_for_tests", None)
     if callable(reset):

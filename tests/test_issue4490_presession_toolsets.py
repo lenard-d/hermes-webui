@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from unittest.mock import patch
 
-from api.models import new_session
+from api.sessions.store import new_session
 from api.routes import handle_post
 
 REPO = Path(__file__).resolve().parents[1]

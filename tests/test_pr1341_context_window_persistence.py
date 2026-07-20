@@ -74,7 +74,7 @@ def test_streaming_persists_context_fields_on_session_before_save():
 
 def test_session_init_accepts_context_fields():
     """Session exposes and applies the three fields as explicit named kwargs."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     parameters = inspect.signature(Session).parameters
     values = {
@@ -93,7 +93,7 @@ def test_session_init_accepts_context_fields():
 
 def test_session_metadata_fields_include_context_fields(tmp_path, monkeypatch):
     """Metadata-only loading restores all three persisted context fields."""
-    from api import models
+    from api.sessions import store as models
 
     sessions_dir = tmp_path / "sessions"
     sessions_dir.mkdir()
@@ -123,7 +123,7 @@ def test_session_metadata_fields_include_context_fields(tmp_path, monkeypatch):
 
 def test_session_compact_exposes_context_fields():
     """Session.compact() exposes the three context values unchanged."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     values = {
         "context_length": 200000,
@@ -152,7 +152,7 @@ def test_session_round_trip_persists_context_fields(tmp_path, monkeypatch):
     sys.modules state and break test ordering for sibling tests that depend
     on a stable api.models import (e.g. test_session_sidecar_repair.py).
     """
-    from api import models
+    from api.sessions import store as models
 
     # Use tmp_path as the session dir for this test only
     sessions_dir = tmp_path / "sessions"

@@ -28,7 +28,7 @@ import pytest
 def test_ensure_cron_project_creates_per_profile(tmp_path, monkeypatch):
     """Each distinct profile gets its own 'Cron Jobs' project_id."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     projects_file = tmp_path / 'projects.json'
@@ -56,7 +56,7 @@ def test_ensure_cron_project_creates_per_profile(tmp_path, monkeypatch):
 def test_ensure_cron_project_idempotent_per_profile(tmp_path, monkeypatch):
     """Repeated calls within the same profile return the same id."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     projects_file = tmp_path / 'projects.json'
@@ -77,7 +77,7 @@ def test_ensure_cron_project_back_tags_legacy_untagged(tmp_path, monkeypatch):
     """A pre-existing 'Cron Jobs' project with no `profile` field is back-tagged
     to whichever profile first calls ensure_cron_project(), then reused going forward."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     projects_file = tmp_path / 'projects.json'
@@ -105,7 +105,7 @@ def test_ensure_cron_project_renamed_root_matches_default(tmp_path, monkeypatch)
     project tagged 'default' is reused — they're the same profile from the
     user's perspective."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     projects_file = tmp_path / 'projects.json'
@@ -135,7 +135,7 @@ def test_ensure_cron_project_renamed_root_matches_default(tmp_path, monkeypatch)
 def test_load_projects_backfills_from_session_index(tmp_path, monkeypatch):
     """Untagged projects pick up their profile from any session that uses them."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / 'projects.json'
     index_file = tmp_path / '_index.json'
@@ -175,7 +175,7 @@ def test_load_projects_backfills_from_session_index(tmp_path, monkeypatch):
 def test_load_projects_backfills_to_default_when_no_sessions(tmp_path, monkeypatch):
     """Untagged project with no session attribution falls back to 'default'."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / 'projects.json'
     projects_file.write_text(json.dumps([
@@ -197,7 +197,7 @@ def test_load_projects_backfills_to_default_when_no_sessions(tmp_path, monkeypat
 def test_load_projects_idempotent_after_first_migrate(tmp_path, monkeypatch):
     """Once everything is tagged, subsequent calls don't re-write the file."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / 'projects.json'
     projects_file.write_text(json.dumps([
@@ -291,7 +291,7 @@ def test_session_move_uses_session_profile():
 @pytest.fixture(autouse=True)
 def _reset_profile_state():
     import api.profiles as profiles
-    import api.models as models
+    import api.sessions.store as models
     profiles._invalidate_root_profile_cache()
     # Reset migration flag so each test starts fresh
     models._projects_migrated = False

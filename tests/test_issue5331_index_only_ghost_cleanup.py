@@ -35,7 +35,7 @@ def mock_env(tmp_path, monkeypatch):
     """
     import api.config as config_mod
     import api.routes as routes
-    import api.models as models
+    import api.sessions.store as models
 
     sessions_dir = tmp_path / "sessions"
     sessions_dir.mkdir()
@@ -139,7 +139,7 @@ def test_cleanup_prunes_index_only_ghosts(mock_env):
 
 def test_repository_cleanup_owns_index_ghost_sweep(mock_env):
     """The reconciliation owner exposes cleanup without HTTP route internals."""
-    from api.session_repository import cleanup_session_store
+    from api.sessions.repository import cleanup_session_store
 
     sessions_dir, index_file = mock_env
     _make_session_file(sessions_dir, "sess-live", "Legit")
@@ -361,7 +361,7 @@ def test_cleanup_index_rewritten_when_phase1_removed_files(mock_env):
 def test_cleanup_removes_recovery_backup_with_empty_sidecar(mock_env):
     """Cleanup must not leave a backup that startup recovery can resurrect."""
     sessions_dir, index_file = mock_env
-    from api.session_repository import cleanup_session_store
+    from api.sessions.repository import cleanup_session_store
 
     _make_session_file(sessions_dir, "sess-backup", "Untitled")
     backup = sessions_dir / "sess-backup.json.bak"
@@ -381,7 +381,7 @@ def test_cleanup_skips_an_empty_session_with_active_turn(mock_env, monkeypatch):
     """A pending turn can still have zero messages and must win over cleanup."""
     sessions_dir, index_file = mock_env
     import api.config as config
-    from api.session_repository import cleanup_session_store
+    from api.sessions.repository import cleanup_session_store
 
     sid = "sess-active-empty"
     sidecar = sessions_dir / f"{sid}.json"

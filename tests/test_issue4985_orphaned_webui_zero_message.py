@@ -58,7 +58,7 @@ Test design:
 
 - Tests 13-18 (the real-pipeline tests) stand up the ``SESSION_DIR`` /
   ``SESSION_INDEX_FILE`` / ``SESSIONS`` / ``HERMES_HOME`` / state.db the
-  way ``api.models.all_sessions()`` reads them in production, write a real
+  way ``api.sessions.store.all_sessions()`` reads them in production, write a real
   session sidecar that survives #1171, and assert that the resulting
   ``_build_session_list_cache_payload`` actually calls
   ``prune_session_from_index`` for the genuinely-surviving orphan.
@@ -122,7 +122,7 @@ def _make_state_db(path: Path, session_ids, *, messages_per_session=None):
 
 def test_agent_session_zero_message_sids_returns_only_orphans(tmp_path, monkeypatch):
     """Mixed input: only ids with zero message rows are returned."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -139,7 +139,7 @@ def test_agent_session_zero_message_sids_returns_only_orphans(tmp_path, monkeypa
 
 def test_agent_session_zero_message_sids_empty_when_db_missing(tmp_path, monkeypatch):
     """No agent DB -> return frozenset() so the caller prunes nothing."""
-    from api import models
+    from api.sessions import store as models
 
     monkeypatch.setattr(
         models, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
@@ -152,7 +152,7 @@ def test_agent_session_zero_message_sids_handles_missing_messages_table(
     tmp_path, monkeypatch,
 ):
     """A state.db without a ``messages`` table degrades to frozenset() — never prune."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -170,7 +170,7 @@ def test_agent_session_zero_message_sids_handles_missing_sessions_table(
     tmp_path, monkeypatch,
 ):
     """A state.db without a ``sessions`` table degrades to frozenset()."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -185,7 +185,7 @@ def test_agent_session_zero_message_sids_handles_missing_sessions_table(
 
 def test_agent_session_zero_message_sids_empty_id_filtered(tmp_path, monkeypatch):
     """Empty / None / whitespace-only ids are filtered before probing."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -200,7 +200,7 @@ def test_agent_session_zero_message_sids_empty_id_filtered(tmp_path, monkeypatch
 
 def test_agent_session_zero_message_sids_batches_over_500_ids(tmp_path, monkeypatch):
     """Batched chunked probe mirrors agent_session_rows_existing (chunk=500)."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -221,7 +221,7 @@ def test_agent_session_zero_message_sids_only_returns_existing_sessions(
     tmp_path, monkeypatch,
 ):
     """Ids that have NO row in ``sessions`` are not in the result (the join filters them)."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -755,7 +755,7 @@ def test_webui_titled_row_with_empty_state_db_messages_is_pruned(monkeypatch):
 # These tests drive a real ``all_sessions()`` (no ``all_sessions``
 # monkeypatch). They stand up the ``SESSION_DIR`` /
 # ``SESSION_INDEX_FILE`` / ``SESSIONS`` / ``HERMES_HOME`` / state.db the
-# way ``api.models.all_sessions()`` reads them in production, write a real
+# way ``api.sessions.store.all_sessions()`` reads them in production, write a real
 # session sidecar that survives #1171's keep-filter, and assert that the
 # resulting ``_build_session_list_cache_payload`` actually fires
 # ``prune_session_from_index`` for the genuinely-surviving orphan shape
@@ -782,7 +782,7 @@ def _real_pipeline(tmp_path, monkeypatch):
     (``messages`` + ``sessions`` tables per test case), and clears
     ``SESSIONS`` so no stale in-memory session leaks across tests.
     """
-    import api.models as models
+    import api.sessions.store as models
     from api import profiles
 
     session_dir = tmp_path / "sessions"
@@ -1008,7 +1008,7 @@ def test_real_all_sessions_post1171_titled_orphan_is_pruned(_real_pipeline, monk
 #     would strip it — see line 3735-3741). The state.db.messages table is
 #     empty so the row IS an orphan; the gate fires and prunes it.
 def test_real_all_sessions_post1171_stale_count_orphan_is_pruned(_real_pipeline, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     tmp_path = _real_pipeline
@@ -1053,7 +1053,7 @@ def test_real_all_sessions_post1171_stale_count_orphan_is_pruned(_real_pipeline,
     # Mirror the indexed row into the in-memory SESSIONS dict so
     # ``all_sessions``'s in-memory overlay includes it (otherwise the index
     # row is dropped at the in-memory-id check on line 3592-3604).
-    from api.models import Session
+    from api.sessions.store import Session
     indexed_session = Session(
         session_id="webui-stale-count",
         title="Untitled",
@@ -1651,7 +1651,7 @@ def test_tombstone_persists_across_polls(_real_pipeline, monkeypatch):
 def test_tombstone_does_not_block_new_session_with_same_id(
     _real_pipeline, monkeypatch,
 ):
-    import api.models as models
+    import api.sessions.store as models
 
     tmp_path = _real_pipeline
     sid = "webui-reused-sid"
@@ -1748,7 +1748,7 @@ def test_tombstone_does_not_block_new_session_with_same_id(
 #     install with millions of prunes does not grow the file without
 #     bound. Verify by directly calling _save with > N ids.
 def test_tombstone_trimmed_to_last_N_entries(monkeypatch, tmp_path):
-    from api import models
+    from api.sessions import store as models
 
     cap = models.WEBUI_ZERO_MESSAGE_ORPHAN_TOMBSTONE_CAP
     oversized = [f"sid-{i:06d}" for i in range(cap + 250)]
@@ -1843,7 +1843,7 @@ def test_tombstone_self_heals_when_message_added(_real_pipeline, monkeypatch):
     # Pre-populate the tombstone file with the sid so the row enters the
     # helper already tombstoned. Mirror the production file format so the
     # loader accepts it.
-    import api.models as models
+    import api.sessions.store as models
 
     session_dir = tmp_path / "sessions"
     tombstone_file = session_dir / "_pruned_webui_orphans.json"
@@ -1920,7 +1920,7 @@ def test_tombstone_self_heals_when_message_added(_real_pipeline, monkeypatch):
 def test_tombstone_loader_is_fail_open_on_corrupt_file(
     _real_pipeline, monkeypatch, corrupt_payload,
 ):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     tmp_path = _real_pipeline
@@ -2023,7 +2023,7 @@ def test_sidecar_only_webui_session_is_retained(_real_pipeline, monkeypatch):
 #     cleared, row returned to the sidebar). Combines the r4.5 self-heal
 #     logic with the r5 sidecar-only retention rule.
 def test_sidecar_only_webui_session_self_heals_tombstone(_real_pipeline, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     tmp_path = _real_pipeline

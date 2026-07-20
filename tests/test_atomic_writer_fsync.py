@@ -28,7 +28,7 @@ def _spy_fsync(monkeypatch, module):
 
 
 def test_session_discoverability_writer_fsyncs_and_roundtrips(tmp_path, monkeypatch):
-    import api.session_discoverability as sd
+    import api.sessions.discoverability as sd
 
     calls = _spy_fsync(monkeypatch, sd)
     path = tmp_path / "_index.json"
@@ -43,7 +43,7 @@ def test_session_discoverability_writer_fsyncs_and_roundtrips(tmp_path, monkeypa
 
 def test_session_discoverability_temp_name_is_thread_unique(monkeypatch):
     """Two threads (same pid) must not collide on one temp path."""
-    import api.session_discoverability as sd
+    import api.sessions.discoverability as sd
 
     names = set()
     real_replace = os.replace
@@ -65,7 +65,7 @@ def test_session_discoverability_temp_name_is_thread_unique(monkeypatch):
 
 
 def test_session_discoverability_failed_write_leaves_no_debris(tmp_path, monkeypatch):
-    import api.session_discoverability as sd
+    import api.sessions.discoverability as sd
 
     original = tmp_path / "_index.json"
     original.write_text('["keep"]', encoding="utf-8")

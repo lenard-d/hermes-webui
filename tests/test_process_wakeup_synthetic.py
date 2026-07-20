@@ -3,7 +3,7 @@
 import time
 from pathlib import Path
 
-from api.models import Session, _append_recovered_pending_turn, _apply_core_sync_or_error_marker
+from api.sessions.store import Session, _append_recovered_pending_turn, _apply_core_sync_or_error_marker
 from api.turn_admission import checkpoint_user_message
 from api.streaming import _materialize_pending_user_turn_before_error, _merge_display_messages_after_agent_result
 

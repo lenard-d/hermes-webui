@@ -33,7 +33,7 @@ from unittest.mock import patch
 import pytest
 
 from api import routes
-from api import models
+from api.sessions import store as models
 
 try:
     import tools.approval as ta

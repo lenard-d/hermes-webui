@@ -96,7 +96,7 @@ def _append_state_db_rows(path: Path, sid: str, rows):
 
 def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
     import api.profiles as profiles
 
@@ -133,7 +133,7 @@ def _large_timestamped_sidecar_messages(count=500):
 
 
 def test_sidebar_state_db_overlay_preserves_numeric_actual_count():
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_float_actual_count"
     sessions = [
@@ -169,7 +169,7 @@ def test_sidebar_state_db_overlay_counts_subagent_child_5308():
     session vanishing regression). The overlay applies to source == 'subagent'
     just like 'webui', while the subagent source classification is preserved.
     """
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "subagent_child_5308"
     sessions = [
@@ -214,7 +214,7 @@ def test_sidebar_state_db_overlay_does_not_count_foreign_cli_source_5308():
     (e.g. a messaging/cron/tui CLI row) must NOT get the count overlay — only
     WebUI-owned rows and delegated subagent children do.
     """
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "cron_row_5308"
     sessions = [
@@ -245,7 +245,7 @@ def test_sidebar_state_db_overlay_does_not_count_foreign_cli_source_5308():
 
 
 def test_tail_cancelled_partial_blocks_state_db_replay():
-    from api.models import merge_session_messages_append_only
+    from api.sessions.store import merge_session_messages_append_only
 
     sidecar = [
         {"role": "user", "content": "cancelled turn", "timestamp": 1000.0},
@@ -269,7 +269,7 @@ def test_tail_cancelled_partial_blocks_state_db_replay():
 
 
 def test_historical_cancelled_partial_does_not_disable_later_state_db_merge():
-    from api.models import merge_session_messages_append_only
+    from api.sessions.store import merge_session_messages_append_only
 
     sidecar = [
         {"role": "user", "content": "cancelled turn", "timestamp": 1000.0},
@@ -297,7 +297,7 @@ def test_historical_cancelled_partial_does_not_disable_later_state_db_merge():
 
 
 def test_state_db_duplicate_backfills_turn_duration():
-    from api.models import merge_session_messages_append_only
+    from api.sessions.store import merge_session_messages_append_only
 
     sidecar = [
         {"role": "assistant", "content": "final answer", "timestamp": 1001.0},
@@ -427,7 +427,7 @@ def test_api_session_includes_state_db_messages_newer_than_webui_sidecar(monkeyp
 
 
 def test_state_db_reader_can_filter_by_timestamp_floor(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_reconcile_since_001"
     _install_test_session(monkeypatch, tmp_path, sid, [])
@@ -447,7 +447,7 @@ def test_state_db_reader_can_filter_by_timestamp_floor(monkeypatch, tmp_path):
 
 
 def test_state_db_reader_since_timestamp_keeps_null_timestamp_rows(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_reconcile_since_null_001"
     _install_test_session(monkeypatch, tmp_path, sid, [])
@@ -596,7 +596,7 @@ def test_msg_limit_session_load_falls_back_with_null_state_db_timestamp(monkeypa
 
 
 def test_limited_state_db_prefix_missing_db_skips_visible_key_normalization(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     sid = "webui_reconcile_prefix_missing_db"
@@ -624,7 +624,7 @@ def test_limited_state_db_prefix_missing_db_skips_visible_key_normalization(monk
 
 
 def test_limited_state_db_prefix_count_mismatch_skips_visible_key_normalization(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     sid = "webui_reconcile_prefix_count_mismatch"
@@ -1573,7 +1573,7 @@ def test_metadata_fast_path_excludes_state_db_rows_filtered_by_reconciliation(mo
 
 
 def test_api_session_reload_drops_stale_cached_user_tail_after_saved_assistant(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     sid = "webui_reconcile_cached_user_tail"
@@ -1618,7 +1618,7 @@ def test_api_session_reload_drops_stale_cached_user_tail_after_saved_assistant(m
 
 
 def test_get_session_reloads_equal_count_cached_user_tail_after_saved_assistant(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_reconcile_equal_count_user_tail"
     disk = _install_test_session(
@@ -1670,7 +1670,7 @@ def test_get_session_reloads_equal_count_cached_user_tail_after_saved_assistant(
 
 
 def test_get_session_keeps_equal_count_newer_cached_user_tail(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_reconcile_equal_count_newer_user_tail"
     _install_test_session(
@@ -1706,7 +1706,7 @@ def test_get_session_keeps_equal_count_newer_cached_user_tail(monkeypatch, tmp_p
 
 
 def test_get_session_reloads_when_disk_adds_anchor_scene_without_new_messages(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_reconcile_anchor_scene_delta"
     _install_test_session(
@@ -1748,7 +1748,7 @@ def test_get_session_reloads_when_disk_adds_anchor_scene_without_new_messages(mo
 
 
 def test_get_session_reloads_when_cached_session_lags_disk(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "webui_reconcile_cache_lags_disk"
     old_messages = [

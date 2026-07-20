@@ -15,7 +15,7 @@ decoded-string path.
 import json
 from pathlib import Path
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
 
 

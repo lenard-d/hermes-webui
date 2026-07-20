@@ -7,11 +7,11 @@ import threading
 import zipfile
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import api.upload as upload
 import pytest
-from api.models import Session
-from api.session_repository import delete_session_state
+from api.sessions.store import Session
+from api.sessions.repository import delete_session_state
 from tests.test_raw_audio_upload import _FakeHandler, _multipart_body
 
 

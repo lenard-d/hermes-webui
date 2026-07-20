@@ -23,8 +23,8 @@ import time
 
 import pytest
 
-import api.models as models
-from api.models import (
+import api.sessions.store as models
+from api.sessions.store import (
     SESSIONS,
     Session,
     all_sessions,

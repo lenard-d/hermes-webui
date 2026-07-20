@@ -52,8 +52,8 @@ def _msg(role: str, content: str, ts: float, mid: str) -> dict:
 
 
 def _make_session(monkeypatch, tmp_path, sid):
-    import api.models as models
-    from api.models import Session
+    import api.sessions.store as models
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True, exist_ok=True)

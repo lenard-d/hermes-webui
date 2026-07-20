@@ -12,7 +12,7 @@ Fixes:
 """
 import pathlib
 
-import api.models as models
+import api.sessions.store as models
 
 MODELS_PY = pathlib.Path(__file__).parent.parent / 'api' / 'models.py'
 AGENT_SESSIONS_PY = pathlib.Path(__file__).parent.parent / 'api' / 'agent_sessions.py'

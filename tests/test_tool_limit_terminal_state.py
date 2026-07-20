@@ -5,9 +5,10 @@ import sys
 import types
 from pathlib import Path
 
-from api import config, models
+from api import config
+from api.sessions import store as models
 from api import streaming
-from api.models import Session
+from api.sessions.store import Session
 
 
 ROOT = Path(__file__).resolve().parents[1]

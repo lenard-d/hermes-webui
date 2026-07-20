@@ -51,7 +51,7 @@ def _patch_tg_config(config_dict):
 
 def _make_provisional_session(user_text, assistant_text='Here is the answer.'):
     """Build a mock session whose title is the provisional first-message slice."""
-    from api.models import title_from
+    from api.sessions.store import title_from
     messages = [
         {'role': 'user', 'content': user_text},
         {'role': 'assistant', 'content': assistant_text},

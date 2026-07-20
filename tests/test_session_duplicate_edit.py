@@ -19,7 +19,7 @@ import pytest
 def isolated_session_env():
     """Isolate session state for testing duplicate + edit scenario."""
     from api import config as _cfg
-    from api import models as _models
+    import api.sessions.store as _models
     from pathlib import Path
     import collections
 
@@ -29,7 +29,7 @@ def isolated_session_env():
 
     # Snapshot config BEFORE any mutation so we always restore the real state.
     # Note: api.models imports SESSION_DIR at module level, so we must update
-    # BOTH api.config.SESSION_DIR and api.models.SESSION_DIR.
+    # BOTH api.config.SESSION_DIR and api.sessions.store.SESSION_DIR.
     old_values = {
         'cfg_SESSION_DIR': _cfg.SESSION_DIR,
         'models_SESSION_DIR': getattr(_models, 'SESSION_DIR', None),
@@ -73,7 +73,7 @@ def isolated_session_env():
 
 def test_duplicate_preserves_truncation_watermark(isolated_session_env):
     """When duplicating a session with truncation_watermark, the watermark should be copied."""
-    from api.models import Session
+    from api.sessions.store import Session
     from api.config import SESSIONS, LOCK
 
     now = time.time()
@@ -128,7 +128,7 @@ def test_duplicate_preserves_truncation_watermark(isolated_session_env):
 
 def test_duplicate_edit_does_not_lose_messages(isolated_session_env):
     """When editing a message in a duplicated session, messages should not be lost after reload."""
-    from api.models import Session, merge_session_messages_append_only, get_state_db_session_messages
+    from api.sessions.store import Session, merge_session_messages_append_only, get_state_db_session_messages
     from api.config import SESSIONS, LOCK
 
     now = time.time()
@@ -180,7 +180,7 @@ def test_duplicate_edit_does_not_lose_messages(isolated_session_env):
     # Simulate edit: truncate to keep first 2 messages, then set watermark
     keep_count = 2
     copied_session.messages = copied_session.messages[:keep_count]
-    from api.session_ops import _truncation_watermark_for
+    from api.sessions.operations import _truncation_watermark_for
     copied_session.truncation_watermark = _truncation_watermark_for(copied_session.messages)
     copied_session.save()
 

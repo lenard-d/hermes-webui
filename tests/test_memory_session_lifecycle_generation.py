@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def _fresh_lifecycle():
     """Import/reload lifecycle module and clear process-global test state."""
-    lifecycle = importlib.import_module("api.session_lifecycle")
+    lifecycle = importlib.import_module("api.sessions.lifecycle")
     lifecycle = importlib.reload(lifecycle)
     reset = getattr(lifecycle, "_reset_for_tests", None)
     if callable(reset):
@@ -352,7 +352,7 @@ def test_clear_session_evicts_outside_session_lock(monkeypatch, tmp_path):
     """Clearing a session must not hold the per-session mutation lock while
     evicting its cached agent, because eviction can run provider commit I/O."""
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     session_dir = tmp_path / "sessions"

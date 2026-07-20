@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import api.profiles as profiles_api
 import api.streaming as streaming
-from api.models import Session
-from api.session_ops import apply_session_title_rename, mark_session_title_generated
+from api.sessions.store import Session
+from api.sessions.operations import apply_session_title_rename, mark_session_title_generated
 
 
 @pytest.fixture(autouse=True)

@@ -62,7 +62,7 @@ def test_regenerate_endpoint_persists_generated_title_without_reordering_sidebar
 def test_regenerate_helper_persists_generated_title_and_publishes_sidebar_refresh(
     monkeypatch, tmp_path
 ):
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     session_dir = tmp_path / "sessions"

@@ -53,7 +53,7 @@ def _read_sse_frames(resp, deadline):
 
 def _subscriber_count():
     """Read the live subscriber count from this pytest process's bus module."""
-    from api import session_events
+    from api.sessions import events as session_events
     with session_events._SESSION_EVENTS_LOCK:
         return len(session_events._SESSION_EVENTS_SUBSCRIBERS)
 
@@ -64,7 +64,7 @@ def test_session_events_bus_subscribe_unsubscribe_balance():
     set at the baseline. This is the safety invariant the SSE handler's
     finally block depends on.
     """
-    from api import session_events
+    from api.sessions import events as session_events
 
     baseline = _subscriber_count()
     q = session_events.subscribe_session_events()

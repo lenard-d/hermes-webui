@@ -2,7 +2,7 @@
 
 
 def test_route_session_list_cache_exports():
-    from api import route_session_list_cache as slc
+    from api.sessions import sidebar_cache as slc
 
     assert hasattr(slc, "_SESSIONS_CACHE")
     assert hasattr(slc, "_session_list_cache_key")
@@ -11,7 +11,7 @@ def test_route_session_list_cache_exports():
 
 
 def test_backward_compat_from_routes():
-    from api import route_session_list_cache as slc
+    from api.sessions import sidebar_cache as slc
     import api.routes as routes
 
     assert hasattr(routes, "_session_list_cache_key")
@@ -21,7 +21,7 @@ def test_backward_compat_from_routes():
 
 
 def test_shared_cache_objects():
-    from api import route_session_list_cache as slc
+    from api.sessions import sidebar_cache as slc
     import api.routes as routes
 
     assert slc._SESSIONS_CACHE is routes._SESSIONS_CACHE
@@ -30,7 +30,7 @@ def test_shared_cache_objects():
 
 
 def test_shared_cache_state_mutation():
-    from api import route_session_list_cache as slc
+    from api.sessions import sidebar_cache as slc
     import api.routes as routes
 
     key = routes._session_list_cache_key(
@@ -52,7 +52,7 @@ def test_shared_cache_state_mutation():
 
 
 def test_live_scalar_exports_follow_route_session_list_cache_state():
-    from api import route_session_list_cache as slc
+    from api.sessions import sidebar_cache as slc
     import api.routes as routes
 
     before = routes._SESSIONS_CACHE_GLOBAL_INVALIDATION_VERSION
@@ -69,10 +69,11 @@ def test_no_circular_import():
     src = (
         pathlib.Path(__file__).parent.parent
         / "api"
-        / "route_session_list_cache.py"
+        / "sessions"
+        / "sidebar_cache.py"
     ).read_text()
     for line in src.splitlines():
         if line.startswith("from api.routes import") or line.startswith("import api.routes"):
             raise AssertionError(
-                "route_session_list_cache must not import api.routes at module scope"
+                "session sidebar cache must not import api.routes"
             )

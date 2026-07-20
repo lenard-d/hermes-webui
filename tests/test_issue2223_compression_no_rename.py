@@ -90,9 +90,9 @@ class TestNoRenameDuringCompression:
 
     def test_preservation_helper_marks_snapshot_without_marking_continuation(self, tmp_path, monkeypatch):
         """The rotation preservation path marks only old_sid as a sidebar-hidden snapshot."""
-        import api.models as models
+        import api.sessions.store as models
         import api.streaming as streaming
-        from api.models import Session
+        from api.sessions.store import Session
 
         session_dir = tmp_path / "sessions"
         session_dir.mkdir()

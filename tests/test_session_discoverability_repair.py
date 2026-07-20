@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from api.session_discoverability import repair_session_discoverability
+from api.sessions.discoverability import repair_session_discoverability
 
 
 def _write_sidecar(session_dir: Path, sid: str, *, messages=1, **metadata):
@@ -157,7 +157,7 @@ def test_repair_discoverability_cli_defaults_to_dry_run(tmp_path):
         [
             sys.executable,
             "-m",
-            "api.session_discoverability",
+            "api.sessions.discoverability",
             "--repair-safe",
             "--session-dir",
             str(tmp_path),

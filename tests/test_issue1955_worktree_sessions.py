@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import api.models as models
-from api.models import SESSIONS, Session, new_session
+import api.sessions.store as models
+from api.sessions.store import SESSIONS, Session, new_session
 
 
 @pytest.fixture(autouse=True)

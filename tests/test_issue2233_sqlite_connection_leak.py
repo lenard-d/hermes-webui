@@ -79,7 +79,7 @@ def test_handoff_summary_path_does_not_leak_fds(tmp_path, monkeypatch):
 
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
-    from api.models import count_conversation_rounds
+    from api.sessions.store import count_conversation_rounds
     from api.routes import _persist_handoff_summary_to_state_db
 
     sid = "20260101_000000_abcdef"

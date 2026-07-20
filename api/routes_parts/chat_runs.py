@@ -48,7 +48,7 @@ def _handle_btw(handler, body):
             return j(handler, {"error": "session already has an active stream"}, status=409)
         s.active_stream_id = None
     # Create ephemeral hidden session inheriting context
-    from api.models import new_session as _new_session
+    from api.sessions.store import new_session as _new_session
     model_provider = getattr(s, 'model_provider', None)
     ephemeral = _new_session(
         workspace=s.workspace,
@@ -98,7 +98,7 @@ def _handle_background(handler, body):
     prompt = str(body["prompt"]).strip()
     if not prompt:
         return bad(handler, "prompt is required")
-    from api.models import new_session as _new_session
+    from api.sessions.store import new_session as _new_session
     model_provider = getattr(s, 'model_provider', None)
     bg = _new_session(
         workspace=s.workspace,
@@ -137,7 +137,7 @@ def _handle_background(handler, body):
             )
             # Reload the bg session from disk and extract the final assistant reply.
             try:
-                from api.models import Session as _Session
+                from api.sessions.store import Session as _Session
                 reloaded = _Session.load(bg_sid)
                 _answer = ""
                 for _m in reversed((reloaded.messages if reloaded else None) or []):
@@ -1165,7 +1165,7 @@ def _handle_chat_start(handler, body, diag=None):
         # is one-shot) yet can't outlive a real switch.
         try:
             if explicit_model_pick:
-                from api.models import model_explicit_pick_signature as _mk_sig
+                from api.sessions.store import model_explicit_pick_signature as _mk_sig
                 s.model_explicit_pick_signature = _mk_sig(model, model_provider)
         except Exception:
             pass

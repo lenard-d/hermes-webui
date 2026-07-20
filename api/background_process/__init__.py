@@ -13,7 +13,7 @@ import time  # noqa: F401 - historical compatibility export
 import uuid  # noqa: F401 - historical compatibility export
 from typing import Any  # Historical compatibility export.
 
-from api.session_channel import (
+from api.sessions import (
     SESSION_CHANNELS,
     SESSION_CHANNELS_LOCK,
     SessionChannel,

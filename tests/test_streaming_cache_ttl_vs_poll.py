@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from api import models
-from api import route_session_list_cache
+from api.sessions import store as models
+from api.sessions import sidebar_cache as route_session_list_cache
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SESSIONS_JS = _REPO_ROOT / "static" / "sessions.js"

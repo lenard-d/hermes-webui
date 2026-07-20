@@ -10,9 +10,9 @@ from pathlib import Path
 
 from api.config import MAX_UPLOAD_BYTES, STATE_DIR
 from api.helpers import j
-from api.models import get_session
+from api.sessions.store import get_session
 from api.profiles import _profiles_match, get_active_profile_name as _get_active_profile_name
-from api.session_repository import session_write_owner
+from api.sessions.repository import session_write_owner
 from api.workspace import (
     safe_resolve_ws,
     resolve_trusted_workspace,

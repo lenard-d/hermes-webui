@@ -3,9 +3,9 @@ import threading
 import weakref
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import pytest
-from api.models import Session
+from api.sessions.store import Session
 
 
 def _isolate_session_store(tmp_path, monkeypatch):
@@ -51,7 +51,7 @@ def _patch_cleanup_collaborators(monkeypatch, tmp_path):
 
 
 def test_delete_session_state_owns_all_persisted_and_runtime_cleanup(tmp_path, monkeypatch):
-    from api.session_repository import delete_session_state
+    from api.sessions.repository import delete_session_state
 
     session_dir = _isolate_session_store(tmp_path, monkeypatch)
     sid = "owneddelete1"
@@ -87,7 +87,7 @@ def test_delete_session_state_owns_all_persisted_and_runtime_cleanup(tmp_path, m
 def test_delete_messaging_session_preserves_state_db_and_has_no_webui_tombstone(
     tmp_path, monkeypatch
 ):
-    from api.session_repository import delete_session_state
+    from api.sessions.repository import delete_session_state
 
     _isolate_session_store(tmp_path, monkeypatch)
     sid = "messagingdelete1"
@@ -109,7 +109,7 @@ def test_delete_messaging_session_preserves_state_db_and_has_no_webui_tombstone(
 
 
 def test_delete_session_state_waits_for_the_session_owner_lock(tmp_path, monkeypatch):
-    from api.session_repository import delete_session_state
+    from api.sessions.repository import delete_session_state
 
     session_dir = _isolate_session_store(tmp_path, monkeypatch)
     sid = "serializeddelete1"
@@ -141,7 +141,7 @@ def test_delete_session_state_waits_for_the_session_owner_lock(tmp_path, monkeyp
 
 
 def test_delete_preserves_lock_identity_for_existing_waiters(tmp_path, monkeypatch):
-    from api.session_repository import delete_session_state
+    from api.sessions.repository import delete_session_state
 
     _isolate_session_store(tmp_path, monkeypatch)
     sid = "deletewaiterlock1"
@@ -184,7 +184,7 @@ def test_session_lock_registry_releases_unreferenced_lock():
 
 
 def test_delete_session_state_refuses_a_live_worker(tmp_path, monkeypatch):
-    from api.session_repository import SessionActiveError, delete_session_state
+    from api.sessions.repository import SessionActiveError, delete_session_state
 
     session_dir = _isolate_session_store(tmp_path, monkeypatch)
     sid = "activedelete1"

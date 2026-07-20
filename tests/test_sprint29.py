@@ -388,7 +388,7 @@ class TestSessionIDValidation:
         """A valid hex session ID gets past the validation check."""
         import sys
         sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
-        from api.models import Session, SESSION_DIR
+        from api.sessions.store import Session, SESSION_DIR
         valid_hex = "deadbeef" * 8  # 64 hex chars
         # Should not raise — returns None only if file doesn't exist (it won't)
         result = Session.load(valid_hex)
@@ -396,14 +396,14 @@ class TestSessionIDValidation:
 
     def test_new_format_session_id_passes_validation(self):
         """New hermes-agent session IDs (YYYYMMDD_HHMMSS_xxxxxx) must pass validation."""
-        from api.models import Session
+        from api.sessions.store import Session
         # Should pass the validator (returns None only because the file doesn't exist)
         result = Session.load("20260406_164014_74b2d1")
         assert result is None  # file doesn't exist, but validator passed
 
     def test_non_hex_session_id_rejected(self):
         """A session ID with dangerous chars must be rejected."""
-        from api.models import Session
+        from api.sessions.store import Session
         evil_ids = [
             "../../../etc/passwd",
             "../../../../root/.ssh/id_rsa",
@@ -422,7 +422,7 @@ class TestSessionIDValidation:
 
     def test_empty_session_id_rejected(self):
         """An empty session ID must be rejected."""
-        from api.models import Session
+        from api.sessions.store import Session
         assert Session.load("") is None
         assert Session.load(None) is None
 

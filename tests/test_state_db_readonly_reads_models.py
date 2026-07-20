@@ -18,7 +18,7 @@ from contextlib import closing
 from pathlib import Path
 
 import api.agent_sessions as agent_sessions
-import api.models as models
+import api.sessions.store as models
 from api.agent_sessions import open_state_db_readonly
 
 

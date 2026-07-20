@@ -5,12 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 import api.config as config
-import api.models as models
-import api.session_recovery as session_recovery
+import api.sessions.store as models
+import api.sessions.recovery as session_recovery
 import api.streaming as streaming
 import api.turn_admission as turn_admission
 import api.turn_journal as turn_journal
-from api.models import Session, new_session
+from api.sessions.store import Session, new_session
 
 
 @pytest.fixture(autouse=True)

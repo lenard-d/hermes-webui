@@ -16,8 +16,12 @@ from api.config import (
     gateway_supports_approval,
 )
 from api.helpers import _redact_text, redact_session_data
-from api.models import clear_process_wakeup_pause, get_session, merge_session_messages_append_only
-from api.session_repository import commit_stream_writeback
+from api.sessions import (
+    clear_process_wakeup_pause,
+    commit_stream_writeback,
+    get_session,
+    merge_session_messages_append_only,
+)
 from .execution import TurnExecution
 from .journal import bound_run_journal_snapshot_args
 from .runtime_state import (

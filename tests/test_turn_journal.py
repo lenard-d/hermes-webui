@@ -3,7 +3,7 @@ import os
 
 import api.turn_journal as turn_journal
 import pytest
-from api.session_recovery import audit_session_recovery
+from api.sessions.recovery import audit_session_recovery
 from api.turn_journal import (
     TurnJournalCommitUnknown,
     append_turn_journal_event,

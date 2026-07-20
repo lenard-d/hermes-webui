@@ -244,7 +244,7 @@ def test_cli_session_reader_preserves_apply_patch_metadata(tmp_path, monkeypatch
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
 
     import api.profiles
-    from api.models import get_cli_session_messages
+    from api.sessions.store import get_cli_session_messages
 
     monkeypatch.setattr(api.profiles, "get_active_hermes_home", lambda: str(tmp_path))
 

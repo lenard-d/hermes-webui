@@ -46,7 +46,7 @@ def _msg(role: str, content: str, ts: float, mid: str) -> dict:
 
 def _install_isolated_session_env(monkeypatch, tmp_path):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
     import api.routes as routes
 
@@ -126,7 +126,7 @@ def test_session_clear_preserves_imported_messaging_transcript_and_blocks_state_
     source_label,
 ):
     import api.routes as routes
-    from api.models import Session, get_cli_session_messages, merge_session_messages_append_only
+    from api.sessions.store import Session, get_cli_session_messages, merge_session_messages_append_only
 
     _install_isolated_session_env(monkeypatch, tmp_path)
 

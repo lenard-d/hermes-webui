@@ -1,7 +1,7 @@
 """truncate_session_at_keep aligns context when lengths differ (#5096 C)."""
 
-from api.models import Session
-from api.session_ops import truncate_session_at_keep
+from api.sessions.store import Session
+from api.sessions.operations import truncate_session_at_keep
 
 
 def test_truncate_session_at_keep_compaction_prefix():

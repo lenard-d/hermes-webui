@@ -3,7 +3,7 @@
 import copy
 import random
 
-import api.session_ops as session_ops
+import api.sessions.operations as session_ops
 import pytest
 
 

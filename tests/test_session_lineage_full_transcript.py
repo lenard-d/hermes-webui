@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from types import SimpleNamespace
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
 
 

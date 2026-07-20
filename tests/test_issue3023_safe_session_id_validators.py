@@ -8,7 +8,7 @@ undeletable" UX.  The fix factored validation into ``is_safe_session_id``
 and applied it consistently across the five known call sites.
 """
 
-from api.models import is_safe_session_id
+from api.sessions.store import is_safe_session_id
 
 
 def test_is_safe_session_id_accepts_hyphenated_gateway_ids():
@@ -77,7 +77,7 @@ def test_session_worktree_remove_validator_accepts_hyphenated_ids():
 def test_repair_stale_pending_validator_accepts_hyphenated_ids(monkeypatch, tmp_path):
     """``_repair_stale_pending`` in models.py must accept hyphens (#3023)."""
     import threading
-    import api.models as models
+    import api.sessions.store as models
 
     session = models.Session(
         session_id="api-hyphenated-id",

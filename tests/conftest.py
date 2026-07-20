@@ -1278,7 +1278,7 @@ def cleanup_test_sessions():
     # helpers cannot leak cached projections to a sibling. One setup clear is
     # sufficient: it also covers an interrupted prior teardown.
     try:
-        from api.models import clear_cli_sessions_cache
+        from api.sessions.store import clear_cli_sessions_cache
         clear_cli_sessions_cache()
     except Exception:
         pass

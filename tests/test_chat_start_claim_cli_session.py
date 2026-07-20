@@ -352,7 +352,7 @@ def isolated_state_db(tmp_path, monkeypatch):
     index_path = sessions_dir / "_index.json"
     index_path.write_text("[]", encoding="utf-8")
     import api.routes as _routes
-    import api.models as _models
+    import api.sessions.store as _models
     monkeypatch.setattr(_models, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_routes, "SESSION_INDEX_FILE", index_path)
     monkeypatch.setattr(_models, "SESSION_INDEX_FILE", index_path)
@@ -410,7 +410,7 @@ def test_helper_returns_was_webui_for_durable_deleted_tombstone_without_index(
     """A full WebUI delete tombstone must keep the 404 self-heal contract even
     after /api/session/delete prunes _index.json before state.db cleanup fails.
     """
-    import api.models as _models
+    import api.sessions.store as _models
 
     sid = "webui-deleted-db-survives"
     _make_state_db(

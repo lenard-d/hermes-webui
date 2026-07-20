@@ -5,7 +5,7 @@ import threading
 
 def test_server_shutdown_audit_logs_active_stream_context(monkeypatch, caplog):
     import server
-    from api import models
+    from api.sessions import store as models
 
     monkeypatch.setattr(server, "_SHUTDOWN_AUDIT_LOGGED", False)
     monkeypatch.setitem(

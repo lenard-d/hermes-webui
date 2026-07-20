@@ -59,7 +59,7 @@ class TestBoundedLockAcquire:
 
 
 def test_move_uses_bounded_lock_acquire():
-    from api.session_repository import SessionBusyError, SessionRepository
+    from api.sessions.repository import SessionBusyError, SessionRepository
 
     lock = threading.Lock()
     lock.acquire()
@@ -79,7 +79,7 @@ def test_move_uses_bounded_lock_acquire():
 
 def test_move_returns_503_on_lock_contention(monkeypatch):
     import api.routes as routes
-    from api.session_repository import SessionBusyError
+    from api.sessions.repository import SessionBusyError
 
     session = SimpleNamespace(
         session_id="move-busy-route",
@@ -118,7 +118,7 @@ def test_move_returns_503_on_lock_contention(monkeypatch):
 
 
 def test_move_releases_lock_in_finally():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = threading.Lock()
     session = SimpleNamespace(session_id="move-release", save=lambda **_kwargs: None)

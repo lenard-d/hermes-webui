@@ -31,7 +31,7 @@ def temp_session_dir(tmp_path, monkeypatch):
     sd = tmp_path / "sessions"
     sd.mkdir()
     # api.models reads SESSION_DIR at import time; patch the module-level binding.
-    import api.models as _m
+    import api.sessions.store as _m
     from collections import OrderedDict
     monkeypatch.setattr(_m, "SESSION_DIR", sd)
     monkeypatch.setattr(_m, "SESSIONS", OrderedDict())
@@ -40,7 +40,7 @@ def temp_session_dir(tmp_path, monkeypatch):
 
 def _make_session_on_disk(session_dir, sid="s_test_1557", n_msgs=1000, with_active_stream=True):
     """Write a realistic session JSON with N messages and a stale active_stream_id."""
-    from api.models import Session
+    from api.sessions.store import Session
     s = Session(
         session_id=sid,
         title="A long conversation",
@@ -65,7 +65,7 @@ def _make_session_on_disk(session_dir, sid="s_test_1557", n_msgs=1000, with_acti
 
 def test_metadata_only_save_raises_to_prevent_wipe(temp_session_dir):
     """Direct test of the #1558 guard: save() must refuse to wipe on-disk messages."""
-    from api.models import get_session
+    from api.sessions.store import get_session
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000)
 
     # Pre-state: on-disk file has 1000 messages.
@@ -96,7 +96,7 @@ def test_metadata_only_save_raises_to_prevent_wipe(temp_session_dir):
 
 def test_clear_stale_stream_state_preserves_messages(temp_session_dir):
     """High-level: the production trigger from #1558 must NOT wipe messages."""
-    from api.models import get_session
+    from api.sessions.store import get_session
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000, with_active_stream=True)
 
     # Simulate a server restart: STREAMS is empty, but the session has a stale
@@ -138,7 +138,7 @@ def test_cancel_stream_upgrades_cached_metadata_projection(temp_session_dir, mon
     from unittest.mock import Mock
 
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.streaming as streaming
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000, with_active_stream=True)
@@ -178,7 +178,7 @@ def test_cancel_stream_does_not_resurrect_session_deleted_before_edit(
     from unittest.mock import Mock
 
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.streaming as streaming
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=4, with_active_stream=True)
@@ -212,7 +212,7 @@ def test_archive_route_reloads_metadata_only_cached_session(temp_session_dir, mo
     from types import SimpleNamespace
 
     import api.routes as routes
-    from api.models import LOCK, SESSIONS, Session, get_session
+    from api.sessions.store import LOCK, SESSIONS, Session, get_session
     monkeypatch.setattr(routes, "SESSIONS", SESSIONS)
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=12, with_active_stream=False)
@@ -256,7 +256,7 @@ def test_archive_route_reloads_metadata_only_cached_session(temp_session_dir, mo
 
 def test_save_writes_bak_when_messages_shrink(temp_session_dir):
     """The backup safeguard: a save that shrinks messages must leave a .bak."""
-    from api.models import Session
+    from api.sessions.store import Session
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000, with_active_stream=False)
 
     # Build a fresh in-memory Session with a smaller messages array, then save —
@@ -286,7 +286,7 @@ def test_save_writes_bak_when_messages_shrink(temp_session_dir):
 
 def test_save_does_not_write_bak_when_messages_grow(temp_session_dir):
     """No backup overhead on the normal grow-the-conversation path."""
-    from api.models import Session
+    from api.sessions.store import Session
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000, with_active_stream=False)
 
     # Build a session with MORE messages than on disk — the normal grow path.
@@ -319,7 +319,7 @@ def test_recover_all_sessions_on_startup_restores_shrunken_session(temp_session_
     live["messages"] = []
     live_path.write_text(json.dumps(live), encoding="utf-8")
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir)
     assert result["restored"] == 1
     assert result["scanned"] >= 1
@@ -336,7 +336,7 @@ def test_recover_all_sessions_on_startup_restores_orphan_bak(temp_session_dir):
     bak_path.write_text(live_path.read_text(encoding="utf-8"), encoding="utf-8")
     live_path.unlink()
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir)
 
     assert result["restored"] == 1
@@ -355,7 +355,7 @@ def test_recover_all_sessions_on_startup_skips_tombstoned_orphan_bak(temp_sessio
     and NOT recreate the sidecar (otherwise the deleted transcript reappears in
     the sidebar on the next boot — the literal ghost the fix exists to kill).
     """
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=42)
     live_path = temp_session_dir / f"{sid}.json"
@@ -365,7 +365,7 @@ def test_recover_all_sessions_on_startup_skips_tombstoned_orphan_bak(temp_sessio
     # Simulate the delete route's durable tombstone for this deleted sid.
     _m._record_webui_deleted_session_tombstone(sid)
     try:
-        from api.session_recovery import recover_all_sessions_on_startup
+        from api.sessions.recovery import recover_all_sessions_on_startup
         result = recover_all_sessions_on_startup(temp_session_dir)
 
         assert result["restored"] == 0, "tombstoned orphan .bak must not be restored"
@@ -376,14 +376,14 @@ def test_recover_all_sessions_on_startup_skips_tombstoned_orphan_bak(temp_sessio
 
 def test_recover_all_sessions_on_startup_rebuilds_missing_index_without_restores(temp_session_dir, monkeypatch):
     """Startup recovery must rebuild a missing index even when no .bak restore runs."""
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=42)
     missing_index = temp_session_dir / "_index.json"
     monkeypatch.setattr(_m, "SESSION_INDEX_FILE", missing_index)
     assert not missing_index.exists()
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir, rebuild_index=True)
 
     assert result["restored"] == 0
@@ -394,7 +394,7 @@ def test_recover_all_sessions_on_startup_rebuilds_missing_index_without_restores
 
 def test_recover_all_sessions_on_startup_rebuilds_index_after_orphan_restore(temp_session_dir, monkeypatch):
     """A restored orphan must be visible through the WebUI session index immediately."""
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=42)
     live_path = temp_session_dir / f"{sid}.json"
@@ -406,7 +406,7 @@ def test_recover_all_sessions_on_startup_rebuilds_index_after_orphan_restore(tem
     stale_index.write_text(json.dumps([]), encoding="utf-8")
     monkeypatch.setattr(_m, "SESSION_INDEX_FILE", stale_index)
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir, rebuild_index=True)
 
     assert result["restored"] == 1
@@ -430,7 +430,7 @@ def test_orphan_bak_recovery_skips_sessions_absent_from_state_db(temp_session_di
         conn.execute("create table sessions (id text primary key)")
         conn.execute("insert into sessions (id) values (?)", ("different_session",))
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir, state_db_path=state_db)
 
     assert result["restored"] == 0
@@ -444,7 +444,7 @@ def test_recover_all_sessions_on_startup_is_idempotent_no_op_on_clean_state(temp
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000)
     live_before = (temp_session_dir / f"{sid}.json").read_text(encoding="utf-8")
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir)
     assert result["restored"] == 0
 
@@ -463,7 +463,7 @@ def test_recover_all_sessions_on_startup_does_not_read_live_files_without_backup
         encoding="utf-8",
     )
 
-    import api.session_recovery as sr
+    import api.sessions.recovery as sr
 
     real_msg_count = sr._msg_count
     msg_count_paths = []
@@ -503,7 +503,7 @@ def test_recover_all_sessions_on_startup_skips_non_session_index_json(temp_sessi
         encoding="utf-8",
     )
 
-    from api.session_recovery import recover_all_sessions_on_startup
+    from api.sessions.recovery import recover_all_sessions_on_startup
     # Before the fix, this raised AttributeError; the broad except in server.py
     # swallowed it and printed [recovery] startup recovery failed: 'list'
     # object has no attribute 'get'. Now the scanner skips _index.json
@@ -519,7 +519,7 @@ def test_recover_all_sessions_on_startup_skips_non_session_index_json(temp_sessi
 
 def test_msg_count_returns_neg1_for_non_dict_top_level(temp_session_dir):
     """``_msg_count`` must not raise on a JSON file whose top-level is a list."""
-    from api.session_recovery import _msg_count
+    from api.sessions.recovery import _msg_count
     list_shaped = temp_session_dir / "_index.json"
     list_shaped.write_text(json.dumps([{"session_id": "x"}]), encoding="utf-8")
     # Pre-fix: AttributeError. Post-fix: -1.
@@ -551,7 +551,7 @@ def test_metadata_only_cached_session_mutation_routes_reload_full_session(
 ):
     """Session metadata mutation routes must not save cached metadata-only stubs."""
     import api.routes as routes
-    from api.models import LOCK, SESSIONS, Session, get_session
+    from api.sessions.store import LOCK, SESSIONS, Session, get_session
 
     sid = _make_session_on_disk(
         temp_session_dir,

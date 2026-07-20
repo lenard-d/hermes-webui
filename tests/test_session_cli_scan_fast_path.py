@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 def test_webui_session_metadata_load_skips_cli_metadata_scan(monkeypatch):
     """Opening a normal WebUI session should not scan imported CLI sessions."""
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(
         session_id="webui_normal",
@@ -34,7 +34,7 @@ def test_webui_session_metadata_load_skips_cli_metadata_scan(monkeypatch):
 def test_read_only_session_metadata_load_preserves_cli_metadata_lookup(monkeypatch):
     """Read-only imported sidecars still need CLI metadata for source identity."""
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(
         session_id="readonly_sidecar",
@@ -72,7 +72,7 @@ def test_read_only_session_metadata_load_preserves_cli_metadata_lookup(monkeypat
 def test_messaging_session_metadata_load_preserves_cli_metadata_lookup(monkeypatch):
     """Messaging/imported sidecars still need CLI metadata for source identity."""
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(
         session_id="messaging_sidecar",
@@ -111,7 +111,7 @@ def test_messaging_session_metadata_load_preserves_cli_metadata_lookup(monkeypat
 
 def test_messaging_session_metadata_matches_full_display_merge(monkeypatch):
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
     sidecar = [{"role": "user", "content": "hi", "timestamp": 1000}, {"role": "assistant", "content": "ok", "timestamp": 1001}]
     cli = sidecar + [{"role": "assistant", "content": "ok", "timestamp": 1001.7}]
     session = Session(session_id="telegram_resume", title="Telegram", messages=sidecar, session_source="messaging", raw_source="telegram")

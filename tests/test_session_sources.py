@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 
 def test_apply_cli_source_metadata_owns_the_allowlist_and_raw_source_fallback():
-    from api.session_sources import apply_cli_source_metadata
+    from api.sessions.sources import apply_cli_source_metadata
 
     session = SimpleNamespace(title="keep", unexpected="original")
     metadata = {
@@ -40,7 +40,7 @@ def test_apply_cli_source_metadata_owns_the_allowlist_and_raw_source_fallback():
 
 
 def test_import_source_metadata_keeps_storage_fields_explicitly_allowlisted():
-    from api.session_sources import import_source_metadata
+    from api.sessions.sources import import_source_metadata
 
     filtered = import_source_metadata(
         {

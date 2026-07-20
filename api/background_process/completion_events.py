@@ -15,7 +15,7 @@ import uuid
 from typing import Any
 
 from api.process_event_utils import completion_delivery_id
-from api.session_channel import get_session_channel
+from api.sessions import get_session_channel
 
 # Preserve the established operational category during the facade split.
 logger = logging.getLogger("api.background_process")

@@ -129,7 +129,7 @@ def test_post_compression_estimate_uses_compressor_budget_counter_without_metada
 
 
 def test_chat_start_clears_expired_post_compression_estimate(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
     from api.turn_admission import prepare_session_for_turn
 
     saved = []
@@ -152,7 +152,7 @@ def test_chat_start_clears_expired_post_compression_estimate(tmp_path, monkeypat
 
 
 def test_estimate_lineage_matrix(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
     direct = models.Session(session_id="issue4685-direct", post_compression_context_tokens_estimate=4_096)

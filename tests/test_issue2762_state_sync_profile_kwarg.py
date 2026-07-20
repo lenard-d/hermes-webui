@@ -131,7 +131,7 @@ def _make_message_state_db(path: Path, session_id: str, message_count: int, labe
 def two_profile_message_homes(tmp_path, monkeypatch):
     """Minimal multi-profile state.db homes for metadata-only read-path tests."""
     import api.config as config
-    import api.models as models_mod
+    import api.sessions.store as models_mod
     import api.profiles as profiles_mod
     import api.routes as routes_mod
 
@@ -305,7 +305,7 @@ def test_api_session_metadata_only_passes_session_profile_to_summary(
     from urllib.parse import urlparse
     from io import BytesIO
 
-    import api.models as models_mod
+    import api.sessions.store as models_mod
     import api.routes as routes_mod
 
     sid = two_profile_message_homes["sid"]

@@ -2,7 +2,7 @@ import json
 
 
 def test_import_cli_session_preserves_parent_session_id():
-    from api.models import import_cli_session, SESSION_DIR, Session
+    from api.sessions.store import import_cli_session, SESSION_DIR, Session
 
     parent_id = 'parent_lineage_001'
     child_id = 'child_lineage_001'
@@ -35,7 +35,7 @@ def test_import_cli_session_preserves_parent_session_id():
 
 
 def test_import_cli_session_persists_source_metadata_in_the_initial_write():
-    from api.models import import_cli_session, SESSION_DIR, Session
+    from api.sessions.store import import_cli_session, SESSION_DIR, Session
 
     sid = "cli_source_metadata_001"
     (SESSION_DIR / f"{sid}.json").unlink(missing_ok=True)

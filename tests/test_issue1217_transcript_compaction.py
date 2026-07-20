@@ -4,7 +4,7 @@ import json
 import sys
 from types import SimpleNamespace
 
-from api.models import Session, reconciled_state_db_messages_for_session, state_db_delta_after_context
+from api.sessions.store import Session, reconciled_state_db_messages_for_session, state_db_delta_after_context
 
 from api.streaming import (
     _assistant_reply_added_after_current_turn,
@@ -24,7 +24,7 @@ def test_session_persists_model_context_separately_from_display_transcript(tmp_p
     session_dir = state_dir / "sessions"
     session_dir.mkdir(parents=True)
 
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", state_dir / "session_index.json")
@@ -735,7 +735,7 @@ class _FakePostHandler:
 
 def test_handle_chat_sync_writeback_dedupes_full_context_replay(tmp_path, monkeypatch):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     state_dir = tmp_path / "state"
@@ -950,7 +950,7 @@ def test_all_cjk_greetings_drop_stale_compaction_context(tmp_path):
 
 
 def test_retry_truncates_model_context_when_it_is_separate(monkeypatch, tmp_path):
-    import api.session_ops as session_ops
+    import api.sessions.operations as session_ops
 
     session = Session(
         session_id="retry1217",
@@ -988,7 +988,7 @@ def test_retry_truncates_model_context_when_it_is_separate(monkeypatch, tmp_path
 
 
 def test_undo_truncates_model_context_when_it_is_separate(monkeypatch, tmp_path):
-    import api.session_ops as session_ops
+    import api.sessions.operations as session_ops
 
     session = Session(
         session_id="undo1217",

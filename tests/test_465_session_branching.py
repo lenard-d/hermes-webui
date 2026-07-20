@@ -454,7 +454,7 @@ def test_branch_route_keeps_404_for_truly_missing_sessions(monkeypatch):
 
 def test_session_model_parent_session_id(tmp_path):
     """Verify Session model supports parent_session_id."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(workspace=tmp_path, parent_session_id="parent-1")
     assert session.parent_session_id == "parent-1"
@@ -462,7 +462,7 @@ def test_session_model_parent_session_id(tmp_path):
 
 def test_session_compact_includes_parent(tmp_path):
     """Verify compact() includes parent_session_id."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     compact = Session(workspace=tmp_path, parent_session_id="parent-1").compact()
     assert compact["parent_session_id"] == "parent-1"
@@ -470,7 +470,7 @@ def test_session_compact_includes_parent(tmp_path):
 
 def test_session_metadata_fields_includes_parent(monkeypatch, tmp_path):
     """Verify parent_session_id is in METADATA_FIELDS for persistence."""
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "_index.json")

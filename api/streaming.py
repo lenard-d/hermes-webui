@@ -55,7 +55,7 @@ from api.todo_state import attach_todo_state, emit_todo_state  # noqa: F401
 from api.turn_journal import append_turn_journal_event_for_stream  # noqa: F401 -- late-bound local-run facade seam
 from api.runs import TurnExecution  # noqa: F401 -- late-bound local-run facade seam
 from api.usage import prompt_cache_hit_percent  # noqa: F401 -- late-bound local-run facade seam
-from api.models import (  # noqa: F401 -- late-bound local-run facade seams
+from api.sessions.store import (  # noqa: F401 -- late-bound local-run facade seams
     _is_empty_partial_activity_message,  # noqa: F401 -- late-bound streaming facade seam
     _evict_sessions_over_cap,
     clear_process_wakeup_pause,
@@ -66,11 +66,11 @@ from api.models import (  # noqa: F401 -- late-bound local-run facade seams
 # These names are consumed through the late-bound ``streaming_api()`` facade by
 # ``streaming_parts.title_generation``. Keep them public here so existing
 # monkeypatch seams continue to observe the canonical module.
-from api.session_ops import (  # noqa: F401
+from api.sessions.operations import (  # noqa: F401
     mark_session_title_generated,
     session_has_manual_title,
 )
-from api.session_repository import edit_session  # noqa: F401 -- late-bound streaming facade seam
+from api.sessions.repository import edit_session  # noqa: F401 -- late-bound streaming facade seam
 from api.process_event_utils import (
     claim_async_delegation_delivery,
     complete_async_delegation_delivery,
@@ -984,7 +984,7 @@ def _aiagent_import_error_detail() -> str:
     return _streaming_terminal_outcomes.aiagent_import_error_detail(
         _streaming_api(),
     )
-from api.models import get_session, title_from  # noqa: F401 -- late-bound local-run facade seam
+from api.sessions.store import get_session, title_from  # noqa: F401 -- late-bound local-run facade seam
 
 # Fields that are safe to send to LLM provider APIs.
 # Everything else (attachments, timestamp, _ts, etc.) is display-only
@@ -2022,7 +2022,7 @@ def _preserve_pre_compression_snapshot(s, old_sid: str) -> None:
         # Existing file is already at least as complete as memory; stamp only
         # the snapshot marker so index/sidebar projection can hide it without
         # rewriting a shorter messages array over a fuller transcript.
-        from api.models import Session
+        from api.sessions.store import Session
         snapshot = Session.load(old_sid)
         if snapshot:
             snapshot.pre_compression_snapshot = True
@@ -3497,7 +3497,7 @@ def _last_resort_sync_from_core(session, stream_id, agent_lock):
     Called from the outer finally block of _run_agent_streaming.
     Must never raise.
     """
-    from api.models import _get_profile_home, _apply_core_sync_or_error_marker
+    from api.sessions.store import _get_profile_home, _apply_core_sync_or_error_marker
     try:
         # Guard: if a cancel was already requested, bail out — cancel_stream() has
         # already saved partial content and we must not double-append error markers.
@@ -3734,25 +3734,25 @@ def _agent_cache_api_key_sig(resolved_api_key, credential_pool) -> str:
 
 
 def _lifecycle_commit_session_memory(session_id: str, *, agent=None, wait: bool = False) -> bool:
-    from api.session_lifecycle import commit_session_memory
+    from api.sessions.lifecycle import commit_session_memory
 
     return commit_session_memory(session_id, agent=agent, wait=wait)
 
 
 def _lifecycle_has_uncommitted_work(session_id: str) -> bool:
-    from api.session_lifecycle import has_uncommitted_work
+    from api.sessions.lifecycle import has_uncommitted_work
 
     return has_uncommitted_work(session_id)
 
 
 def _lifecycle_unregister_agent(session_id: str) -> None:
-    from api.session_lifecycle import unregister_agent
+    from api.sessions.lifecycle import unregister_agent
 
     unregister_agent(session_id)
 
 
 def _lifecycle_discard_session(session_id: str) -> bool:
-    from api.session_lifecycle import discard_session
+    from api.sessions.lifecycle import discard_session
 
     return discard_session(session_id)
 

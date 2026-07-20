@@ -102,7 +102,8 @@ def test_continuation_lookup_is_profile_scoped(tmp_path, monkeypatch):
 
 def test_continuation_lookup_uses_index_without_scanning_sidecars(tmp_path, monkeypatch):
     """Indexed continuation metadata should avoid an O(all sidecars) recovery scan."""
-    from api import routes, config, models
+    from api import routes, config
+    from api.sessions import store as models
 
     class _S:
         def __init__(self, sid, profile, snap=False):
@@ -187,7 +188,8 @@ def test_empty_indexed_continuation_lookup_falls_back_to_sidecars(tmp_path, monk
 
 def test_stale_index_with_existing_candidate_falls_back_to_newer_sidecar(tmp_path, monkeypatch):
     """A complete-looking result is not trusted when another sidecar is absent from the index."""
-    from api import routes, config, models
+    from api import routes, config
+    from api.sessions import store as models
 
     class _S:
         def __init__(self, sid, profile, snap=False):
@@ -240,7 +242,8 @@ def test_stale_index_with_existing_candidate_falls_back_to_newer_sidecar(tmp_pat
 
 def test_stale_index_multihop_falls_back_to_missing_descendant_sidecar(tmp_path, monkeypatch):
     """An indexed snapshot ancestor must not hide a newer descendant omitted from the index."""
-    from api import routes, config, models
+    from api import routes, config
+    from api.sessions import store as models
 
     class _S:
         def __init__(self, sid, profile, snap=False):
@@ -363,7 +366,8 @@ def test_indexed_continuation_lookup_follows_snapshot_hops_without_scanning(tmp_
 
 def test_indexed_continuation_lookup_keeps_profile_scope(tmp_path, monkeypatch):
     """The index fast path must preserve the cross-profile continuation guard."""
-    from api import routes, config, models
+    from api import routes, config
+    from api.sessions import store as models
 
     class _S:
         def __init__(self, sid, profile, snap=False):

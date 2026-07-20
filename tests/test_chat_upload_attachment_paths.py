@@ -42,7 +42,7 @@ def test_attached_files_context_is_hidden_from_sidebar_titles():
 
 def test_server_provisional_titles_strip_attached_files_context():
     """Server-generated provisional titles must not include the path suffix."""
-    from api.models import title_from
+    from api.sessions.store import title_from
 
     title = title_from([
         {

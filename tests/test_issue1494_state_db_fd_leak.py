@@ -192,7 +192,7 @@ def test_get_cli_session_messages_closes_connection(tmp_path, tracking_sqlite, m
     import api.profiles
     monkeypatch.setattr(api.profiles, "get_active_hermes_home", lambda: str(tmp_path))
 
-    from api.models import get_cli_session_messages
+    from api.sessions.store import get_cli_session_messages
 
     for _ in range(5):
         rows = get_cli_session_messages("s1")
@@ -212,7 +212,7 @@ def test_delete_cli_session_closes_connection(tmp_path, tracking_sqlite, monkeyp
     import api.profiles
     monkeypatch.setattr(api.profiles, "get_active_hermes_home", lambda: str(tmp_path))
 
-    from api.models import delete_cli_session
+    from api.sessions.store import delete_cli_session
 
     deleted = delete_cli_session("s1")
     assert deleted is True, "delete_cli_session should report the row was removed"

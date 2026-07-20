@@ -2,7 +2,7 @@
 
 import copy
 
-from api.session_ops import truncate_context_for_display_keep
+from api.sessions.operations import truncate_context_for_display_keep
 
 
 def test_truncate_context_for_display_keep_drops_parent_tail():

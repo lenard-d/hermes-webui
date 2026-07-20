@@ -12,7 +12,7 @@ import threading
 import time
 import types
 
-from api.models import Session
+from api.sessions.store import Session
 from api.config import SESSION_DIR
 from api.routes import _handle_session_compress, get_session
 from tests._pytest_port import BASE

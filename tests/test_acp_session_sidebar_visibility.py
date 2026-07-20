@@ -18,7 +18,7 @@ import sqlite3
 import time
 import unittest.mock
 
-import api.models as models
+import api.sessions.store as models
 from api.agent_sessions import (
     is_cli_session_row,
     is_cli_session_row_visible,
@@ -151,8 +151,8 @@ def _call_uncached(tmp_path, sessions):
     db = tmp_path / 'state.db'
     _make_state_db(db, sessions)
     with (
-        unittest.mock.patch('api.models.get_claude_code_sessions', return_value=[]),
-        unittest.mock.patch('api.models.ensure_cron_project', return_value='cron-project-id'),
+        unittest.mock.patch('api.sessions.store.get_claude_code_sessions', return_value=[]),
+        unittest.mock.patch('api.sessions.store.ensure_cron_project', return_value='cron-project-id'),
     ):
         return models._load_cli_sessions_uncached(tmp_path, db, None)
 

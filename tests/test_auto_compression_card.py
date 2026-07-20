@@ -3,7 +3,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 from api.compression_anchor import visible_messages_for_anchor
-from api.models import Session
+from api.sessions.store import Session
 from api.streaming import (
     _POST_COMPRESSION_TOOL_RESULT_SUMMARY_FLAG,
     _compressed_context_tool_result_summary,
@@ -1147,7 +1147,7 @@ def test_frontend_uses_context_engine_metadata_for_indexed_context_copy():
 
 
 def test_session_model_round_trips_context_engine_metadata(tmp_path, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
 
     state_dir = tmp_path / "state"
     session_dir = state_dir / "sessions"

@@ -46,7 +46,7 @@ def post(path, body=None):
 def _make_session_with_messages():
     created, _ = post("/api/session/new", {})
     sid = created["session"]["session_id"]
-    from api.models import Session
+    from api.sessions.store import Session
 
     # Current master keeps a freshly /api/session/new session memory-only until
     # its first message is persisted, so Session.load(sid) can return None here.
@@ -188,7 +188,7 @@ def test_share_create_supports_raw_messaging_session_without_webui_sidecar():
 
 
 def test_share_create_uses_messaging_display_transcript_when_sidecar_has_no_messages():
-    from api.models import Session
+    from api.sessions.store import Session
     from tests.test_gateway_sync import _ensure_state_db, _insert_gateway_session, _remove_test_sessions
 
     conn = _ensure_state_db()
@@ -239,7 +239,7 @@ def test_share_create_uses_messaging_display_transcript_when_sidecar_has_no_mess
 @pytest.fixture
 def isolated_share_route_session_store(tmp_path, monkeypatch):
     """Keep direct route race tests out of the shared HTTP server state."""
-    from api import models
+    from api.sessions import store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -256,7 +256,8 @@ def test_share_metadata_commit_preserves_concurrent_transcript_write(
     operation,
 ):
     """Share metadata must not save the stale session resolved before share I/O."""
-    from api import models, routes
+    from api.sessions import store as models
+    from api import routes
 
     sid = f"share_{operation}_concurrent_transcript"
     session = models.Session(
@@ -348,7 +349,8 @@ def test_share_metadata_failure_is_reported_and_publication_fails_closed(
     operation,
 ):
     """A partial share/session commit must not be reported as full success."""
-    from api import models, routes
+    from api.sessions import store as models
+    from api import routes
 
     sid = f"share_{operation}_metadata_failure"
     token = "new-share-token" if operation == "create" else "existing-share-token"
@@ -428,7 +430,8 @@ def test_share_mutation_does_not_resurrect_session_deleted_after_resolution(
     operation,
 ):
     """Only genuinely external sessions may seed a missing local sidecar."""
-    from api import models, routes
+    from api.sessions import store as models
+    from api import routes
 
     sid = f"share_{operation}_deleted_before_owner"
     session = models.Session(
@@ -502,7 +505,8 @@ def test_create_and_revoke_share_file_io_is_serialized_by_session_owner(
     monkeypatch,
 ):
     """A racing revoke must observe and revoke the create that committed first."""
-    from api import config, models, routes
+    from api import config, routes
+    from api.sessions import store as models
 
     sid = "share_create_revoke_owner_interleave"
     session = models.Session(

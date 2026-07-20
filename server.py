@@ -497,7 +497,7 @@ def _log_shutdown_audit(reason: str = "serve_forever_exit") -> None:
 
     active_sessions = []
     try:
-        from api.models import LOCK, SESSIONS
+        from api.sessions.store import LOCK, SESSIONS
         with LOCK:
             session_items = list(SESSIONS.items())
         for sid, session in session_items:
@@ -569,8 +569,8 @@ def main() -> None:
     fix_credential_permissions()
 
     try:
-        from api.models import _active_state_db_path
-        from api.session_recovery import recover_all_sessions_on_startup
+        from api.sessions.store import _active_state_db_path
+        from api.sessions.recovery import recover_all_sessions_on_startup
         result = recover_all_sessions_on_startup(
             SESSION_DIR,
             rebuild_index=True,
@@ -730,7 +730,7 @@ def main() -> None:
         except Exception:
             logger.debug("Failed to stop gateway watcher during shutdown")
         try:
-            from api.session_lifecycle import drain_all_on_shutdown
+            from api.sessions.lifecycle import drain_all_on_shutdown
             drain_all_on_shutdown()
         except Exception:
             logger.debug("Failed to drain lifecycle on shutdown", exc_info=True)

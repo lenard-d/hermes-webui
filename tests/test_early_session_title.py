@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 
 def test_prepare_chat_start_sets_provisional_title_for_default_session(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
     from api.turn_admission import prepare_session_for_turn
 
     saved = []
@@ -41,7 +41,7 @@ def test_prepare_chat_start_sets_provisional_title_for_default_session(tmp_path,
 
 
 def test_prepare_chat_start_sets_provisional_title_in_eager_save_mode(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
     saved = []
 
     def fake_save(self, *args, **kwargs):
@@ -70,7 +70,7 @@ def test_prepare_chat_start_sets_provisional_title_in_eager_save_mode(tmp_path, 
 
 
 def test_prepare_chat_start_does_not_overwrite_manual_title(tmp_path, monkeypatch):
-    from api.models import Session
+    from api.sessions.store import Session
     from api.turn_admission import prepare_session_for_turn
 
     monkeypatch.setattr(Session, "save", lambda self, *a, **k: None)
@@ -92,7 +92,7 @@ def test_prepare_chat_start_does_not_overwrite_manual_title(tmp_path, monkeypatc
 
 def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeypatch):
     import api.config as config
-    from api.models import Session
+    from api.sessions.store import Session
     import api.routes as routes
     import api.turn_admission as turn_admission
 
@@ -135,7 +135,7 @@ def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeyp
 
 
 def test_prompt_provisional_title_still_counts_as_provisional_after_response():
-    from api.models import title_from
+    from api.sessions.store import title_from
     from api.streaming import _is_provisional_title
 
     messages = [
@@ -147,7 +147,7 @@ def test_prompt_provisional_title_still_counts_as_provisional_after_response():
 
 
 def test_prompt_prefix_manual_title_is_not_treated_as_provisional():
-    from api.models import title_from
+    from api.sessions.store import title_from
     from api.streaming import _is_provisional_title
 
     messages = [

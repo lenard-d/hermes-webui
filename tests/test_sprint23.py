@@ -31,7 +31,7 @@ def make_session(created_list):
 
 
 def _make_session_visible(sid):
-    from api.models import Session
+    from api.sessions.store import Session
     from tests.conftest import TEST_WORKSPACE
 
     session = Session(

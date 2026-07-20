@@ -1642,7 +1642,7 @@ def _evict_session_agent(session_id: str) -> None:
         return
     should_close = True
     try:
-        from api.session_lifecycle import commit_session_memory, discard_session, has_uncommitted_work, unregister_agent
+        from api.sessions.lifecycle import commit_session_memory, discard_session, has_uncommitted_work, unregister_agent
         if has_uncommitted_work(session_id):
             commit_session_memory(session_id, agent=agent, wait=True)
         if not has_uncommitted_work(session_id):

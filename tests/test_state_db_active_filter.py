@@ -1,7 +1,7 @@
 import sqlite3
 
-import api.models as models
-from api.models import Session, get_state_db_session_messages, reconciled_state_db_messages_for_session
+import api.sessions.store as models
+from api.sessions.store import Session, get_state_db_session_messages, reconciled_state_db_messages_for_session
 
 
 def _make_state_db(path):

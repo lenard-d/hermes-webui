@@ -1,4 +1,4 @@
-"""Tests for `api.session_export_html` palette injection.
+"""Tests for `api.sessions.export` palette injection.
 
 These guard the contract that:
   1. A palette captured from the live WebUI (getComputedStyle) flows through the
@@ -11,7 +11,7 @@ These guard the contract that:
 """
 from __future__ import annotations
 
-from api.session_export_html import (
+from api.sessions.export import (
     _content_to_text,
     _neutralize_remote_images,
     _palette_to_css,
@@ -230,7 +230,7 @@ def test_text_markdown_remote_image_is_neutralized() -> None:
     assert "<img" not in out                     # no active image element
     assert f'src="{remote}"' not in out           # remote src never emitted
     assert remote in out                          # URL kept as inert text
-    from api.session_export_html import _MD
+    from api.sessions.export import _MD
     if _MD is not None:
         assert "[image:" in out                   # shown via placeholder
 
@@ -242,7 +242,7 @@ def test_text_markdown_data_uri_image_is_kept() -> None:
     data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
     out = _render_markdown(f"embedded ![x]({data_uri})")
     assert data_uri in out
-    from api.session_export_html import _MD
+    from api.sessions.export import _MD
     if _MD is not None:
         assert "<img" in out
 

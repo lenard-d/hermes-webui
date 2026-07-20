@@ -73,7 +73,7 @@ def test_local_handoff_persistence_edits_the_repository_current_session(monkeypa
         None,
     )
 
-    monkeypatch.setattr("api.models.get_session", lambda _sid: stale)
+    monkeypatch.setattr("api.sessions.store.get_session", lambda _sid: stale)
 
     @contextmanager
     def _edit_current(sid, **kwargs):
@@ -244,7 +244,7 @@ def test_no_api_key_handoff_summary_persists_fallback_summary(monkeypatch):
     """No-API-key path should persist fallback summary markers."""
     import api.routes as routes
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     # Force API-path validation to focus on fallback behavior only.
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
@@ -299,7 +299,7 @@ def test_no_api_key_handoff_summary_persists_fallback_summary(monkeypatch):
 def test_stale_runtime_handoff_summary_returns_typed_409_without_persisting(monkeypatch):
     """A stale runtime must remain retryable instead of becoming fallback success."""
     import api.routes as routes
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
     monkeypatch.setattr(
@@ -354,7 +354,7 @@ def test_exception_handoff_summary_persists_fallback_summary(monkeypatch):
     """Unhandled summary exception should still persist a fallback handoff marker."""
     import api.routes as routes
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
     monkeypatch.setattr(routes, "bad", lambda _handler, msg, status=400: {"ok": False, "error": msg, "status": status})
@@ -446,7 +446,7 @@ def test_handoff_summary_retries_once_when_length_limit_reached(monkeypatch):
     """finish_reason='length' should trigger one retry with larger budget."""
     import api.routes as routes
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
     monkeypatch.setattr(routes, "bad", lambda _handler, msg, status=400: {"ok": False, "error": msg, "status": status})
@@ -563,7 +563,7 @@ def test_handoff_summary_codex_output_cap_matches_provider_compatibility(
 ):
     """ChatGPT Codex rejects the cap, while other Responses transports retain it."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
 
     if expects_normalized_base_url:
@@ -652,7 +652,7 @@ def test_handoff_summary_falls_back_when_retry_still_incomplete(monkeypatch):
     """Retry may still truncate; fallback should still return deterministic concise bullets."""
     import api.routes as routes
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.setattr(routes, "require", lambda body, *keys: None)
     monkeypatch.setattr(routes, "bad", lambda _handler, msg, status=400: {"ok": False, "error": msg, "status": status})
@@ -746,7 +746,7 @@ def test_handoff_summary_falls_back_when_retry_still_incomplete(monkeypatch):
 def test_handoff_summary_persistence_targets_both_backends_for_messaging_session(tmp_path, monkeypatch):
     """Messaging sessions should persist handoff summary markers into both local JSON and state.db."""
     import api.routes as routes
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     sid = "messaging_1013_both_backends_01"
@@ -811,7 +811,7 @@ def test_handoff_summary_persistence_targets_both_backends_for_messaging_session
 def test_persisted_handoff_summary_deduplicates_identical_tail_markers(tmp_path, monkeypatch):
     """When the tail already contains the same handoff marker, repeated generation should be idempotent."""
     import api.routes as routes
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     sid = "messaging_1013_dedupe_tail"

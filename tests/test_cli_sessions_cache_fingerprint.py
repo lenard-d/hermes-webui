@@ -19,7 +19,7 @@ def test_content_fingerprint_advances_on_commit():
     """The cache key's content fingerprint must change after any commit, even
     when mtime/size would not reliably change (the WAL-collision flake source).
     """
-    from api.models import _sqlite_file_stat_cache_key, _sqlite_content_fingerprint
+    from api.sessions.store import _sqlite_file_stat_cache_key, _sqlite_content_fingerprint
 
     d = tempfile.mkdtemp()
     p = Path(d) / "state.db"
@@ -52,7 +52,7 @@ def test_content_fingerprint_detects_message_only_change():
     """An in-place session row update or message-only insert must also change the
     fingerprint (sessions COUNT/MAX alone could miss a same-rowid REPLACE).
     """
-    from api.models import _sqlite_content_fingerprint
+    from api.sessions.store import _sqlite_content_fingerprint
 
     d = tempfile.mkdtemp()
     p = Path(d) / "state.db"
@@ -80,7 +80,7 @@ def test_content_fingerprint_safe_on_missing_or_empty_db():
     """The fingerprint must not raise on a missing path or a db without the
     expected tables — it returns None / zeroed parts so the stat fallback applies.
     """
-    from api.models import _sqlite_content_fingerprint
+    from api.sessions.store import _sqlite_content_fingerprint
 
     assert _sqlite_content_fingerprint(Path("/nonexistent/state.db")) is None
 

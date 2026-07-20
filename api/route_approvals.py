@@ -7,7 +7,7 @@ import queue
 import threading
 import uuid
 
-from api.session_events import publish_session_list_changed
+from api.sessions.events import publish_session_list_changed
 
 # Approval system (optional -- graceful fallback if agent not available)
 try:

@@ -6,9 +6,9 @@ import time
 import pytest
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
-from api.models import SESSIONS, Session, all_sessions
+from api.sessions.store import SESSIONS, Session, all_sessions
 
 
 @pytest.fixture(autouse=True)

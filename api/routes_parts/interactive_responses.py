@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from api.clarify import resolve_clarify
     from api.helpers import bad, j
-    from api.models import get_session
+    from api.sessions.store import get_session
     from api.route_approvals import (
         _GATEWAY_MIRROR_FLAG,
         _approval_sse_notify_locked,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         resolve_gateway_approval,
         save_permanent_allowlist,
     )
-    from api.session_events import publish_session_list_changed
+    from api.sessions.events import publish_session_list_changed
 
 
 def _resolve_approval_legacy(sid: str, approval_id: str, choice: str) -> bool:

@@ -10,9 +10,9 @@ from unittest import mock
 import pytest
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import api.streaming as streaming
-from api.models import Session
+from api.sessions.store import Session
 
 
 @pytest.fixture(autouse=True)

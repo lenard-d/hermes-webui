@@ -42,7 +42,7 @@ _SNAPSHOT_ARGS_TRUNCATED_SUFFIX = "...[truncated]"
 
 
 def _default_session_dir() -> Path:
-    from api.models import SESSION_DIR
+    from api.sessions import SESSION_DIR
 
     return Path(SESSION_DIR)
 

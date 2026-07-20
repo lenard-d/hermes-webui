@@ -105,7 +105,7 @@ def test_session_new_still_commits_same_profile_prev_session_id(monkeypatch):
     def _commit(prev_session_id, **kwargs):
         commit_calls.append(prev_session_id)
 
-    import api.session_lifecycle as lifecycle
+    import api.sessions.lifecycle as lifecycle
 
     monkeypatch.setattr(lifecycle, "commit_session_memory", _commit)
 

@@ -10,8 +10,8 @@ a single key, losing tool calls during merge.
 """
 from __future__ import annotations
 
-from api import models
-from api.models import (
+from api.sessions import store as models
+from api.sessions.store import (
     _matching_visible_duplicate,
     _session_message_dedup_key,
     _session_message_merge_key,

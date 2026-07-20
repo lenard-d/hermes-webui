@@ -13,7 +13,7 @@ import sqlite3
 import time
 from unittest import mock
 
-import api.models as models
+import api.sessions.store as models
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -99,10 +99,10 @@ def test_discord_sessions_not_squeezed_out_by_cron(tmp_path):
     _make_state_db(db, cron_count=15, discord_count=5)
 
     with (
-        mock.patch("api.models.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.models.get_last_workspace", return_value=tmp_path),
-        mock.patch("api.models.ensure_cron_project", return_value="cron-project-id"),
-        mock.patch("api.models.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.store.get_last_workspace", return_value=tmp_path),
+        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-project-id"),
+        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
     ):
         result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 
@@ -124,13 +124,13 @@ def test_cron_sessions_recovered_by_second_pass(tmp_path):
 
     with (
         mock.patch(
-            "api.models.read_importable_agent_session_rows",
+            "api.sessions.store.read_importable_agent_session_rows",
             wraps=models.read_importable_agent_session_rows,
         ) as read_rows,
-        mock.patch("api.models.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.models.get_last_workspace", return_value=tmp_path),
-        mock.patch("api.models.ensure_cron_project", return_value="cron-project-id"),
-        mock.patch("api.models.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.store.get_last_workspace", return_value=tmp_path),
+        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-project-id"),
+        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
     ):
         result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 
@@ -198,10 +198,10 @@ def test_webui_sidecarless_sessions_not_excluded(tmp_path):
     conn.close()
 
     with (
-        mock.patch("api.models.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.models.get_last_workspace", return_value=tmp_path),
-        mock.patch("api.models.ensure_cron_project", return_value="cron-project-id"),
-        mock.patch("api.models.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.store.get_last_workspace", return_value=tmp_path),
+        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-project-id"),
+        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
     ):
         result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 

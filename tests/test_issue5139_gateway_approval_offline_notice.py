@@ -11,7 +11,7 @@ from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from api import models
+from api.sessions import store as models
 from api.config import STREAMS, STREAMS_LOCK, invalidate_gateway_caps
 from api.gateway_chat import _run_gateway_chat_streaming
 

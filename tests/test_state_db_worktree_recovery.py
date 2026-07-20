@@ -14,7 +14,7 @@ Caught by Opus advisor on stage-337 review.
 """
 from __future__ import annotations
 
-from api.session_recovery import _state_db_row_to_sidecar
+from api.sessions.recovery import _state_db_row_to_sidecar
 
 
 def test_state_db_recovery_preserves_worktree_metadata():

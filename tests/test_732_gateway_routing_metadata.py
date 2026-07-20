@@ -4,7 +4,7 @@ from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
-from api.models import Session
+from api.sessions.store import Session
 from api.streaming import _normalize_gateway_routing_metadata
 
 

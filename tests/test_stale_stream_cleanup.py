@@ -508,7 +508,7 @@ def test_stale_stream_cleanup_reloads_repository_current_generation(tmp_path, mo
     """A detached full object must not overwrite a newer cached/durable owner."""
     from collections import OrderedDict
 
-    import api.models as models
+    import api.sessions.store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()

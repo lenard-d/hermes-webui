@@ -7,8 +7,8 @@ of the user turn that was submitted just before the restart.
 """
 
 import api.config as config
-import api.models as models
-from api.models import Session, get_session
+import api.sessions.store as models
+from api.sessions.store import Session, get_session
 
 
 def test_stale_stream_cleanup_recovers_pending_turn_on_non_empty_session(tmp_path, monkeypatch):

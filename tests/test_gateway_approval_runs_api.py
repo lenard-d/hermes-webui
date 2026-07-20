@@ -648,7 +648,7 @@ def test_gateway_empty_response_no_approval_banner(tmp_path, monkeypatch):
     """Empty response from chat/completions path emits gateway_empty_response, not gateway_approval_unsupported."""
     from collections import OrderedDict
 
-    from api import models
+    from api.sessions import store as models
     from api.config import STREAMS, STREAMS_LOCK
     from api.gateway_chat import _run_gateway_chat_streaming
 

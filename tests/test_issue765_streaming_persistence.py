@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-import api.models as models
-from api.models import Session
+import api.sessions.store as models
+from api.sessions.store import Session
 
 
 @pytest.fixture(autouse=True)
@@ -487,7 +487,7 @@ class TestIssue765FollowupHardening:
     def test_session_ops_retry_undo_hold_agent_lock(self, operation_name):
         """Both mutations wait for the session owner lock before changing disk."""
         import api.config as config
-        import api.session_ops as session_ops
+        import api.sessions.operations as session_ops
 
         sid = f"owner-lock-{operation_name}"
         session = Session(
@@ -596,7 +596,7 @@ class TestIssue765FollowupHardening:
             t = threading.Thread(target=_periodic_checkpoint, daemon=True)
             t.start()
 
-            from api.session_ops import undo_last
+            from api.sessions.operations import undo_last
             # Collect the allowed message snapshots (each state the session
             # is in at a point where a checkpoint might observe it).
             allowed_message_snapshots = []

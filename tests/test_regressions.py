@@ -55,7 +55,7 @@ def make_session(created_list):
 
 
 def _make_session_visible(sid):
-    from api.models import Session
+    from api.sessions.store import Session
     from tests.conftest import TEST_WORKSPACE
 
     session = Session(
@@ -353,7 +353,7 @@ def test_deleted_session_does_not_appear_in_list(cleanup_test_sessions):
 
 def test_server_delete_prunes_session_index(cleanup_test_sessions):
     """session/delete should prune the deleted row without discarding the index."""
-    from api.models import SESSION_INDEX_FILE
+    from api.sessions.store import SESSION_INDEX_FILE
 
     deleted_sid = make_session(cleanup_test_sessions)
     retained_sid = make_session(cleanup_test_sessions)
@@ -372,7 +372,7 @@ def test_server_delete_prunes_session_index(cleanup_test_sessions):
 
 def test_server_delete_removes_session_bak_snapshot(cleanup_test_sessions):
     """session/delete must remove sidecar backups so deleted sessions stay deleted."""
-    from api.models import SESSION_DIR
+    from api.sessions.store import SESSION_DIR
 
     sid = make_session(cleanup_test_sessions)
     _make_session_visible(sid)

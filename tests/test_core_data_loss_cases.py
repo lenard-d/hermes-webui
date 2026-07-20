@@ -11,7 +11,7 @@ Both are regression tests — they should FAIL against the current code
 """
 from __future__ import annotations
 
-import api.models as models
+import api.sessions.store as models
 import api.webui_session_db as webui_db
 
 
@@ -446,7 +446,7 @@ def test_core_a_route_full_session_load_does_not_resurrect_deleted_turns(tmp_pat
     from urllib.parse import urlparse
 
     import api.routes as routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     state = [
         _msg("user", "original prompt", 100.0),

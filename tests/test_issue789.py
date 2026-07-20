@@ -18,8 +18,8 @@ import time
 
 import pytest
 
-import api.models as models
-from api.models import Session, all_sessions
+import api.sessions.store as models
+from api.sessions.store import Session, all_sessions
 
 
 @pytest.fixture(autouse=True)

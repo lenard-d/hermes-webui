@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import api.routes as routes
-import api.models as models
+import api.sessions.store as models
 import api.profiles as profiles
 import pytest
 

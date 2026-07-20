@@ -18,7 +18,7 @@ def _msg(role: str, content: str, ts: float, mid: str) -> dict:
 
 def _install_isolated_session_env(monkeypatch, tmp_path):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
     import api.routes as routes
 
@@ -61,9 +61,9 @@ def _post_clear(monkeypatch, sid: str):
 
 
 def test_session_clear_persists_empty_context_and_blocks_state_db_replay(monkeypatch, tmp_path):
-    import api.models as models
-    from api.models import Session, merge_session_messages_append_only
-    from api.session_recovery import inspect_session_recovery_status, recover_session
+    import api.sessions.store as models
+    from api.sessions.store import Session, merge_session_messages_append_only
+    from api.sessions.recovery import inspect_session_recovery_status, recover_session
 
     _install_isolated_session_env(monkeypatch, tmp_path)
 
@@ -160,7 +160,7 @@ def test_session_clear_persists_empty_context_and_blocks_state_db_replay(monkeyp
 
 
 def test_empty_sidecar_without_watermark_still_recovers_state_db_rows():
-    from api.models import Session, merge_session_messages_append_only
+    from api.sessions.store import Session, merge_session_messages_append_only
 
     session = Session(
         session_id="issue5532_negative_space",
@@ -185,7 +185,7 @@ def test_empty_sidecar_without_watermark_still_recovers_state_db_rows():
 
 
 def test_clear_sentinel_does_not_suppress_later_backup_recovery(tmp_path):
-    from api.session_recovery import inspect_session_recovery_status, recover_session
+    from api.sessions.recovery import inspect_session_recovery_status, recover_session
 
     live_path = tmp_path / "post_clear_loss.json"
     live = {
@@ -218,8 +218,8 @@ def test_clear_sentinel_does_not_suppress_later_backup_recovery(tmp_path):
 
 
 def test_clearing_empty_live_session_preserves_existing_recoverable_backup(monkeypatch, tmp_path):
-    from api.models import Session
-    from api.session_recovery import inspect_session_recovery_status, recover_session
+    from api.sessions.store import Session
+    from api.sessions.recovery import inspect_session_recovery_status, recover_session
 
     _install_isolated_session_env(monkeypatch, tmp_path)
     sid = "issue5532_empty_live_with_backup"

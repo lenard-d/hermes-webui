@@ -25,7 +25,7 @@ even when it falls beyond the cap.
 """
 from __future__ import annotations
 
-import api.models as models
+import api.sessions.store as models
 
 
 def _capture_probed_ids(monkeypatch):

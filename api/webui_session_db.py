@@ -14,7 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import api.models as models
+import api.sessions.store as models
 
 
 _METADATA_FIELDS = frozenset(

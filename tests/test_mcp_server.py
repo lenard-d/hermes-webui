@@ -41,7 +41,7 @@ if str(_REPO) not in sys.path:
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # These tests mutate module-level constants on api.config / mcp_server /
-# api.models (STATE_DIR, SESSION_DIR, PROJECTS_FILE, …) so the MCP server
+# api.sessions.store (STATE_DIR, SESSION_DIR, PROJECTS_FILE, …) so the MCP server
 # reads from a tmpdir. Without restoration, downstream tests in the full
 # suite (test_pytest_state_isolation, test_provider_quota_status,
 # test_provider_management, etc.) read the now-deleted tmpdir from
@@ -83,7 +83,7 @@ def _cleanup_state_dir(state_dir: Path):
     shutil.rmtree(state_dir, ignore_errors=True)
     os.environ.pop("HERMES_WEBUI_STATE_DIR", None)
 
-    # Restore api.config / mcp_server / api.models module constants.
+    # Restore api.config / mcp_server / api.sessions.store module constants.
     saved = _SAVED_CONSTANTS
     if saved.get("captured"):
         import api.config as _cfg
@@ -93,9 +93,9 @@ def _cleanup_state_dir(state_dir: Path):
             mcp_mod = sys.modules["mcp_server"]
             for attr, val in saved["mcp_server"].items():
                 setattr(mcp_mod, attr, val)
-        if "api.models" in sys.modules:
-            models_mod = sys.modules["api.models"]
-            for attr, val in saved["api.models"].items():
+        if "api.sessions.store" in sys.modules:
+            models_mod = sys.modules["api.sessions.store"]
+            for attr, val in saved["api.sessions.store"].items():
                 setattr(models_mod, attr, val)
         # Restore HERMES_BASE_HOME / HERMES_HOME if we changed them
         for env_key, env_val in saved["env"].items():
@@ -169,15 +169,15 @@ def _reimport_mcp():
                          "WEBUI_URL")
             if hasattr(mod, attr)
         }
-        if "api.models" in sys.modules:
-            models_mod = sys.modules["api.models"]
-            _SAVED_CONSTANTS["api.models"] = {
+        if "api.sessions.store" in sys.modules:
+            models_mod = sys.modules["api.sessions.store"]
+            _SAVED_CONSTANTS["api.sessions.store"] = {
                 attr: getattr(models_mod, attr)
                 for attr in ("STATE_DIR", "PROJECTS_FILE", "SESSION_DIR")
                 if hasattr(models_mod, attr)
             }
         else:
-            _SAVED_CONSTANTS["api.models"] = {}
+            _SAVED_CONSTANTS["api.sessions.store"] = {}
         _SAVED_CONSTANTS["captured"] = True
 
     # Acquire the api.profiles module THAT mcp_server's bound functions read.
@@ -231,11 +231,11 @@ def _reimport_mcp():
     if hasattr(mod, 'SESSION_INDEX_FILE'):
         mod.SESSION_INDEX_FILE = cfg.SESSION_INDEX_FILE
 
-    # api.models also imports STATE_DIR / PROJECTS_FILE etc. as module
+    # api.sessions.store also imports STATE_DIR / PROJECTS_FILE etc. as module
     # constants — re-point those too so load_projects() / save_projects()
     # see the fresh STATE_DIR.
-    if 'api.models' in sys.modules:
-        models_mod = sys.modules['api.models']
+    if 'api.sessions.store' in sys.modules:
+        models_mod = sys.modules['api.sessions.store']
         if hasattr(models_mod, 'STATE_DIR'):
             models_mod.STATE_DIR = cfg.STATE_DIR
         if hasattr(models_mod, 'PROJECTS_FILE'):
@@ -720,7 +720,7 @@ async def test_profiles_match_input_matrix(a, b):
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Maintainer ask: verify that --profile is applied to _active_profile *before*
-# any api.models / api.profiles consumer reads the active profile. The risk
+# any api.sessions.store / api.profiles consumer reads the active profile. The risk
 # is that if the canonical helpers cached the profile on first read at import
 # time, a --profile foo flag passed at startup would bind too late.
 #

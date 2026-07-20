@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from api.helpers import _sanitize_error, bad, j, require, safe_resolve
-    from api.models import get_session_for_file_ops
+    from api.sessions.store import get_session_for_file_ops
     from api.routes import _read_anchored_file_bytes
     from api.workspace import (
         make_anchored_dir,

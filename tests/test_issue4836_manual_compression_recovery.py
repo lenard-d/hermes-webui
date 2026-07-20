@@ -8,10 +8,10 @@ import sys
 import time
 import types
 
-import api.models as models
-from api.models import Session, reconciled_state_db_messages_for_session
+import api.sessions.store as models
+from api.sessions.store import Session, reconciled_state_db_messages_for_session
 from api.routes import _handle_session_compress
-from api.session_recovery import inspect_session_recovery_status, recover_all_sessions_on_startup
+from api.sessions.recovery import inspect_session_recovery_status, recover_all_sessions_on_startup
 
 
 class _FakeHandler:

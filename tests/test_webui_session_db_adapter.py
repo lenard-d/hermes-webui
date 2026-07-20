@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import api.webui_session_db as session_db
 from api.webui_session_db import WebUIJsonSessionDB
 

@@ -16,8 +16,8 @@ cap is the backstop the plain dict lacked.
 """
 from __future__ import annotations
 
-import api.models as models
-from api.models import (
+import api.sessions.store as models
+from api.sessions.store import (
     _CLI_SESSIONS_CACHE_MAX_ENTRIES,
     _cache_cli_sessions_if_current,
     _cli_sessions_cache_invalidation_stamp,

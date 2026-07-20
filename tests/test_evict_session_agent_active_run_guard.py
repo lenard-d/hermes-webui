@@ -66,9 +66,9 @@ def test_evict_closes_session_db_when_no_run_active(monkeypatch):
 
     # Neutralize the lifecycle commit machinery so the test isolates the
     # ACTIVE_RUNS guard + close decision (no uncommitted work => should_close).
-    monkeypatch.setattr("api.session_lifecycle.has_uncommitted_work", lambda *_a, **_k: False)
-    monkeypatch.setattr("api.session_lifecycle.unregister_agent", lambda *_a, **_k: None)
-    monkeypatch.setattr("api.session_lifecycle.discard_session", lambda *_a, **_k: None)
+    monkeypatch.setattr("api.sessions.lifecycle.has_uncommitted_work", lambda *_a, **_k: False)
+    monkeypatch.setattr("api.sessions.lifecycle.unregister_agent", lambda *_a, **_k: None)
+    monkeypatch.setattr("api.sessions.lifecycle.discard_session", lambda *_a, **_k: None)
     try:
         config._evict_session_agent(sid)
         with config.SESSION_AGENT_CACHE_LOCK:

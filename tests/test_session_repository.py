@@ -64,7 +64,7 @@ class _FailingSaveSession(_FakeSession):
 
 
 def test_edit_upgrades_metadata_stub_and_saves_under_the_session_lock():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     stub = _FakeSession("s1", metadata_only=True, messages=[])
@@ -89,7 +89,7 @@ def test_edit_upgrades_metadata_stub_and_saves_under_the_session_lock():
 
 
 def test_edit_does_not_save_a_failed_mutation():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     original_messages = [
@@ -130,7 +130,7 @@ def test_edit_does_not_save_a_failed_mutation():
 
 
 def test_edit_reports_a_busy_session_when_the_bounded_lock_cannot_be_acquired():
-    from api.session_repository import SessionBusyError, SessionRepository
+    from api.sessions.repository import SessionBusyError, SessionRepository
 
     lock = _BusyLock()
     full = _FakeSession("s1", metadata_only=False, messages=[])
@@ -150,7 +150,7 @@ def test_edit_reports_a_busy_session_when_the_bounded_lock_cannot_be_acquired():
 
 
 def test_edit_can_skip_persistence_for_an_unchanged_mutation():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     full = _FakeSession("s1", metadata_only=False, messages=[])
@@ -169,7 +169,7 @@ def test_edit_can_skip_persistence_for_an_unchanged_mutation():
 
 
 def test_edit_reloads_current_session_under_lock_instead_of_saving_stale_argument():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     stale = _FakeSession(
@@ -204,7 +204,7 @@ def test_edit_reloads_current_session_under_lock_instead_of_saving_stale_argumen
 
 
 def test_edit_uses_explicit_seed_only_when_repository_has_no_session():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     seed = _FakeSession("new", metadata_only=False, messages=[])
@@ -223,7 +223,7 @@ def test_edit_uses_explicit_seed_only_when_repository_has_no_session():
 
 
 def test_stream_writeback_reconciles_a_late_signal_after_the_first_save():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])
@@ -269,7 +269,7 @@ def test_stream_writeback_reconciles_a_late_signal_after_the_first_save():
 
 
 def test_stream_writeback_rejects_a_stale_generation_without_mutating_or_saving():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])
@@ -296,7 +296,7 @@ def test_stream_writeback_rejects_a_stale_generation_without_mutating_or_saving(
 
 
 def test_stream_writeback_does_not_resurrect_a_missing_session_from_caller_seed():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     seed = _FakeSession("deleted", metadata_only=False, messages=[])
@@ -329,7 +329,7 @@ def test_stream_writeback_does_not_resurrect_a_missing_session_from_caller_seed(
 
 
 def test_stream_writeback_discards_reconcile_mutation_when_no_resave_is_requested():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])
@@ -377,7 +377,7 @@ def test_stream_writeback_discards_reconcile_mutation_when_no_resave_is_requeste
 
 
 def test_stream_writeback_restores_memory_when_the_first_durable_save_fails():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FailingSaveSession(
@@ -412,7 +412,7 @@ def test_stream_writeback_restores_memory_when_the_first_durable_save_fails():
 
 
 def test_stream_writeback_keeps_the_first_commit_when_reconciliation_save_fails():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FailingSaveSession(
@@ -452,7 +452,7 @@ def test_stream_writeback_keeps_the_first_commit_when_reconciliation_save_fails(
 
 
 def test_write_owner_rejects_deleted_seed_before_cache_publication():
-    from api.session_repository import SessionRepository, SessionWriteRejected
+    from api.sessions.repository import SessionRepository, SessionWriteRejected
 
     lock = _RecordingLock()
     seed = _FakeSession("deleted", metadata_only=False, messages=[])
@@ -479,7 +479,7 @@ def test_write_owner_rejects_deleted_seed_before_cache_publication():
 
 
 def test_admission_compensation_generation_mismatch_is_noop():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])
@@ -508,7 +508,7 @@ def test_admission_compensation_generation_mismatch_is_noop():
 
 
 def test_admission_compensation_does_not_resurrect_missing_baseline_sidecar():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])
@@ -536,7 +536,7 @@ def test_admission_compensation_does_not_resurrect_missing_baseline_sidecar():
 
 
 def test_first_turn_compensation_restores_memory_without_creating_sidecar():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("new", metadata_only=False, messages=[])
@@ -569,7 +569,7 @@ def test_first_turn_compensation_restores_memory_without_creating_sidecar():
 
 
 def test_first_turn_compensation_discards_matching_provisional_sidecar():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("new", metadata_only=False, messages=[])
@@ -602,7 +602,7 @@ def test_first_turn_compensation_discards_matching_provisional_sidecar():
 
 
 def test_first_turn_discard_failure_restores_provisional_memory_state():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("new", metadata_only=False, messages=[])
@@ -637,7 +637,7 @@ def test_first_turn_discard_failure_restores_provisional_memory_state():
 
 
 def test_admission_compensation_restores_memory_when_restore_raises():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])
@@ -668,7 +668,7 @@ def test_admission_compensation_restores_memory_when_restore_raises():
 
 
 def test_admission_compensation_commits_before_marker_callback_and_tolerates_index_failure():
-    from api.session_repository import SessionRepository
+    from api.sessions.repository import SessionRepository
 
     lock = _RecordingLock()
     current = _FakeSession("s1", metadata_only=False, messages=[])

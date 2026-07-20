@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 def test_new_session_does_not_inherit_display_personality_from_config():
     """display.personality='taleb' must not stamp Session.personality."""
-    import api.models as m
+    import api.sessions.store as m
     import api.config as cfg_mod
 
     cfg = {
@@ -32,7 +32,7 @@ def test_new_session_does_not_inherit_display_personality_from_config():
 
 def test_new_session_still_defaults_to_no_personality_when_config_missing():
     """Missing display.personality continues to produce personality=None."""
-    import api.models as m
+    import api.sessions.store as m
     import api.config as cfg_mod
 
     cfg = {"agent": {"personalities": {}}}

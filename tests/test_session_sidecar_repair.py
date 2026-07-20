@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-import api.models as models
-from api.models import (
+import api.sessions.store as models
+from api.sessions.store import (
     Session,
     _get_profile_home,
     _apply_core_sync_or_error_marker,

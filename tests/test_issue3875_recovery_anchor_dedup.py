@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 import api.profiles as profiles
-from api.models import Session, _append_journaled_partial_output
+from api.sessions.store import Session, _append_journaled_partial_output
 from api.run_journal import append_run_event
 
 

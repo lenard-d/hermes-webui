@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from api.session_recovery import recover_missing_sidecars_from_state_db, audit_session_recovery
+from api.sessions.recovery import recover_missing_sidecars_from_state_db, audit_session_recovery
 
 
 def _make_state_db(path, *, sid="state_only_001", source="webui", messages=2):
@@ -49,7 +49,7 @@ def test_recover_missing_sidecars_from_state_db_materializes_webui_row(tmp_path)
 
 
 def test_recover_missing_sidecars_from_state_db_skips_deleted_webui_tombstone(tmp_path, monkeypatch):
-    import api.models as _m
+    import api.sessions.store as _m
     monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="deleted_webui_001")
     _write_index(tmp_path, [
@@ -74,7 +74,7 @@ def test_recover_missing_sidecars_index_only_no_tombstone_is_repairable(tmp_path
     """A crash that loses the sidecar (index intact, NO durable tombstone) must
     still be recovered from state.db — the index heuristic alone must not
     suppress repair (#5504 Codex/Opus finding; matches origin/master behavior)."""
-    import api.models as _m
+    import api.sessions.store as _m
     monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="crashed_webui_001")
     _write_index(tmp_path, [
@@ -92,7 +92,7 @@ def test_recover_missing_sidecars_index_only_no_tombstone_is_repairable(tmp_path
 
 
 def test_audit_reports_deleted_webui_tombstone_is_unsafe(tmp_path, monkeypatch):
-    import api.models as _m
+    import api.sessions.store as _m
     monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="deleted_webui_001")
     _write_index(tmp_path, [
@@ -131,7 +131,7 @@ def test_audit_no_double_count_when_bak_and_state_db_row_both_survive(tmp_path, 
     yield EXACTLY ONE deleted-webui-tombstone audit item, not two (#5504 SILENT
     finding — the orphan-.bak branch and the state.db missing-sidecar loop both
     used to emit it)."""
-    import api.models as _m
+    import api.sessions.store as _m
     import json as _json
     monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="deleted_both_001")
@@ -156,7 +156,7 @@ def test_audit_no_double_count_when_bak_and_state_db_row_both_survive(tmp_path, 
 
 
 def test_recover_missing_sidecars_skips_durable_delete_tombstone_without_index(tmp_path, monkeypatch):
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = _make_state_db(tmp_path / "state.db", sid="durable_deleted_001")
     monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
@@ -181,7 +181,7 @@ def test_recover_missing_sidecars_skips_durable_delete_tombstone_without_index(t
 
 
 def test_audit_skips_index_missing_file_when_durable_delete_tombstone_survives(tmp_path, monkeypatch):
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = "durable_deleted_index_001"
     _write_index(tmp_path, [
@@ -208,7 +208,7 @@ def test_audit_skips_index_missing_file_when_durable_delete_tombstone_survives(t
 
 
 def test_audit_skips_orphan_backup_when_durable_delete_tombstone_survives(tmp_path, monkeypatch):
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = _make_state_db(tmp_path / "state.db", sid="durable_deleted_backup_001")
     (tmp_path / f"{sid}.json.bak").write_text(
@@ -333,7 +333,7 @@ def test_materialized_sidecar_round_trips_through_session_load(tmp_path, monkeyp
     _state_db_row_to_sidecar() falls out of sync with what Session.__init__
     expects. See Opus review on PR #2041 for context.
     """
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = _make_state_db(tmp_path / "state.db", sid="rt_001", messages=3)
 
@@ -377,7 +377,7 @@ def test_recover_missing_sidecars_uses_per_process_tmp_suffix(tmp_path):
 
     # And the source explicitly references pid + tid in the suffix
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "api" / "session_recovery.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parent.parent / "api" / "sessions" / "recovery.py").read_text(encoding="utf-8")
     assert "os.getpid()" in src and "threading.current_thread().ident" in src, (
         ".reconcile.tmp suffix must include pid + tid for concurrency safety"
     )

@@ -4,7 +4,7 @@ from tests.frontend_asset_contract import family_source
 
 
 def test_project_assigned_cron_rows_are_returned_but_default_hidden():
-    from api.models import _include_project_hidden_background_sidebar_sessions
+    from api.sessions.store import _include_project_hidden_background_sidebar_sessions
 
     visible = [
         {"session_id": "webui-1", "title": "Normal", "message_count": 1, "project_id": None},

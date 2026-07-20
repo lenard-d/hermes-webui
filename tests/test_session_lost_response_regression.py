@@ -22,11 +22,11 @@ import time
 
 import pytest
 
-import api.models as models
+import api.sessions.store as models
 import api.config as config
 import api.profiles as profiles
 import api.streaming as streaming  # noqa: F401  imported for fixture parity
-from api.models import (
+from api.sessions.store import (
     Session,
     _apply_core_sync_or_error_marker,
     merge_session_messages_append_only,

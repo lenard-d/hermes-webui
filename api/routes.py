@@ -53,7 +53,7 @@ from api.compression_recovery import (
     compression_recovery_payload_for_session,
     is_generic_continuation_intent,
 )
-from api.session_events import (
+from api.sessions.events import (
     add_session_list_changed_listener,
     publish_session_list_changed,
     subscribe_session_events,
@@ -61,7 +61,7 @@ from api.session_events import (
 )
 from api.gateway_restart import restart_active_profile_gateway
 from api.shares import create_or_refresh_share, load_share, revoke_share
-from api.session_repository import (
+from api.sessions.repository import (
     SessionActiveError,
     SessionBusyError,
     cleanup_session_store,
@@ -69,7 +69,7 @@ from api.session_repository import (
     edit_session,
     get_full_session,
 )
-from api.session_sources import apply_cli_source_metadata
+from api.sessions.sources import apply_cli_source_metadata
 from api.routes_parts._binding import install_routes_part as _install_routes_part
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ def _persist_generated_session_title(
             if not _looks_like_default_cli_title(latest_meta):
                 return session.title
         session.title = normalized_title
-        from api.session_ops import mark_session_title_generated
+        from api.sessions.operations import mark_session_title_generated
 
         # mark_session_title_generated sets s.llm_title_generated = True and clears manual_title.
         mark_session_title_generated(session)
@@ -237,7 +237,7 @@ def _on_session_list_changed(profile: str | None = None) -> None:
     # window (≤30s) rather than instantly. That bound is the deliberate
     # latency/CPU trade-off of the freeze.
     try:
-        from api.models import clear_cli_sessions_cache
+        from api.sessions.store import clear_cli_sessions_cache
         clear_cli_sessions_cache()
     except Exception:
         logger.debug("Failed to clear CLI sessions cache on session list change", exc_info=True)
@@ -701,7 +701,7 @@ for _live_models_compat_class in (
 del _live_models_compat_class
 
 
-from api import route_session_list_cache as _route_session_list_cache
+from api.sessions import sidebar_cache as _route_session_list_cache
 
 _SESSIONS_CACHE = _route_session_list_cache._SESSIONS_CACHE
 _SESSIONS_CACHE_INFLIGHT = _route_session_list_cache._SESSIONS_CACHE_INFLIGHT
@@ -862,7 +862,7 @@ def _prune_orphaned_webui_zero_message_sessions(rows, *, diag_stage=None):
     # Gate predicate mirrors the inline block that lived here before the
     # helper extract. The (title!='Untitled' OR count>0) clause is what makes
     # this gate actually reach a row #1171 kept — without it, the gate is a
-    # no-op because ``all_sessions()`` at ``api/models.py:3892-3898`` (and
+    # no-op because ``all_sessions()`` in the session store (and
     # its full-scan fallback at 3946-3952) has already stripped every
     # (Untitled ∧ count==0 ∧ ¬active_stream_id ∧ ¬has_pending_user_message ∧
     # ¬worktree_path) row before our prune block runs.
@@ -908,7 +908,7 @@ def _prune_orphaned_webui_zero_message_sessions(rows, *, diag_stage=None):
         # common live-row path takes the ``else`` branch and pays
         # nothing). Full ``Session.load`` is intentional (vs
         # ``load_metadata_only`` which zeroes the messages array at
-        # ``api/models.py:1210``).
+        # the session store's projection filter.
         for row in profile_rows:
             sid = str(row.get("session_id") or "").strip()
             if not sid:
@@ -924,11 +924,11 @@ def _prune_orphaned_webui_zero_message_sessions(rows, *, diag_stage=None):
                 # 4584722701, supersedes the r5 cached-count signal).
                 # Full ``Session.load`` is intentional (vs
                 # ``load_metadata_only`` which zeros the messages array
-                # at ``api/models.py:1210``); the common live-row path
+                # in the session store); the common live-row path
                 # pays nothing because it skips the load via the
                 # ``else`` branch below.
                 try:
-                    from api.models import Session as _Session
+                    from api.sessions.store import Session as _Session
                     _loaded = _Session.load(sid)
                     sidecar_has_messages = bool(
                         _loaded is not None and len(_loaded.messages or []) > 0
@@ -1170,7 +1170,7 @@ def _build_session_list_cache_payload(
         #
         # The (title!='Untitled' OR count>0) clause is the part that makes
         # this gate actually reach a row #1171 kept. Without it, the gate is
-        # a no-op because all_sessions() at api/models.py:3892-3898 and
+        # a no-op because all_sessions() in the session store and
         # 3946-3952 has already stripped every (Untitled ∧ count==0 ∧
         # ¬active_stream_id ∧ ¬has_pending_user_message ∧ ¬worktree_path)
         # row before this point — making the earlier 6-condition gate a
@@ -1762,7 +1762,7 @@ def _clear_stale_stream_state(session) -> bool:
         return False
     grace_seconds = 30.0
     try:
-        from api.models import _REPAIR_STALE_PENDING_GRACE_SECONDS
+        from api.sessions.store import _REPAIR_STALE_PENDING_GRACE_SECONDS
         grace_seconds = float(_REPAIR_STALE_PENDING_GRACE_SECONDS)
         pending_started_at = getattr(session, "pending_started_at", None)
         pending_age = time.time() - float(pending_started_at) if pending_started_at else None
@@ -1814,7 +1814,7 @@ def _clear_stale_stream_state(session) -> bool:
 
             if getattr(current, "pending_user_message", None):
                 try:
-                    from api.models import (
+                    from api.sessions.store import (
                         _apply_core_sync_or_error_marker,
                         _get_profile_home,
                     )
@@ -2437,7 +2437,7 @@ _install_routes_part(globals(), _session_projection_routes_part)
 del _session_projection_routes_part
 
 
-from api.models import (
+from api.sessions.store import (
     Session,
     cache_full_session,
     get_session,
@@ -2749,7 +2749,7 @@ from api.routes_parts.llm_wiki import (  # noqa: F401 - compatibility facade re-
 def _handle_insights(handler, parsed) -> bool:
     """Return usage analytics from local WebUI and Hermes session data."""
     from api.insights import build_insights
-    from api.models import _active_state_db_path
+    from api.sessions.store import _active_state_db_path
 
     payload = build_insights(
         parsed.query,
@@ -4722,7 +4722,7 @@ def handle_get(handler, parsed) -> bool:
         return j(handler, report)
 
     if parsed.path == "/api/session/recovery/audit":
-        from api.session_recovery import audit_session_recovery
+        from api.sessions.recovery import audit_session_recovery
         return j(handler, audit_session_recovery(SESSION_DIR, state_db_path=_active_state_db_path()))
 
     if parsed.path == "/api/session/status":
@@ -4730,7 +4730,7 @@ def handle_get(handler, parsed) -> bool:
         if not sid:
             return bad(handler, "Missing session_id")
         try:
-            from api.session_ops import session_status
+            from api.sessions.operations import session_status
             _clear_stale_stream_state(get_session(sid, metadata_only=True))
             return j(handler, session_status(sid))
         except KeyError:
@@ -4747,7 +4747,7 @@ def handle_get(handler, parsed) -> bool:
         if not sid:
             return bad(handler, "Missing session_id")
         try:
-            from api.session_ops import session_usage
+            from api.sessions.operations import session_usage
             return j(handler, session_usage(sid))
         except KeyError:
             return bad(handler, "Session not found", 404)
@@ -5713,7 +5713,7 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, "Failed to uninstall extension", status=500)
 
     if parsed.path == "/api/session/recovery/repair-safe":
-        from api.session_recovery import repair_safe_session_recovery
+        from api.sessions.recovery import repair_safe_session_recovery
         result = repair_safe_session_recovery(SESSION_DIR, state_db_path=_active_state_db_path())
         return j(handler, result, status=200 if result.get("clean") else 409)
 
@@ -5981,7 +5981,7 @@ def handle_post(handler, parsed) -> bool:
                 # the request thread is safe.
                 def _commit_prev_session_memory(_sid=prev_session_id):
                     try:
-                        from api.session_lifecycle import commit_session_memory
+                        from api.sessions.lifecycle import commit_session_memory
                         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
                         prev_agent = None
                         with SESSION_AGENT_CACHE_LOCK:
@@ -5999,7 +5999,7 @@ def handle_post(handler, parsed) -> bool:
                         # Self-unregister so the background-commit registry does
                         # not leak completed threads; drain only tracks live ones.
                         try:
-                            from api.session_lifecycle import _unregister_background_commit_thread
+                            from api.sessions.lifecycle import _unregister_background_commit_thread
                             _unregister_background_commit_thread(threading.current_thread())
                         except Exception:
                             pass
@@ -6009,7 +6009,7 @@ def handle_post(handler, parsed) -> bool:
                     daemon=True,
                     name=f"commit-memory-{prev_session_id}",
                 )
-                from api.session_lifecycle import _register_background_commit_thread
+                from api.sessions.lifecycle import _register_background_commit_thread
                 # Refused only if shutdown draining has already begun; in that
                 # window the inline drain commits the pending generation instead,
                 # so skipping the worker start is safe (avoids a late daemon
@@ -6237,9 +6237,9 @@ def handle_post(handler, parsed) -> bool:
             return bad(handler, str(e), 500)
 
     if parsed.path == "/api/admin/reload":
-        # Hot-reload api.models module to pick up code changes without restart.
+        # Hot-reload the session store to pick up code changes without restart.
         import importlib
-        from api import models as _models
+        import api.sessions.store as _models
         importlib.reload(_models)
         # Also re-expose get_session from the reloaded module so routes.py
         # continues to work (routes.py imported it at module level).
@@ -6247,7 +6247,7 @@ def handle_post(handler, parsed) -> bool:
         _routes.get_session = _models.get_session
         _routes.Session = _models.Session
         _routes.compact = _models.compact
-        return j(handler, {"status": "ok", "reloaded": "api.models"})
+        return j(handler, {"status": "ok", "reloaded": "api.sessions.store"})
 
     if parsed.path == "/api/sessions/cleanup":
         return _handle_sessions_cleanup(handler, body, zero_only=False)
@@ -6270,7 +6270,7 @@ def handle_post(handler, parsed) -> bool:
         except PermissionError:
             return bad(handler, "Read-only imported sessions cannot be renamed from WebUI", 403)
         with edit_session(body["session_id"], session=s) as s:
-            from api.session_ops import apply_session_title_rename
+            from api.sessions.operations import apply_session_title_rename
             apply_session_title_rename(s, body["title"])
         _sync_session_title_to_insights(s)
         publish_session_list_changed(
@@ -6603,7 +6603,7 @@ def handle_post(handler, parsed) -> bool:
             # /clear wiped s.messages but left the watermark unset, so the
             # append-only state.db merge treated it as "keep everything" and the
             # cleared history resurrected on the next /api/session read (#5532).
-            from api.session_ops import truncate_session_at_keep
+            from api.sessions.operations import truncate_session_at_keep
             truncate_session_at_keep(s, 0)
             s.tool_calls = []
             # A compressed-continuation child keeps its archived transcript in a
@@ -6641,7 +6641,7 @@ def handle_post(handler, parsed) -> bool:
             # session also clears manual_title/llm_title_generated — otherwise the
             # reused session keeps its manual-title protection and never auto-names
             # again (#3542 lifecycle gap).
-            from api.session_ops import apply_session_title_rename
+            from api.sessions.operations import apply_session_title_rename
             apply_session_title_rename(s, "Untitled")
         persisted_clear = False
         try:
@@ -6699,7 +6699,7 @@ def handle_post(handler, parsed) -> bool:
         if keep < 0:
             return bad(handler, "keep_count must be non-negative")
         with edit_session(body["session_id"], session=s) as s:
-            from api.session_ops import truncate_session_at_keep
+            from api.sessions.operations import truncate_session_at_keep
 
             old_msg_count, old_ctx_count = truncate_session_at_keep(s, keep)
             logger.info(
@@ -6777,7 +6777,7 @@ def handle_post(handler, parsed) -> bool:
             branch_title = f"{source_title} (fork)"
 
         # Create new session inheriting workspace/model/profile
-        from api.session_ops import truncate_context_for_display_keep
+        from api.sessions.operations import truncate_context_for_display_keep
 
         fork_keep = keep_count if keep_count is not None else len(source_messages)
         forked_context = truncate_context_for_display_keep(
@@ -6843,7 +6843,7 @@ def handle_post(handler, parsed) -> bool:
         if _session_is_subagent_view_only(body["session_id"]):
             return bad(handler, "Subagent sessions are view-only and cannot be modified from WebUI", 400)
         try:
-            from api.session_ops import retry_last
+            from api.sessions.operations import retry_last
             result = retry_last(body["session_id"])
             return j(handler, {"ok": True, **result})
         except KeyError:
@@ -6859,7 +6859,7 @@ def handle_post(handler, parsed) -> bool:
         if _session_is_subagent_view_only(body["session_id"]):
             return bad(handler, "Subagent sessions are view-only and cannot be modified from WebUI", 400)
         try:
-            from api.session_ops import undo_last
+            from api.sessions.operations import undo_last
             result = undo_last(body["session_id"])
             return j(handler, {"ok": True, **result})
         except KeyError:
@@ -7359,7 +7359,7 @@ def handle_post(handler, parsed) -> bool:
             except Exception:
                 pass
             try:
-                from api.models import clear_cli_sessions_cache
+                from api.sessions.store import clear_cli_sessions_cache
                 clear_cli_sessions_cache()
             except Exception:
                 pass
@@ -8324,7 +8324,7 @@ def _handle_session_export(handler, parsed):
     qs = parse_qs(parsed.query)
     fmt = qs.get("format", ["json"])[0].lower()
     if fmt == "html":
-        from api.session_export_html import render_session_html
+        from api.sessions.export import render_session_html
         theme = qs.get("theme", ["dark"])[0].lower()
         palette: dict | None = None
         raw_palette = qs.get("palette", [""])[0]
@@ -9631,7 +9631,7 @@ def _handle_conversation_rounds(handler, body):
         except (TypeError, ValueError):
             return bad(handler, "since must be a unix timestamp (number)")
 
-    from api.models import count_conversation_rounds, CONVERSATION_ROUND_THRESHOLD
+    from api.sessions.store import count_conversation_rounds, CONVERSATION_ROUND_THRESHOLD
 
     rounds = count_conversation_rounds(sid, since=since)
     return j(handler, {

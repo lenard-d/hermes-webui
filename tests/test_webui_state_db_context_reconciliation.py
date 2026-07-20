@@ -31,10 +31,10 @@ def _make_state_db(path: Path, sid: str, rows):
 
 def test_next_webui_turn_context_includes_state_db_external_messages(monkeypatch, tmp_path):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
     import api.streaming as streaming
-    from api.models import Session
+    from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -145,7 +145,7 @@ def test_next_webui_turn_context_includes_state_db_external_messages(monkeypatch
 
 
 def test_state_db_delta_after_context_allows_recovered_turn_prefix():
-    from api.models import state_db_delta_after_context
+    from api.sessions.store import state_db_delta_after_context
 
     sidecar_context = [
         {
@@ -180,7 +180,7 @@ def test_state_db_delta_after_context_allows_recovered_turn_prefix():
 
 
 def test_state_db_delta_after_context_does_not_promote_unrelated_prefix_as_recovered():
-    from api.models import state_db_delta_after_context
+    from api.sessions.store import state_db_delta_after_context
 
     sidecar_context = [
         {"role": "user", "content": "hi", "_recovered": True},
@@ -198,9 +198,9 @@ def test_state_db_delta_after_context_does_not_promote_unrelated_prefix_as_recov
 
 def test_webui_streaming_normalizes_trailing_prefill_user_before_current_turn(monkeypatch, tmp_path):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.streaming as streaming
-    from api.models import new_session
+    from api.sessions.store import new_session
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()

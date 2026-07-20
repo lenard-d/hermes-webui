@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import api.agent_sessions as agent_sessions
-import api.models as models
+import api.sessions.store as models
 import api.profiles as profiles
 import api.routes as routes
 

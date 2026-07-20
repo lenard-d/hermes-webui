@@ -22,7 +22,7 @@ def _get_projects(base_url):
 
 def test_ensure_cron_project_creates_project():
     """ensure_cron_project() should create a 'Cron Jobs' project if none exists."""
-    from api.models import ensure_cron_project, load_projects, save_projects
+    from api.sessions.store import ensure_cron_project, load_projects, save_projects
 
     # Remove any existing Cron Jobs project to test creation
     projects = load_projects()
@@ -45,7 +45,7 @@ def test_ensure_cron_project_creates_project():
 
 def test_ensure_cron_project_idempotent():
     """Calling ensure_cron_project() twice should return the same ID."""
-    from api.models import ensure_cron_project, load_projects, save_projects
+    from api.sessions.store import ensure_cron_project, load_projects, save_projects
 
     projects = load_projects()
     save_projects([p for p in projects if p.get('name') != 'Cron Jobs'])
@@ -57,7 +57,7 @@ def test_ensure_cron_project_idempotent():
 
 def test_is_cron_session():
     """is_cron_session should detect cron sessions by source_tag or ID prefix."""
-    from api.models import is_cron_session
+    from api.sessions.store import is_cron_session
 
     # By source_tag
     assert is_cron_session("any_id", source_tag="cron") is True
@@ -87,7 +87,7 @@ def test_cron_jobs_project_i18n_key_exists():
 
 def test_cron_session_gets_project_id_in_cli_list():
     """get_cli_sessions() should assign project_id for cron sessions."""
-    from api.models import get_cli_sessions
+    from api.sessions.store import get_cli_sessions
     # Just verify the function is callable and returns a list
     # The actual project assignment is tested indirectly via integration
     sessions = get_cli_sessions()

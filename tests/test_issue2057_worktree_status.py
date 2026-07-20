@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 
 import pytest
 
-import api.models as models
-from api.models import SESSIONS, Session
+import api.sessions.store as models
+from api.sessions.store import SESSIONS, Session
 
 
 def _git(cwd, *args):

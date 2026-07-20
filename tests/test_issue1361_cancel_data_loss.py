@@ -22,9 +22,9 @@ from unittest.mock import Mock, patch
 import pytest
 
 import api.config as config
-import api.models as models
+import api.sessions.store as models
 import api.streaming as streaming
-from api.models import Session
+from api.sessions.store import Session
 from api.run_journal import append_run_event
 from api.streaming import cancel_stream
 

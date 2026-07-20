@@ -25,7 +25,7 @@ guard allows newer state.db rows to merge in.
 ``0.0`` is the truncate-to-empty sentinel (#2914) that must keep blocking all
 state replay, so the advance is falsy-gated and never touches ``0.0``.
 """
-import api.models as models
+import api.sessions.store as models
 import api.streaming as streaming
 
 

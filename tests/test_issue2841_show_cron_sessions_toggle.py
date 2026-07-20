@@ -3,7 +3,7 @@ from tests.frontend_asset_contract import family_source
 
 import pathlib
 
-from api.models import _hide_from_default_sidebar
+from api.sessions.store import _hide_from_default_sidebar
 
 ROOT = pathlib.Path(__file__).parent.parent
 

@@ -27,13 +27,14 @@ from .runtime_state import (
     finish_runtime_run,
     register_runtime_stream,
 )
-from api.models import _REPAIR_STALE_PENDING_GRACE_SECONDS, title_from
-from api.session_repository import (
+from api.sessions import (
+    REPAIR_STALE_PENDING_GRACE_SECONDS,
+    SessionWriteRejected,
     admission_write_owner,
     compensate_failed_admission,
-    SessionWriteRejected,
+    publish_session_list_changed,
+    title_from,
 )
-from api.session_events import publish_session_list_changed
 from api.turn_journal import (
     TurnJournalCommitUnknown,
     append_turn_journal_event,
@@ -298,7 +299,7 @@ def start_local_turn(
                     active_stream_id=locked_stream_id,
                     pending_user_message=getattr(session, "pending_user_message", None),
                     pending_started_at=getattr(session, "pending_started_at", None),
-                    pending_grace_seconds=float(_REPAIR_STALE_PENDING_GRACE_SECONDS),
+                    pending_grace_seconds=float(REPAIR_STALE_PENDING_GRACE_SECONDS),
                 )
                 if blocking:
                     diag.stage("response_write") if diag else None

@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-import api.models as models
-from api.models import (
+import api.sessions.store as models
+from api.sessions.store import (
     Session,
     _append_journaled_partial_output,
     _apply_core_sync_or_error_marker,

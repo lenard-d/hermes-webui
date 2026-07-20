@@ -6,8 +6,8 @@ import time
 
 
 def test_missing_index_starts_background_rebuild_while_preserving_first_scan(monkeypatch, tmp_path):
-    import api.models as models
-    from api.models import all_sessions
+    import api.sessions.store as models
+    from api.sessions.store import all_sessions
 
     # Hermetic isolation: a prior test in the same worker may have left the
     # background rebuild thread bookkeeping populated. Since #3884 the start

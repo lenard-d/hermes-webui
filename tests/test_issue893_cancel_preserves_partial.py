@@ -71,12 +71,12 @@ class TestCancelStreamPreservesPartial:
     def test_cancel_stream_saves_partial_text_to_session(self, tmp_path, monkeypatch):
         """cancel_stream() persists accumulated partial text as an assistant message."""
         import queue
-        from api.models import Session
+        from api.sessions.store import Session
         from api.streaming import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
-        import api.models as _models
+        import api.sessions.store as _models
         monkeypatch.setattr(config, 'SESSION_DIR', session_dir)
         monkeypatch.setattr(config, 'SESSION_INDEX_FILE', session_dir / '_index.json')
         monkeypatch.setattr(_models, 'SESSION_DIR', session_dir)
@@ -109,7 +109,7 @@ class TestCancelStreamPreservesPartial:
         assert result is True
 
         # Reload the session and check messages
-        from api.models import Session
+        from api.sessions.store import Session
         saved = Session.load('sess_partial')
         assert saved is not None
 
@@ -134,12 +134,12 @@ class TestCancelStreamPreservesPartial:
     def test_cancel_stream_with_no_partial_text_still_saves_cancel_marker(self, tmp_path, monkeypatch):
         """If no tokens were streamed before cancel, only the cancel marker is saved."""
         import queue
-        from api.models import Session
+        from api.sessions.store import Session
         from api.streaming import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
-        import api.models as _models
+        import api.sessions.store as _models
         monkeypatch.setattr(config, 'SESSION_DIR', session_dir)
         monkeypatch.setattr(config, 'SESSION_INDEX_FILE', session_dir / '_index.json')
         monkeypatch.setattr(_models, 'SESSION_DIR', session_dir)
@@ -178,12 +178,12 @@ class TestCancelStreamPreservesPartial:
     def test_cancel_stream_strips_thinking_markup_from_partial(self, tmp_path, monkeypatch):
         """Thinking blocks in partial text are stripped before saving."""
         import queue
-        from api.models import Session
+        from api.sessions.store import Session
         from api.streaming import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
-        import api.models as _models
+        import api.sessions.store as _models
         monkeypatch.setattr(config, 'SESSION_DIR', session_dir)
         monkeypatch.setattr(config, 'SESSION_INDEX_FILE', session_dir / '_index.json')
         monkeypatch.setattr(_models, 'SESSION_DIR', session_dir)
@@ -224,12 +224,12 @@ class TestCancelStreamPreservesPartial:
     def test_cancel_stream_strips_unclosed_think_tag(self, tmp_path, monkeypatch):
         """The common cancel-mid-reasoning case: <think> block without a closing tag."""
         import queue
-        from api.models import Session
+        from api.sessions.store import Session
         from api.streaming import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
-        import api.models as _models
+        import api.sessions.store as _models
         monkeypatch.setattr(config, 'SESSION_DIR', session_dir)
         monkeypatch.setattr(config, 'SESSION_INDEX_FILE', session_dir / '_index.json')
         monkeypatch.setattr(_models, 'SESSION_DIR', session_dir)
@@ -307,7 +307,7 @@ class TestPartialMessageInContext:
         "Here is the answer:" would be a substring of many later partial bodies
         and silently drop the new partial, resurrecting the #893 data-loss bug.
         '''
-        from api.models import Session
+        from api.sessions.store import Session
 
         # Build a session that already has a short prior assistant reply
         s = Session(session_id='sess_short_prior', title='Test')
@@ -350,7 +350,7 @@ class TestPartialMessageInContext:
         with exactly the same content (e.g. cancel_stream re-entered for the
         same stream id after STREAMS_LOCK is released).
         '''
-        from api.models import Session
+        from api.sessions.store import Session
 
         s = Session(session_id='sess_exact_dedup', title='Test')
         s.messages = [
@@ -382,7 +382,7 @@ class TestPartialMessageInContext:
         prior message was a completed turn from an earlier conversation,
         and the new _partial belongs to the current cancelled stream.
         '''
-        from api.models import Session
+        from api.sessions.store import Session
 
         s = Session(session_id='sess_nondiluted', title='Test')
         s.messages = [

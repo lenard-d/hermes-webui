@@ -38,7 +38,7 @@ def isolated_session_env():
     Everything is restored on teardown (even on exception).
     """
     from api import config as _cfg
-    from api import models as _models
+    import api.sessions.store as _models
 
     tmpdir = tempfile.mkdtemp()
     sessions_dir = Path(tmpdir) / "sessions"
@@ -86,7 +86,7 @@ def isolated_session_env():
 
 def _make_persisted_session(idx, *, messages=None):
     """Build + save a real session with at least one message (so it persists)."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     if messages is None:
         messages = [
@@ -101,7 +101,7 @@ def _make_persisted_session(idx, *, messages=None):
 def _insert(sid_session):
     """Insert a session into the cache exactly like the production accessors do."""
     from api.config import SESSIONS, LOCK
-    from api.models import _evict_sessions_over_cap
+    from api.sessions.store import _evict_sessions_over_cap
 
     with LOCK:
         SESSIONS[sid_session.session_id] = sid_session
@@ -159,7 +159,7 @@ def test_active_streaming_session_never_evicted(isolated_session_env):
     """An active/streaming session must survive eviction even as the oldest (#4765)."""
     from api import config as _cfg
     from api.config import SESSIONS
-    from api.models import _session_is_evictable
+    from api.sessions.store import _session_is_evictable
 
     _cfg.SESSIONS_MAX = 3
 
@@ -189,7 +189,7 @@ def test_unsaved_session_never_evicted(isolated_session_env):
     """A session with unsaved messages (not yet on disk) is never evicted (#4765)."""
     from api import config as _cfg
     from api.config import SESSIONS
-    from api.models import Session, _session_is_evictable
+    from api.sessions.store import Session, _session_is_evictable
 
     _cfg.SESSIONS_MAX = 3
 
@@ -215,7 +215,7 @@ def test_unsaved_session_never_evicted(isolated_session_env):
 
 def test_stale_disk_copy_blocks_eviction(isolated_session_env):
     """A cached session ahead of its sidecar (unsaved tail) is not evictable (#4765)."""
-    from api.models import _session_is_evictable
+    from api.sessions.store import _session_is_evictable
 
     s = _make_persisted_session(1)  # 2 messages on disk
     # Simulate new turns appended in memory but not yet flushed to disk.
@@ -238,7 +238,7 @@ def test_evicted_session_lazily_reloads_identical_content(isolated_session_env):
     """An evicted session transparently reloads from disk with identical content."""
     from api import config as _cfg
     from api.config import SESSIONS
-    from api.models import get_session
+    from api.sessions.store import get_session
 
     _cfg.SESSIONS_MAX = 3
 
@@ -282,7 +282,7 @@ def test_no_data_loss_all_files_survive_heavy_churn(isolated_session_env):
     """Eviction removes only the in-memory copy; every sidecar file survives (#4765)."""
     from api import config as _cfg
     from api.config import SESSIONS
-    from api.models import get_session
+    from api.sessions.store import get_session
 
     _cfg.SESSIONS_MAX = 4
 
@@ -352,7 +352,7 @@ def test_unsaved_new_session_survives_churn_and_stays_startable(isolated_session
     """
     from api import config as _cfg
     from api.config import SESSIONS
-    from api.models import get_session, new_session
+    from api.sessions.store import get_session, new_session
 
     _cfg.SESSIONS_MAX = 5
 
@@ -383,7 +383,7 @@ def test_stale_draftless_unsaved_shell_is_evictable(isolated_session_env):
     A shell that is empty AND draftless AND older than the grace window is
     treated as abandoned and becomes evictable again.
     """
-    from api.models import _session_is_evictable, _UNSAVED_SHELL_GRACE_S, new_session
+    from api.sessions.store import _session_is_evictable, _UNSAVED_SHELL_GRACE_S, new_session
 
     shell = new_session()
     # Freshly created → protected (inside the grace window).
@@ -405,7 +405,7 @@ def test_stale_unsaved_shell_with_draft_stays_resident(isolated_session_env):
     draft is something the user is actively working on and must not be dropped —
     its draft lives only in this cache entry until the first send.
     """
-    from api.models import _session_is_evictable, _UNSAVED_SHELL_GRACE_S, new_session
+    from api.sessions.store import _session_is_evictable, _UNSAVED_SHELL_GRACE_S, new_session
 
     shell = new_session()
     shell.created_at = time.time() - (_UNSAVED_SHELL_GRACE_S + 60)

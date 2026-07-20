@@ -2,7 +2,7 @@
 
 
 def test_messageful_hidden_snapshot_is_preserved_when_no_visible_representative():
-    from api.models import _preserve_messageful_sidebar_discoverability
+    from api.sessions.store import _preserve_messageful_sidebar_discoverability
 
     hidden_snapshot = {
         "session_id": "root_snapshot",
@@ -21,7 +21,7 @@ def test_messageful_hidden_snapshot_is_preserved_when_no_visible_representative(
 
 
 def test_messageful_hidden_snapshot_stays_hidden_when_continuation_is_visible():
-    from api.models import _preserve_messageful_sidebar_discoverability
+    from api.sessions.store import _preserve_messageful_sidebar_discoverability
 
     hidden_snapshot = {
         "session_id": "root_snapshot",
@@ -45,7 +45,7 @@ def test_messageful_hidden_snapshot_stays_hidden_when_continuation_is_visible():
 
 
 def test_intentional_background_sessions_are_not_rescued_into_sidebar():
-    from api.models import _preserve_messageful_sidebar_discoverability
+    from api.sessions.store import _preserve_messageful_sidebar_discoverability
 
     cron_row = {
         "session_id": "cron_digest_001",
@@ -79,7 +79,7 @@ def _lineage_row(session_id, *, root="lineage", count=1, ts=1.0, snapshot=False,
 
 def test_fuller_snapshot_does_not_hide_multirow_imported_cli_lineage():
     """Multiple messageful imported/CLI rows in one lineage are user-facing segments."""
-    from api.models import _prefer_fuller_snapshots_for_sidebar
+    from api.sessions.store import _prefer_fuller_snapshots_for_sidebar
 
     rows = [
         _lineage_row("imported-a", count=3, ts=100.0),
@@ -100,7 +100,7 @@ def test_fuller_snapshot_does_not_hide_multirow_imported_cli_lineage():
 
 def test_fuller_snapshot_still_replaces_single_inactive_continuation():
     """The existing single-continuation cleanup stays intact."""
-    from api.models import _prefer_fuller_snapshots_for_sidebar
+    from api.sessions.store import _prefer_fuller_snapshots_for_sidebar
 
     rows = [
         _lineage_row("continuation", count=3, ts=100.0, source="webui"),

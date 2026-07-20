@@ -12,8 +12,8 @@ import json
 import pytest
 
 import api.config as config
-import api.models as models
-from api.models import (
+import api.sessions.store as models
+from api.sessions.store import (
     SESSIONS,
     Session,
     all_sessions,

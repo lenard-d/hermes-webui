@@ -8,10 +8,10 @@ import re
 import urllib.error
 
 import api.gateway_chat as gateway_chat
-import api.models as models
+import api.sessions.store as models
 import api.streaming as streaming
 from api.config import PENDING_GOAL_CONTINUATION, STREAMS, create_stream_channel
-from api.models import new_session
+from api.sessions.store import new_session
 from api.gateway_chat import (
     _gateway_http_error_event,
     _gateway_reasoning_delta,

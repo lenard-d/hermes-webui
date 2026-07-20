@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-import api.models as models
+import api.sessions.store as models
 
 
 def _patch_active_home(monkeypatch, home):

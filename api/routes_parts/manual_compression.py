@@ -27,7 +27,7 @@ if TYPE_CHECKING:
         redact_session_data,
         require,
     )
-    from api.models import get_session
+    from api.sessions.store import get_session
     from api.routes import _session_is_subagent_view_only, logger
 
 
@@ -518,7 +518,7 @@ def _handle_session_compress(handler, body):
             if _sanitize_messages_for_api(s.messages) != original_messages:
                 return bad(handler, "Session was modified during compression; please retry.", 409)
 
-            from api.session_ops import _truncation_watermark_for
+            from api.sessions.operations import _truncation_watermark_for
             from api.streaming import _stamp_missing_message_timestamps
 
             compressed_copy = copy.deepcopy(compressed)

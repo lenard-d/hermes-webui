@@ -100,7 +100,7 @@ def _make_state_db(path: Path, sid: str, rows):
 
 def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.routes as routes
     import api.profiles as profiles
 
@@ -140,7 +140,7 @@ def test_content_key_strips_workspace_prefix_for_user_turns():
     This is the core of #5339: the reconciliation key and the streaming
     identity must produce the same key for the same human turn.
     """
-    from api.models import _session_message_content_key
+    from api.sessions.store import _session_message_content_key
     from api.streaming import _message_identity
 
     prefixed = {"role": "user", "content": WORKSPACE_PREFIX + "Hello world"}
@@ -156,7 +156,7 @@ def test_content_key_strips_workspace_prefix_for_user_turns():
 
 def test_content_key_is_idempotent_for_bare_user_message():
     """A user message with no prefix keys identically before and after the fix."""
-    from api.models import _session_message_content_key
+    from api.sessions.store import _session_message_content_key
 
     bare = {"role": "user", "content": "just a plain message"}
     assert _session_message_content_key(bare) == (
@@ -169,7 +169,7 @@ def test_content_key_is_idempotent_for_bare_user_message():
 
 def test_content_key_does_not_strip_for_non_user_roles():
     """Prefix stripping must be scoped to user turns only (matches streaming)."""
-    from api.models import _session_message_content_key
+    from api.sessions.store import _session_message_content_key
 
     prefixed = {"role": "assistant", "content": WORKSPACE_PREFIX + "Hello world"}
     bare = {"role": "assistant", "content": "Hello world"}
@@ -179,7 +179,7 @@ def test_content_key_does_not_strip_for_non_user_roles():
 
 def test_content_key_keeps_distinct_user_messages_distinct():
     """Guard: two genuinely different user messages still key differently."""
-    from api.models import _session_message_content_key
+    from api.sessions.store import _session_message_content_key
 
     one = {"role": "user", "content": WORKSPACE_PREFIX + "first question"}
     two = {"role": "user", "content": WORKSPACE_PREFIX + "second question"}
@@ -198,7 +198,7 @@ def test_state_db_delta_treats_prefixed_state_row_as_mirror_of_bare_sidecar():
     holds a workspace-prefixed copy of the last completed user turn while the
     sidecar holds the bare optimistic bubble. They must reconcile to no delta.
     """
-    from api.models import state_db_delta_after_context
+    from api.sessions.store import state_db_delta_after_context
 
     sidecar = [
         {"role": "user", "content": "hello there", "timestamp": 1000.0},
@@ -216,7 +216,7 @@ def test_state_db_delta_treats_prefixed_state_row_as_mirror_of_bare_sidecar():
 
 def test_state_db_delta_still_surfaces_genuinely_new_user_turn():
     """Guard: a genuinely new (post-restart) user turn is still a real delta."""
-    from api.models import state_db_delta_after_context
+    from api.sessions.store import state_db_delta_after_context
 
     sidecar = [
         {"role": "user", "content": "hello there", "timestamp": 1000.0},

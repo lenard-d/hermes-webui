@@ -23,7 +23,7 @@ class RecordingLock:
 
 
 def test_session_index_fast_path_keeps_json_work_outside_global_lock(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()

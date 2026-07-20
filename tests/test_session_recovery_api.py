@@ -1,6 +1,6 @@
 import json
 
-from api.session_recovery import audit_session_recovery, repair_safe_session_recovery
+from api.sessions.recovery import audit_session_recovery, repair_safe_session_recovery
 
 
 def _write_session(session_dir, sid, messages=1):
@@ -13,7 +13,7 @@ def _write_session(session_dir, sid, messages=1):
 
 
 def test_repair_safe_session_recovery_restores_backup_and_rebuilds_index(tmp_path, monkeypatch):
-    import api.models as _m
+    import api.sessions.store as _m
 
     sid = "abc123"
     live = _write_session(tmp_path, sid, messages=4)

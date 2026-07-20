@@ -12,7 +12,7 @@ ROUTES = "\n".join(
     )
 )
 CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")
-SESSION_EVENTS = Path("api/session_events.py").read_text(encoding="utf-8")
+SESSION_EVENTS = Path("api/sessions/events.py").read_text(encoding="utf-8")
 PROFILES = "\n".join(
     Path(path).read_text(encoding="utf-8")
     for path in ("api/profiles.py", "api/profiles_parts/cron_scope.py")
@@ -73,7 +73,7 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
 
 
 def test_session_event_queue_same_profile_is_bounded_and_latest_wins():
-    from api import session_events
+    from api.sessions import events as session_events
 
     q = session_events.subscribe_session_events()
     try:
@@ -89,7 +89,7 @@ def test_session_event_queue_same_profile_is_bounded_and_latest_wins():
 
 
 def test_session_events_payload_tracks_session_id_when_available():
-    from api import session_events
+    from api.sessions import events as session_events
 
     q = session_events.subscribe_session_events()
     try:
@@ -108,7 +108,7 @@ def test_session_events_payload_tracks_session_id_when_available():
 
 
 def test_session_event_queue_same_profile_different_sessions_coalesces_to_profile_refresh():
-    from api import session_events
+    from api.sessions import events as session_events
 
     q = session_events.subscribe_session_events()
     try:
@@ -133,7 +133,7 @@ def test_session_event_queue_same_profile_different_sessions_coalesces_to_profil
 
 
 def test_session_event_queue_profile_mismatch_coalesces_to_unscoped_refresh_all():
-    from api import session_events
+    from api.sessions import events as session_events
 
     q = session_events.subscribe_session_events()
     try:
@@ -158,7 +158,7 @@ def test_session_event_queue_profile_mismatch_coalesces_to_unscoped_refresh_all(
 
 
 def test_session_event_queue_unscoped_pending_stays_unscoped_when_followed_by_scoped():
-    from api import session_events
+    from api.sessions import events as session_events
 
     q = session_events.subscribe_session_events()
     try:
@@ -174,7 +174,7 @@ def test_session_event_queue_unscoped_pending_stays_unscoped_when_followed_by_sc
 
 
 def test_session_event_queue_drain_race_preserves_incoming_profile():
-    from api import session_events
+    from api.sessions import events as session_events
 
     class DrainedQueue:
         def __init__(self):
@@ -206,7 +206,7 @@ def test_session_event_queue_drain_race_preserves_incoming_profile():
 
 
 def test_session_events_payload_tracks_profile_when_available():
-    from api import session_events
+    from api.sessions import events as session_events
 
     q = session_events.subscribe_session_events()
     try:
@@ -226,7 +226,7 @@ def test_session_events_payload_tracks_profile_when_available():
 
 
 def test_session_events_payload_omits_profile_for_default_root_alias(monkeypatch):
-    from api import session_events
+    from api.sessions import events as session_events
 
     monkeypatch.setattr(session_events, "_profile_is_root_alias", lambda profile: profile == "kinni")
 

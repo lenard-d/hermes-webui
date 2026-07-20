@@ -73,7 +73,7 @@ def _rebuild_recovery_session_index(session_dir: Path) -> None:
     ``Session`` cache entries whose backing JSON files are absent from this
     directory; those would immediately audit as ``index_missing_file`` rows.
     """
-    from api.models import _load_session_from_path
+    from api.sessions.store import _load_session_from_path
 
     entry_map: dict[str, dict] = {}
     for path in sorted(session_dir.glob('*.json')):
@@ -193,7 +193,7 @@ def _backup_predates_intentional_shrink(session_path: Path, bak_path: Path) -> b
     # post-dates the compression (the marker persists across saves) → it is a
     # recoverable post-compression snapshot, never a shrink-undoing one.
     try:
-        from api.models import _context_messages_include_compression_marker
+        from api.sessions.store import _context_messages_include_compression_marker
         if _context_messages_include_compression_marker(bak_ctx):
             return False
     except Exception:
@@ -604,7 +604,7 @@ def recover_missing_sidecars_from_state_db(session_dir: Path, state_db_path: Pat
             continue
         payload = _state_db_row_to_sidecar(row)
         # Per-process/per-thread tmp suffix to avoid corruption under
-        # concurrent reconciliation calls (matches api/models.py:484
+        # concurrent reconciliation calls (matches Session.save()
         # Session.save() convention).
         tmp_suffix = f".json.reconcile.tmp.{os.getpid()}.{threading.current_thread().ident}"
         tmp = target.with_suffix(tmp_suffix)
@@ -721,7 +721,7 @@ def _durable_tombstone_marks_deleted_webui_session(session_dir: Path, sid: str) 
     if not sid or (session_dir / f"{sid}.json").exists():
         return False
     try:
-        from api import models as _models
+        import api.sessions.store as _models
 
         if Path(_models.SESSION_DIR).resolve() == session_dir.resolve():
             return sid in _models._load_webui_deleted_session_tombstone()

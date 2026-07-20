@@ -105,7 +105,7 @@ def _seed_insights_state_db(db_path, *, session_id, model, now):
 def test_insights_ignores_global_state_db_when_none_is_injected(
     monkeypatch, tmp_path
 ):
-    import api.models as models
+    import api.sessions.store as models
     from api.insights import build_insights
 
     now = time.mktime((2026, 5, 30, 12, 0, 0, 0, 0, -1))
@@ -137,7 +137,7 @@ def test_insights_ignores_global_state_db_when_none_is_injected(
 def test_insights_reads_injected_state_db_when_global_resolver_is_none(
     monkeypatch, tmp_path
 ):
-    import api.models as models
+    import api.sessions.store as models
     from api.insights import build_insights
 
     now = time.mktime((2026, 5, 30, 12, 0, 0, 0, 0, -1))
@@ -444,7 +444,7 @@ def _call_insights_with_state_db(monkeypatch, tmp_path, entries, state_rows, day
     and points _active_state_db_path at it, so the CLI second-pass is exercised."""
     import sqlite3
     import api.routes as routes
-    import api.models as models
+    import api.sessions.store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -475,7 +475,7 @@ def _call_insights_with_state_db(monkeypatch, tmp_path, entries, state_rows, day
         )
     conn.commit()
     conn.close()
-    # _handle_insights does `from api.models import _active_state_db_path`, so patch on the module.
+    # _handle_insights does `from api.sessions.store import _active_state_db_path`, so patch on the module.
     monkeypatch.setattr(models, "_active_state_db_path", lambda: db_path)
 
     handler = _FakeHandler()

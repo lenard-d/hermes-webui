@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from api.session_recovery import (
+from api.sessions.recovery import (
     inspect_session_recovery_status,
     recover_all_sessions_on_startup,
     recover_session,

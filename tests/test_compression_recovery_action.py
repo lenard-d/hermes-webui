@@ -4,14 +4,15 @@ import io
 import json
 from pathlib import Path
 
-from api import models, routes
+from api.sessions import store as models
+from api import routes
 from api.compression_recovery import (
     compression_recovery_payload_for_session,
     is_generic_continuation_intent,
     stamp_compression_exhausted_recovery,
 )
-from api.models import Session
-from api.session_recovery import _state_db_row_to_sidecar
+from api.sessions.store import Session
+from api.sessions.recovery import _state_db_row_to_sidecar
 from api.webui_session_db import WebUIJsonSessionDB
 
 

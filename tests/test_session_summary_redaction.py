@@ -21,7 +21,7 @@ def _get(path):
 
 
 def _write_session_with_secret_title():
-    from api.models import Session
+    from api.sessions.store import Session
     from tests.conftest import TEST_WORKSPACE
 
     sid = "sec_summary_" + uuid.uuid4().hex[:8]

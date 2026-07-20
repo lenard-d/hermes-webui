@@ -12,7 +12,7 @@ import time
 import uuid
 from typing import Optional
 
-from api.session_events import publish_session_list_changed
+from api.sessions.events import publish_session_list_changed
 
 
 DEFAULT_TIMEOUT_SECONDS = 120

@@ -70,7 +70,7 @@ def _write_projects(path, projects):
 def _isolate_projects(tmp_path, monkeypatch):
     """Point PROJECTS_FILE at a fresh tmp_path file; reset profile-alias caches."""
     import api.config as cfg
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     projects_file = tmp_path / "projects.json"
@@ -89,7 +89,7 @@ def _isolate_projects(tmp_path, monkeypatch):
 def test_sidebar_scan_zero_user_projects_skips_cron_project_creation(tmp_path):
     """Reproduction anchor: listing the sidebar with a cron row must not
     create or persist a Cron Jobs project when no user project exists."""
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / "projects.json"
     db = tmp_path / "state.db"
@@ -161,7 +161,7 @@ def test_recovery_endpoint_zero_user_projects_skips_cron_project_creation(monkey
 
 
 def test_sidebar_scan_with_user_project_still_autoassigns_cron(tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / "projects.json"
     _write_projects(projects_file, [
@@ -242,7 +242,7 @@ def test_recovery_endpoint_with_user_project_still_autoassigns_cron(monkeypatch,
 
 
 def test_preexisting_tagged_cron_project_resolves_when_zero_user_projects(tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / "projects.json"
     _write_projects(projects_file, [
@@ -263,7 +263,7 @@ def test_preexisting_tagged_cron_project_resolves_when_zero_user_projects(tmp_pa
 
 
 def test_legacy_untagged_cron_project_back_tagged_when_zero_user_projects(tmp_path, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     # A non-default active profile is required to exercise the back-tag loop:
@@ -297,7 +297,7 @@ def test_legacy_untagged_cron_project_back_tagged_when_zero_user_projects(tmp_pa
 
 
 def test_renamed_root_alias_cron_project_resolves_when_zero_user_projects(tmp_path, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     projects_file = tmp_path / "projects.json"
@@ -325,7 +325,7 @@ def test_webhook_project_still_auto_created_when_zero_user_projects(tmp_path):
     """Adjacent-condition row: the ungated webhook path must still
     auto-create its dedicated project even in the same zero-user-project
     scan where the cron path is now suppressed."""
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / "projects.json"
     db_path = tmp_path / "state.db"
@@ -368,7 +368,7 @@ def test_webhook_project_still_auto_created_when_zero_user_projects(tmp_path):
 
 
 def test_profile_has_user_projects_ignores_system_named_projects(tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / "projects.json"
 
@@ -401,7 +401,7 @@ def test_ensure_cron_project_default_create_true_ignores_gate(tmp_path):
     """A direct call with no `create` argument must keep today's
     unconditional-create behavior, even with zero user projects — only the
     two gated callers opt in."""
-    import api.models as models
+    import api.sessions.store as models
 
     projects_file = tmp_path / "projects.json"
     pid = models.ensure_cron_project()

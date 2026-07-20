@@ -51,7 +51,7 @@ def test_tool_only_partial_dedupe_is_scoped_to_current_user_turn():
 
 
 def test_session_load_collapses_adjacent_duplicate_partials(tmp_path, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "abc123"
     session_dir = tmp_path / "sessions"

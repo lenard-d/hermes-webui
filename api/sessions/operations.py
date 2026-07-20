@@ -1,6 +1,6 @@
 """Session-mutation operations for slash commands (/retry, /undo) and
 read-only aggregators (/status, /usage). Operates on the webui's own
-JSON Session store (api/models.py), not on hermes-agent's SQLite.
+JSON session store, not on hermes-agent's SQLite.
 
 Behavior parity reference: gateway/run.py:_handle_*_command in
 the hermes-agent repo.
@@ -11,8 +11,8 @@ import logging
 from bisect import bisect_left
 from typing import Any
 
-from api.models import get_session
-from api.session_repository import edit_session
+from api.sessions.store import get_session
+from api.sessions.repository import edit_session
 
 logger = logging.getLogger(__name__)
 

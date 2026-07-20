@@ -38,7 +38,7 @@ def _msg(role: str, content: str, ts: float, mid: str) -> dict:
 
 def _seed_session_dir(monkeypatch, tmp_path):
     """Point the session store at an isolated tmp dir (mirror #2914 harness)."""
-    import api.models as models
+    import api.sessions.store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -90,7 +90,7 @@ def test_clear_endpoint_sets_truncation_watermark(monkeypatch, tmp_path):
     stays None because the handler never set it.
     """
     _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(
         session_id="issue5532clear",
@@ -117,7 +117,7 @@ def test_clear_empties_context_messages(monkeypatch, tmp_path):
     continued turn does not carry pre-clear context into the model. On master
     the /clear handler left context_messages untouched."""
     _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(
         session_id="issue5532ctx",
@@ -142,7 +142,7 @@ def test_clear_then_read_does_not_resurrect_state_db_messages(monkeypatch, tmp_p
     row and the transcript reappears (the P0 data-loss symptom).
     """
     _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session, reconciled_state_db_messages_for_session
+    from api.sessions.store import Session, reconciled_state_db_messages_for_session
 
     session = Session(
         session_id="issue5532resurrect",
@@ -176,8 +176,8 @@ def test_clear_matches_truncate_to_empty_marker(monkeypatch, tmp_path):
     so the merge contract is not forked. Guards against a future divergence
     where /clear grows its own bespoke watermark logic."""
     _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session
-    from api.session_ops import truncate_session_at_keep
+    from api.sessions.store import Session
+    from api.sessions.operations import truncate_session_at_keep
 
     # Reference: what truncate-to-empty produces on the same transcript.
     ref = Session(
@@ -219,7 +219,7 @@ def test_clear_detaches_compression_snapshot_parent(monkeypatch, tmp_path):
     so the display stitch re-adds the parent's archived messages after clear.
     """
     _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session
+    from api.sessions.store import Session
     import api.routes as routes
 
     parent = Session(
@@ -274,7 +274,7 @@ def test_clear_preserves_ordinary_fork_parent_link(monkeypatch, tmp_path):
     silently un-nesting forked sessions.
     """
     _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session
+    from api.sessions.store import Session
 
     parent = Session(
         session_id="issue5532forkparent",
@@ -318,8 +318,8 @@ def test_clear_survives_startup_recovery(monkeypatch, tmp_path):
     it, and the reloaded session has messages again + watermark None.
     """
     models = _seed_session_dir(monkeypatch, tmp_path)
-    from api.models import Session
-    from api import session_recovery
+    from api.sessions.store import Session
+    from api.sessions import recovery as session_recovery
 
     session = Session(
         session_id="issue5532recover",

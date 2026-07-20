@@ -99,7 +99,7 @@ def _state_db_session_source(sid: str) -> str:
     if not sid or not is_safe_session_id(sid):
         return ""
     try:
-        from api.models import _active_state_db_path
+        from api.sessions.store import _active_state_db_path
         db_path = _active_state_db_path()
         if not db_path or not Path(db_path).exists():
             return ""
@@ -227,7 +227,7 @@ def _claim_or_synthesize_cli_session(sid: str, cli_meta: dict = None):
         claimable per :func:`_is_claimable_cli_source` (CLI / TUI /
         Desktop, no explicit read_only, not a messaging / claude_code
         session). ``session`` is a fully populated
-        :class:`api.models.Session` ready for writeable use; the caller
+        :class:`api.sessions.store.Session` ready for writeable use; the caller
         MUST call ``session.save()`` to persist a WebUI-owned sidecar
         before the first write.  The Session carries the source-tag
         metadata from the CLI/state.db lookup (``is_cli_session=True``,
@@ -283,7 +283,7 @@ def _claim_or_synthesize_cli_session(sid: str, cli_meta: dict = None):
                 workspace = None
         if not workspace:
             try:
-                from api.models import DEFAULT_WORKSPACE
+                from api.sessions.store import DEFAULT_WORKSPACE
                 workspace = DEFAULT_WORKSPACE
             except Exception:
                 workspace = "/"
@@ -359,7 +359,7 @@ def _claim_or_synthesize_cli_session(sid: str, cli_meta: dict = None):
     state_db_source = ""
     state_db_row = None
     try:
-        from api.models import _active_state_db_path
+        from api.sessions.store import _active_state_db_path
         db_path = _active_state_db_path()
         if db_path and Path(db_path).exists():
             import sqlite3 as _sqlite
@@ -1468,7 +1468,7 @@ def _dedupe_cli_sidebar_sessions_for_api(
     project-assigned messageful rows must remain in the `/api/sessions` payload
     with `default_hidden` so the matching project chip can reveal them (#3134).
     """
-    from api.models import (
+    from api.sessions.store import (
         _hide_from_default_sidebar as _hide_background,
         _include_project_hidden_background_sidebar_sessions,
     )

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     )
     from api.config import runtime_stream_alive
     from api.helpers import _sanitize_error, bad, j, require
-    from api.models import get_session
+    from api.sessions.store import get_session
     from api.routes import logger
 
 def _git_session(handler, session_id: str):

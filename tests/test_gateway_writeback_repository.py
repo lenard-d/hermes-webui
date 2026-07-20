@@ -5,7 +5,7 @@ import pytest
 
 import api.config as config
 import api.gateway_chat as gateway_chat
-import api.models as models
+import api.sessions.store as models
 import api.streaming as streaming
 
 

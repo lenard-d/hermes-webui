@@ -445,7 +445,7 @@ def test_runner_owned_start_run_does_not_enter_local_stream_barrier(monkeypatch)
 def test_stream_admission_uses_one_gateway_ownership_snapshot(monkeypatch, gateway_owned):
     """The barrier and worker must share one immutable backend decision."""
     from api import config
-    from api import models
+    from api.sessions import store as models
     from api import routes
     from api import turn_admission
 

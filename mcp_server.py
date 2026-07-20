@@ -3,7 +3,7 @@
 Hermes WebUI MCP Server — exposes project and session management
 as MCP tools for any MCP-compatible agent.
 
-Option A rewrite (2026-05-08): imports api.models and api.profiles
+Option A rewrite (2026-05-08): imports api.sessions and api.profiles
 directly from the webui codebase, using canonical helpers for
 locking, profile scoping, index consistency, and validation.
 
@@ -55,7 +55,7 @@ import api.config as _cfg
 from api.config import (
     STATE_DIR, SESSION_DIR, SESSION_INDEX_FILE, PROJECTS_FILE, HOME,
 )
-from api.models import load_projects, save_projects
+from api.sessions.store import load_projects, save_projects
 from api.profiles import get_active_profile_name, _is_root_profile, _profiles_match
 
 # ── Apply --profile override before any module uses get_active_profile_name
@@ -77,7 +77,7 @@ server = Server("hermes-webui")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Helpers — filesystem (project CRUD via canonical api.models)
+#  Helpers — filesystem (project CRUD via the canonical session store)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _active_profile() -> str:
@@ -342,7 +342,7 @@ async def handle_delete_project(arguments: dict) -> list[TextContent]:
 
     # Unassign sessions only when we can do it cache-safely via the HTTP API.
     # The previous filesystem fallback wrote session_data directly with
-    # os.replace(), which bypassed _write_session_index() in api/models.py
+    # os.replace(), which bypassed _write_session_index() in the session store
     # and left _index.json holding the stale project_id — a running WebUI
     # would still group those sessions under the deleted project until a
     # subsequent re-compact. Even calling Session.save() in-process would

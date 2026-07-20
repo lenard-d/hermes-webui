@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.models import merge_session_messages_append_only
+from api.sessions.store import merge_session_messages_append_only
 
 
 def _legacy(role: str, content: str, timestamp=None) -> dict:

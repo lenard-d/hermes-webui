@@ -477,7 +477,7 @@ def test_chat_stream_allows_unknown_dead_stream_fallback_replay_path(monkeypatch
 
 def test_session_new_skips_prev_session_commit_from_other_profile(monkeypatch):
     """Cross-profile prev_session_id after a profile switch must not 404 (#5420)."""
-    import api.session_lifecycle as session_lifecycle
+    import api.sessions.lifecycle as session_lifecycle
     handler = _FakeHandler()
     foreign = _SimpleSession("foreign_session", profile="other")
     calls = {"commit": 0, "new": 0}
@@ -511,7 +511,7 @@ def test_session_new_skips_prev_session_commit_from_other_profile(monkeypatch):
 
 
 def test_session_new_keeps_prev_session_commit_for_same_profile(monkeypatch):
-    import api.session_lifecycle as session_lifecycle
+    import api.sessions.lifecycle as session_lifecycle
     handler = _FakeHandler()
     visible = _SimpleSession("visible_session", profile="default")
     calls = {"commit": 0, "new": 0}

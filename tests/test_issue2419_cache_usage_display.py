@@ -16,7 +16,7 @@ def test_webui_backend_prompt_cache_hit_percent_uses_prompt_total_denominator():
 
 
 def test_session_compact_exposes_prompt_cache_counters():
-    from api.models import Session
+    from api.sessions.store import Session
 
     session = Session(
         session_id="issue2419_cache_usage",

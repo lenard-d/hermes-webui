@@ -1551,7 +1551,7 @@ def test_providers_scan_active_own_providers_entry_owns_over_other_slug_5511():
 def test_explicit_pick_signature_matches_same_context_5979():
     """The signature matches when model+provider are unchanged (deliberate pick
     is honored across same-model follow-up sends)."""
-    import api.models as models
+    import api.sessions.store as models
     sig = models.model_explicit_pick_signature
     picked = sig('x-ai/grok-composer-2.5-fast', 'custom:llm-proxy')
     assert picked == sig('x-ai/grok-composer-2.5-fast', 'custom:llm-proxy')
@@ -1560,7 +1560,7 @@ def test_explicit_pick_signature_matches_same_context_5979():
 def test_explicit_pick_signature_invalidated_on_model_change_5979():
     """A model change (e.g. via /api/session/update) yields a DIFFERENT signature,
     so a stale explicit-pick can't wrongly preserve a #433 leftover on cold."""
-    import api.models as models
+    import api.sessions.store as models
     sig = models.model_explicit_pick_signature
     picked = sig('x-ai/grok-composer-2.5-fast', 'custom:llm-proxy')
     # switched to a stale first-party id on the same proxy → signature differs
@@ -1572,7 +1572,7 @@ def test_explicit_pick_signature_invalidated_on_model_change_5979():
 def test_explicit_pick_signature_persists_round_trip_5979():
     """Session.model_explicit_pick_signature survives save/reload (b3nw's cold
     restart scenario), and defaults to None when absent."""
-    import api.models as models
+    import api.sessions.store as models
     s = models.Session(session_id='sig5979', model='x-ai/grok-composer-2.5-fast',
                         model_provider='custom:llm-proxy')
     s.model_explicit_pick_signature = models.model_explicit_pick_signature(
@@ -1598,7 +1598,7 @@ def test_streaming_explicitly_picked_computation_5979():
         _current_sig = mk_sig(s.model or model, s.model_provider or provider_context)
         _explicitly_picked = bool(_picked_sig) and _picked_sig == _current_sig
     """
-    import api.models as models
+    import api.sessions.store as models
     mk = models.model_explicit_pick_signature
 
     def _explicitly_picked(session):

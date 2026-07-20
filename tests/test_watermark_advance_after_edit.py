@@ -19,10 +19,10 @@ import json
 from io import BytesIO
 from types import SimpleNamespace
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
 import api.turn_admission as turn_admission
-from api.models import Session
+from api.sessions.store import Session
 
 
 def _msg(role: str, content: str, ts: float, mid: str) -> dict:
@@ -261,7 +261,7 @@ def test_retry_then_new_turn_watermark_advances(monkeypatch, tmp_path):
     """After /retry → new turn, watermark should advance (not clear to None)."""
     _setup_session_dir(monkeypatch, tmp_path)
 
-    from api.session_ops import retry_last
+    from api.sessions.operations import retry_last
 
     sid = "retry_watermark_advance"
     session = Session(
@@ -294,7 +294,7 @@ def test_undo_then_new_turn_watermark_advances(monkeypatch, tmp_path):
     """After /undo → new turn, watermark should advance (not clear to None)."""
     _setup_session_dir(monkeypatch, tmp_path)
 
-    from api.session_ops import undo_last
+    from api.sessions.operations import undo_last
 
     sid = "undo_watermark_advance"
     session = Session(

@@ -50,7 +50,7 @@ def test_live_active_stream_id_is_stale_safe():
     sys.path.insert(0, str(REPO_ROOT))
     from types import SimpleNamespace
     from api import config as cfg
-    from api.session_ops import _live_active_stream_id
+    from api.sessions.operations import _live_active_stream_id
 
     assert _live_active_stream_id(SimpleNamespace(active_stream_id=None)) is None
     assert _live_active_stream_id(SimpleNamespace(active_stream_id="ghost-not-in-any-registry")) is None

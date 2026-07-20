@@ -19,8 +19,8 @@ from unittest.mock import patch
 
 import pytest
 
-import api.models as models
-from api.models import Session, _write_session_index, prune_session_from_index
+import api.sessions.store as models
+from api.sessions.store import Session, _write_session_index, prune_session_from_index
 
 
 @pytest.fixture(autouse=True)

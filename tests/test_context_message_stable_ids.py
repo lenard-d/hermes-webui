@@ -23,7 +23,7 @@ from api.streaming import (
     _dedupe_replayed_context_messages,
     _merge_display_messages_after_agent_result,
 )
-from api.session_ops import truncate_context_for_display_keep
+from api.sessions.operations import truncate_context_for_display_keep
 
 
 def test_assign_stable_ids_mints_monotonic_ints():

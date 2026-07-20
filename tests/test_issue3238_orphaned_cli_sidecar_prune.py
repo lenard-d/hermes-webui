@@ -49,7 +49,7 @@ def _make_state_db(path: Path, session_ids):
 
 
 def test_agent_session_row_exists_true_for_present_row(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -61,7 +61,7 @@ def test_agent_session_row_exists_true_for_present_row(tmp_path, monkeypatch):
 
 def test_agent_session_row_exists_false_for_deleted_row(tmp_path, monkeypatch):
     """The core fix: a session id that is NOT in state.db is reported gone."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -73,7 +73,7 @@ def test_agent_session_row_exists_false_for_deleted_row(tmp_path, monkeypatch):
 
 def test_agent_session_row_exists_safe_true_when_db_missing(tmp_path, monkeypatch):
     """No agent DB on this instance -> never claim a row is gone (no data loss)."""
-    from api import models
+    from api.sessions import store as models
 
     monkeypatch.setattr(
         models, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
@@ -82,7 +82,7 @@ def test_agent_session_row_exists_safe_true_when_db_missing(tmp_path, monkeypatc
 
 
 def test_agent_session_row_exists_empty_id_is_false(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -94,7 +94,7 @@ def test_agent_session_row_exists_empty_id_is_false(tmp_path, monkeypatch):
 
 def test_agent_session_row_exists_handles_missing_sessions_table(tmp_path, monkeypatch):
     """A state.db without a `sessions` table degrades to safe-True."""
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -108,7 +108,7 @@ def test_agent_session_row_exists_handles_missing_sessions_table(tmp_path, monke
 
 
 def test_agent_session_rows_existing_returns_present_subset(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -122,7 +122,7 @@ def test_agent_session_rows_existing_returns_present_subset(tmp_path, monkeypatc
 
 
 def test_agent_session_rows_existing_safe_when_db_missing(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     monkeypatch.setattr(
         models, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
@@ -132,7 +132,7 @@ def test_agent_session_rows_existing_safe_when_db_missing(tmp_path, monkeypatch)
 
 
 def test_agent_session_rows_existing_batches_over_500_ids(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -145,7 +145,7 @@ def test_agent_session_rows_existing_batches_over_500_ids(tmp_path, monkeypatch)
 
 
 def test_agent_session_rows_existing_normalizes_whitespace_in_probe_ids(tmp_path, monkeypatch):
-    from api import models
+    from api.sessions import store as models
 
     home = tmp_path / "home"
     home.mkdir()

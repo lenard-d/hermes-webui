@@ -33,7 +33,7 @@ def test_read_body_rejects_negative_content_length_without_unbounded_read():
 
 
 def test_session_save_rejects_unsafe_session_id(tmp_path, monkeypatch):
-    import api.models as models
+    import api.sessions.store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()

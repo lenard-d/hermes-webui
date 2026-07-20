@@ -26,7 +26,7 @@ def _claude_fixture_rows() -> list[dict]:
 
 def test_default_claude_code_scan_is_disabled_inside_test_state(monkeypatch, tmp_path):
     """Test runs must not accidentally scan Michael's real ~/.claude/projects."""
-    import api.models as models
+    import api.sessions.store as models
 
     monkeypatch.delenv("HERMES_WEBUI_CLAUDE_PROJECTS_DIR", raising=False)
     monkeypatch.setenv("HERMES_WEBUI_TEST_STATE_DIR", str(tmp_path / "state"))
@@ -36,7 +36,7 @@ def test_default_claude_code_scan_is_disabled_inside_test_state(monkeypatch, tmp
 
 
 def test_get_claude_code_sessions_reads_fixture_jsonl_without_real_home(tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     projects_dir = tmp_path / "claude" / "projects"
     fixture = projects_dir / "project-a" / "session.jsonl"
@@ -65,7 +65,7 @@ def test_get_claude_code_sessions_reads_fixture_jsonl_without_real_home(tmp_path
 
 
 def test_claude_code_scan_skips_symlinks_and_oversized_files(tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     projects_dir = tmp_path / "claude" / "projects"
     valid = projects_dir / "project-a" / "valid.jsonl"
@@ -89,7 +89,7 @@ def test_claude_code_scan_skips_symlinks_and_oversized_files(tmp_path):
 
 
 def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     hermes_home = tmp_path / "hermes"
@@ -127,7 +127,7 @@ def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
 
 
 def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
 
     hermes_home = tmp_path / "hermes"

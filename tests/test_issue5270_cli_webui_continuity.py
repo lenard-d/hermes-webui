@@ -75,7 +75,7 @@ def _make_cli_continuation_state_db(path: Path, *, parent_sid: str, child_sid: s
 
 def _install_cli_continuity_env(monkeypatch, tmp_path):
     import api.config as config
-    import api.models as models
+    import api.sessions.store as models
     import api.profiles as profiles
     import api.routes as routes
     import api.streaming as streaming

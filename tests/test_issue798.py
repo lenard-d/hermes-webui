@@ -78,7 +78,7 @@ def _run_profile_resolution_probe(env):
 import json
 from pathlib import Path
 import api.profiles as p
-import api.models as m
+import api.sessions.store as m
 
 p.set_request_profile('foo')
 foo_home = p.get_active_hermes_home()
@@ -175,7 +175,7 @@ def test_new_session_uses_explicit_profile_not_global():
     Core fix for #798: client B's session is tagged to B's profile, not the global.
     """
     import api.profiles as p
-    import api.models as m
+    import api.sessions.store as m
 
     original = p._active_profile
     try:
@@ -193,7 +193,7 @@ def test_new_session_uses_explicit_profile_not_global():
 def test_new_session_falls_back_to_global_when_profile_not_supplied():
     """R19f: new_session() without explicit profile still reads _active_profile (backward compat)."""
     import api.profiles as p
-    import api.models as m
+    import api.sessions.store as m
 
     original = p._active_profile
     try:
@@ -208,7 +208,7 @@ def test_new_session_falls_back_to_global_when_profile_not_supplied():
 def test_new_session_none_profile_falls_back_to_global():
     """R19g: profile=None explicitly also falls back to the global (same as omitting it)."""
     import api.profiles as p
-    import api.models as m
+    import api.sessions.store as m
 
     original = p._active_profile
     try:
@@ -225,7 +225,7 @@ def test_concurrent_new_sessions_get_correct_profiles():
     Each session must be stamped with its own profile, never the other's.
     Direct reproduction of the #798 race (minus the actual switch_profile() call).
     """
-    import api.models as m
+    import api.sessions.store as m
 
     results = {}
     errors = []
@@ -269,7 +269,7 @@ def test_sessions_js_sends_profile_in_new_session_post():
 def test_new_session_uses_explicit_profile_default_model_and_provider(tmp_path, monkeypatch):
     """New chats must inherit the selected profile's config default."""
     import api.profiles as p
-    import api.models as m
+    import api.sessions.store as m
 
     monkeypatch.setattr(p, "_DEFAULT_HERMES_HOME", tmp_path)
     profile_home = tmp_path / "profiles" / "pepper"
@@ -293,7 +293,7 @@ def test_new_session_uses_explicit_profile_default_model_and_provider(tmp_path, 
 def test_new_session_does_not_persist_display_personality(monkeypatch, tmp_path):
     """display.personality is a UI/default hint, not durable per-session state."""
     import api.config as c
-    import api.models as m
+    import api.sessions.store as m
 
     monkeypatch.setattr(c, "get_config", lambda: {"display": {"personality": "kawaii"}})
     with patch.object(m.Session, 'save', return_value=None):

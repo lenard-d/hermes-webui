@@ -1,4 +1,4 @@
-import api.models as models
+import api.sessions.store as models
 
 
 def test_compression_continuation_fallback_reads_only_file_head(monkeypatch, tmp_path):

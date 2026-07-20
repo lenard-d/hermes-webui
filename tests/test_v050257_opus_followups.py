@@ -178,14 +178,14 @@ def test_session_load_metadata_only_returns_instance_not_dict():
     not a dict. This is the contract that breaks PR #1402's toolset override
     if a future change converts it to a dict."""
     sys.path.insert(0, str(REPO))
-    from api.models import Session
+    from api.sessions.store import Session
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmpd:
         # Create a fake session file
         import json as _json
         sid = "test1234abcd"
-        from api import models
+        from api.sessions import store as models
         original = models.SESSION_DIR
         models.SESSION_DIR = Path(tmpd)
         try:

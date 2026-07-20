@@ -1251,7 +1251,7 @@ def test_gateway_watcher_uses_normalized_source_metadata(monkeypatch):
 
 def test_imported_cli_session_metadata_survives_compact(cleanup_test_sessions):
     """Imported agent sessions should remain distinguishable in compact sidebar payloads."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     sid = 'gw_imported_metadata_001'
     cleanup_test_sessions.append(sid)
@@ -1361,7 +1361,8 @@ def test_import_cli_all_profiles_opt_in_reads_named_profile_state_db(cleanup_tes
 
 
 def test_all_profiles_cli_contexts_normalizes_default_profile_name(tmp_path, monkeypatch):
-    from api import models, profiles
+    from api.sessions import store as models
+    from api import profiles
 
     profiles_root = tmp_path / "profiles"
     profiles_root.mkdir()
@@ -1388,7 +1389,7 @@ def test_all_profiles_cli_contexts_normalizes_default_profile_name(tmp_path, mon
 
 def test_sessions_response_backfills_imported_messaging_source_metadata(cleanup_test_sessions):
     """Old imported messaging sessions should still expose source metadata in /api/sessions."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     conn = _ensure_state_db()
     sid = 'gw_legacy_import_weixin_001'
@@ -1430,7 +1431,7 @@ def test_sessions_response_backfills_imported_messaging_source_metadata(cleanup_
 
 def test_sessions_response_keeps_only_latest_messaging_session_per_source(cleanup_test_sessions):
     """Sidebar should keep messaging sessions by stable identity, not source-wide."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     conn = _ensure_state_db()
     old_sid = 'gw_old_weixin_visible_001'
@@ -1567,7 +1568,7 @@ def test_messaging_projection_keeps_no_identity_continuation_when_gateway_source
     Telegram, Discord, Slack, and Weixin all use the same messaging projection.
     """
     from api import routes
-    from api.models import Session
+    from api.sessions.store import Session
 
     parent_sid = "webui_pre_compression_snapshot"
     cleanup_test_sessions.append(parent_sid)
@@ -1627,7 +1628,7 @@ def test_messaging_projection_keeps_no_identity_continuation_when_gateway_source
 
 def test_session_load_exposes_continuation_for_pre_compression_snapshot(cleanup_test_sessions):
     """Reloading an old hidden compression snapshot should give the browser a recovery target."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     parent_sid = "webui_mobile_snapshot_parent"
     child_sid = "webui_mobile_snapshot_child"
@@ -1664,7 +1665,7 @@ def test_session_load_exposes_continuation_for_pre_compression_snapshot(cleanup_
 
 def test_session_load_exposes_multihop_continuation_for_repeated_compression(cleanup_test_sessions):
     """A stale older snapshot should recover to the newest visible descendant."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     root_sid = "webui_mobile_snapshot_root"
     middle_sid = "webui_mobile_snapshot_middle"
@@ -1990,7 +1991,7 @@ def test_delete_imported_messaging_session_preserves_agent_memory(cleanup_test_s
         # recorded in the deleted-WebUI tombstone — otherwise
         # _claim_or_synthesize_cli_session() would treat the still-live
         # channel session as was-webui and self-heal it to a 404 on reopen.
-        import api.models as _m
+        import api.sessions.store as _m
         assert sid not in _m._load_webui_deleted_session_tombstone(), (
             "messaging session must not be tombstoned as a deleted WebUI session"
         )
@@ -2011,7 +2012,7 @@ def test_deleted_webui_session_stays_out_of_sidebar_projection(cleanup_test_sess
     reappears as an 'Agent' ghost. The projection must skip a tombstoned
     source='webui' row that has no live sidecar.
     """
-    import api.models as _m
+    import api.sessions.store as _m
 
     conn = _ensure_state_db()
     sid = 'webui_deleted_ghost_projection_001'
@@ -2041,7 +2042,7 @@ def test_deleted_webui_session_stays_out_of_sidebar_projection(cleanup_test_sess
 
 def test_imported_cron_sessions_hidden_from_sidebar_by_default(cleanup_test_sessions):
     """Cron sessions already imported into the WebUI store should stay hidden from the sidebar."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     sid = 'cron_imported_20260427'
     cleanup_test_sessions.append(sid)
@@ -2184,7 +2185,7 @@ def test_gateway_session_messages_readable():
 
 def test_session_prefers_state_db_messages_over_stale_local_snapshot(cleanup_test_sessions):
     """Stale local JSON for messaging sessions should not mask newer state.db messages."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     conn = _ensure_state_db()
     sid = 'gw_masking_regression_001'
@@ -2258,7 +2259,7 @@ def test_session_prefers_state_db_messages_over_stale_local_snapshot(cleanup_tes
 
 def test_messaging_session_message_count_matches_deduped_display_messages(cleanup_test_sessions):
     """Thread sessions must not advertise raw DB rows that display merge dedupes away."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     conn = _ensure_state_db()
     sid = 'gw_display_count_regression_001'
@@ -2349,7 +2350,7 @@ def test_sessions_prefers_state_db_metadata_for_messaging_overlap(cleanup_test_s
             {"role": "user", "content": "stale one", "timestamp": now - 100},
             {"role": "assistant", "content": "stale two", "timestamp": now - 99},
         ]
-        from api.models import Session
+        from api.sessions.store import Session
         local = Session(
             session_id=sid,
             title='Stale Sidebar',
@@ -2382,7 +2383,7 @@ def test_sessions_prefers_state_db_metadata_for_messaging_overlap(cleanup_test_s
 
 def test_archiving_messaging_session_keeps_state_db_history(cleanup_test_sessions):
     """Archiving a messaging session should persist metadata without importing full transcript."""
-    from api.models import Session
+    from api.sessions.store import Session
 
     conn = _ensure_state_db()
     sid = 'gw_archive_metadata_only_001'
@@ -2440,7 +2441,7 @@ def test_importing_older_gateway_session_preserves_original_timestamps_and_order
             {'session_id': newer_webui_sid, 'title': 'Newer WebUI Session'},
         )
         assert rename_status == 200, rename
-        from api.models import Session
+        from api.sessions.store import Session
         from tests.conftest import TEST_WORKSPACE
         newer_webui_session = Session(
             session_id=newer_webui_sid,

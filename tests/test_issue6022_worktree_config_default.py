@@ -12,10 +12,10 @@ from types import SimpleNamespace
 
 import pytest
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
 import api.worktrees as worktrees
-from api.models import SESSIONS
+from api.sessions.store import SESSIONS
 
 
 @pytest.fixture(autouse=True)

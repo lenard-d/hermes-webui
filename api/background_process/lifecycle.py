@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Optional
 
-from api.session_channel import collect_expired_session_channels
+from api.sessions import collect_expired_session_channels
 
 from .completion_events import EMIT_COALESCE_LOCK, LAST_EMIT_TS
 from .process_coordination import process_one, recover_processes_for_webui

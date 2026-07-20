@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from api.session_discoverability import audit_session_discoverability
+from api.sessions.discoverability import audit_session_discoverability
 
 
 def _write_sidecar(session_dir: Path, sid: str, *, messages=1, **metadata):

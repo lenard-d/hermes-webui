@@ -31,7 +31,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def _fresh_lifecycle():
     """Import/reload lifecycle module and clear process-global test state."""
-    lifecycle = importlib.import_module("api.session_lifecycle")
+    lifecycle = importlib.import_module("api.sessions.lifecycle")
     lifecycle = importlib.reload(lifecycle)
     reset = getattr(lifecycle, "_reset_for_tests", None)
     if callable(reset):

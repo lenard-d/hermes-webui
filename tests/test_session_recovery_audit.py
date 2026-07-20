@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from api.session_recovery import audit_session_recovery
+from api.sessions.recovery import audit_session_recovery
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,7 +87,7 @@ def test_session_recovery_module_audit_cli_outputs_json(tmp_path):
     _write_session(tmp_path, sid, messages=1)
 
     result = subprocess.run(
-        [sys.executable, "-m", "api.session_recovery", "--audit", "--session-dir", str(tmp_path)],
+        [sys.executable, "-m", "api.sessions.recovery", "--audit", "--session-dir", str(tmp_path)],
         cwd=str(REPO_ROOT),
         text=True,
         stdout=subprocess.PIPE,

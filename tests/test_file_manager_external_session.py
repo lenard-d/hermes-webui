@@ -81,7 +81,7 @@ def test_routes_file_handlers_use_fallback():
 
 
 # ---------------------------------------------------------------------------
-# Functional tests against api.models.get_session_for_file_ops
+# Functional tests against api.sessions.store.get_session_for_file_ops
 # ---------------------------------------------------------------------------
 
 pytestmark_models = pytest.mark.requires_agent_modules
@@ -119,7 +119,7 @@ def _make_state_db(path: Path, sid: str) -> None:
 
 @pytest.fixture
 def models_module():
-    return pytest.importorskip("api.models")
+    return pytest.importorskip("api.sessions.store")
 
 
 def test_get_session_for_file_ops_webui_passthrough(models_module, monkeypatch):

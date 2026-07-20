@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 import api.profiles as profiles
-from api.models import (
+from api.sessions.store import (
     Session,
     _append_journaled_partial_output,
     _append_recovered_pending_turn,

@@ -22,7 +22,7 @@ from typing import Optional  # noqa: F401 - compatibility export
 
 import yaml  # noqa: F401 - historical compatibility-facade export
 
-from api.session_events import publish_session_list_changed  # noqa: F401 - cron adapter seam
+from api.sessions.events import publish_session_list_changed  # noqa: F401 - cron adapter seam
 from api.profiles_parts.facade import bind_profile_function, bind_profiles_api
 
 logger = logging.getLogger(__name__)
@@ -356,7 +356,7 @@ def _profiles_match(row_profile, active_profile) -> bool:
 
     A row with no profile (`None` or empty string) is treated as belonging to
     the root profile — that's the convention used by the legacy backfill at
-    api/models.py::all_sessions, and matches the default seen in
+    api/sessions/store.py::all_sessions, and matches the default seen in
     `static/sessions.js` (`S.activeProfile||'default'`).
 
     Originally lived in api/routes.py; relocated here so both routes.py and

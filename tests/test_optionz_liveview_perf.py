@@ -620,7 +620,7 @@ def test_persisted_message_count_uses_metadata_only(monkeypatch):
     """The companion lookup must return the persisted count via a metadata-only
     load (never parsing the full transcript) and None when unknown."""
     from api import background_process as bp
-    import api.models as models
+    import api.sessions.store as models
 
     sid = "sess-persisted-count"
 
@@ -644,7 +644,7 @@ def test_persisted_message_count_requests_metadata_only(monkeypatch):
     """Guard the perf contract: the lookup MUST pass metadata_only=True so it
     never parses a 400KB+ transcript on every per-session SSE (re)connect."""
     from api import background_process as bp
-    import api.models as models
+    import api.sessions.store as models
 
     seen = {}
 

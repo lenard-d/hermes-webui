@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import urlparse
 
-import api.models as models
+import api.sessions.store as models
 import api.routes as routes
 
 

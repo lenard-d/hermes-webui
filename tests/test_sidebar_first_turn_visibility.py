@@ -97,7 +97,7 @@ class TestSidebarFirstTurnVisibility:
         assert "_sessionStreamingById.set(sid,false)" in clear_body.replace(" ", "")
 
     def test_backend_compact_counts_pending_first_turn_as_visible(self, tmp_path):
-        from api.models import Session
+        from api.sessions.store import Session
 
         session = Session(
             session_id="pending-first-turn",
@@ -113,7 +113,7 @@ class TestSidebarFirstTurnVisibility:
 
     def test_backend_index_filter_keeps_pending_first_turn_sessions(self, monkeypatch, tmp_path):
         import json
-        import api.models as models
+        import api.sessions.store as models
 
         sid = "pending-index-turn"
         sidecar = models.Session(

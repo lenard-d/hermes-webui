@@ -16,8 +16,8 @@ unchanged.
 """
 import sqlite3
 
-import api.models as models
-from api.models import get_state_db_session_messages
+import api.sessions.store as models
+from api.sessions.store import get_state_db_session_messages
 
 
 def _make_state_db(path, n_rows=100):

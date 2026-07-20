@@ -11,7 +11,7 @@ import sqlite3
 
 import pytest
 
-import api.models as models
+import api.sessions.store as models
 
 
 def _make_state_db(path, sessions):

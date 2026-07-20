@@ -2,8 +2,8 @@ import json
 import logging
 from pathlib import Path
 
-import api.models as models
-from api.models import Session
+import api.sessions.store as models
+from api.sessions.store import Session
 from api.request_diagnostics import RequestDiagnostics
 
 

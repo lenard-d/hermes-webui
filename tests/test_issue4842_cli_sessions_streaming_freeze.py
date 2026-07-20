@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api import models as M
+import api.sessions.store as M
 
 
 def _set_active_streams(monkeypatch, ids):
@@ -111,7 +111,7 @@ def test_structural_change_listener_clears_cli_cache(monkeypatch):
     cleared = {"n": 0}
     monkeypatch.setattr(M, "clear_cli_sessions_cache", lambda: cleared.__setitem__("n", cleared["n"] + 1))
     # The route module imports the symbol lazily inside the listener, so patching
-    # api.models.clear_cli_sessions_cache is what the listener resolves.
+    # api.sessions.store.clear_cli_sessions_cache is what the listener resolves.
     R._on_session_list_changed("default")
     assert cleared["n"] >= 1, (
         "_on_session_list_changed must clear the CLI/cron projection cache so a "

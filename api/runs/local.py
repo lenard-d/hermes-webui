@@ -1375,7 +1375,7 @@ def run_agent_streaming(
             # pick — so a #433 first-party leftover is never wrongly preserved on
             # a cold catalog. Only affects the cold custom-proxy branch; warm
             # endpoint-advertised provenance always wins over this flag.
-            from api.models import model_explicit_pick_signature as _mk_sig
+            from api.sessions import model_explicit_pick_signature as _mk_sig
             _picked_sig = getattr(s, "model_explicit_pick_signature", None)
             # Compare against the session's persisted model+provider — the exact
             # fields /api/chat/start stamped the signature from (it persists the
@@ -1459,7 +1459,7 @@ def run_agent_streaming(
             # Per-session toolset override (#493): if the session has
             # enabled_toolsets set, use that instead of the global config.
             try:
-                from api.models import Session, SESSION_DIR
+                from api.sessions import SESSION_DIR, Session
                 _session_path = SESSION_DIR / f"{session_id}.json"
                 if _session_path.exists():
                     _session_meta = Session.load_metadata_only(session_id)
@@ -1703,7 +1703,7 @@ def run_agent_streaming(
                         # Reopened/cache-hit sessions must register the agent
                         # so later lifecycle commits can find it.
                         try:
-                            from api.session_lifecycle import register_agent
+                            from api.sessions import register_agent
                             register_agent(session_id, agent)
                         except Exception:
                             logger.debug("Lifecycle register_agent failed for cached session %s", session_id, exc_info=True)
@@ -1779,7 +1779,7 @@ def run_agent_streaming(
                     # Register the new agent with the memory lifecycle so
                     # its commit_memory_session() can be found later.
                     try:
-                        from api.session_lifecycle import register_agent
+                        from api.sessions import register_agent
                         register_agent(session_id, agent)
                     except Exception:
                         logger.debug("Lifecycle register_agent failed for new session %s", session_id, exc_info=True)
@@ -3118,7 +3118,7 @@ def run_agent_streaming(
                     # in-memory bookkeeping, not provider I/O, so keep it inside the
                     # per-session writeback lock to preserve completed-turn ordering.
                     try:
-                        from api.session_lifecycle import mark_turn_completed
+                        from api.sessions import mark_turn_completed
                         mark_turn_completed(s.session_id, agent=agent)
                     except Exception:
                         logger.debug("Memory lifecycle mark failed for session %s", s.session_id, exc_info=True)

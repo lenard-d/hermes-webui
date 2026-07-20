@@ -386,9 +386,10 @@ class SessionRepository:
 
 def _default_repository() -> SessionRepository:
     # Resolve collaborators at call time. ``/api/admin/reload`` can replace the
-    # models module while the process is running; retaining bound callables here
+    # session store while the process is running; retaining bound callables here
     # would keep edits attached to the stale module and stale cache.
-    from api import config, models
+    from api import config
+    from . import store as models
 
     def sidecar_path(sid: str):
         root = models.SESSION_DIR.resolve()
@@ -505,7 +506,8 @@ def session_deleted_for_write(sid: str) -> bool:
     negative case is intentionally cheap and is checked while admission holds
     the same per-session owner lock as deletion.
     """
-    from api import config, models
+    from api import config
+    from . import store as models
 
     sid = str(sid or "")
     if not models.is_safe_session_id(sid):
@@ -525,7 +527,8 @@ def session_deleted_for_write(sid: str) -> bool:
 
 def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
     """Remove empty sidecars and index-only ghosts as one reconciliation pass."""
-    from api import config, models
+    from api import config
+    from . import store as models
 
     session_dir = models.SESSION_DIR
     index_file = models.SESSION_INDEX_FILE
@@ -644,7 +647,8 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
     artifacts, journals, the sidebar index, and (for non-messaging sessions)
     the Hermes state database.
     """
-    from api import config, models
+    from api import config
+    from . import store as models
 
     sid = str(sid or "")
     if not models.is_safe_session_id(sid):

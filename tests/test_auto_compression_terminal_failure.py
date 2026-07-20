@@ -9,8 +9,9 @@ import sys
 import types
 from pathlib import Path
 
-from api import config, models, streaming
-from api.models import Session
+from api import config, streaming
+from api.sessions import store as models
+from api.sessions.store import Session
 from api.streaming import (
     _agent_result_terminal_failure,
     _session_lacks_final_assistant_answer,

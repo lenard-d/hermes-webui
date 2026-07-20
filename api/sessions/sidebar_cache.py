@@ -1,4 +1,4 @@
-"""Session-list cache helpers extracted from api.routes."""
+"""Profile-scoped session-list cache and runtime overlays."""
 
 import os
 import copy
@@ -8,7 +8,11 @@ from collections import OrderedDict
 from pathlib import Path
 
 from api.config import LOCK, SESSION_DIR, SESSIONS, SETTINGS_FILE
-from api.models import _active_state_db_path, _active_stream_ids
+from api.sessions.store import (
+    _active_state_db_path,
+    _active_stream_ids,
+    _sqlite_content_fingerprint,
+)
 from api.profiles import _profiles_match
 
 
@@ -36,47 +40,18 @@ _SESSIONS_CACHE_PROFILE_INVALIDATION_VERSION: dict[str, int] = {}
 
 
 def _session_list_cache_session_dir() -> Path:
-    try:
-        import api.routes as _routes
-
-        value = getattr(_routes, "SESSION_DIR", SESSION_DIR)
-        return Path(value)
-    except Exception:
-        return SESSION_DIR
+    return Path(SESSION_DIR)
 
 
 def _session_list_cache_settings_file() -> Path:
-    try:
-        import api.routes as _routes
-
-        value = getattr(_routes, "SETTINGS_FILE", SETTINGS_FILE)
-        return Path(value)
-    except Exception:
-        return SETTINGS_FILE
+    return Path(SETTINGS_FILE)
 
 
 def _session_list_cache_state_db_path():
-    try:
-        import api.routes as _routes
-
-        override = getattr(_routes, "_active_state_db_path", None)
-        if callable(override) and override is not _session_list_cache_state_db_path:
-            return override()
-    except Exception:
-        pass
     return _active_state_db_path()
 
 
 def _session_list_cache_gateway_session_metadata_path() -> Path:
-    try:
-        import api.routes as _routes
-
-        override = getattr(_routes, "_gateway_session_metadata_path", None)
-        if callable(override) and override is not _session_list_cache_gateway_session_metadata_path:
-            return Path(override())
-    except Exception:
-        pass
-
     try:
         from api.profiles import get_active_hermes_home
 
@@ -87,26 +62,10 @@ def _session_list_cache_gateway_session_metadata_path() -> Path:
 
 
 def _session_list_cache_active_stream_ids():
-    try:
-        import api.routes as _routes
-
-        override = getattr(_routes, "_active_stream_ids", None)
-        if callable(override) and override is not _session_list_cache_active_stream_ids:
-            return override()
-    except Exception:
-        pass
     return _active_stream_ids()
 
 
 def _session_list_cache_resolved_source_stamp(key: tuple):
-    try:
-        import api.routes as _routes
-
-        override = getattr(_routes, "_session_list_cache_source_stamp", None)
-        if callable(override) and override is not _session_list_cache_source_stamp:
-            return override(key)
-    except Exception:
-        pass
     return _session_list_cache_source_stamp(key)
 
 
@@ -316,14 +275,6 @@ def _session_list_cache_streaming_freeze_marker():
 
 
 def _session_list_cache_state_db_fingerprint(state_db_path: Path | None):
-    try:
-        import api.routes as _routes
-
-        override = getattr(_routes, "_session_list_cache_state_db_fingerprint", None)
-        if callable(override) and override is not _session_list_cache_state_db_fingerprint:
-            return override(state_db_path)
-    except Exception:
-        pass
     return _session_list_cache_state_db_fingerprint_impl(state_db_path)
 
 
@@ -331,8 +282,6 @@ def _session_list_cache_state_db_fingerprint_impl(state_db_path: Path | None):
     if state_db_path is None:
         return None
     try:
-        from api.models import _sqlite_content_fingerprint
-
         return _sqlite_content_fingerprint(state_db_path)
     except Exception:
         return None
@@ -401,14 +350,6 @@ def _session_list_cache_source_stamp(key: tuple) -> tuple[tuple[int, int], tuple
 
 
 def _session_list_cache_settings_write_version() -> int:
-    try:
-        import api.routes as _routes
-
-        override = getattr(_routes, "_session_list_cache_settings_write_version", None)
-        if callable(override) and override is not _session_list_cache_settings_write_version:
-            return int(override())
-    except Exception:
-        pass
     try:
         from api.config import _SETTINGS_WRITE_VERSION
 

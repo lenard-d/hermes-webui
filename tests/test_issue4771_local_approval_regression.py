@@ -39,7 +39,7 @@ import pytest
 # (api.config._AGENT_DIR), which is what makes `tools.approval` importable.
 # Import order matters: tools.* will not resolve until api.config has run.
 from api import routes
-from api import models
+from api.sessions import store as models
 
 try:
     import tools.approval as ta

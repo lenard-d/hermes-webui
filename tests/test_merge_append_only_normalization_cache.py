@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-import api.models as models
+import api.sessions.store as models
 
 
 class _CountingList(list):

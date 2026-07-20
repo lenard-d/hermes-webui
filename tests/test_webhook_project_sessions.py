@@ -30,7 +30,7 @@ def test_webhook_source_normalizes_to_webhook_category():
 
 
 def test_ensure_webhook_project_creates_dedicated_project():
-    from api.models import WEBHOOK_PROJECT_NAME, ensure_webhook_project, load_projects, save_projects
+    from api.sessions.store import WEBHOOK_PROJECT_NAME, ensure_webhook_project, load_projects, save_projects
 
     projects = load_projects()
     save_projects([p for p in projects if p.get("name") != WEBHOOK_PROJECT_NAME])
@@ -48,7 +48,7 @@ def test_ensure_webhook_project_creates_dedicated_project():
 
 
 def test_is_webhook_session_detects_source_metadata_not_session_id():
-    from api.models import is_webhook_session
+    from api.sessions.store import is_webhook_session
 
     assert is_webhook_session("any-id", source_tag="webhook") is True
     assert is_webhook_session("any-id", source_tag=" WebHook ") is True
@@ -59,7 +59,7 @@ def test_is_webhook_session_detects_source_metadata_not_session_id():
 
 
 def test_project_assigned_webhook_rows_are_returned_but_default_hidden():
-    from api.models import (
+    from api.sessions.store import (
         _hide_from_default_sidebar,
         _include_project_hidden_background_sidebar_sessions,
     )
@@ -102,7 +102,7 @@ def test_project_assigned_webhook_rows_are_returned_but_default_hidden():
 
 
 def test_webhook_rows_get_webhook_project_id(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     db = tmp_path / "state.db"
     db.write_text("", encoding="utf-8")
@@ -124,7 +124,7 @@ def test_webhook_rows_get_webhook_project_id(monkeypatch, tmp_path):
 
 
 def test_webhook_second_pass_keeps_older_project_rows_available(monkeypatch, tmp_path):
-    import api.models as models
+    import api.sessions.store as models
 
     db = tmp_path / "state.db"
     db.write_text("", encoding="utf-8")

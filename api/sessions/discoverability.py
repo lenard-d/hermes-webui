@@ -6,7 +6,7 @@ places that decide whether a session can be found from the WebUI sidebar:
 - JSON sidecars under the WebUI session directory
 - ``_index.json`` sidebar metadata
 - canonical ``state.db`` rows/messages
-- the live ``api.models.all_sessions()`` sidebar response, when available
+- the live ``api.sessions.store.all_sessions()`` sidebar response, when available
 """
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ def _normalize_api_sessions(api_sessions: Iterable[dict] | None) -> dict[str, di
     records: dict[str, dict] = {}
     if api_sessions is None:
         try:
-            from api.models import all_sessions
+            from api.sessions.store import all_sessions
 
             api_sessions = all_sessions()
         except Exception:
@@ -491,7 +491,7 @@ def _materialize_sidecar_from_state_db(session_dir: Path, state_db_path: Path | 
     if target.exists():
         return {"session_id": sid, "action": "materialize_sidecar_from_state_db", "applied": False, "skipped": "sidecar_exists"}
     try:
-        from api.session_recovery import _read_state_db_missing_sidecar_rows, _state_db_row_to_sidecar
+        from api.sessions.recovery import _read_state_db_missing_sidecar_rows, _state_db_row_to_sidecar
     except Exception as exc:
         return {"session_id": sid, "action": "materialize_sidecar_from_state_db", "applied": False, "error": f"recovery_import_failed:{exc}"}
     rows = {str(row.get("id") or ""): row for row in _read_state_db_missing_sidecar_rows(session_dir, state_db_path)}

@@ -698,7 +698,7 @@ def _handle_gateway_sse_stream(handler, parsed):
     q = watcher.subscribe()
     try:
         # Send initial snapshot immediately
-        from api.models import get_cli_sessions
+        from api.sessions.store import get_cli_sessions
         initial = get_cli_sessions()
         _sse(handler, 'sessions_changed', {'sessions': initial})
 

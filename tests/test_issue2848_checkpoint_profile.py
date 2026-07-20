@@ -10,7 +10,7 @@ def test_checkpoint_save_uses_session_profile_env(monkeypatch, tmp_path):
     They must route profile-scoped helpers through the session's profile instead
     of falling back to the process-global/default profile.
     """
-    from api.models import Session
+    from api.sessions.store import Session
     from api.streaming import _save_streaming_checkpoint
     import api.config as config
     import api.profiles as profiles
