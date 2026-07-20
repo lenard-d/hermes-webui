@@ -115,10 +115,10 @@ def test_session_duplicate_foreign_profile_session_blocked_by_visibility_guard(m
 def test_session_duplicate_same_profile_still_duplicates(monkeypatch):
     handler = _FakeHandler()
     source = _SimpleSession("session_visible", profile="default")
-    calls = {"load": 0, "save": 0}
+    calls = {"loaded_ids": [], "save": 0}
 
-    def _load(_sid):
-        calls["load"] += 1
+    def _load(session_id):
+        calls["loaded_ids"].append(session_id)
         return source
 
     monkeypatch.setattr(routes.Session, "load", staticmethod(_load))
@@ -136,7 +136,8 @@ def test_session_duplicate_same_profile_still_duplicates(monkeypatch):
     cap = _capture(monkeypatch)
     routes.handle_post(handler, urlparse("/api/session/duplicate"))
 
-    assert calls["load"] == 1
+    assert calls["loaded_ids"]
+    assert set(calls["loaded_ids"]) == {"session_visible"}
     assert calls["save"] == 1
     assert "bad" not in cap
     assert cap["ok"]["session"]["session_id"] != "session_visible"
