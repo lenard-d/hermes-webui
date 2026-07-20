@@ -14,7 +14,7 @@ that are reasoning-capable but 400 on a disable.
 """
 from __future__ import annotations
 
-from api.runs.title_generation import _route_rejects_reasoning_extra
+from api.runs.title_generation.provider_invocation import _route_rejects_reasoning_extra
 
 
 class TestAuxRejectList:

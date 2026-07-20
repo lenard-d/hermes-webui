@@ -51,9 +51,7 @@ from .terminal_outcomes import (
     _cleanup_ephemeral_cancelled_turn,
     _finalize_cancelled_turn,
 )
-from .title_generation import (
-    _maybe_schedule_title_refresh,
-)
+from .title_generation.lifecycle import _maybe_schedule_title_refresh
 from .turn_context import (
     _stream_writeback_can_supersede_recovery_marker,
     _stream_writeback_is_current,

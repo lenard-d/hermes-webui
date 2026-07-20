@@ -136,6 +136,11 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         gateway_runtime.py Local stream-to-Gateway-run approval correlation
         gateway_transport.py Runs API and chat-completions HTTP/SSE transports
         gateway_settlement.py Owner-checked success, error, cancel, and teardown persistence
+        title_generation/  Session-title policy, provider invocation, and durable publication
+          __init__.py      Narrow on-demand title-generation Interface
+          policy.py        Exchange selection, prompts, validation, and local fallback
+          provider_invocation.py Auxiliary/active-agent routing, retries, and response normalization
+          lifecycle.py     Background scheduling, owner-locked writes, and title events
       model_context.py     Shared context-window lookup and refresh policy
       workspace_context.py Shared workspace display/prefix and runtime-path policy
       updates/             Self-update package with a small public interface
@@ -509,6 +514,15 @@ larger migration remains incremental:
   for approval relay. `gateway.py` coordinates those modules and always releases
   the shared `TurnExecution` plus the Gateway correlation on teardown. The
   transports do not create a second stream, cancellation, or callback registry.
+- Session title generation is divided by ownership inside
+  `api.runs.title_generation`. `policy` owns conversation selection, prompt
+  rules, language/script validation, and the local fallback;
+  `provider_invocation` owns auxiliary and active-agent routing, retry budgets,
+  route-specific request policy, and response normalization without mutating
+  sessions; `lifecycle` owns background scheduling, title events, and durable
+  publication. Slow provider calls happen outside the session edit lock, then
+  publication reloads the authoritative session under its owner lock so a
+  manual rename or newer automatic title wins over a stale worker.
 - `api.updates`, `api.workspace`, and `api.workspace_git` use explicit package
   owners and stateless compatibility interfaces. `api.runs` owns local and
   Gateway execution plus the transcript, payload, agent-cache, attachment,

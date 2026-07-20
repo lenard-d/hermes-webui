@@ -16,7 +16,7 @@ from .local import LocalRunDependencies
 from . import local as _local_run
 from .payloads import _session_payload_with_full_messages
 from .provider_errors import _classify_provider_error
-from .title_generation import _maybe_schedule_title_refresh
+from .title_generation.lifecycle import _maybe_schedule_title_refresh
 from .webui_prefill import (
     _load_webui_prefill_context,
     _normalize_prefill_messages_before_user_turn,

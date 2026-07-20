@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from api.runs.title_generation import _fallback_title_from_exchange, _first_exchange_snippets
+from api.runs.title_generation.policy import _fallback_title_from_exchange, _first_exchange_snippets
 from api.runs.thinking_content import _sanitize_generated_title
 
 
@@ -61,5 +61,5 @@ class TestGeneratedTitleSanitization(unittest.TestCase):
         )
 
     def test_title_generation_source_has_no_cjk_literals(self):
-        src = Path("api/runs/title_generation.py").read_text(encoding="utf-8")
+        src = Path("api/runs/title_generation/policy.py").read_text(encoding="utf-8")
         self.assertNotRegex(src, r"[\u4e00-\u9fff]", "title generation code should stay English-only")

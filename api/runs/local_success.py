@@ -19,10 +19,10 @@ from .gateway_routing_metadata import _extract_gateway_routing_metadata
 from .local_context_window import ContextWindowProjection
 from .runtime_resolution import _persistent_state_changes, _persistent_state_snapshot
 from .thinking_content import _looks_invalid_generated_title, _split_thinking_from_content
-from .title_generation import (
+from .title_generation.lifecycle import _run_background_title_update
+from .title_generation.policy import (
     _first_exchange_snippets,
     _is_provisional_title,
-    _run_background_title_update,
 )
 from .tool_events import _extract_tool_calls_from_messages
 from .transcript import _stamp_missing_message_timestamps

@@ -14,7 +14,7 @@ from api.runs.message_sanitization import _sanitize_messages_for_api
 from api.runs.provider_errors import _classify_provider_error
 
 STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local.py'
-TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'title_generation.py'
+TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'title_generation' / 'lifecycle.py'
 
 streaming_src = STREAMING.read_text(encoding='utf-8')
 title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')

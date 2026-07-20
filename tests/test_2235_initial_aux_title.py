@@ -30,7 +30,7 @@ _agent_stub.auxiliary_client = _aux_stub
 @pytest.fixture(autouse=True)
 def _route_title_writes_through_loaded_test_session(monkeypatch):
     """Keep these focused unit tests on their injected session seam."""
-    import api.runs.title_generation as title_generation
+    from api.runs.title_generation import lifecycle as title_generation
 
     @contextmanager
     def edit_loaded(sid, *, touch_updated_at=True, save_when=None, **_kwargs):
@@ -70,13 +70,13 @@ class TestInitialAuxTitleSucceeds(unittest.TestCase):
     the first-turn background title update must persist the LLM title
     instead of leaving the provisional first-message slice in place."""
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_aux_title_replaces_provisional_on_first_turn(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'Can you help me design a REST API for user management?'
         assistant_text = 'Sure, here is a plan for your REST API design.'
@@ -119,15 +119,15 @@ class TestInitialAuxTitleSucceeds(unittest.TestCase):
         self.assertTrue(status_events, "Expected a 'title_status' event")
         self.assertEqual(status_events[0]['status'], 'llm_aux')
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_aux_title_status_distinguishes_llm_aux_from_fallback(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
         """title_status must clearly report 'llm_aux' when the aux route
         succeeds, distinguishing it from fallback and skipped cases."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'Explain quantum entanglement in simple terms.'
         assistant_text = 'Quantum entanglement is a phenomenon where...'
@@ -157,15 +157,15 @@ class TestInitialAuxTitleSucceeds(unittest.TestCase):
         self.assertNotEqual(status_events[0]['status'], 'fallback')
         self.assertNotEqual(status_events[0]['status'], 'skipped')
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_aux_title_with_agent_present_uses_aux_first(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
         """When aux is configured and an agent is available, the aux route
         must be tried first (not the agent route)."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'Write a Python function to sort a list.'
         assistant_text = 'Here is a Python sort function.'
@@ -200,15 +200,15 @@ class TestUnconfiguredAuxPreservesFallback(unittest.TestCase):
     """When no aux title_generation config is set, the existing
     agent/local fallback behaviour must still run."""
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=False)
-    @patch('api.runs.title_generation._generate_llm_session_title_for_agent')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=False)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_for_agent')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_agent_route_tried_first_when_aux_unconfigured(
         self, mock_get_session, mock_agent_title, mock_configured,
     ):
         """When aux is not configured and an agent is present, the agent
         route must be tried first (existing behaviour)."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'What is the capital of France?'
         assistant_text = 'The capital of France is Paris.'
@@ -237,16 +237,16 @@ class TestUnconfiguredAuxPreservesFallback(unittest.TestCase):
         # The title must be updated
         self.assertEqual(s.title, 'France Capital')
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=False)
-    @patch('api.runs.title_generation._generate_llm_session_title_for_agent')
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=False)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_for_agent')
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_fallback_used_when_agent_and_aux_both_fail(
         self, mock_get_session, mock_aux_title, mock_agent_title, mock_configured,
     ):
         """When both agent and aux routes fail, the local fallback must
         still be used (existing behaviour preserved)."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'Tell me about machine learning.'
         assistant_text = 'Machine learning is a subset of AI...'
@@ -280,15 +280,15 @@ class TestUnconfiguredAuxPreservesFallback(unittest.TestCase):
         status_events = [d for e, d in events if e == 'title_status']
         self.assertTrue(status_events)
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=False)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=False)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_no_agent_unconfigured_aux_uses_aux_route_with_fallback(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
         """When there is no agent and aux is not configured, the aux route
         is still tried (it will likely fail), and the local fallback is used."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'How do I bake a cake?'
         assistant_text = 'Here is a simple cake recipe.'
@@ -323,13 +323,13 @@ class TestRefreshPathParity(unittest.TestCase):
     """The refresh path must use the same configured aux routing as the
     initial title update path."""
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_refresh_uses_aux_route_when_configured(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
-        from api.runs.title_generation import _run_background_title_refresh
+        from api.runs.title_generation.lifecycle import _run_background_title_refresh
 
         s = MagicMock()
         s.title = 'Old LLM Title'
@@ -363,16 +363,16 @@ class TestRefreshPathParity(unittest.TestCase):
         self.assertTrue(title_events)
         self.assertEqual(title_events[0]['title'], 'Refreshed Title')
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation._generate_llm_session_title_for_agent')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_for_agent')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_refresh_aux_failure_tries_agent_fallback(
         self, mock_get_session, mock_agent_title, mock_aux_title, mock_configured,
     ):
         """When aux fails in the refresh path, the agent fallback must be
         tried (same routing as the initial update path)."""
-        from api.runs.title_generation import _run_background_title_refresh
+        from api.runs.title_generation.lifecycle import _run_background_title_refresh
 
         s = MagicMock()
         s.title = 'Old Title'
@@ -411,13 +411,13 @@ class TestAuxTitleStatusDiagnostics(unittest.TestCase):
     """title_status diagnostics must clearly distinguish llm_aux,
     aux failures, fallback, and skipped cases."""
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_aux_failure_reports_error_status(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         user_text = 'Debug this Python code for me.'
         assistant_text = 'The issue is on line 42.'
@@ -446,13 +446,13 @@ class TestAuxTitleStatusDiagnostics(unittest.TestCase):
         self.assertIn('aux', status_events[0].get('reason', '').lower() +
                       status_events[0].get('status', '').lower())
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_already_generated_title_reports_skipped(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         s = MagicMock()
         s.title = 'Existing LLM Title'

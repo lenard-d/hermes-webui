@@ -18,14 +18,17 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 CSS = family_source("style")
 HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
-STREAMING_PY = (
-    REPO_ROOT / "api" / "runs" / "title_generation.py"
+TITLE_PROVIDER_PY = (
+    REPO_ROOT / "api" / "runs" / "title_generation" / "provider_invocation.py"
 ).read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
     REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
-TITLE_GENERATION_PY = (
-    REPO_ROOT / "api" / "runs" / "title_generation.py"
+TITLE_LIFECYCLE_PY = (
+    REPO_ROOT / "api" / "runs" / "title_generation" / "lifecycle.py"
+).read_text(encoding="utf-8")
+TITLE_POLICY_PY = (
+    REPO_ROOT / "api" / "runs" / "title_generation" / "policy.py"
 ).read_text(encoding="utf-8")
 
 
@@ -74,23 +77,24 @@ class TestIssue495TitleStreaming(unittest.TestCase):
     def test_streaming_has_llm_title_helper(self):
         self.assertIn(
             "def _generate_llm_session_title_for_agent(",
-            STREAMING_PY,
+            TITLE_PROVIDER_PY,
             "the run title owner should define its agent-backed title helper",
         )
 
     def test_streaming_rejects_generic_completion_titles(self):
         self.assertEqual(_sanitize_generated_title("all set"), "")
         self.assertEqual(_sanitize_generated_title("completed"), "")
-        self.assertNotIn(
-            "测试完成",
-            TITLE_GENERATION_PY,
-            "title generation should stay English-only",
-        )
+        for source in (TITLE_POLICY_PY, TITLE_PROVIDER_PY, TITLE_LIFECYCLE_PY):
+            self.assertNotIn(
+                "测试完成",
+                source,
+                "title generation should stay English-only",
+            )
 
     def test_streaming_uses_reasoning_split_for_minimax_titles(self):
         self.assertIn(
             "reasoning_split",
-            TITLE_GENERATION_PY,
+            TITLE_PROVIDER_PY,
             "title generation should request MiniMax calls with reasoning_split so final text is separated from thinking",
         )
 
@@ -99,21 +103,21 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         # which can be rotated during context compression — see #652 fix)
         self.assertIn(
             "put_event('title', {'session_id': session_id, 'title': effective_title})",
-            TITLE_GENERATION_PY,
+            TITLE_LIFECYCLE_PY,
             "title generation should emit a title SSE event when title is updated",
         )
 
     def test_streaming_emits_title_status_sse_event(self):
         self.assertIn(
             "put_event('title_status', payload)",
-            TITLE_GENERATION_PY,
+            TITLE_LIFECYCLE_PY,
             "title generation should emit a title_status SSE event for diagnostics",
         )
 
     def test_streaming_emits_stream_end_event(self):
         self.assertIn(
             "put_event('stream_end', {'session_id': session_id})",
-            TITLE_GENERATION_PY,
+            TITLE_LIFECYCLE_PY,
             "background title path should end the SSE stream with stream_end",
         )
 
@@ -156,7 +160,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_title_snippet_uses_visible_assistant_reply_after_tools(self):
         """Tool-heavy opening turns should use the final visible assistant reply."""
-        from api.runs.title_generation import _first_exchange_snippets
+        from api.runs.title_generation.policy import _first_exchange_snippets
 
         user_msg = {
             "role": "user",
@@ -194,7 +198,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_title_snippet_keeps_short_substantive_assistant_reply(self):
         """Short but real assistant answers should still be eligible for titles."""
-        from api.runs.title_generation import _first_exchange_snippets
+        from api.runs.title_generation.policy import _first_exchange_snippets
 
         messages = [
             {"role": "user", "content": "Can you help me rename this session?"},
@@ -208,7 +212,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_provisional_title_detection_ignores_whitespace_noise(self):
         """Temporary first-message titles should still match with whitespace normalization."""
-        from api.runs.title_generation import _is_provisional_title
+        from api.runs.title_generation.policy import _is_provisional_title
         from api.sessions.projects import title_from
 
         messages = [
@@ -231,7 +235,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         """An assistant row with tool_calls AND a substantive answer text
         must still be used as the first-exchange snippet — it's not a
         preamble, it's an agentic first-turn plan."""
-        from api.runs.title_generation import _first_exchange_snippets
+        from api.runs.title_generation.policy import _first_exchange_snippets
 
         user_msg = {
             "role": "user",
@@ -263,7 +267,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_fallback_title_preserves_unicode_letters(self):
         """Local fallback title generation must not strip German umlauts."""
-        from api.runs.title_generation import _fallback_title_from_exchange
+        from api.runs.title_generation.policy import _fallback_title_from_exchange
 
         title = _fallback_title_from_exchange(
             "Bitte führe ein Selbst-Audit durch. Wo ist überall noch Gemini-2.5-flash als Modell im Einsatz? Sei gründlich",
@@ -278,7 +282,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         """Tool-call rows whose content is empty or meta-reasoning preamble
         ('Let me check my memory first.') must still be skipped — those are
         orchestration scaffolding, not title material."""
-        from api.runs.title_generation import _first_exchange_snippets
+        from api.runs.title_generation.policy import _first_exchange_snippets
 
         user_msg = {
             "role": "user",

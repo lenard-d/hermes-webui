@@ -17,8 +17,16 @@ import pytest
 # Ensure the project root is on sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-import api.runs.title_generation as title_generation
-from api.runs.title_generation import _count_exchanges, _latest_exchange_snippets, _get_title_refresh_interval, _run_background_title_refresh, _maybe_schedule_title_refresh
+from api.runs.title_generation import lifecycle as title_generation
+from api.runs.title_generation.lifecycle import (
+    _maybe_schedule_title_refresh,
+    _run_background_title_refresh,
+)
+from api.runs.title_generation.policy import (
+    _count_exchanges,
+    _get_title_refresh_interval,
+    _latest_exchange_snippets,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -239,7 +247,7 @@ class TestRunBackgroundTitleRefresh:
     def test_skips_when_title_changed_before_call(self):
         """If the title has changed (manual rename) since the refresh was scheduled, skip."""
         put, events = self._make_put_event()
-        with patch('api.runs.title_generation.get_session') as mock_get:
+        with patch('api.runs.title_generation.lifecycle.get_session') as mock_get:
             s = self._make_session_obj(title='Different Title')
             mock_get.return_value = s
             _run_background_title_refresh(
@@ -250,13 +258,13 @@ class TestRunBackgroundTitleRefresh:
 
     def test_skips_if_session_not_found(self):
         put, events = self._make_put_event()
-        with patch('api.runs.title_generation.get_session', side_effect=KeyError('not found')):
+        with patch('api.runs.title_generation.lifecycle.get_session', side_effect=KeyError('not found')):
             _run_background_title_refresh('sid', 'u', 'a', 'title', put)
         assert events == []
 
     def test_skips_when_title_is_untitled(self):
         put, events = self._make_put_event()
-        with patch('api.runs.title_generation.get_session') as mock_get:
+        with patch('api.runs.title_generation.lifecycle.get_session') as mock_get:
             s = self._make_session_obj(title='Untitled')
             mock_get.return_value = s
             _run_background_title_refresh('sid', 'u', 'a', 'Untitled', put)
@@ -265,9 +273,9 @@ class TestRunBackgroundTitleRefresh:
     def test_skips_same_title(self):
         """If the LLM generates a title identical to the current one, no event is emitted."""
         put, events = self._make_put_event()
-        with patch('api.runs.title_generation.get_session') as mock_get, \
-             patch('api.runs.title_generation._aux_title_configured', return_value=True), \
-             patch('api.runs.title_generation._generate_llm_session_title_via_aux',
+        with patch('api.runs.title_generation.lifecycle.get_session') as mock_get, \
+             patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True), \
+             patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux',
                    return_value=('Old Title', 'llm_ok', 'raw')):
             s = self._make_session_obj(title='Old Title')
             mock_get.return_value = s
@@ -278,9 +286,9 @@ class TestRunBackgroundTitleRefresh:
         put, events = self._make_put_event()
         s = self._make_session_obj(title='Old Title')
         # Use a real dict for SESSIONS so .get() works, pre-populated with our session
-        with patch('api.runs.title_generation.get_session', return_value=s), \
-             patch('api.runs.title_generation._aux_title_configured', return_value=True), \
-             patch('api.runs.title_generation._generate_llm_session_title_via_aux',
+        with patch('api.runs.title_generation.lifecycle.get_session', return_value=s), \
+             patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True), \
+             patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux',
                    return_value=('New Refreshed Title', 'llm_ok', 'raw')):
             _run_background_title_refresh('sid', 'u', 'a', 'Old Title', put)
         title_events = [(n, d) for n, d in events if n == 'title']
@@ -309,9 +317,9 @@ class TestRunBackgroundTitleRefresh:
             assert not lock.held, "Session.save() must run outside api.sessions.store.LOCK"
 
         s.save = save
-        with patch('api.runs.title_generation.get_session', return_value=s), \
-             patch('api.runs.title_generation._aux_title_configured', return_value=True), \
-             patch('api.runs.title_generation._generate_llm_session_title_via_aux',
+        with patch('api.runs.title_generation.lifecycle.get_session', return_value=s), \
+             patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True), \
+             patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux',
                    return_value=('New Refreshed Title', 'llm_ok', 'raw')):
             _run_background_title_refresh('sid', 'u', 'a', 'Old Title', put)
         title_events = [(n, d) for n, d in events if n == 'title']
@@ -321,7 +329,7 @@ class TestRunBackgroundTitleRefresh:
     def test_exceptions_are_silently_swallowed(self):
         """Any unexpected error inside must not propagate — it's a background daemon."""
         put, events = self._make_put_event()
-        with patch('api.runs.title_generation.get_session', side_effect=RuntimeError('oops')):
+        with patch('api.runs.title_generation.lifecycle.get_session', side_effect=RuntimeError('oops')):
             # Should not raise
             _run_background_title_refresh('sid', 'u', 'a', 'title', put)
         assert events == []
@@ -336,7 +344,7 @@ class TestMaybeScheduleTitleRefresh:
         pass
 
     def test_does_nothing_when_disabled(self):
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=0):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=0):
             spawned = []
             with patch('threading.Thread', side_effect=lambda **kw: spawned.append(kw) or MagicMock()):
                 session = _make_session(messages=[_user_msg('q'), _asst_msg('a')] * 5)
@@ -344,7 +352,7 @@ class TestMaybeScheduleTitleRefresh:
         assert spawned == []
 
     def test_does_nothing_when_title_is_empty(self):
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5):
             spawned = []
             with patch('threading.Thread', side_effect=lambda **kw: spawned.append(kw) or MagicMock()):
                 session = _make_session(title='', messages=[_user_msg('q'), _asst_msg('a')] * 5)
@@ -352,7 +360,7 @@ class TestMaybeScheduleTitleRefresh:
         assert spawned == []
 
     def test_does_nothing_for_untitled(self):
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5):
             spawned = []
             with patch('threading.Thread', side_effect=lambda **kw: spawned.append(kw) or MagicMock()):
                 session = _make_session(title='Untitled', messages=[_user_msg('q'), _asst_msg('a')] * 5)
@@ -360,7 +368,7 @@ class TestMaybeScheduleTitleRefresh:
         assert spawned == []
 
     def test_does_nothing_when_title_not_llm_generated(self):
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5):
             spawned = []
             with patch('threading.Thread', side_effect=lambda **kw: spawned.append(kw) or MagicMock()):
                 session = _make_session(llm_title_generated=False,
@@ -370,7 +378,7 @@ class TestMaybeScheduleTitleRefresh:
 
     def test_does_nothing_when_exchange_count_not_at_interval(self):
         """Refresh only fires when exchange_count % interval == 0 (and > 0)."""
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5):
             spawned = []
             with patch('threading.Thread', side_effect=lambda **kw: spawned.append(kw) or MagicMock()):
                 # 4 exchanges — not a multiple of 5
@@ -380,7 +388,7 @@ class TestMaybeScheduleTitleRefresh:
 
     def test_spawns_thread_at_exact_interval(self):
         """Refresh fires when exchange_count == refresh_interval."""
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5):
             with patch('threading.Thread') as mock_thread_cls:
                 mock_thread = MagicMock()
                 mock_thread_cls.return_value = mock_thread
@@ -392,7 +400,7 @@ class TestMaybeScheduleTitleRefresh:
 
     def test_spawns_thread_at_multiple_of_interval(self):
         """Refresh fires at 10 exchanges when interval is 5."""
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5):
             with patch('threading.Thread') as mock_thread_cls:
                 mock_thread = MagicMock()
                 mock_thread_cls.return_value = mock_thread
@@ -403,8 +411,8 @@ class TestMaybeScheduleTitleRefresh:
 
     def test_does_nothing_when_no_exchange_content(self):
         """Even at interval, if both snippets are empty, don't spawn."""
-        with patch('api.runs.title_generation._get_title_refresh_interval', return_value=5), \
-             patch('api.runs.title_generation._latest_exchange_snippets', return_value=('', '')):
+        with patch('api.runs.title_generation.lifecycle._get_title_refresh_interval', return_value=5), \
+             patch('api.runs.title_generation.lifecycle._latest_exchange_snippets', return_value=('', '')):
             spawned = []
             with patch('threading.Thread', side_effect=lambda **kw: spawned.append(kw) or MagicMock()):
                 session = _make_session(messages=[_user_msg('q'), _asst_msg('a')] * 5)

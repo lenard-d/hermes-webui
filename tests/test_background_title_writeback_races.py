@@ -27,7 +27,7 @@ class _Session(SimpleNamespace):
 
 def _install_title_worker_seams(monkeypatch, *, initial_title: str):
     import api.profiles as profiles
-    import api.runs.title_generation as title_generation
+    from api.runs.title_generation import lifecycle as title_generation
 
     sid = "title-race"
     durable: dict[str, object] = {}

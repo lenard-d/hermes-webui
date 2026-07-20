@@ -28,7 +28,7 @@ _agent_stub.auxiliary_client = _aux_stub
 @pytest.fixture(autouse=True)
 def _route_title_writes_through_loaded_test_session(monkeypatch):
     """Keep these routing tests on their injected session seam."""
-    import api.runs.title_generation as title_generation
+    from api.runs.title_generation import lifecycle as title_generation
 
     @contextmanager
     def edit_loaded(sid, *, touch_updated_at=True, save_when=None, **_kwargs):
@@ -48,7 +48,7 @@ def _patch_tg_config(config_dict):
 
 class TestAuxTitleConfigured(unittest.TestCase):
     def _call(self, tg_config):
-        from api.runs.title_generation import _aux_title_configured
+        from api.runs.title_generation.provider_invocation import _aux_title_configured
         with _patch_tg_config(tg_config):
             return _aux_title_configured()
 
@@ -82,7 +82,7 @@ class TestAuxTitleConfigured(unittest.TestCase):
         self.assertTrue(self._call({'provider': '', 'model': '', 'base_url': 'https://api.example.com'}))
 
     def test_import_error_returns_false(self):
-        from api.runs.title_generation import _aux_title_configured
+        from api.runs.title_generation.provider_invocation import _aux_title_configured
         with patch('agent.auxiliary_client._get_auxiliary_task_config', side_effect=ImportError("no module"), create=True):
             self.assertFalse(_aux_title_configured())
 
@@ -91,7 +91,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
     """Verify generate_title_raw_via_aux() reads timeout from config rather than hardcoding 15.0."""
 
     def _run_with_config(self, tg_config, expected_timeout):
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -131,7 +131,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
 
     def test_webui_prefixed_model_id_is_stripped_before_aux_call(self):
         """Regression: @provider:model picker ids must not reach provider APIs verbatim."""
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -172,7 +172,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
         WebUI titles look like local first-message placeholders or unrelated
         chat-model output instead of using auxiliary.title_generation.model.
         """
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -216,7 +216,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
         once WebUI passes explicit provider/model/base_url values, so WebUI
         must forward the configured task api_key with the rest of the route.
         """
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -255,7 +255,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
 
     def test_title_prompt_requires_matching_user_language(self):
         """Conversation starts should get a language-neutral match-language instruction."""
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -286,7 +286,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
         self.assertNotIn('German good:', messages[0]['content'])
 
     def test_title_prompt_language_rule_is_same_for_supported_locales(self):
-        from api.runs.title_generation import _title_prompt_language_rule
+        from api.runs.title_generation.policy import _title_prompt_language_rule
 
         expected = "Match the language of the user question.\n"
         examples = [
@@ -302,7 +302,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
 
     def test_title_language_detection_avoids_english_tech_false_positives(self):
         """English tech/jargon text must not be classified as German by shared tokens."""
-        from api.runs.title_generation import _detect_title_language
+        from api.runs.title_generation.policy import _detect_title_language
 
         examples = [
             'Why did the session die after the DAS storage failover?',
@@ -315,7 +315,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
 
     def test_title_language_detection_keeps_german_without_umlaut(self):
         """German without umlauts still needs a language hint when evidence is specific."""
-        from api.runs.title_generation import _detect_title_language
+        from api.runs.title_generation.policy import _detect_title_language
 
         self.assertEqual(
             _detect_title_language('Warum werden hier die Bilder der alten Session nicht angezeigt?'),
@@ -324,7 +324,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
 
     def test_german_source_rejects_english_aux_title(self):
         """Regression: an English aux title must not overwrite a German conversation."""
-        from api.runs.title_generation import _generate_llm_session_title_via_aux
+        from api.runs.title_generation.provider_invocation import _generate_llm_session_title_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -347,7 +347,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
         self.assertEqual(raw_preview, 'Old Session Image Display Issue')
 
     def test_german_fallback_uses_generic_topic_extraction_without_literal_override(self):
-        from api.runs.title_generation import _fallback_title_from_exchange
+        from api.runs.title_generation.policy import _fallback_title_from_exchange
 
         title = _fallback_title_from_exchange(
             'Warum werden hier die Bilder der alten Session nicht mehr angezeigt?',
@@ -362,7 +362,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
 
     def test_code_only_first_message_does_not_trigger_german_language_guard(self):
         """Code-only starts should fall through to the neutral/default title path."""
-        from api.runs.title_generation import _detect_title_language, _title_language_mismatch, _title_prompt_language_rule
+        from api.runs.title_generation.policy import _detect_title_language, _title_language_mismatch, _title_prompt_language_rule
 
         code_only = "print('hello')\nfor i in range(3):\n    print(i)"
 
@@ -378,7 +378,7 @@ class TestGenerateTitleRawViaAuxTimeout(unittest.TestCase):
         must not attach an unrelated auxiliary.title_generation api_key to the
         caller-supplied provider/model/base_url.
         """
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         mock_resp = types.SimpleNamespace(
             choices=[
@@ -438,7 +438,7 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
 
     def test_title_budget_defaults_to_reasoning_safe_value(self):
         """Title generation should not use a tiny output cap that starves final content."""
-        from api.runs.title_generation import _title_completion_budget, _title_retry_completion_budget
+        from api.runs.title_generation.provider_invocation import _title_completion_budget, _title_retry_completion_budget
 
         self.assertEqual(_title_completion_budget(), 512)
         self.assertEqual(_title_retry_completion_budget(), 1024)
@@ -449,7 +449,7 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
         retry — the second call invariably produces the same empty-reasoning
         shape and just doubles the GPU/credit burn.  Short-circuit to the local
         fallback path instead."""
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         call_count = [0]
 
@@ -481,7 +481,7 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
         """Length-truncated responses WITHOUT reasoning tokens still get the
         budget-doubling retry — those are legitimately recoverable by giving
         the model more headroom."""
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         responses = [
             {'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}]},
@@ -506,7 +506,7 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
 
     def test_aux_returns_specific_status_when_reasoning_retry_still_empty(self):
         """Diagnostics should expose the provider failure mode instead of generic llm_error_aux."""
-        from api.runs.title_generation import generate_title_raw_via_aux
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_aux
 
         def empty_length_response(**kwargs):
             return {
@@ -531,7 +531,7 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
     def test_agent_route_short_circuits_on_empty_reasoning_without_retrying(self):
         """Regression for #2083 on the active-agent route: empty-reasoning
         responses must NOT trigger a budget-doubling retry."""
-        from api.runs.title_generation import generate_title_raw_via_agent
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_agent
 
         call_count = [0]
 
@@ -574,7 +574,7 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
 
     def test_agent_route_still_retries_finish_length_without_reasoning(self):
         """The active-agent route should preserve retry-on-length-no-reasoning."""
-        from api.runs.title_generation import generate_title_raw_via_agent
+        from api.runs.title_generation.provider_invocation import generate_title_raw_via_agent
 
         responses = [
             {'choices': [{'message': {'content': ''}, 'finish_reason': 'length'}]},
@@ -611,14 +611,14 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
         self.assertEqual(captured_budgets, [512, 1024])
         self.assertIsNone(agent.reasoning_config)
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_fallback_title_status_keeps_underlying_llm_reason(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
         """Local fallback should not hide that the LLM failed because it hit length."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         mock_session = MagicMock()
         mock_session.title = 'Untitled'
@@ -645,14 +645,14 @@ class TestReasoningModelTitleGeneration(unittest.TestCase):
         self.assertEqual(title_status[0]['status'], 'fallback')
         self.assertEqual(title_status[0]['reason'], 'local_summary:llm_length_aux')
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_generic_fallback_title_is_not_persisted(
         self, mock_get_session, mock_aux_title, mock_configured,
     ):
         """A generic local fallback is worse than the provisional first-message title."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         provisional_title = '\u5e2e\u6211\u53bb\u627e\u4e00\u672c\u300a\u7ea2\u697c\u68a6\u300b\u7535\u5b50\u4e66'
         first_user_text = provisional_title + '\u3002'
@@ -751,13 +751,13 @@ class TestBackgroundTitleProfileRouting(unittest.TestCase):
             if original_manager_module is not None:
                 sys.modules['tools.skill_manager_tool'] = original_manager_module
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_background_title_generation_uses_session_profile_home(
         self, mock_get_session, mock_configured,
     ):
         """A background title worker for a non-default profile must resolve aux config from that profile."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         mock_session = MagicMock()
         mock_session.title = 'Untitled'
@@ -786,7 +786,7 @@ class TestBackgroundTitleProfileRouting(unittest.TestCase):
         events = []
         try:
             with patch('api.profiles.get_hermes_home_for_profile', return_value='profile-home'):
-                with patch('api.runs.title_generation._generate_llm_session_title_via_aux', side_effect=fake_aux_title):
+                with patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux', side_effect=fake_aux_title):
                     with patch.dict(os.environ, {'HERMES_HOME': 'default-home'}, clear=False):
                         _run_background_title_update(
                             session_id='profile-title-session',
@@ -874,7 +874,7 @@ class TestAuxTitleTimeoutEdgeCases(unittest.TestCase):
     """_aux_title_timeout must reject zero, negative, and non-numeric values."""
 
     def _call(self, tg_config, default=15.0):
-        from api.runs.title_generation import _aux_title_timeout
+        from api.runs.title_generation.provider_invocation import _aux_title_timeout
         with _patch_tg_config(tg_config):
             return _aux_title_timeout(default=default)
 
@@ -917,15 +917,15 @@ class TestAuxInvalidAuxTriggersAgentFallback(unittest.TestCase):
     actually emits.
     """
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation._generate_llm_session_title_for_agent')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_for_agent')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_llm_invalid_aux_triggers_agent_fallback(
         self, mock_get_session, mock_agent_title, mock_aux_title, mock_configured,
     ):
         """Simulate aux returning (None, 'llm_invalid_aux', '...') and verify agent fallback fires."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         # Build a mock session that passes all the pre-checks
         mock_session = MagicMock()
@@ -965,15 +965,15 @@ class TestAuxInvalidAuxTriggersAgentFallback(unittest.TestCase):
         self.assertTrue(len(title_events) > 0, "Expected a 'title' event to be emitted")
         self.assertEqual(title_events[0][1]['title'], 'Weather Report')
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation._generate_llm_session_title_for_agent')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_for_agent')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_llm_error_aux_triggers_agent_fallback(
         self, mock_get_session, mock_agent_title, mock_aux_title, mock_configured,
     ):
         """Simulate aux returning (None, 'llm_error_aux', '') and verify agent fallback fires."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         mock_session = MagicMock()
         mock_session.title = 'Untitled'
@@ -1003,15 +1003,15 @@ class TestAuxInvalidAuxTriggersAgentFallback(unittest.TestCase):
 
         mock_agent_title.assert_called_once()
 
-    @patch('api.runs.title_generation._aux_title_configured', return_value=True)
-    @patch('api.runs.title_generation._generate_llm_session_title_via_aux')
-    @patch('api.runs.title_generation._generate_llm_session_title_for_agent')
-    @patch('api.runs.title_generation.get_session')
+    @patch('api.runs.title_generation.lifecycle._aux_title_configured', return_value=True)
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_via_aux')
+    @patch('api.runs.title_generation.lifecycle._generate_llm_session_title_for_agent')
+    @patch('api.runs.title_generation.lifecycle.get_session')
     def test_success_status_does_not_trigger_agent_fallback(
         self, mock_get_session, mock_agent_title, mock_aux_title, mock_configured,
     ):
         """When aux succeeds, the agent route must NOT be called."""
-        from api.runs.title_generation import _run_background_title_update
+        from api.runs.title_generation.lifecycle import _run_background_title_update
 
         mock_session = MagicMock()
         mock_session.title = 'Untitled'

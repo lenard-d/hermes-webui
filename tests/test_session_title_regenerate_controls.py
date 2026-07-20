@@ -136,7 +136,7 @@ def test_streaming_helper_generates_title_from_persisted_transcript(monkeypatch)
             return False
 
     import api.profiles as profiles_api
-    import api.streaming.title_generation as title_generation
+    from api.runs.title_generation import lifecycle as title_generation
     monkeypatch.setattr(profiles_api, "profile_env_for_background_worker", lambda *args, **kwargs: _ProfileEnv())
     monkeypatch.setattr(
         title_generation,
@@ -164,7 +164,7 @@ def test_streaming_helper_has_local_fallback_when_llm_title_is_empty(monkeypatch
             return False
 
     import api.profiles as profiles_api
-    import api.streaming.title_generation as title_generation
+    from api.runs.title_generation import lifecycle as title_generation
     monkeypatch.setattr(profiles_api, "profile_env_for_background_worker", lambda *args, **kwargs: _ProfileEnv())
     monkeypatch.setattr(title_generation, "_generate_llm_session_title_via_aux", lambda *args, **kwargs: (None, "llm_empty", ""))
 

@@ -135,7 +135,7 @@ def test_start_chat_stream_response_includes_provisional_title(tmp_path, monkeyp
 
 def test_prompt_provisional_title_still_counts_as_provisional_after_response():
     from api.sessions.store import title_from
-    from api.runs.title_generation import _is_provisional_title
+    from api.runs.title_generation.policy import _is_provisional_title
 
     messages = [
         {"role": "user", "content": "Can you implement early session titles in Hermes WebUI?"},
@@ -147,7 +147,7 @@ def test_prompt_provisional_title_still_counts_as_provisional_after_response():
 
 def test_prompt_prefix_manual_title_is_not_treated_as_provisional():
     from api.sessions.store import title_from
-    from api.runs.title_generation import _is_provisional_title
+    from api.runs.title_generation.policy import _is_provisional_title
 
     messages = [
         {"role": "user", "content": "Can you implement early session titles in Hermes WebUI?"},

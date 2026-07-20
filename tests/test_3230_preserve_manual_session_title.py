@@ -9,7 +9,7 @@ import pytest
 import api.config as config
 import api.sessions.store as models
 import api.profiles as profiles_api
-import api.runs.title_generation as title_generation
+from api.runs.title_generation import lifecycle as title_generation
 from api.sessions.store import Session
 from api.sessions.operations import apply_session_title_rename, mark_session_title_generated
 
@@ -108,7 +108,7 @@ def test_adaptive_refresh_skips_manual_title_even_at_configured_interval():
         manual_title=True,
     )
 
-    with patch("api.runs.title_generation._get_title_refresh_interval", return_value=5), \
+    with patch("api.runs.title_generation.lifecycle._get_title_refresh_interval", return_value=5), \
          patch("threading.Thread") as thread_cls:
         title_generation._maybe_schedule_title_refresh(session, lambda *_args: None, agent=None)
 
@@ -124,7 +124,7 @@ def test_adaptive_refresh_still_schedules_for_generated_titles_without_manual_lo
         manual_title=False,
     )
 
-    with patch("api.runs.title_generation._get_title_refresh_interval", return_value=5), \
+    with patch("api.runs.title_generation.lifecycle._get_title_refresh_interval", return_value=5), \
          patch("threading.Thread") as thread_cls:
         thread = MagicMock()
         thread_cls.return_value = thread

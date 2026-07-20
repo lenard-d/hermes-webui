@@ -131,7 +131,7 @@ def test_audit_reports_runtime_auxiliary_and_model_metadata_imports():
     anchors = _anchors(classes["runtime_auxiliary_model_metadata"])
 
     assert ("api/streaming/attachments.py", "agent.auxiliary_client") in anchors
-    assert ("api/streaming/title_generation.py", "agent.auxiliary_client") in anchors
+    assert ("api/runs/title_generation/provider_invocation.py", "agent.auxiliary_client") in anchors
     assert ("api/streaming/tool_events.py", "agent.model_metadata") in anchors
     assert ("api/config/model_catalog.py", "hermes_cli.models") in anchors
 
