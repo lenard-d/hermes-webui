@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parents[1]
+LLM_WIKI_PY = REPO / "api" / "routes_parts" / "llm_wiki.py"
 
 
 class _FakeHandler:
@@ -53,11 +54,12 @@ def test_wiki_page_route_exists_in_routes():
 
 
 def test_wiki_page_path_traversal_rejection():
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    src = LLM_WIKI_PY.read_text(encoding="utf-8")
     # Traversal is rejected by a real `..` path SEGMENT check (not the bare
     # substring, which would also reject a legit filename like `v1..v2.md`).
     assert 'part == ".."' in src, "Segment-based path-traversal check not found in wiki page handler"
-    assert "_skill_path_within" in src.split("/api/wiki/page")[1].split("/api/")[0], (
+    page_handler = src.split("def _handle_llm_wiki_page(", 1)[1].split("\n__routes_exports__", 1)[0]
+    assert "_skill_path_within" in page_handler, (
         "Symlink-safe _skill_path_within guard not found in /api/wiki/page handler"
     )
 

@@ -15,11 +15,11 @@ These tests pin the defenses applied per Opus advisor on stage-299:
 from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
-ROUTES_PY = Path(__file__).parent.parent / "api" / "routes.py"
+LLM_WIKI_PY = Path(__file__).parent.parent / "api" / "routes_parts" / "llm_wiki.py"
 
 
 def _read_source():
-    return ROUTES_PY.read_text()
+    return LLM_WIKI_PY.read_text()
 
 
 def test_wiki_max_files_constant_present():
