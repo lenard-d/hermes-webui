@@ -121,8 +121,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       index.html           HTML template
       style.css            Base CSS loaded before ordered domain styles
       style_parts/         Direct-loaded theme, layout, transcript, settings, and panel CSS
-      ui.js                UI compatibility bootstrap loaded before ordered domain scripts
-      ui_parts/            Direct-loaded UI state, rendering, navigation, model, and composer domains
+      modules/ui/          Native UI owners plus `index.js` entrypoint and compatibility publication
+        composer-controls.js Stable import facade for the extracted composer-adjacent owners
+        toolsets-controls.js Session toolset chip, picker, catalog, and persistence owner
+        mobile-composer-config.js Narrow-layout composer configuration panel owner
+        message-scroll-follow.js Transcript scroll intent, pinning, cue, and PWA gesture owner
+        activity-timing.js Worklog duration, compression timer, and event timestamp owner
       session_render_cache.js Native ES module owning the bounded transcript-render LRU
       session_render_cache_adapter.js Temporary classic-frontend compatibility adapter
       workspace.js         Workspace transport and compatibility facade
@@ -622,7 +626,11 @@ The main directly loaded families are:
 
 1. `style.css`, then `style_parts/` for theme, layout, transcript, settings, and panel CSS.
 2. `i18n.js`, helpers, one complete locale file per language, then the i18n runtime.
-3. `ui.js`, then ordered `ui_parts/` for UI state, navigation, model/composer controls, and rendering.
+3. `modules/ui/index.js`, the native-module entrypoint for UI state, navigation,
+   model/composer controls, transcript presentation, and rendering. The former
+   composer-control bucket is split by ownership: `toolsets-controls.js`,
+   `mobile-composer-config.js`, `message-scroll-follow.js`, and
+   `activity-timing.js`; `composer-controls.js` is only their stable import facade.
 4. `workspace.js`, then ordered `workspace_parts/` for navigation, preview/editor,
    and upload behavior.
 5. Ordered `sessions_parts/`, then `sessions.js`, whose compatibility facade is intentionally installed last.
@@ -633,13 +641,14 @@ The main directly loaded families are:
 9. Ordered `boot_parts/`, then `boot.js`; standalone owners such as `terminal.js`
    and `onboarding.js` remain directly loaded.
 
-Most application assets remain classic scripts. Their browser order and selected
-compatibility globals are therefore part of the contract, while family namespaces
+Most application assets remain classic scripts, while the UI family is loaded as
+native ES modules. Classic browser order and selected compatibility globals remain
+part of the contract, while family namespaces
 such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
 the semantic owners. A domain stays intact when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
 `config/model_catalog.py`, `runs/local.py`, and
-`ui_parts/017-message-renderer.js` are deliberately larger than the line-count
+`modules/ui/renderer.js` are deliberately larger than the line-count
 heuristic because their state and cleanup lifecycles do not expose a narrower
 safe Interface.
 

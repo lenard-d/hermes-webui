@@ -3,7 +3,10 @@ import * as activityPresentation from './activity-presentation.js';
 import * as anchorScenes from './anchor-scenes.js';
 import * as assistantTurnPresentation from './assistant-turn-presentation.js';
 import * as composer from './composer.js';
+import * as activityTiming from './activity-timing.js';
 import * as composerControls from './composer-controls.js';
+import * as messageScrollFollow from './message-scroll-follow.js';
+import * as mobileComposerConfig from './mobile-composer-config.js';
 import * as contentPostprocessing from './content-postprocessing.js';
 import * as dialogsAndReconnect from './dialogs-and-reconnect.js';
 import * as healthAndUpdates from './health-and-updates.js';
@@ -20,6 +23,7 @@ import * as state from './state.js';
 import * as toolWorklog from './tool-worklog.js';
 import * as transparentWorklog from './transparent-worklog.js';
 import * as topbarPresentation from './topbar-presentation.js';
+import * as toolsetsControls from './toolsets-controls.js';
 import * as workspaceAndUploads from './workspace-and-uploads.js';
 import { publishCompatibilityDomain } from '../compatibility.js';
 
@@ -30,6 +34,10 @@ const modules = Object.assign(Object.create(null), {
   modelState,
   modelCatalog,
   modelSelection,
+  toolsetsControls,
+  mobileComposerConfig,
+  messageScrollFollow,
+  activityTiming,
   composerControls,
   activityAndScroll,
   assistantTurnPresentation,
@@ -69,6 +77,7 @@ function exposeCompatibilityBinding(name, ownerBindings) {
 }
 
 for (const moduleApi of Object.values(modules)) {
+  if (moduleApi.compatibilityFacade === true) continue;
   for (const name of Object.keys(moduleApi.compatibilityBindings)) {
     exposeCompatibilityBinding(name, moduleApi.compatibilityBindings);
   }
