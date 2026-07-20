@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from types import ModuleType, SimpleNamespace
+
 from tests.frontend_asset_contract import family_source
 
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[1]
 PANELS_JS = family_source("panels")
 SESSIONS_JS = family_source("sessions")
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 NODE = shutil.which("node")
 
 
@@ -36,17 +36,66 @@ def _extract_function(source: str, name: str) -> str:
     return source[start:pos]
 
 
-def test_recent_handler_reuses_dispatcher_cron_context_without_nesting():
-    import inspect
-    import api.routes as routes
+def test_recent_handler_reuses_dispatcher_cron_context_without_nesting(monkeypatch):
+    import sys
 
-    dispatch_start = ROUTES_PY.index('if parsed.path == "/api/crons/recent":')
-    dispatch_end = ROUTES_PY.index('if parsed.path == "/api/crons/status":', dispatch_start)
-    dispatch = ROUTES_PY[dispatch_start:dispatch_end]
-    handler = inspect.getsource(routes._handle_cron_recent)
+    import api.profiles as profiles
+    from api.http.routes import automation_queries
+    from api.routes_parts import cron as cron_domain
 
-    assert "with cron_profile_context():" in dispatch
-    assert "cron_profile_context_for_home" not in handler
+    events = []
+
+    @contextmanager
+    def tracked_cron_context():
+        events.append("context-enter")
+        yield
+        events.append("context-exit")
+
+    @contextmanager
+    def forbidden_nested_home_context(*_args, **_kwargs):
+        raise AssertionError("the cron domain handler must reuse the HTTP context")
+        yield  # pragma: no cover - required for the contextmanager shape
+
+    cron_module = ModuleType("cron")
+    cron_module.__path__ = []
+    cron_jobs_module = ModuleType("cron.jobs")
+    cron_jobs_module.list_jobs = lambda *, include_disabled: []
+    cron_module.jobs = cron_jobs_module
+
+    monkeypatch.setitem(sys.modules, "cron", cron_module)
+    monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs_module)
+    monkeypatch.setattr(profiles, "cron_profile_context", tracked_cron_context)
+    monkeypatch.setattr(
+        profiles,
+        "cron_profile_context_for_home",
+        forbidden_nested_home_context,
+    )
+    monkeypatch.setattr(
+        cron_domain,
+        "j",
+        lambda _handler, payload, **_kwargs: payload,
+        raising=False,
+    )
+
+    # automation_queries is the HTTP owner and receives its dependencies via
+    # RouteContext. Supply only the dependencies this route executes instead
+    # of borrowing and patching the api.routes compatibility namespace.
+    class StubRouteContext(dict):
+        def __missing__(self, _key):
+            return None
+
+    ctx = StubRouteContext(
+        _ensure_agent_cron_import_path=lambda: events.append("cron-import-ready"),
+        _handle_cron_recent=cron_domain._handle_cron_recent,
+    )
+    response = automation_queries.handle_get(
+        object(),
+        SimpleNamespace(path="/api/crons/recent", query="since=42"),
+        ctx,
+    )
+
+    assert response == {"completions": [], "since": 42.0}
+    assert events == ["context-enter", "cron-import-ready", "context-exit"]
 
 
 def test_successful_profile_switch_resets_unread_cron_state():

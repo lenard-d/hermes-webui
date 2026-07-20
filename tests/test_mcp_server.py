@@ -12,7 +12,6 @@ import json
 import os
 import sys
 import tempfile
-import uuid
 from pathlib import Path
 
 import pytest
@@ -41,7 +40,7 @@ if str(_REPO) not in sys.path:
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # These tests mutate module-level constants on api.config / mcp_server /
-# api.sessions.store (STATE_DIR, SESSION_DIR, PROJECTS_FILE, …) so the MCP server
+# api.sessions.projects (PROJECTS_FILE / SESSION_INDEX_FILE) so the MCP server
 # reads from a tmpdir. Without restoration, downstream tests in the full
 # suite (test_pytest_state_isolation, test_provider_quota_status,
 # test_provider_management, etc.) read the now-deleted tmpdir from
@@ -83,7 +82,7 @@ def _cleanup_state_dir(state_dir: Path):
     shutil.rmtree(state_dir, ignore_errors=True)
     os.environ.pop("HERMES_WEBUI_STATE_DIR", None)
 
-    # Restore api.config / mcp_server / api.sessions.store module constants.
+    # Restore api.config / mcp_server / api.sessions.projects module constants.
     saved = _SAVED_CONSTANTS
     if saved.get("captured"):
         import api.config as _cfg
@@ -93,10 +92,10 @@ def _cleanup_state_dir(state_dir: Path):
             mcp_mod = sys.modules["mcp_server"]
             for attr, val in saved["mcp_server"].items():
                 setattr(mcp_mod, attr, val)
-        if "api.sessions.store" in sys.modules:
-            models_mod = sys.modules["api.sessions.store"]
-            for attr, val in saved["api.sessions.store"].items():
-                setattr(models_mod, attr, val)
+        if "api.sessions.projects" in sys.modules:
+            projects_mod = sys.modules["api.sessions.projects"]
+            for attr, val in saved["api.sessions.projects"].items():
+                setattr(projects_mod, attr, val)
         # Restore HERMES_BASE_HOME / HERMES_HOME if we changed them
         for env_key, env_val in saved["env"].items():
             if env_val is _MISSING_ENV:
@@ -150,6 +149,7 @@ def _reimport_mcp():
     os.environ["HERMES_HOME"] = str(isolated_home)
 
     import api.config as cfg
+    import api.sessions.projects as session_projects
     import mcp_server as mod
 
     # First-time snapshot of module constants — captured AFTER the imports
@@ -169,15 +169,14 @@ def _reimport_mcp():
                          "WEBUI_URL")
             if hasattr(mod, attr)
         }
-        if "api.sessions.store" in sys.modules:
-            models_mod = sys.modules["api.sessions.store"]
-            _SAVED_CONSTANTS["api.sessions.store"] = {
-                attr: getattr(models_mod, attr)
-                for attr in ("STATE_DIR", "PROJECTS_FILE", "SESSION_DIR")
-                if hasattr(models_mod, attr)
-            }
-        else:
-            _SAVED_CONSTANTS["api.sessions.store"] = {}
+        _SAVED_CONSTANTS["api.sessions.projects"] = {
+            attr: getattr(session_projects, attr)
+            for attr in (
+                "PROJECTS_FILE",
+                "SESSION_INDEX_FILE",
+                "_projects_migrated",
+            )
+        }
         _SAVED_CONSTANTS["captured"] = True
 
     # Acquire the api.profiles module THAT mcp_server's bound functions read.
@@ -188,7 +187,6 @@ def _reimport_mcp():
     # object as `mcp_server.get_active_profile_name`'s closure reference.
     # We need to mutate the closure-bound module so mcp_server sees our
     # _active_profile assignment.
-    import api.profiles as fresh_profiles_via_import
     # mcp_server.get_active_profile_name is bound at first-import time and
     # reads `_active_profile` from its own module's globals via closure.
     # That module is the function's __globals__["__name__"] entry in
@@ -197,7 +195,7 @@ def _reimport_mcp():
     bound_get_active = mod.get_active_profile_name
     bound_module_name = bound_get_active.__module__
     # Grab whatever Python currently has registered for that name; it may
-    # or may not be the same object as fresh_profiles_via_import.
+    # or may not be the same object as a fresh import of api.profiles.
     # Use the function's __globals__ directly — that's the actual closure
     # the function uses for its module-level reads.
     bound_globals = bound_get_active.__globals__
@@ -231,17 +229,12 @@ def _reimport_mcp():
     if hasattr(mod, 'SESSION_INDEX_FILE'):
         mod.SESSION_INDEX_FILE = cfg.SESSION_INDEX_FILE
 
-    # api.sessions.store also imports STATE_DIR / PROJECTS_FILE etc. as module
-    # constants — re-point those too so load_projects() / save_projects()
-    # see the fresh STATE_DIR.
-    if 'api.sessions.store' in sys.modules:
-        models_mod = sys.modules['api.sessions.store']
-        if hasattr(models_mod, 'STATE_DIR'):
-            models_mod.STATE_DIR = cfg.STATE_DIR
-        if hasattr(models_mod, 'PROJECTS_FILE'):
-            models_mod.PROJECTS_FILE = cfg.PROJECTS_FILE
-        if hasattr(models_mod, 'SESSION_DIR'):
-            models_mod.SESSION_DIR = cfg.SESSION_DIR
+    # load_projects() / save_projects() are re-exported by api.sessions.store,
+    # but their live globals belong to api.sessions.projects. Point that owner
+    # at the isolated fixture paths instead of patching the compatibility seam.
+    session_projects.PROJECTS_FILE = cfg.PROJECTS_FILE
+    session_projects.SESSION_INDEX_FILE = cfg.SESSION_INDEX_FILE
+    session_projects._projects_migrated = False
 
     # Re-evaluate WEBUI_URL from current env (PR #1895 made it env-aware
     # but the value is computed once at module load; tests need to see
@@ -481,12 +474,12 @@ class TestProfileScoping:
     async def test_legacy_untagged_hidden_from_non_root_profile(self):
         """Untagged projects (no `profile` field) belong to the root profile.
 
-        Mirrors api/routes.py:_profiles_match where a missing profile coerces
-        to 'default'. A non-root profile must NOT see legacy untagged rows.
+        Mirrors the canonical api.profiles matcher where a missing profile
+        coerces to 'default'. A non-root profile must NOT see legacy rows.
         """
         # Manually write a legacy untagged project (pre-#1614 schema)
-        import api.config as _cfg_mod
-        PROJECTS_FILE = _cfg_mod.PROJECTS_FILE
+        import api.sessions.projects as session_projects
+        PROJECTS_FILE = session_projects.PROJECTS_FILE
         legacy = [{
             "project_id": "legacy000001",
             "name": "LegacyUntagged",
@@ -511,8 +504,8 @@ class TestProfileScoping:
 
     async def test_legacy_untagged_rename_blocked_from_non_root(self):
         """Non-root profile cannot rename a legacy untagged project."""
-        import api.config as _cfg_mod
-        PROJECTS_FILE = _cfg_mod.PROJECTS_FILE
+        import api.sessions.projects as session_projects
+        PROJECTS_FILE = session_projects.PROJECTS_FILE
         legacy = [{
             "project_id": "legacy000002",
             "name": "Legacy",
@@ -624,21 +617,17 @@ class TestApiPassword:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  _profiles_match parity (mcp_server vs api.routes vs api.profiles)
+#  _profiles_match parity (MCP adapter vs canonical profile owner)
 # ═══════════════════════════════════════════════════════════════════════════
 #
-# Locks the canonical-helper relocation: mcp_server.py and api/routes.py both
-# now import _profiles_match from api/profiles/__init__.py. If anyone re-introduces a
-# local copy in either module, both the identity check and the input-matrix
-# parametrize trip immediately.
+# Locks the canonical-helper relocation: mcp_server.py imports the matcher from
+# api.profiles instead of carrying its own security-sensitive implementation.
 
 async def test_profiles_match_single_source_of_truth():
-    """All three module names resolve to the same canonical object.
+    """The MCP adapter resolves to the profile owner's canonical object.
 
-    This locks the relocation: mcp_server.py and api/routes.py both import
-    _profiles_match from api/profiles/__init__.py rather than carrying a local copy.
-    Re-introducing a local definition in either module trips this test
-    immediately.
+    Re-introducing a local MCP implementation would allow profile visibility
+    semantics to drift away from the domain owner and trips this test.
 
     Imported here in a clean module-import context (not via _reimport_mcp,
     which would re-execute api/profiles/__init__.py and produce a distinct function
@@ -653,33 +642,28 @@ async def test_profiles_match_single_source_of_truth():
     # Snapshot the originals; we'll put them back at the end.
     saved_modules = {
         k: sys.modules[k]
-        for k in ('mcp_server', 'api.routes', 'api.profiles')
+        for k in ('mcp_server', 'api.profiles')
         if k in sys.modules
     }
     # Also snapshot the attributes on the parent `api` package, because
-    # `import api.routes as r` resolves via `sys.modules['api'].routes`,
-    # NOT directly via sys.modules['api.routes']. If we don't restore
-    # the parent attribute, subsequent `import api.routes as r` calls
-    # bind to the fresh re-imported module even though sys.modules
-    # holds the original.
+    # Restore the parent-package attribute as well as sys.modules so sibling
+    # tests keep patching the same api.profiles module object.
     import api as _api_parent
     saved_api_attrs = {}
-    for sub in ('routes', 'profiles'):
+    for sub in ('profiles',):
         if hasattr(_api_parent, sub):
             saved_api_attrs[sub] = getattr(_api_parent, sub)
 
-    for k in ('mcp_server', 'api.routes', 'api.profiles'):
+    for k in ('mcp_server', 'api.profiles'):
         sys.modules.pop(k, None)
     try:
         import api.profiles as _profiles_mod
-        import api.routes as _routes_mod
         import mcp_server as _mcp_mod
-        canonical = _profiles_mod._profiles_match
-        assert _routes_mod._profiles_match is canonical
+        canonical = _profiles_mod.profiles_match
         assert _mcp_mod._profiles_match is canonical
     finally:
         # Restore so monkeypatch handles in sibling tests target the right module.
-        for k in ('mcp_server', 'api.routes', 'api.profiles'):
+        for k in ('mcp_server', 'api.profiles'):
             sys.modules.pop(k, None)
         sys.modules.update(saved_modules)
         # Restore parent-package attributes too (see above for why).
@@ -703,16 +687,15 @@ async def test_profiles_match_single_source_of_truth():
     ('foo', 'default'),
 ])
 async def test_profiles_match_input_matrix(a, b):
-    """mcp_server._profiles_match agrees with api.routes._profiles_match
-    on every (row, active) pair across the visibility matrix.
+    """The MCP matcher agrees with the profile owner across the matrix.
 
     Note: function-object identity is checked separately in
     test_profiles_match_single_source_of_truth — here we only assert
     behavioral parity, which is robust to test-fixture re-imports that
     clear and re-execute api.profiles."""
     from mcp_server import _profiles_match as mcp_match
-    from api.routes import _profiles_match as routes_match
-    assert mcp_match(a, b) == routes_match(a, b)
+    from api.profiles import profiles_match
+    assert mcp_match(a, b) == profiles_match(a, b)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -720,7 +703,7 @@ async def test_profiles_match_input_matrix(a, b):
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Maintainer ask: verify that --profile is applied to _active_profile *before*
-# any api.sessions.store / api.profiles consumer reads the active profile. The risk
+# any api.sessions.projects / api.profiles consumer reads the active profile. The risk
 # is that if the canonical helpers cached the profile on first read at import
 # time, a --profile foo flag passed at startup would bind too late.
 #
@@ -744,8 +727,8 @@ class TestProfileCliOrdering:
         _profiles._active_profile = _profile_arg right after import). If a
         helper had latched the profile at import time, the override here
         would be too late and the test would see 'default'-tagged rows."""
-        import api.config as _cfg_mod
-        PROJECTS_FILE = _cfg_mod.PROJECTS_FILE
+        import api.sessions.projects as session_projects
+        PROJECTS_FILE = session_projects.PROJECTS_FILE
         # Pre-seed two projects: one for default, one for foo.
         seeded = [
             {"project_id": "p_default_0001", "name": "DefaultRow",

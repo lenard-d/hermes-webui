@@ -329,7 +329,7 @@ def test_streaming_cronjob_wrapper_uses_profile_context_only_for_tool_call(tmp_p
     import types
 
     from api import profiles as p
-    from api import streaming as st
+    from api.streaming import diagnostics as st
 
     profile_home = tmp_path / "home" / "profiles" / "ops"
     events = []
@@ -412,7 +412,7 @@ def test_streaming_cronjob_wrapper_context_survives_threadpool_context_copy(tmp_
     import types
 
     from api import profiles as p
-    from api import streaming as st
+    from api.streaming import diagnostics as st
 
     profile_home = tmp_path / "home" / "profiles" / "ops"
     events = []
@@ -486,7 +486,7 @@ def test_streaming_cronjob_wrapper_leaves_calls_unwrapped_without_streaming_prof
     """CLI/default calls through the registered cronjob handler are unchanged."""
     import types
 
-    from api import streaming as st
+    from api.streaming import diagnostics as st
 
     events = []
 
@@ -528,23 +528,84 @@ def test_streaming_cronjob_wrapper_leaves_calls_unwrapped_without_streaming_prof
     assert events == [("handler", "list")]
 
 
-def test_streaming_profile_home_mutation_avoids_long_lived_cron_cache_patch():
-    """Guard the streaming integration seam for issue #4580.
+def test_local_run_environment_avoids_long_lived_cron_context(tmp_path, monkeypatch):
+    """The turn environment must not pin cron module caches for the whole run.
 
-    Streaming still mutates process env briefly for legacy fallbacks, but cron
-    path caches must be scoped to the cronjob tool-call boundary via the
-    wrapper/contextvar path — not patched for the full agent turn.
+    The per-turn profile remains available through the diagnostics contextvar,
+    while ``cron_profile_context_for_home`` is entered only by the wrapped tool
+    handler covered above. This exercises the current run-environment owner
+    instead of asserting strings in a removed streaming fragment.
     """
-    from pathlib import Path
+    import types
 
-    src = (
-        Path(__file__).resolve().parent.parent
-        / "api"
-        / "streaming_parts"
-        / "local_run.py"
-    ).read_text(encoding="utf-8")
-    assert "_install_streaming_cronjob_profile_wrapper()" in src
-    assert "_STREAMING_CRON_PROFILE_HOME.set(_profile_home)" in src
-    assert "_STREAMING_CRON_PROFILE_HOME.reset(_streaming_cron_profile_home_token)" in src
-    assert "def _patch_streaming_profile_module_caches" not in src
-    assert "old_profile_module_cache_snapshot" not in src
+    from api import profiles
+    from api.runs import local_environment
+    from api.streaming import diagnostics
+
+    profile_home = tmp_path / "home" / "profiles" / "ops"
+    profile_home.mkdir(parents=True)
+    events = []
+
+    def forbidden_cron_context(*_args, **_kwargs):
+        events.append("cron-context-entered")
+        raise AssertionError("run setup must not hold a cron context")
+
+    background_process = types.ModuleType("api.background_process")
+    background_process.register_process_session = (
+        lambda session_id, process_id: events.append(
+            ("register-process", session_id, process_id)
+        )
+    )
+    mcp_tool = types.ModuleType("tools.mcp_tool")
+    mcp_tool.discover_mcp_tools = lambda: events.append("discover-mcp")
+
+    monkeypatch.setitem(sys.modules, "api.background_process", background_process)
+    monkeypatch.setitem(sys.modules, "tools.mcp_tool", mcp_tool)
+    monkeypatch.setattr(profiles, "cron_profile_context_for_home", forbidden_cron_context)
+    monkeypatch.setattr(
+        local_environment,
+        "ensure_agent_runtime_current",
+        lambda: events.append("runtime-current"),
+    )
+    monkeypatch.setattr(
+        local_environment,
+        "_prewarm_skill_tool_modules",
+        lambda: events.append("skills-prewarmed"),
+    )
+    monkeypatch.setattr(
+        local_environment,
+        "_install_streaming_cronjob_profile_wrapper",
+        lambda: events.append("cron-wrapper-installed"),
+    )
+    monkeypatch.setattr(local_environment, "set_thread_env", lambda _env: None)
+    monkeypatch.setenv("HERMES_HOME", "before-run")
+
+    token = diagnostics._STREAMING_CRON_PROFILE_HOME.set(str(profile_home))
+    environment = local_environment.LocalRunEnvironment()
+    try:
+        environment.enter(
+            session_id="session-1",
+            workspace=str(tmp_path),
+            profile_home=str(profile_home),
+            profile_runtime_env={},
+            safe_profile_runtime_env={},
+            patch_skill_home_modules=lambda home: events.append(
+                ("patch-skills", str(home))
+            ),
+        )
+        assert os.environ["HERMES_HOME"] == str(profile_home)
+        assert diagnostics._STREAMING_CRON_PROFILE_HOME.get() == str(profile_home)
+    finally:
+        environment.close()
+        diagnostics._STREAMING_CRON_PROFILE_HOME.reset(token)
+
+    assert os.environ["HERMES_HOME"] == "before-run"
+    assert "cron-context-entered" not in events
+    assert events == [
+        ("register-process", "session-1", "session-1"),
+        "runtime-current",
+        "skills-prewarmed",
+        "cron-wrapper-installed",
+        ("patch-skills", str(profile_home)),
+        "discover-mcp",
+    ]
