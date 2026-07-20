@@ -10,7 +10,7 @@ The fix wraps both connect() calls with ``contextlib.closing(...)`` so
 the connection is closed deterministically:
 
   * api/models.py :: count_conversation_rounds
-  * api/routes.py :: _persist_handoff_summary_to_state_db
+  * api/routes_parts/handoff_summary.py :: _persist_handoff_summary_to_state_db
 
 This test loops the two patched functions ~20 times against a tmp state.db
 and asserts the parent process open-fd count does not climb.

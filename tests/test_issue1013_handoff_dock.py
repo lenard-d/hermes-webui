@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
 STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-ROUTES = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+HANDOFF_SUMMARY = (ROOT / "api" / "routes_parts" / "handoff_summary.py").read_text(encoding="utf-8")
 UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
 
 
@@ -179,9 +179,9 @@ def test_handoff_summary_card_rendering_uses_persisted_messages():
 
 def test_handoff_summary_does_not_call_removed_agent_get_response():
     """Current Hermes Agent exposes run_conversation/private transports, not get_response."""
-    handoff_start = ROUTES.index("def _handle_handoff_summary")
-    next_handler = ROUTES.index("\ndef _handle_skill_save", handoff_start)
-    handoff_body = ROUTES[handoff_start:next_handler]
+    handoff_start = HANDOFF_SUMMARY.index("def _handle_handoff_summary")
+    next_handler = HANDOFF_SUMMARY.index("\n__routes_exports__", handoff_start)
+    handoff_body = HANDOFF_SUMMARY[handoff_start:next_handler]
     assert ".get_response(" not in handoff_body
     assert "_agent_text_completion" in handoff_body
     assert "_fallback_handoff_summary" in handoff_body
@@ -189,9 +189,9 @@ def test_handoff_summary_does_not_call_removed_agent_get_response():
 
 def test_handoff_summary_prompt_uses_you_and_你():
     """Summary prompt should use assistant-facing pronouns instead of “user/用户”."""
-    handoff_start = ROUTES.index("def _handle_handoff_summary")
-    next_handler = ROUTES.index("\ndef _handle_skill_save", handoff_start)
-    handoff_body = ROUTES[handoff_start:next_handler]
+    handoff_start = HANDOFF_SUMMARY.index("def _handle_handoff_summary")
+    next_handler = HANDOFF_SUMMARY.index("\n__routes_exports__", handoff_start)
+    handoff_body = HANDOFF_SUMMARY[handoff_start:next_handler]
     prompt_start = handoff_body.index("summary_system_prompt = (")
     prompt_end = handoff_body.index("summary_user_text =", prompt_start)
     prompt_body = handoff_body[prompt_start:prompt_end]
