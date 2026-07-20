@@ -31,9 +31,10 @@ import tempfile
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = pathlib.Path(__file__).parent.parent
-UI_JS_PATH = ROOT / "static" / "ui.js"
-UI_JS = UI_JS_PATH.read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

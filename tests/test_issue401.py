@@ -9,13 +9,13 @@ The older loadSession() path rewrote message history on the client:
 That broke both durable logging and page refresh for valid tool runs.
 """
 import json
-import pathlib
 import subprocess
 import textwrap
 
-REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+from tests.frontend_asset_contract import family_source
+
+SESSIONS_JS = family_source("sessions")
+UI_JS = family_source("ui")
 _SYNC_TOOL_CALLS_FN_NAME = (
     "function _syncToolCallsForLoadedMessages(messages, sessionToolCalls){"
 )

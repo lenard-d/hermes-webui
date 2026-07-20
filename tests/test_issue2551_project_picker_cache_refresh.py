@@ -12,12 +12,12 @@ entry before re-rendering, so the optimistic update reflects the move
 immediately without a wasted `/api/sessions` round trip.
 """
 
-from pathlib import Path
 import json
 import subprocess
 
-REPO = Path(__file__).resolve().parents[1]
-SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+from tests.frontend_asset_contract import family_source
+
+SESSIONS_SRC = family_source("sessions")
 
 
 def _show_project_picker_body() -> str:

@@ -18,9 +18,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_SRC = family_source("sessions")
 NODE = shutil.which("node")
 
 
@@ -91,6 +93,7 @@ LOAD_SESSION_SRC = _extract_function(SESSIONS_SRC, "loadSession")
 ENSURE_MESSAGES_LOADED_SRC = _extract_function(SESSIONS_SRC, "_ensureMessagesLoaded")
 INFLIGHT_HAS_VISIBLE_STATE_SRC = _extract_function(SESSIONS_SRC, "_inflightHasVisibleLiveState")
 SELECT_LIVE_RECOVERY_INFLIGHT_SRC = _extract_function(SESSIONS_SRC, "_selectLiveRecoveryInflight")
+RESTORE_LOADED_SESSION_SRC = _extract_function(SESSIONS_SRC, "_restoreLoadedSession")
 
 
 def _normalise_ws(s: str) -> str:
@@ -98,33 +101,41 @@ def _normalise_ws(s: str) -> str:
 
 
 def test_loadsession_has_generation_token_and_forwards_to_ensure_messages_loaded():
-    body = LOAD_SESSION_SRC
-    assert "_loadSessionGeneration" in body, (
+    load_body = LOAD_SESSION_SRC
+    restore_body = RESTORE_LOADED_SESSION_SRC
+    assert "_loadSessionGeneration" in load_body, (
         "loadSession() must use a global generation counter so superseded loads "
         "can be rejected by continuation ownership checks"
     )
-    assert "const _loadGeneration = ++_loadSessionGeneration" in body, (
+    assert "const _loadGeneration = ++_loadSessionGeneration" in load_body, (
         "loadSession() must increment and capture per-call generation"
     )
-    assert "const _isCurrentLoad = () => _loadingSessionId === sid && _loadSessionGeneration === _loadGeneration" in body
-    assert "loadGeneration:_loadGeneration" in body, (
-        "loadSession() must thread generation into _ensureMessagesLoaded()"
+    assert "const _isCurrentLoad = () => _loadingSessionId === sid && _loadSessionGeneration === _loadGeneration" in load_body
+    assert "loadGeneration:_loadGeneration" in restore_body, (
+        "_restoreLoadedSession() must thread loadSession's generation into "
+        "_ensureMessagesLoaded()"
     )
-    # Guard each await/catch branch so stale continuation cannot mutate shared pane state.
-    # Two calls exist in this function: INFLIGHT and idle branches.
-    norm = _normalise_ws(body)
-    assert norm.count("if(!_isCurrentLoad())") >= 6, (
-        "loadSession() should check ownership in multiple await/catch paths, "
-        "including stale _ensureMessagesLoaded catch branches"
+    # Both owners must guard their own await/catch continuations: loadSession()
+    # owns metadata/draft loading while _restoreLoadedSession() owns the INFLIGHT
+    # and idle message-loading branches.
+    load_norm = _normalise_ws(load_body)
+    restore_norm = _normalise_ws(restore_body)
+    assert load_norm.count("if(!_isCurrentLoad())") >= 5, (
+        "loadSession() should reject stale metadata/draft continuations"
+    )
+    assert restore_norm.count("if(!_isCurrentLoad())") >= 5, (
+        "_restoreLoadedSession() should check ownership in its INFLIGHT and idle "
+        "message-load await/catch paths"
     )
     ensure_call = _normalise_ws("await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, loadGeneration:_loadGeneration});")
-    assert ensure_call in norm, (
-        "loadSession() must pass generation into _ensureMessagesLoaded() for stale-owner checks"
+    assert ensure_call in restore_norm, (
+        "_restoreLoadedSession() must pass generation into "
+        "_ensureMessagesLoaded() for stale-owner checks"
     )
     assert (
-        "showToast('Failed to load session" in LOAD_SESSION_SRC
-        or "showToast('Failed to load conversation messages" in LOAD_SESSION_SRC
-    ), "loadSession() should preserve toast-based failure paths"
+        "showToast('Failed to load session" in RESTORE_LOADED_SESSION_SRC
+        or "showToast('Failed to load conversation messages" in RESTORE_LOADED_SESSION_SRC
+    ), "_restoreLoadedSession() should preserve toast-based failure paths"
 
 
 def test_ensure_messages_loaded_ownership_guard_pre_and_post_await():
@@ -348,6 +359,7 @@ let toastCalls = [];
 // Source under test
 __INFLIGHT_HAS_VISIBLE_STATE_SRC__
 __SELECT_LIVE_RECOVERY_INFLIGHT_SRC__
+__RESTORE_LOADED_SESSION_SRC__
 __LOAD_SESSION_SRC__
 __ENSURE_MESSAGES_LOADED_SRC__
 
@@ -601,6 +613,7 @@ def test_loadsession_cross_session_ordering_and_stale_reject_behavior():
         .replace(
             "__SELECT_LIVE_RECOVERY_INFLIGHT_SRC__", SELECT_LIVE_RECOVERY_INFLIGHT_SRC
         )
+        .replace("__RESTORE_LOADED_SESSION_SRC__", RESTORE_LOADED_SESSION_SRC)
         .replace("__LOAD_SESSION_SRC__", LOAD_SESSION_SRC)
         .replace("__ENSURE_MESSAGES_LOADED_SRC__", ENSURE_MESSAGES_LOADED_SRC)
     )
