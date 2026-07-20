@@ -188,6 +188,13 @@ _UI_MODULE_NAMES = (
     "settled-turn-finalization.js",
     "tool-worklog.js",
     "content-postprocessing.js",
+    "workspace-preferences.js",
+    "workspace-drag-drop.js",
+    "workspace-file-actions.js",
+    "workspace-tree.js",
+    "upload-tray.js",
+    "upload-status.js",
+    "upload-transport.js",
     "workspace-and-uploads.js",
 )
 

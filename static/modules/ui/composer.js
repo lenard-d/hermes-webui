@@ -5,7 +5,7 @@ import { _dynamicModelLabels, _inlineMediaHtmlForRef, _isSafeDataImageUri, _mdIm
 import { syncModelChip } from './model-catalog.js';
 import { _applyModelToDropdown } from './model-state.js';
 import { $, S, SESSION_QUEUES, _clearPersistedSessionQueue, _getSessionQueue, _isBacktickFenceClose, _matchBacktickFenceLine, _persistSessionQueueStorage, _queueDrainSid, assistantDisplayName, esc, getQueuedSessionCount, queueSessionMessage, shiftQueuedSessionMessage } from './state.js';
-import { renderTray } from './workspace-and-uploads.js';
+import { renderTray } from './upload-tray.js';
 import { compatibilityBindings as stateBindings } from './state.js';
 
 function renderMd(raw){

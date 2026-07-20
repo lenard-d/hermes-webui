@@ -863,23 +863,19 @@ class TestFrontendWiring:
         assert "_trySteer uploads with clearPending=false" in self.msgs
 
     def test_upload_pending_files_can_preserve_staged_files_for_steer(self):
-        ui = family_source("ui")
-        assert "async function uploadPendingFiles(options={})" in ui
-        assert "const pendingFiles=Array.isArray(opts.files)?opts.files.filter(Boolean):[...(S.pendingFiles||[])];" in ui
-        assert "const sessionId=String(opts.sessionId||(S.session&&S.session.session_id)||'');" in ui
-        assert "const clearPending=!(opts&&opts.clearPending===false)" in ui
-        assert "fd.append('session_id',sessionId)" in ui
-        assert "if(clearPending&&_uploadPendingFilesCurrentSession(sessionId)){S.pendingFiles=[];renderTray();}" in ui
-        assert "else if(typeof renderTray==='function'&&_uploadPendingFilesCurrentSession(sessionId))renderTray();" in ui
+        owner = (Path(__file__).resolve().parents[1] / "static/modules/ui/upload-transport.js").read_text()
+        assert "async function uploadPendingFiles(options={})" in owner
+        assert "const pendingFiles=Array.isArray(opts.files)?opts.files.filter(Boolean):[...(S.pendingFiles||[])];" in owner
+        assert "const sessionId=String(opts.sessionId||(S.session&&S.session.session_id)||'');" in owner
+        assert "const clearPending=!(opts&&opts.clearPending===false)" in owner
+        assert "fd.append('session_id',sessionId)" in owner
+        assert "if(clearPending&&_uploadPendingFilesCurrentSession(sessionId)){S.pendingFiles=[];renderTray();}" in owner
+        assert "else if(_uploadPendingFilesCurrentSession(sessionId))renderTray();" in owner
 
     def test_upload_pending_files_progress_bar_is_session_scoped(self):
-        ui = family_source("ui")
-        progress_helper = _source_between(
-            ui,
-            "const _uploadPendingFilesProgressBySession",
-            "\nasync function uploadPendingFiles",
-        )
-        upload_body = ui[ui.index("async function uploadPendingFiles") :]
+        ui_dir = Path(__file__).resolve().parents[1] / "static/modules/ui"
+        progress_helper = (ui_dir / "upload-status.js").read_text()
+        upload_body = (ui_dir / "upload-transport.js").read_text()
         sessions = family_source("sessions")
         load_body = _source_between(sessions, "async function loadSession", "\nfunction _isMessagingSession")
         assert "_uploadPendingFilesSyncProgressForSession(sid)" in load_body
@@ -906,11 +902,11 @@ class TestFrontendWiring:
             pytest.skip("node not available")
         assert node is not None
 
-        ui = family_source("ui")
+        ui = (Path(__file__).resolve().parents[1] / "static/modules/ui/upload-status.js").read_text()
         progress_src = _source_between(
             ui,
             "const _uploadPendingFilesProgressBySession",
-            "\nasync function uploadPendingFiles",
+            "\nexport {",
         )
         script = textwrap.dedent(
             f"""

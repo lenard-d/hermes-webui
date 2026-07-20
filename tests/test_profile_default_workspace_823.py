@@ -127,11 +127,11 @@ class TestBlankPageAfterSessionDelete:
         """promptNewFile on blank page reads _profileDefaultWorkspace which must
         be non-null even after a newSession() + deleteSession() cycle."""
         src = family_source("ui")
-        m = re.search(r'async function promptNewFile\([^)]*\)\{.*?\n\}', src, re.DOTALL)
-        assert m, "promptNewFile not found"
+        m = re.search(r'async function _ensureWorkspaceSession\([^)]*\)\{.*?\n\}', src, re.DOTALL)
+        assert m, "workspace session-mint owner not found"
         fn = m.group(0)
         assert '_profileDefaultWorkspace' in fn, (
-            "promptNewFile must read S._profileDefaultWorkspace (must persist after newSession)"
+            "workspace session mint must read S._profileDefaultWorkspace (must persist after newSession)"
         )
 
 

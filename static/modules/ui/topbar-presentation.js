@@ -3,7 +3,7 @@ import { _liveModelFetchPending, syncModelChip } from './model-catalog.js';
 import { syncReasoningChip } from './model-selection.js';
 import { _applyModelToDropdown, _applySessionModelFallback, _ensureModelOptionInDropdown, _persistSessionModelCorrection, _providerDefersMissingModelFallback } from './model-state.js';
 import { $, S, assistantDisplayName } from './state.js';
-import { _syncWorkspaceHeadingState } from './workspace-and-uploads.js';
+import { _syncWorkspaceHeadingState } from './workspace-preferences.js';
 
 function _topbarLoadedMessageCount(){
   const messages=Array.isArray(S.messages)?S.messages:[];

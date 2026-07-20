@@ -164,6 +164,14 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         update-summary.js Compare links, bounded summary cache, generation, and summary rendering
         update-lifecycle.js Apply/force/lock-recovery actions and restart identity polling
         session-recovery.js Active-session refresh, pending-turn merge, and boot reattach checks
+        workspace-preferences.js Hidden-file preference, menu, and heading-state owner
+        workspace-drag-drop.js Workspace move drag state, cache remap, and drop-target owner
+        workspace-file-actions.js Create, rename, delete, clipboard, and context-menu owner
+        workspace-tree.js Breadcrumb and file-tree presentation owner
+        upload-tray.js Pending attachment selection and preview owner
+        upload-status.js Session-scoped upload progress owner
+        upload-transport.js Multipart upload and archive-extraction transport owner
+        workspace-and-uploads.js Stable import facade for workspace and upload owners
       session_render_cache.js Native ES module owning the bounded transcript-render LRU
       session_render_cache_adapter.js Temporary classic-frontend compatibility adapter
       workspace.js         Workspace transport and compatibility facade
@@ -744,6 +752,10 @@ The main directly loaded families are:
    cache identity, `cli-tool-presentation.js` owns CLI result projection, and
    `message-scroll-snapshot.js` owns scroll capture and restoration.
    `live-activity.js` remains only as the stable compatibility seam.
+   Workspace UI behavior follows the same native-module pattern: preferences,
+   drag/move state, file actions, tree rendering, pending-upload presentation,
+   session-scoped progress, and upload transport have separate owners;
+   `workspace-and-uploads.js` remains only as a stable import facade.
 4. `workspace.js`, then ordered `workspace_parts/` for navigation, preview/editor,
    and upload behavior.
 5. `static/modules/sessions/index.js`, a native-module entrypoint whose semantic

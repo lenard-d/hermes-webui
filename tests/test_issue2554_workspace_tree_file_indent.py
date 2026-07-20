@@ -1,24 +1,18 @@
 """Regression coverage for #2554 — workspace tree file rows align with directories."""
+from pathlib import Path
+
 from tests.frontend_asset_contract import family_source
 
 
-from pathlib import Path
-
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS = family_source("ui")
+TREE_JS = (REPO_ROOT / "static" / "modules" / "ui" / "workspace-tree.js").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 
 
 def _render_tree_item_toggle_block() -> str:
-    # After the symlink PR, the guard changed from ``if(item.type==='dir')``
-    # to ``if(isDirLike)`` (covers real dirs and directory-symlinks).
-    try:
-        start = UI_JS.index("if(isDirLike){\n      // Toggle arrow for directories")
-    except ValueError:
-        start = UI_JS.index("if(item.type==='dir'){\n      // Toggle arrow for directories")
-    end = UI_JS.index("\n\n    // Icon", start)
-    return UI_JS[start:end]
+    start = TREE_JS.index("if(isDirLike){")
+    end = TREE_JS.index("\n\n    const iconEl=", start)
+    return TREE_JS[start:end]
 
 
 def test_file_rows_get_toggle_placeholder_before_icon():
@@ -29,8 +23,8 @@ def test_file_rows_get_toggle_placeholder_before_icon():
     assert "spacer.setAttribute('aria-hidden','true')" in block
     assert "el.appendChild(spacer);" in block
 
-    spacer_idx = UI_JS.index("spacer.className='file-tree-toggle-placeholder'")
-    icon_idx = UI_JS.index("const iconEl=document.createElement('span');", spacer_idx)
+    spacer_idx = TREE_JS.index("spacer.className='file-tree-toggle-placeholder'")
+    icon_idx = TREE_JS.index("const iconEl=document.createElement('span');", spacer_idx)
     assert spacer_idx < icon_idx, "file-row spacer must be appended before the file icon"
 
 

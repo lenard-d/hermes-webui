@@ -147,12 +147,19 @@ def test_context_switch_auto_sessions_do_not_forward_staged_toolsets():
     for src, marker in (
         (PANELS_JS, "function promptWorkspacePath"),
         (PANELS_JS, "function switchToWorkspace"),
-        (UI_JS, "function promptNewFile"),
-        (UI_JS, "function promptNewFolder"),
     ):
         body = _function_body(src, marker)
         assert "enabled_toolsets" not in body
         assert "S._pendingSessionToolsets=null" in body.replace(" ", "")
+
+    for marker in ("function promptNewFile", "function promptNewFolder"):
+        body = _function_body(UI_JS, marker)
+        assert "enabled_toolsets" not in body
+        assert "_ensureWorkspaceSession" in body
+
+    session_owner = _function_body(UI_JS, "function _ensureWorkspaceSession")
+    assert "enabled_toolsets" not in session_owner
+    assert "S._pendingSessionToolsets=null" in session_owner.replace(" ", "")
 
 
 def test_backend_new_session_accepts_enabled_toolsets():

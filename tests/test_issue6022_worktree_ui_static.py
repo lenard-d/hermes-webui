@@ -68,10 +68,13 @@ def test_workspace_bind_prompts_send_explicit_worktree_false():
 
 def test_file_and_folder_creation_send_explicit_worktree_false():
     src = family_source("ui")
+    session_owner = src[src.index("async function _ensureWorkspaceSession") :]
+    session_owner = session_owner[: session_owner.index("\n}\n")]
+    assert "worktree:false" in session_owner
     for fn in ("async function promptNewFile", "async function promptNewFolder"):
         block = src[src.index(fn) :]
         block = block[: block.index("\n}\n")]
-        assert "worktree:false" in block, f"{fn} must opt out of the config default"
+        assert "_ensureWorkspaceSession" in block, f"{fn} must use the guarded session mint owner"
     assert "body:JSON.stringify({workspace:ws})" not in src
 
 

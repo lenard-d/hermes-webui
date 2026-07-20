@@ -46,6 +46,13 @@ import * as transparentWorklog from './transparent-worklog.js';
 import * as topbarPresentation from './topbar-presentation.js';
 import * as toolsetsControls from './toolsets-controls.js';
 import * as workspaceAndUploads from './workspace-and-uploads.js';
+import * as workspacePreferences from './workspace-preferences.js';
+import * as workspaceDragDrop from './workspace-drag-drop.js';
+import * as workspaceFileActions from './workspace-file-actions.js';
+import * as workspaceTree from './workspace-tree.js';
+import * as uploadTray from './upload-tray.js';
+import * as uploadStatus from './upload-status.js';
+import * as uploadTransport from './upload-transport.js';
 import { publishCompatibilityDomain } from '../compatibility.js';
 
 const modules = Object.assign(Object.create(null), {
@@ -96,6 +103,13 @@ const modules = Object.assign(Object.create(null), {
   settledTurnFinalization,
   toolWorklog,
   contentPostprocessing,
+  workspacePreferences,
+  workspaceDragDrop,
+  workspaceFileActions,
+  workspaceTree,
+  uploadTray,
+  uploadStatus,
+  uploadTransport,
   workspaceAndUploads,
 });
 

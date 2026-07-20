@@ -104,8 +104,8 @@ def test_primary_ui_interfaces_have_one_authoritative_owner():
         "renderMd": "composer.js",
         "renderMessages": "renderer.js",
         "buildToolCard": "tool-worklog.js",
-        "renderFileTree": "workspace-and-uploads.js",
-        "uploadPendingFiles": "workspace-and-uploads.js",
+        "renderFileTree": "workspace-tree.js",
+        "uploadPendingFiles": "upload-transport.js",
     }
 
     for function_name, owner in expected.items():

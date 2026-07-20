@@ -56,10 +56,8 @@ class TestComposerTrayThumbnails:
 
     def test_rendertray_non_image_still_uses_paperclip(self):
         """Non-image files must still get the paperclip chip (not thumbnail)."""
-        ui = family_source("ui")
-        idx = ui.find('function renderTray()')
-        body = ui[idx:idx + 800]
-        assert 'paperclip' in body, 'non-image files must still use paperclip chip in renderTray'
+        owner = _read_js("modules/ui/upload-tray.js")
+        assert 'paperclip' in owner, 'non-image files must still use paperclip chip in renderTray'
 
     def test_attach_thumb_css_present(self):
         """CSS must define .attach-thumb with width/height/object-fit for the thumbnail."""

@@ -100,32 +100,25 @@ class TestPromptNewFileNoSession:
         m = re.search(r'async function promptNewFile\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m, "promptNewFile not found"
         fn = m.group(0)
-        # Must have auto-create path (not just early return when no session)
-        assert '_profileDefaultWorkspace' in fn, (
-            "promptNewFile must read S._profileDefaultWorkspace to auto-create "
-            "a session when called on the blank new-chat page"
-        )
-        assert 'session/new' in fn, (
-            "promptNewFile must call /api/session/new to create a session "
-            "bound to the default workspace when S.session is null"
-        )
+        assert '_ensureWorkspaceSession' in fn
+        owner = re.search(r'async function _ensureWorkspaceSession\([^)]*\)\{.*?\n\}', src, re.DOTALL)
+        assert owner and '_profileDefaultWorkspace' in owner.group(0)
+        assert 'session/new' in owner.group(0)
 
     def test_prompt_new_folder_auto_creates_session(self):
         src = family_source("ui")
         m = re.search(r'async function promptNewFolder\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m, "promptNewFolder not found"
         fn = m.group(0)
-        assert '_profileDefaultWorkspace' in fn, (
-            "promptNewFolder must read S._profileDefaultWorkspace for auto-create path"
-        )
-        assert 'session/new' in fn, (
-            "promptNewFolder must call /api/session/new to create session on blank page"
-        )
+        assert '_ensureWorkspaceSession' in fn
+        owner = re.search(r'async function _ensureWorkspaceSession\([^)]*\)\{.*?\n\}', src, re.DOTALL)
+        assert owner and '_profileDefaultWorkspace' in owner.group(0)
+        assert 'session/new' in owner.group(0)
 
     def test_prompt_new_file_still_returns_early_without_default(self):
         """If no default workspace, the function should return early (not crash)."""
         src = family_source("ui")
-        m = re.search(r'async function promptNewFile\([^)]*\)\{.*?\n\}', src, re.DOTALL)
+        m = re.search(r'async function _ensureWorkspaceSession\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m
         fn = m.group(0)
         # Must have a guard for empty workspace

@@ -3,23 +3,23 @@
 The renderer _renderTreeItems must use isDirLike (type==='dir' || (type==='symlink'
 && is_dir)) for all expand/navigate/delete gates rather than type==='dir' alone.
 """
-from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS = family_source("ui")
+TREE_JS = (REPO_ROOT / "static" / "modules" / "ui" / "workspace-tree.js").read_text(encoding="utf-8")
 ICONS_JS = (REPO_ROOT / "static" / "icons.js").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
 WS_JS = family_source("workspace")
 
 
 def _render_block() -> str:
-    start = UI_JS.find("function _renderTreeItems(container, entries, depth)")
-    assert start >= 0, "_renderTreeItems not found in static/ui.js"
-    # Capture to end of function (next top-level async/function declaration)
-    end = UI_JS.find("\nasync function deleteWorkspaceDir", start)
+    start = TREE_JS.find("function _renderTreeItems(container, entries, depth)")
+    assert start >= 0, "_renderTreeItems not found in its workspace-tree owner"
+    end = TREE_JS.find("\nexport {", start)
     assert end >= 0, "end of _renderTreeItems not found"
-    return UI_JS[start:end]
+    return TREE_JS[start:end]
 
 
 class TestIsDirLikeLocals:
@@ -88,8 +88,8 @@ class TestSymlinkTooltip:
             f"symlink_link_to key must appear in multiple locale blocks; found {count}"
 
     def test_elideMiddle_utility_present(self):
-        assert "function elideMiddle(" in UI_JS, \
-            "elideMiddle() utility must be defined in static/ui.js"
+        assert "function elideMiddle(" in TREE_JS, \
+            "elideMiddle() utility must be defined by the workspace-tree owner"
 
     def test_tooltip_uses_symlink_link_to(self):
         block = _render_block()
