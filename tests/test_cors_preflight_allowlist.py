@@ -113,11 +113,18 @@ class TestServerNoWildcard:
         """Regression guard: the literal `*` Allow-Origin must not come back."""
         src = (ROOT / "server.py").read_text(encoding="utf-8")
         routes_src = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        security_src = (ROOT / "api" / "routes_parts" / "security.py").read_text(
+            encoding="utf-8"
+        )
         assert '"Access-Control-Allow-Origin", "*"' not in src
         assert '"Access-Control-Allow-Origin", "*"' not in routes_src
-        # server.py stays a thin dispatcher: the preflight logic lives in api/routes.
+        assert '"Access-Control-Allow-Origin", "*"' not in security_src
+        # server.py stays a thin dispatcher and api.routes remains the public facade.
         assert "apply_cors_preflight_headers" in src
-        assert "def apply_cors_preflight_headers" in routes_src
+        assert "def apply_cors_preflight_headers" in security_src
+        from api.routes import apply_cors_preflight_headers
+
+        assert callable(apply_cors_preflight_headers)
 
     def test_allowed_preflight_sets_vary_origin(self):
         """An allowed preflight must set Vary: Origin (correct for caching an

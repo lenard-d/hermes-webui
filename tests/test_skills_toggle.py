@@ -19,10 +19,50 @@ def test_toggle_path_registered():
     assert '/api/skills/toggle' in routes_source
 
 
-def test_skills_list_includes_disabled_flag():
-    """Each skill dict in the API response must have a 'disabled' boolean field."""
-    routes_source = (Path(__file__).resolve().parent.parent / "api" / "routes.py").read_text("utf-8")
-    assert '"disabled": name in disabled' in routes_source
+def test_skills_list_includes_disabled_flag(tmp_path, monkeypatch):
+    """The facade reports profile-disabled skills in the observable payload."""
+    import sys
+    import types
+
+    import api.routes as routes
+
+    skill_dir = tmp_path / "disabled-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: disabled-skill\ndescription: Test skill\n---\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        routes,
+        "_get_disabled_skill_names_for_profile",
+        lambda: {"disabled-skill"},
+    )
+    agent_package = types.ModuleType("agent")
+    skill_utils = types.ModuleType("agent.skill_utils")
+    skill_utils.iter_skill_index_files = lambda root, filename: root.rglob(filename)
+    tools_skill = types.ModuleType("tools.skills_tool")
+    tools_skill.MAX_DESCRIPTION_LENGTH = 500
+    tools_skill._EXCLUDED_SKILL_DIRS = set()
+    tools_skill._parse_frontmatter = lambda _content: (
+        {"name": "disabled-skill", "description": "Test skill"},
+        "",
+    )
+    tools_skill._sort_skills = lambda skills: skills
+    tools_skill.skill_matches_platform = lambda _frontmatter: True
+    monkeypatch.setitem(sys.modules, "agent", agent_package)
+    monkeypatch.setitem(sys.modules, "agent.skill_utils", skill_utils)
+    monkeypatch.setitem(sys.modules, "tools.skills_tool", tools_skill)
+
+    payload = routes._skills_list_from_dir(tmp_path)
+
+    assert payload["skills"] == [
+        {
+            "name": "disabled-skill",
+            "description": "Test skill",
+            "category": None,
+            "disabled": True,
+        }
+    ]
 
 
 def test_i18n_keys_added():
