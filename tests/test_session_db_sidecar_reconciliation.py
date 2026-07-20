@@ -49,8 +49,8 @@ def test_recover_missing_sidecars_from_state_db_materializes_webui_row(tmp_path)
 
 
 def test_recover_missing_sidecars_from_state_db_skips_deleted_webui_tombstone(tmp_path, monkeypatch):
-    import api.sessions.store as _m
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
+    from api.sessions import records
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="deleted_webui_001")
     _write_index(tmp_path, [
         {
@@ -61,21 +61,21 @@ def test_recover_missing_sidecars_from_state_db_skips_deleted_webui_tombstone(tm
         }
     ])
     # A genuine delete records the DURABLE tombstone; only that suppresses repair.
-    _m._record_webui_deleted_session_tombstone(sid)
+    records._record_webui_deleted_session_tombstone(sid)
     try:
         result = recover_missing_sidecars_from_state_db(tmp_path, tmp_path / "state.db")
         assert result["materialized"] == 0
         assert not (tmp_path / f"{sid}.json").exists()
     finally:
-        _m._clear_webui_deleted_session_tombstone(sid)
+        records._clear_webui_deleted_session_tombstone(sid)
 
 
 def test_recover_missing_sidecars_index_only_no_tombstone_is_repairable(tmp_path, monkeypatch):
     """A crash that loses the sidecar (index intact, NO durable tombstone) must
     still be recovered from state.db — the index heuristic alone must not
     suppress repair (#5504 Codex/Opus finding; matches origin/master behavior)."""
-    import api.sessions.store as _m
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
+    from api.sessions import records
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="crashed_webui_001")
     _write_index(tmp_path, [
         {
@@ -92,8 +92,8 @@ def test_recover_missing_sidecars_index_only_no_tombstone_is_repairable(tmp_path
 
 
 def test_audit_reports_deleted_webui_tombstone_is_unsafe(tmp_path, monkeypatch):
-    import api.sessions.store as _m
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
+    from api.sessions import records
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="deleted_webui_001")
     _write_index(tmp_path, [
         {
@@ -103,7 +103,7 @@ def test_audit_reports_deleted_webui_tombstone_is_unsafe(tmp_path, monkeypatch):
             "session_source": "webui",
         }
     ])
-    _m._record_webui_deleted_session_tombstone(sid)
+    records._record_webui_deleted_session_tombstone(sid)
     try:
         report = audit_session_recovery(tmp_path, state_db_path=tmp_path / "state.db")
 
@@ -123,7 +123,7 @@ def test_audit_reports_deleted_webui_tombstone_is_unsafe(tmp_path, monkeypatch):
             for item in report["items"]
         )
     finally:
-        _m._clear_webui_deleted_session_tombstone(sid)
+        records._clear_webui_deleted_session_tombstone(sid)
 
 
 def test_audit_no_double_count_when_bak_and_state_db_row_both_survive(tmp_path, monkeypatch):
@@ -131,16 +131,16 @@ def test_audit_no_double_count_when_bak_and_state_db_row_both_survive(tmp_path, 
     yield EXACTLY ONE deleted-webui-tombstone audit item, not two (#5504 SILENT
     finding — the orphan-.bak branch and the state.db missing-sidecar loop both
     used to emit it)."""
-    import api.sessions.store as _m
+    from api.sessions import records
     import json as _json
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
     sid = _make_state_db(tmp_path / "state.db", sid="deleted_both_001")
     # Plant a surviving orphan .bak (no live sidecar) for the same sid.
     (tmp_path / f"{sid}.json.bak").write_text(
         _json.dumps({"session_id": sid, "messages": [{"role": "user", "content": "x"}]}),
         encoding="utf-8",
     )
-    _m._record_webui_deleted_session_tombstone(sid)
+    records._record_webui_deleted_session_tombstone(sid)
     try:
         report = audit_session_recovery(tmp_path, state_db_path=tmp_path / "state.db")
         tombstone_items = [
@@ -152,15 +152,15 @@ def test_audit_no_double_count_when_bak_and_state_db_row_both_survive(tmp_path, 
             f"expected exactly one tombstone audit item, got {len(tombstone_items)}"
         )
     finally:
-        _m._clear_webui_deleted_session_tombstone(sid)
+        records._clear_webui_deleted_session_tombstone(sid)
 
 
 def test_recover_missing_sidecars_skips_durable_delete_tombstone_without_index(tmp_path, monkeypatch):
-    import api.sessions.store as _m
+    from api.sessions import records
 
     sid = _make_state_db(tmp_path / "state.db", sid="durable_deleted_001")
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
-    _m._record_webui_deleted_session_tombstone(sid)
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
+    records._record_webui_deleted_session_tombstone(sid)
 
     result = recover_missing_sidecars_from_state_db(tmp_path, tmp_path / "state.db")
     report = audit_session_recovery(tmp_path, state_db_path=tmp_path / "state.db")
@@ -181,7 +181,7 @@ def test_recover_missing_sidecars_skips_durable_delete_tombstone_without_index(t
 
 
 def test_audit_skips_index_missing_file_when_durable_delete_tombstone_survives(tmp_path, monkeypatch):
-    import api.sessions.store as _m
+    from api.sessions import records
 
     sid = "durable_deleted_index_001"
     _write_index(tmp_path, [
@@ -192,8 +192,8 @@ def test_audit_skips_index_missing_file_when_durable_delete_tombstone_survives(t
             "session_source": "webui",
         }
     ])
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
-    _m._record_webui_deleted_session_tombstone(sid)
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
+    records._record_webui_deleted_session_tombstone(sid)
 
     report = audit_session_recovery(tmp_path)
 
@@ -208,7 +208,7 @@ def test_audit_skips_index_missing_file_when_durable_delete_tombstone_survives(t
 
 
 def test_audit_skips_orphan_backup_when_durable_delete_tombstone_survives(tmp_path, monkeypatch):
-    import api.sessions.store as _m
+    from api.sessions import records
 
     sid = _make_state_db(tmp_path / "state.db", sid="durable_deleted_backup_001")
     (tmp_path / f"{sid}.json.bak").write_text(
@@ -220,8 +220,8 @@ def test_audit_skips_orphan_backup_when_durable_delete_tombstone_survives(tmp_pa
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
-    _m._record_webui_deleted_session_tombstone(sid)
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
+    records._record_webui_deleted_session_tombstone(sid)
 
     report = audit_session_recovery(tmp_path, state_db_path=tmp_path / "state.db")
 
@@ -333,16 +333,16 @@ def test_materialized_sidecar_round_trips_through_session_load(tmp_path, monkeyp
     _state_db_row_to_sidecar() falls out of sync with what Session.__init__
     expects. See Opus review on PR #2041 for context.
     """
-    import api.sessions.store as _m
+    from api.sessions import records
 
     sid = _make_state_db(tmp_path / "state.db", sid="rt_001", messages=3)
 
-    monkeypatch.setattr(_m, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
 
     result = recover_missing_sidecars_from_state_db(tmp_path, tmp_path / "state.db")
     assert result["materialized"] == 1
 
-    loaded = _m.Session.load(sid)
+    loaded = records.Session.load(sid)
     assert loaded is not None, "Session.load returned None for materialized sidecar"
     assert loaded.session_id == sid
     assert len(loaded.messages) == 3

@@ -1,6 +1,27 @@
 import json
+import threading
 from collections import OrderedDict
 from types import SimpleNamespace
+
+import pytest
+
+
+@pytest.fixture
+def isolated_anchor_session_env(tmp_path, monkeypatch):
+    """Point session record/cache owners at one isolated sidecar directory."""
+    from api.sessions import cache, records
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    index_file = session_dir / "_index.json"
+    sessions = OrderedDict()
+    lock = threading.RLock()
+    for owner in (records, cache):
+        monkeypatch.setattr(owner, "SESSION_DIR", session_dir)
+        monkeypatch.setattr(owner, "SESSION_INDEX_FILE", index_file)
+        monkeypatch.setattr(owner, "SESSIONS", sessions)
+        monkeypatch.setattr(owner, "LOCK", lock)
+    return session_dir
 
 
 def _client_anchor_scene_message_ref(message):
@@ -83,18 +104,13 @@ def test_anchor_scene_visible_semantics_preserves_empty_tool_args():
     assert _anchor_scene_visible_semantics(scene)[0]["args"] == {}
 
 
-def test_anchor_scene_persistence_round_trip_outside_provider_messages(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_round_trip_outside_provider_messages(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    session_dir = isolated_anchor_session_env
 
     session = Session(
         session_id="anchorpersist1",
@@ -165,23 +181,18 @@ def test_anchor_scene_persistence_round_trip_outside_provider_messages(tmp_path,
     assert hydrated[1]["_anchor_activity_scene"]["activity_rows"][0]["tool_call_id"] == "call-1"
 
 
-def test_anchor_scene_persistence_rejects_cross_profile_write(tmp_path, monkeypatch):
+def test_anchor_scene_persistence_rejects_cross_profile_write(
+    isolated_anchor_session_env, monkeypatch
+):
     """#4411 security: /api/session/anchor-scene must not persist a scene onto a
     session that isn't visible to the active request profile. _get_or_materialize_session
     loads by id with no profile scoping, so the handler must apply the same
     _session_visible_to_active_profile guard GET /api/session uses — returning 404
     and leaving anchor_activity_scenes untouched (no cross-profile write)."""
-    from api.sessions import store as models
     from api import routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    session_dir = isolated_anchor_session_env
 
     session = Session(
         session_id="foreignprofile1",
@@ -314,18 +325,11 @@ def test_anchor_scene_hydration_rejects_stale_index_fallback_when_final_answer_m
     assert "_anchor_activity_scene" not in hydrated[3]
 
 
-def test_anchor_scene_persistence_rejects_invalid_scene(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_rejects_invalid_scene(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
-
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    from api.sessions.records import Session
 
     Session(
         session_id="anchorpersist2",
@@ -354,18 +358,13 @@ def test_anchor_scene_persistence_rejects_invalid_scene(tmp_path, monkeypatch):
     assert "activity_scene_v1" in captured["error"]
 
 
-def test_anchor_scene_persistence_prefers_unique_ref_over_stale_index(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_prefers_unique_ref_over_stale_index(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    session_dir = isolated_anchor_session_env
 
     messages = [
         {"role": "user", "content": "old question"},
@@ -411,18 +410,13 @@ def test_anchor_scene_persistence_prefers_unique_ref_over_stale_index(tmp_path, 
     assert record["scene"]["final_answer"] == "new final"
 
 
-def test_anchor_scene_persistence_rejects_duplicate_client_ref_over_stale_index(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_rejects_duplicate_client_ref_over_stale_index(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    session_dir = isolated_anchor_session_env
 
     messages = [
         {"role": "user", "content": "old question"},
@@ -463,18 +457,13 @@ def test_anchor_scene_persistence_rejects_duplicate_client_ref_over_stale_index(
     assert not raw.get("anchor_activity_scenes")
 
 
-def test_anchor_scene_persistence_converts_window_index_to_full_index(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_converts_window_index_to_full_index(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    session_dir = isolated_anchor_session_env
 
     Session(
         session_id="anchorpersist_window",
@@ -522,18 +511,11 @@ def test_anchor_scene_persistence_converts_window_index_to_full_index(tmp_path, 
     assert record["message_ref"] == routes._assistant_anchor_scene_message_ref(raw["messages"][3])
 
 
-def test_anchor_scene_persistence_rejects_unmatched_ref_without_index(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_rejects_unmatched_ref_without_index(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
-
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    from api.sessions.records import Session
 
     Session(
         session_id="anchorpersist_no_index",
@@ -569,18 +551,13 @@ def test_anchor_scene_persistence_rejects_unmatched_ref_without_index(tmp_path, 
     assert captured["error"] == "Assistant message not found"
 
 
-def test_anchor_scene_persistence_rejects_ref_miss_stale_index_mismatch(tmp_path, monkeypatch):
-    from api.sessions import store as models
+def test_anchor_scene_persistence_rejects_ref_miss_stale_index_mismatch(
+    isolated_anchor_session_env, monkeypatch
+):
     from api import routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSIONS", models.SESSIONS)
+    session_dir = isolated_anchor_session_env
 
     Session(
         session_id="anchorpersist_stale_index_mismatch",
@@ -2099,7 +2076,9 @@ def test_anchor_scene_hydration_seals_unmatched_live_running_activity_rows():
     assert [row.get("role") for row in activity_rows] == ["thinking", "prose", "tool"]
 
 
-def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics(tmp_path, monkeypatch):
+def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics(
+    isolated_anchor_session_env, monkeypatch
+):
     """Runtime journal replay and settled read hydration must preserve the same
     visible anchor activity semantics for one turn.
 
@@ -2108,14 +2087,11 @@ def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics
     -> persisted anchor_activity_scenes record
     -> _hydrate_anchor_activity_scenes(...)._anchor_activity_scene.
     """
-    from api.sessions import store as models
     from api import routes
-    from api.run_journal import RunJournalWriter
+    from api.runs import journal
 
-    session_dir = tmp_path / "sessions"
-    session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
+    session_dir = isolated_anchor_session_env
+    monkeypatch.setattr(journal, "_default_session_dir", lambda: session_dir)
 
     session_id = "anchorparity1"
     stream_id = "stream-parity-1"
@@ -2124,7 +2100,7 @@ def test_runtime_journal_anchor_scene_matches_settled_hydrated_visible_semantics
     process_after_tool = "checkpoint tail"
     final_answer = "Final answer: keep the activity above this answer."
 
-    writer = RunJournalWriter(session_id, stream_id, session_dir=session_dir)
+    writer = journal.RunJournalWriter(session_id, stream_id, session_dir=session_dir)
     writer.append_sse_event("token", {"text": process_before_tool})
     writer.append_sse_event("reasoning", {"text": thinking})
     writer.append_sse_event(

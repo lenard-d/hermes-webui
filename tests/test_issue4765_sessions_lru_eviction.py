@@ -3,7 +3,7 @@
 Crash cluster: #4765 / #2233 / #4633.
 
 Root cause: the WebUI kept ALL session objects + messages in a global in-memory
-``OrderedDict`` (``api.config.SESSIONS``). On long-running self-hosted installs
+``OrderedDict`` (now owned by ``api.sessions.cache``). On long-running self-hosted installs
 the cache never shed idle sessions, so RSS climbed unbounded
 (~700MB -> 7.5GB@9h -> 17.8GB@44h) until the interpreter segfaulted.
 
@@ -20,73 +20,41 @@ These tests prove the four required invariants:
   4. No data loss: eviction removes only the in-memory copy, never the file.
 """
 import collections
-import shutil
-import tempfile
 import threading
 import time
-from pathlib import Path
 
 import pytest
 
 
 @pytest.fixture
-def isolated_session_env():
+def isolated_session_env(tmp_path, monkeypatch):
     """Isolate all SESSIONS-cache global state onto a throwaway temp dir.
 
-    ``api.models`` imports ``SESSION_DIR`` / ``SESSION_INDEX_FILE`` at module
-    load, so both ``api.config`` and ``api.models`` copies must be redirected.
-    Everything is restored on teardown (even on exception).
+    Session sidecars and cache state have separate semantic owners. Patch those
+    owners directly so the tests exercise the production persistence/cache
+    paths without relying on the historical ``api.sessions.store`` facade.
     """
-    from api import config as _cfg
-    import api.sessions.store as _models
+    from api import config
+    from api.sessions import cache, records
 
-    tmpdir = tempfile.mkdtemp()
-    sessions_dir = Path(tmpdir) / "sessions"
+    sessions_dir = tmp_path / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
-
-    old = {
-        "cfg_SESSION_DIR": _cfg.SESSION_DIR,
-        "models_SESSION_DIR": getattr(_models, "SESSION_DIR", None),
-        "cfg_SESSION_INDEX_FILE": _cfg.SESSION_INDEX_FILE,
-        "models_SESSION_INDEX_FILE": getattr(_models, "SESSION_INDEX_FILE", None),
-        "SESSIONS": _cfg.SESSIONS,
-        "LOCK": _cfg.LOCK,
-        "SESSIONS_MAX": _cfg.SESSIONS_MAX,
-        "cfg": getattr(_cfg, "cfg", None),
-    }
-
     index_file = sessions_dir / "_index.json"
-    _cfg.SESSION_DIR = sessions_dir
-    _models.SESSION_DIR = sessions_dir
-    _cfg.SESSION_INDEX_FILE = index_file
-    _models.SESSION_INDEX_FILE = index_file
-    _cfg.LOCK = threading.Lock()
-    _models.LOCK = _cfg.LOCK
-    _cfg.SESSIONS = collections.OrderedDict()
-    _models.SESSIONS = _cfg.SESSIONS
+    sessions = collections.OrderedDict()
+    lock = threading.Lock()
+    for owner in (records, cache):
+        monkeypatch.setattr(owner, "SESSION_DIR", sessions_dir)
+        monkeypatch.setattr(owner, "SESSION_INDEX_FILE", index_file)
+        monkeypatch.setattr(owner, "SESSIONS", sessions)
+        monkeypatch.setattr(owner, "LOCK", lock)
+    monkeypatch.setattr(config, "SESSIONS_MAX", config.SESSIONS_MAX)
 
-    try:
-        yield sessions_dir
-    finally:
-        _cfg.SESSION_DIR = old["cfg_SESSION_DIR"]
-        if old["models_SESSION_DIR"] is not None:
-            _models.SESSION_DIR = old["models_SESSION_DIR"]
-        _cfg.SESSION_INDEX_FILE = old["cfg_SESSION_INDEX_FILE"]
-        if old["models_SESSION_INDEX_FILE"] is not None:
-            _models.SESSION_INDEX_FILE = old["models_SESSION_INDEX_FILE"]
-        _cfg.SESSIONS = old["SESSIONS"]
-        _models.SESSIONS = old["SESSIONS"]
-        _cfg.LOCK = old["LOCK"]
-        _models.LOCK = old["LOCK"]
-        _cfg.SESSIONS_MAX = old["SESSIONS_MAX"]
-        if old["cfg"] is not None:
-            _cfg.cfg = old["cfg"]
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    yield sessions_dir
 
 
 def _make_persisted_session(idx, *, messages=None):
     """Build + save a real session with at least one message (so it persists)."""
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
     if messages is None:
         messages = [
@@ -100,13 +68,12 @@ def _make_persisted_session(idx, *, messages=None):
 
 def _insert(sid_session):
     """Insert a session into the cache exactly like the production accessors do."""
-    from api.config import SESSIONS, LOCK
-    from api.sessions.store import _evict_sessions_over_cap
+    from api.sessions import cache
 
-    with LOCK:
-        SESSIONS[sid_session.session_id] = sid_session
-        SESSIONS.move_to_end(sid_session.session_id)
-        _evict_sessions_over_cap()
+    with cache.LOCK:
+        cache.SESSIONS[sid_session.session_id] = sid_session
+        cache.SESSIONS.move_to_end(sid_session.session_id)
+        cache._evict_sessions_over_cap()
 
 
 # ─────────────────────────── config knob ────────────────────────────────────
@@ -130,10 +97,10 @@ def test_cache_cap_reads_config_yaml_key():
 
 def test_eviction_happens_past_the_cap(isolated_session_env):
     """Inserting well past the cap must bound the in-memory cache size (#4765)."""
-    from api import config as _cfg
-    from api.config import SESSIONS
+    from api import config
+    from api.sessions import cache
 
-    _cfg.SESSIONS_MAX = 5
+    config.SESSIONS_MAX = 5
     cap = 5
 
     created = [_make_persisted_session(i) for i in range(20)]
@@ -142,13 +109,13 @@ def test_eviction_happens_past_the_cap(isolated_session_env):
 
     # The cache must be bounded — this is the whole point of the fix. Without
     # it, all 20 (and eventually millions) would remain resident forever.
-    assert len(SESSIONS) <= cap, (
-        f"cache grew to {len(SESSIONS)} entries; expected <= {cap} — the "
+    assert len(cache.SESSIONS) <= cap, (
+        f"cache grew to {len(cache.SESSIONS)} entries; expected <= {cap} — the "
         f"unbounded-growth crash (#4765/#2233/#4633) is not fixed"
     )
 
     # The most-recently-inserted sessions are the ones kept (LRU semantics).
-    kept = set(SESSIONS.keys())
+    kept = set(cache.SESSIONS.keys())
     assert created[-1].session_id in kept
     assert created[0].session_id not in kept
 
@@ -157,11 +124,10 @@ def test_eviction_happens_past_the_cap(isolated_session_env):
 
 def test_active_streaming_session_never_evicted(isolated_session_env):
     """An active/streaming session must survive eviction even as the oldest (#4765)."""
-    from api import config as _cfg
-    from api.config import SESSIONS
-    from api.sessions.store import _session_is_evictable
+    from api import config
+    from api.sessions import cache
 
-    _cfg.SESSIONS_MAX = 3
+    config.SESSIONS_MAX = 3
 
     # Oldest entry is actively streaming (has an in-flight turn).
     active = _make_persisted_session(0)
@@ -170,28 +136,28 @@ def test_active_streaming_session_never_evicted(isolated_session_env):
     active.pending_started_at = time.time()
     _insert(active)
 
-    assert _session_is_evictable(active) is False
+    assert cache._session_is_evictable(active) is False
 
     # Now flood the cache far past the cap with clean sessions.
     for i in range(1, 30):
         _insert(_make_persisted_session(i))
 
-    assert active.session_id in SESSIONS, (
+    assert active.session_id in cache.SESSIONS, (
         "an actively streaming session was evicted — this would drop an "
         "in-flight turn and corrupt live state (#4765 safety invariant)"
     )
     # The live object identity (with its unsaved runtime state) is preserved.
-    assert SESSIONS[active.session_id] is active
-    assert SESSIONS[active.session_id].active_stream_id == "live-stream-xyz"
+    assert cache.SESSIONS[active.session_id] is active
+    assert cache.SESSIONS[active.session_id].active_stream_id == "live-stream-xyz"
 
 
 def test_unsaved_session_never_evicted(isolated_session_env):
     """A session with unsaved messages (not yet on disk) is never evicted (#4765)."""
-    from api import config as _cfg
-    from api.config import SESSIONS
-    from api.sessions.store import Session, _session_is_evictable
+    from api import config
+    from api.sessions import cache
+    from api.sessions.records import Session
 
-    _cfg.SESSIONS_MAX = 3
+    config.SESSIONS_MAX = 3
 
     # Build a session with messages in memory but DO NOT save it to disk.
     unsaved = Session(
@@ -200,22 +166,22 @@ def test_unsaved_session_never_evicted(isolated_session_env):
         messages=[{"role": "user", "content": "not persisted yet", "timestamp": time.time()}],
     )
     assert not unsaved.path.exists()
-    assert _session_is_evictable(unsaved) is False
+    assert cache._session_is_evictable(unsaved) is False
 
     _insert(unsaved)
     for i in range(1, 30):
         _insert(_make_persisted_session(i))
 
-    assert unsaved.session_id in SESSIONS, (
+    assert unsaved.session_id in cache.SESSIONS, (
         "a session with unsaved in-memory messages was evicted — this loses "
         "data (#4765 safety invariant)"
     )
-    assert SESSIONS[unsaved.session_id] is unsaved
+    assert cache.SESSIONS[unsaved.session_id] is unsaved
 
 
 def test_stale_disk_copy_blocks_eviction(isolated_session_env):
     """A cached session ahead of its sidecar (unsaved tail) is not evictable (#4765)."""
-    from api.sessions.store import _session_is_evictable
+    from api.sessions.cache import _session_is_evictable
 
     s = _make_persisted_session(1)  # 2 messages on disk
     # Simulate new turns appended in memory but not yet flushed to disk.
@@ -236,11 +202,10 @@ def test_stale_disk_copy_blocks_eviction(isolated_session_env):
 
 def test_evicted_session_lazily_reloads_identical_content(isolated_session_env):
     """An evicted session transparently reloads from disk with identical content."""
-    from api import config as _cfg
-    from api.config import SESSIONS
-    from api.sessions.store import get_session
+    from api import config
+    from api.sessions import cache
 
-    _cfg.SESSIONS_MAX = 3
+    config.SESSIONS_MAX = 3
 
     rich_messages = [
         {"role": "user", "content": "remember: the passphrase is orange-turbine-42",
@@ -259,14 +224,14 @@ def test_evicted_session_lazily_reloads_identical_content(isolated_session_env):
     for i in range(1, 30):
         _insert(_make_persisted_session(i))
 
-    assert victim_id not in SESSIONS, (
+    assert victim_id not in cache.SESSIONS, (
         "the clean, persisted, idle victim should have been evicted from RAM"
     )
     # The sidecar file is untouched (invariant 4: no data loss).
     assert victim.path.exists()
 
     # Accessing it again must transparently reload from the sidecar (invariant 3).
-    reloaded = get_session(victim_id)
+    reloaded = cache.get_session(victim_id)
     assert reloaded is not None
     assert reloaded.session_id == victim_id
     assert [{"role": m["role"], "content": m["content"]} for m in reloaded.messages] == \
@@ -275,23 +240,22 @@ def test_evicted_session_lazily_reloads_identical_content(isolated_session_env):
         "the reload path is lossy (#4765)"
     )
     # And it is back in the cache after the lazy reload.
-    assert victim_id in SESSIONS
+    assert victim_id in cache.SESSIONS
 
 
 def test_no_data_loss_all_files_survive_heavy_churn(isolated_session_env):
     """Eviction removes only the in-memory copy; every sidecar file survives (#4765)."""
-    from api import config as _cfg
-    from api.config import SESSIONS
-    from api.sessions.store import get_session
+    from api import config
+    from api.sessions import cache
 
-    _cfg.SESSIONS_MAX = 4
+    config.SESSIONS_MAX = 4
 
     created = [_make_persisted_session(i) for i in range(25)]
     for s in created:
         _insert(s)
 
     # Cache is bounded...
-    assert len(SESSIONS) <= 4
+    assert len(cache.SESSIONS) <= 4
     # ...but NOT ONE session file was deleted.
     for s in created:
         assert s.path.exists(), f"sidecar for {s.session_id} was deleted — data loss!"
@@ -299,7 +263,7 @@ def test_no_data_loss_all_files_survive_heavy_churn(isolated_session_env):
     # Every single session (even long-evicted ones) is still fully retrievable
     # with its original content via the lazy-reload accessor.
     for i, s in enumerate(created):
-        loaded = get_session(s.session_id)
+        loaded = cache.get_session(s.session_id)
         assert loaded is not None
         assert loaded.title == f"Session {i}"
         assert len(loaded.messages) == 2
@@ -308,10 +272,10 @@ def test_no_data_loss_all_files_survive_heavy_churn(isolated_session_env):
 
 def test_eviction_skips_active_but_still_bounds_clean_entries(isolated_session_env):
     """Mixed workload: active pinned, clean bounded — the realistic steady state."""
-    from api import config as _cfg
-    from api.config import SESSIONS
+    from api import config
+    from api.sessions import cache
 
-    _cfg.SESSIONS_MAX = 5
+    config.SESSIONS_MAX = 5
 
     # A handful of concurrently-active streams that must all stay resident.
     actives = []
@@ -327,12 +291,12 @@ def test_eviction_skips_active_but_still_bounds_clean_entries(isolated_session_e
 
     # All actives survive.
     for a in actives:
-        assert a.session_id in SESSIONS, "an active stream was evicted under churn"
+        assert a.session_id in cache.SESSIONS, "an active stream was evicted under churn"
 
     # The cache stays bounded: active (3, pinned) + at most cap clean entries.
     # It may briefly sit slightly above cap because actives are non-evictable,
     # but it must NOT grow unbounded with the 40 churned sessions.
-    assert len(SESSIONS) <= _cfg.SESSIONS_MAX + len(actives)
+    assert len(cache.SESSIONS) <= config.SESSIONS_MAX + len(actives)
 
 
 def test_unsaved_new_session_survives_churn_and_stays_startable(isolated_session_env):
@@ -350,15 +314,14 @@ def test_unsaved_new_session_survives_churn_and_stays_startable(isolated_session
     ``get_session()``. That churn blew past the cap and dropped the session the
     user was composing in.
     """
-    from api import config as _cfg
-    from api.config import SESSIONS
-    from api.sessions.store import get_session, new_session
+    from api import config
+    from api.sessions import cache, records
 
-    _cfg.SESSIONS_MAX = 5
+    config.SESSIONS_MAX = 5
 
-    composing = new_session()
+    composing = cache.new_session()
     sid = composing.session_id
-    assert not (_cfg.SESSION_DIR / f"{sid}.json").exists(), (
+    assert not (records.SESSION_DIR / f"{sid}.json").exists(), (
         "precondition: new_session() must not persist before the first message"
     )
 
@@ -366,11 +329,11 @@ def test_unsaved_new_session_survives_churn_and_stays_startable(isolated_session
     for i in range(40):
         _insert(_make_persisted_session(i))
 
-    assert sid in SESSIONS, "unsaved new session was evicted — its only copy is gone"
+    assert sid in cache.SESSIONS, "unsaved new session was evicted — its only copy is gone"
 
     # The chokepoint both failing routes go through.
-    assert get_session(sid, metadata_only=True) is not None
-    assert get_session(sid).session_id == sid
+    assert cache.get_session(sid, metadata_only=True) is not None
+    assert cache.get_session(sid).session_id == sid
 
 
 def test_stale_draftless_unsaved_shell_is_evictable(isolated_session_env):
@@ -383,16 +346,16 @@ def test_stale_draftless_unsaved_shell_is_evictable(isolated_session_env):
     A shell that is empty AND draftless AND older than the grace window is
     treated as abandoned and becomes evictable again.
     """
-    from api.sessions.store import _session_is_evictable, _UNSAVED_SHELL_GRACE_S, new_session
+    from api.sessions import cache
 
-    shell = new_session()
+    shell = cache.new_session()
     # Freshly created → protected (inside the grace window).
-    assert _session_is_evictable(shell) is False, (
+    assert cache._session_is_evictable(shell) is False, (
         "a fresh empty shell must be protected during the compose window"
     )
     # Age it past the grace window with no draft and no messages → abandoned.
-    shell.created_at = time.time() - (_UNSAVED_SHELL_GRACE_S + 60)
-    assert _session_is_evictable(shell) is True, (
+    shell.created_at = time.time() - (cache._UNSAVED_SHELL_GRACE_S + 60)
+    assert cache._session_is_evictable(shell) is True, (
         "a stale, empty, draftless, never-saved shell must be evictable so these "
         "shells cannot accumulate unbounded past the cache cap"
     )
@@ -405,11 +368,11 @@ def test_stale_unsaved_shell_with_draft_stays_resident(isolated_session_env):
     draft is something the user is actively working on and must not be dropped —
     its draft lives only in this cache entry until the first send.
     """
-    from api.sessions.store import _session_is_evictable, _UNSAVED_SHELL_GRACE_S, new_session
+    from api.sessions import cache
 
-    shell = new_session()
-    shell.created_at = time.time() - (_UNSAVED_SHELL_GRACE_S + 60)
+    shell = cache.new_session()
+    shell.created_at = time.time() - (cache._UNSAVED_SHELL_GRACE_S + 60)
     shell.composer_draft = {"text": "half-written thought", "files": []}
-    assert _session_is_evictable(shell) is False, (
+    assert cache._session_is_evictable(shell) is False, (
         "a stale shell with an active composer draft must stay resident"
     )
