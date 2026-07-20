@@ -56,6 +56,51 @@ def test_gateway_routing_metadata_absent_returns_none_without_placeholder_noise(
     assert _normalize_gateway_routing_metadata(None, requested_model="gpt-5.5", requested_provider="openai-codex") is None
 
 
+def test_gateway_routing_metadata_rejects_objects_and_secret_fields():
+    normalized = _normalize_gateway_routing_metadata({
+        "used_provider": {"name": "provider-object", "api_key": "top-secret"},
+        "used_model": ["model-object"],
+        "requested_provider": "safe-provider",
+        "api_key": "top-secret",
+        "headers": {"authorization": "Bearer top-secret"},
+        "routing": [
+            {
+                "provider": {"name": "nested-provider"},
+                "model": ["nested-model"],
+                "status": "selected",
+                "api_key": "top-secret",
+                "request": {"authorization": "Bearer top-secret"},
+            },
+        ],
+    })
+
+    assert normalized == {
+        "requested_provider": "safe-provider",
+        "provider_changed": False,
+        "model_changed": False,
+        "has_failover": False,
+        "routing": [{"status": "selected"}],
+    }
+    assert "top-secret" not in repr(normalized)
+    assert "provider-object" not in repr(normalized)
+
+
+def test_gateway_routing_metadata_bounds_scalars_and_attempts():
+    long_provider = "p" * 300
+    normalized = _normalize_gateway_routing_metadata({
+        "used_provider": long_provider,
+        "routing": [
+            {"provider": f"provider-{index}", "status": "failed"}
+            for index in range(15)
+        ],
+    })
+
+    assert normalized["used_provider"] == "p" * 240
+    assert len(normalized["routing"]) == 12
+    assert normalized["routing"][-1]["provider"] == "provider-11"
+    assert normalized["has_failover"] is True
+
+
 def test_session_persists_latest_gateway_routing_and_history_across_reload():
     routing = _normalize_gateway_routing_metadata(
         {

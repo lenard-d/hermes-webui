@@ -85,7 +85,8 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
       streaming.py         SSE orchestration and compatibility facade for extracted stream domains
-      streaming_parts/     Importable payload, replay, compression, attachment, and terminal domains
+      streaming_parts/     Importable payload, replay, compression, Gateway routing metadata,
+                           attachment, and terminal domains
       updates.py           Self-update check and release notes
       upload.py            Multipart parser, file upload handler
       workspace.py         File ops: list_dir, read_file_content, git detection, workspace helpers
@@ -907,7 +908,8 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         workspace.py          File ops and workspace management
         upload.py             Multipart parser and file upload handler
         streaming.py          SSE orchestration and streaming compatibility facade
-        streaming_parts/      Payload, replay, compression, attachment, and terminal domains
+        streaming_parts/      Payload, replay, compression, Gateway routing metadata,
+                              attachment, and terminal domains
       static/
         index.html            HTML document (served from disk)
         style.css             Base CSS

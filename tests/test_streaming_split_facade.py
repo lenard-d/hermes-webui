@@ -1,6 +1,10 @@
 """Behavioral compatibility checks for the streaming module split facade."""
 
+import subprocess
+import sys
+
 from api import streaming
+from api.streaming_parts import gateway_routing_metadata
 from api.streaming_parts import payloads
 from api.streaming_parts import runtime_resolution
 from api.streaming_parts.bindings import streaming_api
@@ -671,3 +675,80 @@ def test_runtime_resolution_public_helpers_keep_streaming_module_identity():
 
     assert runtime_resolution.file_signature is not None
     assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_gateway_metadata_normalizer_observes_facade_helpers(monkeypatch):
+    payload = {"opaque": "payload"}
+    found = {"used_provider": " raw provider "}
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_find_gateway_metadata_payload",
+        lambda value: found if value is payload else None,
+    )
+    monkeypatch.setattr(
+        streaming,
+        "_clean_gateway_routing_scalar",
+        lambda value: seen.append(value) or (str(value).strip() if value is not None else None),
+    )
+
+    result = streaming._normalize_gateway_routing_metadata(payload)
+
+    assert result == {
+        "used_provider": "raw provider",
+        "provider_changed": False,
+        "model_changed": False,
+        "has_failover": False,
+    }
+    assert " raw provider " in seen
+
+
+def test_gateway_metadata_extractor_observes_facade_normalizer(monkeypatch):
+    result_metadata = {"gateway": {"provider": "result"}}
+    agent_metadata = {"provider": "agent"}
+    agent = type("Agent", (), {"gateway_metadata": agent_metadata})()
+    seen = []
+
+    def normalize(candidate, requested_model=None, requested_provider=None):
+        seen.append((candidate, requested_model, requested_provider))
+        if candidate is agent_metadata:
+            return {"used_provider": "patched"}
+        return None
+
+    monkeypatch.setattr(streaming, "_normalize_gateway_routing_metadata", normalize)
+
+    assert streaming._extract_gateway_routing_metadata(
+        agent,
+        result_metadata,
+        requested_model="model-a",
+        requested_provider="provider-a",
+    ) == {"used_provider": "patched"}
+    assert (agent_metadata, "model-a", "provider-a") in seen
+
+
+def test_gateway_routing_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._clean_gateway_routing_scalar,
+        streaming._find_gateway_metadata_payload,
+        streaming._normalize_gateway_routing_metadata,
+        streaming._extract_gateway_routing_metadata,
+    )
+
+    assert gateway_routing_metadata.normalize_gateway_routing_metadata is not None
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_gateway_routing_module_imports_without_streaming_facade():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import api.streaming_parts.gateway_routing_metadata; "
+            "assert 'api.streaming' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
