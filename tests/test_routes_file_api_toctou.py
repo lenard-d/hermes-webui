@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
+WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
 WORKSPACE_PY = ROOT / "api" / "workspace.py"
 UPLOAD_PY = ROOT / "api" / "upload.py"
 
@@ -94,7 +95,7 @@ def test_inline_html_preview_reads_through_anchor(monkeypatch, tmp_path):
 
 
 def test_editor_file_endpoints_use_anchored_helpers():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = WORKSPACE_FILES_PY.read_text(encoding="utf-8")
     delete_body = _func_body(src, "_handle_file_delete")
     save_body = _func_body(src, "_handle_file_save")
     create_body = _func_body(src, "_handle_file_create")

@@ -8,6 +8,7 @@ def _src(name: str) -> str:
 
 
 ROUTES = open("api/routes.py", encoding="utf-8").read()
+WORKSPACE_FILES = open("api/routes_parts/workspace_files.py", encoding="utf-8").read()
 
 
 class TestIssue3402WorkspaceTreeMoveApi:
@@ -16,7 +17,10 @@ class TestIssue3402WorkspaceTreeMoveApi:
         assert "return _handle_file_move(handler, body)" in ROUTES
 
     def test_file_move_handler_requires_dest_dir(self):
-        block = ROUTES[ROUTES.index("def _handle_file_move"):ROUTES.index("def _handle_file_move") + 4000]
+        block = WORKSPACE_FILES[
+            WORKSPACE_FILES.index("def _handle_file_move"):
+            WORKSPACE_FILES.index("def _handle_file_move") + 4000
+        ]
         assert 'require(body, "session_id", "path", "dest_dir")' in block
         # The move performs a rename. As of the #3422 security hardening the
         # primary path uses a workspace-anchored os.rename(..., src_dir_fd=...,

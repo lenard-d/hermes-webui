@@ -5,8 +5,8 @@ Covers:
   (a) WebUI session — existing behavior preserved (get_session path).
   (b) state.db-only session — fallback returns a workspace-bearing view.
   (c) Unknown session — KeyError still propagates so callers 404.
-  (d) Static check: every file-manager handler in api/routes.py calls
-      get_session_for_file_ops, not the raw get_session.
+  (d) Static check: every file-manager handler behind the api.routes facade
+      calls get_session_for_file_ops, not the raw get_session.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
+WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
 
 
 FILE_HANDLERS = [
@@ -32,8 +33,10 @@ FILE_HANDLERS = [
     "_handle_file_read",
     "_handle_file_delete",
     "_handle_file_save",
+    "_handle_office_file_save",
     "_handle_file_create",
     "_handle_file_rename",
+    "_handle_file_move",
     "_handle_create_dir",
     "_handle_file_reveal",
     "_handle_file_path",
@@ -41,20 +44,30 @@ FILE_HANDLERS = [
 ]
 
 
-def _handler_body(src: str, name: str) -> str:
-    start = src.index(f"def {name}(")
-    # next top-level def or class
-    m = re.search(r"\n(?:def |class )", src[start + 1 :])
-    end = (start + 1 + m.start()) if m else len(src)
-    return src[start:end]
+def _handler_body(sources: tuple[str, ...], name: str) -> str:
+    for src in sources:
+        marker = f"def {name}("
+        if marker not in src:
+            continue
+        start = src.index(marker)
+        # next top-level def/class or the route-part export declaration
+        m = re.search(r"\n(?:def |class |__routes_exports__)", src[start + 1 :])
+        end = (start + 1 + m.start()) if m else len(src)
+        return src[start:end]
+    raise AssertionError(f"{name} not found in route facade or workspace file part")
 
 
 def test_routes_file_handlers_use_fallback():
-    src = ROUTES_PY.read_text(encoding="utf-8")
-    assert "get_session_for_file_ops" in src, "fallback helper must be imported"
+    sources = (
+        ROUTES_PY.read_text(encoding="utf-8"),
+        WORKSPACE_FILES_PY.read_text(encoding="utf-8"),
+    )
+    assert any("get_session_for_file_ops" in src for src in sources), (
+        "fallback helper must be imported"
+    )
     missing = []
     for name in FILE_HANDLERS:
-        body = _handler_body(src, name)
+        body = _handler_body(sources, name)
         # Must not call get_session(...) directly inside the handler.
         # (get_session_for_file_ops also contains "get_session(" as a substring,
         # so check word-boundary occurrences.)

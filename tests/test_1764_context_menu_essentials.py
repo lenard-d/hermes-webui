@@ -30,6 +30,7 @@ import re
 
 ROOT = Path(__file__).resolve().parent.parent
 ROUTES = ROOT / "api" / "routes.py"
+WORKSPACE_FILES = ROOT / "api" / "routes_parts" / "workspace_files.py"
 UI = ROOT / "static" / "ui.js"
 SESSIONS = ROOT / "static" / "sessions.js"
 I18N = ROOT / "static" / "i18n.js"
@@ -75,8 +76,9 @@ class TestCopyFilePathMenuItem:
 
     def test_endpoint_handler_present(self):
         """Server-side endpoint must exist and route through the dispatcher."""
-        src = ROUTES.read_text(encoding="utf-8")
-        assert 'parsed.path == "/api/file/path"' in src
+        routes_src = ROUTES.read_text(encoding="utf-8")
+        src = WORKSPACE_FILES.read_text(encoding="utf-8")
+        assert 'parsed.path == "/api/file/path"' in routes_src
         assert "def _handle_file_path(handler, body):" in src
         # Must use safe_resolve to prevent path traversal.
         # Find the handler body and check.
@@ -96,7 +98,7 @@ class TestCopyFilePathMenuItem:
         """Copy-path on a recently-deleted file is still useful (paste into
         terminal to investigate). The handler must not 404 on missing files.
         """
-        src = ROUTES.read_text(encoding="utf-8")
+        src = WORKSPACE_FILES.read_text(encoding="utf-8")
         m = re.search(
             r"def _handle_file_path\(handler, body\):.*?(?=\ndef )",
             src,
@@ -184,7 +186,7 @@ class TestRevealFailedTostIncludesPath:
         just "File not found" with no path — useless for diagnosing stale
         session rows.
         """
-        src = ROUTES.read_text(encoding="utf-8")
+        src = WORKSPACE_FILES.read_text(encoding="utf-8")
         # Find _handle_file_reveal body.
         m = re.search(
             r"def _handle_file_reveal\(handler, body\):.*?(?=\ndef )",
