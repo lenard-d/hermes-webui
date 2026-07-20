@@ -541,6 +541,20 @@ larger migration remains incremental:
   adapters, preserving the dependency direction config -> profiles -> providers.
   `api.models` preserves only a stateless compatibility import, while the
   durable owner lives in `api.sessions`.
+- `api.extensions.configuration` is the public runtime/status/enablement
+  Interface rather than the owner of every extension concern. `roots.py` owns
+  admin-selected versus WebUI-managed directories; `identity.py` owns canonical
+  extension IDs; `override_state.py` owns bounded override parsing, atomic
+  fsync-and-replace persistence, and the shared mutation lock used by enablement,
+  sidecar consent, and gallery lifecycle; `asset_urls.py` owns recursive URL
+  decoding plus same-origin and relative-path validation; `settings_schema.py`
+  owns the storage-gated, non-sensitive browser settings projection;
+  `manifest.py` owns bounded manifest loading, asset-base normalization, gallery
+  aggregation, and effective runtime projection; and `status.py` builds the
+  administrator snapshot. Gallery, sidecar, and asset-security modules import
+  those owners directly instead of reaching through private attributes on
+  configuration. Status warnings remain code-only and never expose rejected
+  values or filesystem paths.
 - Gateway-backed chat is divided by lifecycle responsibility inside `api.runs`.
   `gateway_transport` owns request construction and both Gateway HTTP/SSE
   protocols; `gateway_events` projects decoded protocol activity into the one

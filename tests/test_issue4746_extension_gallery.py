@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.extensions import configuration as extensions_configuration
 from api.extensions import gallery as gallery_owner
+from api.extensions import roots as extension_roots
 
 
 def _make_zip(files: dict) -> bytes:
@@ -31,7 +31,7 @@ def _setup_ext_env(monkeypatch, tmp_path):
     state_dir.mkdir()
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(ext_dir))
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
-    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extension_roots, "extension_state_dir", lambda: state_dir)
     return ext_dir, state_dir
 
 
@@ -224,7 +224,7 @@ def test_install_bootstraps_managed_default_root_without_env(monkeypatch, tmp_pa
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
     import api.extensions as ext_mod
 
-    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extension_roots, "extension_state_dir", lambda: state_dir)
 
     default_root = state_dir / "extensions"
     # Pre-install: nothing exists yet, gallery is "configured" but not valid.

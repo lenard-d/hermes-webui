@@ -22,9 +22,11 @@ from typing import Any, Dict, List
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, build_opener
 
-from . import configuration
+from . import roots
 from .errors import ExtensionInstallError
-from .security import _fully_unquote_path, _is_safe_relative_path
+from .identity import is_valid_extension_id
+from .override_state import EXTENSION_STATE_LOCK
+from .asset_urls import _fully_unquote_path, _is_safe_relative_path
 
 
 _GALLERY_INSTALL_STATE_FILENAME = "extension-install-manifest.json"
@@ -111,7 +113,7 @@ def _safe_download(url: str, max_bytes: int, timeout: int = 30) -> bytes:
 
 
 def _install_manifest_file() -> Path:
-    return configuration._extension_state_dir() / _GALLERY_INSTALL_STATE_FILENAME
+    return roots.extension_state_dir() / _GALLERY_INSTALL_STATE_FILENAME
 
 
 def _empty_install_manifest() -> Dict[str, Any]:
@@ -135,7 +137,7 @@ def _load_install_manifest() -> Dict[str, Any]:
         return _empty_install_manifest()
     installed: Dict[str, Any] = {}
     for extension_id, entry in parsed["installed"].items():
-        if not configuration._valid_extension_id(extension_id) or not isinstance(entry, dict):
+        if not is_valid_extension_id(extension_id) or not isinstance(entry, dict):
             continue
         files = entry.get("files", [])
         if not isinstance(files, list):
@@ -185,7 +187,7 @@ def _remove_extracted_files(paths: List[Path], extension_dir: Path) -> None:
 
 def install_extension(id: object, download_url: object, sha256: object) -> Dict[str, Any]:
     """Download, verify, and transactionally extract a gallery extension."""
-    if not configuration._valid_extension_id(id):
+    if not is_valid_extension_id(id):
         raise ExtensionInstallError("Invalid extension id")
     extension_id = str(id).strip()
     if not isinstance(download_url, str) or not download_url.startswith("https://"):
@@ -195,7 +197,7 @@ def install_extension(id: object, download_url: object, sha256: object) -> Dict[
         raise ExtensionInstallError("Invalid download URL")
     if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
         raise ExtensionInstallError("Invalid sha256")
-    root = configuration._writable_extension_root()
+    root = roots.writable_extension_root()
     if root is None:
         raise ExtensionInstallError("Extensions not configured", 404)
     try:
@@ -262,7 +264,7 @@ def install_extension(id: object, download_url: object, sha256: object) -> Dict[
         except Exception:
             pass
 
-    with configuration._EXTENSION_STATE_LOCK:
+    with EXTENSION_STATE_LOCK:
         extension_dir.mkdir(parents=True, exist_ok=True)
         if extension_dir.is_symlink():
             raise ExtensionInstallError("Extension directory is a symlink", 400)
@@ -303,13 +305,13 @@ def install_extension(id: object, download_url: object, sha256: object) -> Dict[
 
 def uninstall_extension(id: object) -> Dict[str, Any]:
     """Remove only files recorded as gallery-installed and then its record."""
-    if not configuration._valid_extension_id(id):
+    if not is_valid_extension_id(id):
         raise ExtensionInstallError("Invalid extension id")
     extension_id = str(id).strip()
-    root = configuration._extension_root()
+    root = roots.extension_root()
     if root is None:
         raise ExtensionInstallError("Extensions not configured", 404)
-    with configuration._EXTENSION_STATE_LOCK:
+    with EXTENSION_STATE_LOCK:
         manifest = _load_install_manifest()
         entry = manifest["installed"].get(extension_id)
         if entry is None:

@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from api.extensions import configuration as extensions_configuration
+from api.extensions import roots as extension_roots
 
 
 class FakeHandler:
@@ -56,7 +56,7 @@ def _use_extension_state_dir(monkeypatch, tmp_path):
     state_dir = tmp_path / "webui-state"
     state_dir.mkdir()
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
-    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extension_roots, "extension_state_dir", lambda: state_dir)
     return state_dir
 
 
@@ -396,11 +396,12 @@ def test_extension_status_reports_recursion_error_safely(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "deep.json")
 
     from api.extensions import configuration as extensions
+    from api.extensions import manifest as manifest_owner
 
     def raise_recursion_error(_manifest_file):
         raise RecursionError("manifest nesting exceeded")
 
-    monkeypatch.setattr(extensions, "_read_manifest_text", raise_recursion_error)
+    monkeypatch.setattr(manifest_owner, "_read_manifest_text", raise_recursion_error)
 
     status = extensions.get_extension_status()
     assert status["manifest"]["status"] == "too_deeply_nested"
@@ -1151,17 +1152,17 @@ def test_extension_state_recursion_error_fails_safe(tmp_path, monkeypatch):
     state_file = state_dir / "extension-overrides.json"
     state_file.write_text('{"disabled_extensions":["templates"]}', encoding="utf-8")
 
-    from api.extensions import configuration as extensions
+    from api.extensions import override_state
 
     def raise_recursion_error(_text):
         raise RecursionError("state nesting exceeded")
 
-    monkeypatch.setattr(extensions.json, "loads", raise_recursion_error)
-    state = extensions._load_extension_state({"warnings": []})
+    monkeypatch.setattr(override_state.json, "loads", raise_recursion_error)
+    state = override_state.load_extension_state({"warnings": []})
     assert state == {"version": 1, "disabled_extensions": [], "sidecar_proxy_consents": {}}
 
     diagnostics = {"warnings": []}
-    extensions._load_extension_state(diagnostics)
+    override_state.load_extension_state(diagnostics)
     assert diagnostics["warnings"] == [
         {"code": "extension_state_unreadable", "source": "extension_state"}
     ]

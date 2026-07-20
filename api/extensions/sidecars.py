@@ -9,9 +9,22 @@ fails closed before the route adapter can contact anything.
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
-from . import configuration
+from .asset_urls import _MAX_URL_LIST, _fully_unquote_path
+from .diagnostics import add_diagnostic_warning, new_diagnostics
 from .errors import ExtensionSidecarProxyError
-from .security import _MAX_URL_LIST, _fully_unquote_path
+from .identity import normalize_extension_id
+from .manifest import (
+    _load_manifest_with_status,
+    _manifest_entry_text,
+    _manifest_extension_entries,
+    _manifest_extension_state,
+)
+from .override_state import (
+    EXTENSION_STATE_LOCK,
+    load_extension_state,
+    write_extension_state,
+)
+from .roots import extension_root
 
 _SIDECAR_WARNING_SOURCE = "manifest:sidecars"
 _DEFAULT_SIDECAR_HEALTH_PATH = "/health"
@@ -93,14 +106,14 @@ def _sidecar_from_manifest_entry(
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        configuration._add_diagnostic_warning(
+        add_diagnostic_warning(
             diagnostics,
             "sidecar_invalid",
             _SIDECAR_WARNING_SOURCE,
         )
         return None
     if raw.get("type") != "loopback":
-        configuration._add_diagnostic_warning(
+        add_diagnostic_warning(
             diagnostics,
             "sidecar_type_unsupported",
             _SIDECAR_WARNING_SOURCE,
@@ -108,7 +121,7 @@ def _sidecar_from_manifest_entry(
         return None
     origin = _normalize_loopback_sidecar_origin(raw.get("origin"))
     if origin is None:
-        configuration._add_diagnostic_warning(
+        add_diagnostic_warning(
             diagnostics,
             "sidecar_origin_rejected",
             _SIDECAR_WARNING_SOURCE,
@@ -117,7 +130,7 @@ def _sidecar_from_manifest_entry(
     if "health_path" in raw:
         health_path = _normalize_sidecar_health_path(raw.get("health_path"))
         if health_path is None:
-            configuration._add_diagnostic_warning(
+            add_diagnostic_warning(
                 diagnostics,
                 "sidecar_health_path_rejected",
                 _SIDECAR_WARNING_SOURCE,
@@ -125,8 +138,8 @@ def _sidecar_from_manifest_entry(
             return None
     else:
         health_path = _DEFAULT_SIDECAR_HEALTH_PATH
-    sidecar_id = configuration._manifest_entry_text(entry, "id")
-    name = configuration._manifest_entry_text(entry, "name")
+    sidecar_id = _manifest_entry_text(entry, "id")
+    name = _manifest_entry_text(entry, "name")
     return {
         "id": sidecar_id,
         "name": name,
@@ -171,11 +184,11 @@ def _extension_sidecar_records(
         consent_map = state["sidecar_proxy_consents"]
     id_counts: Dict[str, int] = {}
     by_id: Dict[str, Dict[str, Any]] = {}
-    for _source, _index, entry in configuration._manifest_extension_entries(manifest):
-        raw_id = configuration._manifest_entry_text(entry, "id")
-        if not configuration._valid_extension_id(raw_id):
+    for _source, _index, entry in _manifest_extension_entries(manifest):
+        raw_id = _manifest_entry_text(entry, "id")
+        extension_id = normalize_extension_id(raw_id)
+        if extension_id is None:
             continue
-        extension_id = raw_id.strip()
         id_counts[extension_id] = id_counts.get(extension_id, 0) + 1
         if extension_id in by_id:
             continue
@@ -194,7 +207,7 @@ def _extension_sidecar_records(
         )
         by_id[extension_id] = {
             "id": extension_id,
-            "name": configuration._manifest_entry_text(entry, "name"),
+            "name": _manifest_entry_text(entry, "name"),
             "manifest_enabled": manifest_enabled,
             "user_disabled": user_disabled,
             "effective_enabled": effective_enabled,
@@ -221,7 +234,7 @@ def _extension_sidecar_records(
         if len(records) < _MAX_URL_LIST:
             records.append({**sidecar, "proxy": proxy})
         else:
-            configuration._add_diagnostic_warning(
+            add_diagnostic_warning(
                 diagnostics,
                 "sidecar_list_truncated",
                 _SIDECAR_WARNING_SOURCE,
@@ -247,26 +260,26 @@ def set_extension_sidecar_proxy_consent(
     approved: object,
 ) -> Dict[str, Any]:
     """Persist or revoke consent bound to the currently declared exact origin."""
-    if not configuration._valid_extension_id(extension_id):
+    ext_id = normalize_extension_id(extension_id)
+    if ext_id is None:
         raise ExtensionSidecarProxyError("Invalid extension id", status=400)
-    ext_id = str(extension_id).strip()
     if not isinstance(approved, bool):
         raise ExtensionSidecarProxyError("approved must be a boolean", status=400)
-    root = configuration._extension_root()
+    root = extension_root()
     if root is None:
         raise ExtensionSidecarProxyError("Extensions are not configured", status=404)
-    with configuration._EXTENSION_STATE_LOCK:
-        diagnostics = configuration._new_diagnostics()
-        state = configuration._load_extension_state(diagnostics)
+    with EXTENSION_STATE_LOCK:
+        diagnostics = new_diagnostics()
+        state = load_extension_state(diagnostics)
         disabled_ids = set(state.get("disabled_extensions") or [])
         consent_map = dict(state.get("sidecar_proxy_consents") or {})
-        manifest, manifest_status = configuration._load_manifest_with_status(root, diagnostics)
+        manifest, manifest_status = _load_manifest_with_status(root, diagnostics)
         if manifest is None or not manifest_status.get("loaded", False):
             raise ExtensionSidecarProxyError(
                 "Extension manifest is not loaded",
                 status=409,
             )
-        extension_state = configuration._manifest_extension_state(
+        extension_state = _manifest_extension_state(
             manifest,
             disabled_ids,
             diagnostics,
@@ -293,7 +306,7 @@ def set_extension_sidecar_proxy_consent(
             consent_map[ext_id] = sidecar["origin"]
         else:
             consent_map.pop(ext_id, None)
-        configuration._write_extension_state(
+        write_extension_state(
             {
                 "disabled_extensions": sorted(disabled_ids),
                 "sidecar_proxy_consents": {
@@ -303,7 +316,9 @@ def set_extension_sidecar_proxy_consent(
                 },
             }
         )
-    return configuration.get_extension_status()
+    from .status import get_extension_status
+
+    return get_extension_status()
 
 
 def resolve_extension_sidecar_proxy_target(
@@ -312,26 +327,26 @@ def resolve_extension_sidecar_proxy_target(
     query: str = "",
 ) -> Dict[str, Any]:
     """Resolve one consented declaration to the exact upstream URL."""
-    if not configuration._valid_extension_id(extension_id):
+    ext_id = normalize_extension_id(extension_id)
+    if ext_id is None:
         raise ExtensionSidecarProxyError("Invalid extension id", status=400)
     normalized_path = _normalize_sidecar_proxy_path(proxy_path)
     if normalized_path is None:
         raise ExtensionSidecarProxyError("Invalid sidecar proxy path", status=400)
-    ext_id = str(extension_id).strip()
-    root = configuration._extension_root()
+    root = extension_root()
     if root is None:
         raise ExtensionSidecarProxyError("Extensions are not configured", status=404)
-    diagnostics = configuration._new_diagnostics()
-    state = configuration._load_extension_state(diagnostics)
+    diagnostics = new_diagnostics()
+    state = load_extension_state(diagnostics)
     disabled_ids = set(state.get("disabled_extensions") or [])
-    manifest, manifest_status = configuration._load_manifest_with_status(root, diagnostics)
+    manifest, manifest_status = _load_manifest_with_status(root, diagnostics)
     if manifest is None or not manifest_status.get("loaded", False):
         raise ExtensionSidecarProxyError(
             "Extension manifest is not loaded",
             status=409,
         )
     consent_ids = set((state.get("sidecar_proxy_consents") or {}).keys())
-    extension_state = configuration._manifest_extension_state(
+    extension_state = _manifest_extension_state(
         manifest,
         disabled_ids,
         diagnostics,
