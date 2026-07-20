@@ -3,6 +3,7 @@
 import api.config as config
 from api.config_parts import (
     config_io,
+    model_reasoning,
     path_env,
     provider_discovery,
     provider_routing,
@@ -28,6 +29,14 @@ def test_config_reexports_config_domain_implementations():
     assert config._atomic_write_settings_text is (
         settings_persistence._atomic_write_settings_text
     )
+    assert config.parse_reasoning_effort is model_reasoning.parse_reasoning_effort
+    assert config.resolve_model_reasoning_efforts is (
+        model_reasoning.resolve_model_reasoning_efforts
+    )
+    assert config.coerce_reasoning_effort_for_model is (
+        model_reasoning.coerce_reasoning_effort_for_model
+    )
+    assert config.get_reasoning_status is model_reasoning.get_reasoning_status
 
 
 def test_config_io_resolves_patched_env_reader_at_call_time(monkeypatch):
@@ -88,3 +97,23 @@ def test_settings_write_publication_state_is_owned_by_config_facade():
     assert "_SETTINGS_WRITE_LOCK" not in vars(settings_persistence)
     assert isinstance(config._SETTINGS_WRITE_VERSION, int)
     assert config._SETTINGS_WRITE_LOCK is not None
+
+
+def test_model_reasoning_resolves_patched_impl_at_call_time(monkeypatch):
+    monkeypatch.setattr(
+        config,
+        "_resolve_model_reasoning_efforts_impl",
+        lambda *_args, **_kwargs: ["none", "low", "high"],
+    )
+    monkeypatch.setattr(
+        config,
+        "_filter_reasoning_efforts_for_provider",
+        lambda efforts, *_args: efforts,
+    )
+    monkeypatch.setattr(config, "_zai_glm_classification", lambda *_args: None)
+
+    assert config.resolve_model_reasoning_efforts("patched-model") == [
+        "none",
+        "low",
+        "high",
+    ]
