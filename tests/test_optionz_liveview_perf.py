@@ -266,15 +266,15 @@ def test_streaming_exports_write_deadline_api():
 def test_sse_write_deadline_env_override(monkeypatch):
     import importlib
 
-    from api import streaming
+    from api.streaming import transport
 
     monkeypatch.setenv("HERMES_SSE_WRITE_DEADLINE", "7.25")
     try:
-        reloaded = importlib.reload(streaming)
+        reloaded = importlib.reload(transport)
         assert reloaded.SSE_WRITE_DEADLINE_SECONDS == 7.25
     finally:
         monkeypatch.delenv("HERMES_SSE_WRITE_DEADLINE", raising=False)
-        importlib.reload(streaming)
+        importlib.reload(transport)
 
 
 def test_start_session_turn_emits_server_turn_started():
@@ -620,23 +620,32 @@ def test_persisted_message_count_uses_metadata_only(monkeypatch):
     """The companion lookup must return the persisted count via a metadata-only
     load (never parsing the full transcript) and None when unknown."""
     from api import background_process as bp
-    import api.sessions.store as models
+    import api.sessions.cache as session_cache
 
     sid = "sess-persisted-count"
 
     # Normal: metadata stub carries _metadata_message_count.
-    monkeypatch.setattr(models, "get_session", lambda _sid, metadata_only=False: _make_meta_session(_sid, 7), raising=True)
+    monkeypatch.setattr(
+        session_cache,
+        "get_session",
+        lambda _sid, metadata_only=False: _make_meta_session(_sid, 7),
+    )
     assert bp.persisted_message_count_for_session(sid) == 7
 
     # Unknown count (legacy sidecar, no persisted count, empty messages) → None
     # so the caller treats it as "cannot tell", never a spurious trigger.
-    monkeypatch.setattr(models, "get_session", lambda _sid, metadata_only=False: _make_meta_session(_sid, None), raising=True)
+    monkeypatch.setattr(
+        session_cache,
+        "get_session",
+        lambda _sid, metadata_only=False: _make_meta_session(_sid, None),
+    )
     assert bp.persisted_message_count_for_session(sid) is None
 
     # Lookup failure (e.g. corrupt sidecar) is swallowed → None, never raises.
     def _boom(_sid, metadata_only=False):
         raise RuntimeError("decode error")
-    monkeypatch.setattr(models, "get_session", _boom, raising=True)
+
+    monkeypatch.setattr(session_cache, "get_session", _boom)
     assert bp.persisted_message_count_for_session(sid) is None
 
 
@@ -644,7 +653,7 @@ def test_persisted_message_count_requests_metadata_only(monkeypatch):
     """Guard the perf contract: the lookup MUST pass metadata_only=True so it
     never parses a 400KB+ transcript on every per-session SSE (re)connect."""
     from api import background_process as bp
-    import api.sessions.store as models
+    import api.sessions.cache as session_cache
 
     seen = {}
 
@@ -652,7 +661,7 @@ def test_persisted_message_count_requests_metadata_only(monkeypatch):
         seen["metadata_only"] = metadata_only
         return _make_meta_session(_sid, 3)
 
-    monkeypatch.setattr(models, "get_session", _spy, raising=True)
+    monkeypatch.setattr(session_cache, "get_session", _spy)
     assert bp.persisted_message_count_for_session("sess-spy") == 3
     assert seen.get("metadata_only") is True
 
