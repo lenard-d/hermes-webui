@@ -138,49 +138,41 @@ class TestCancelledTurnPersistenceGuards:
         assert _session_has_cancel_marker(session) is False
 
     def test_silent_failure_path_checks_cancel_event_before_persisting_provider_error(self):
-        src = _read("api/runs/local.py")
-        silent_idx = src.find("# ── Detect silent agent failure")
-        if silent_idx == -1:
-            silent_idx = src.find("# ── Detect missing final assistant reply")
-        assert silent_idx != -1, "silent-failure block not found"
-        apperror_idx = src.find("put('apperror', _error_payload)", silent_idx)
-        assert apperror_idx != -1, "silent-failure apperror emission not found"
-        block = src[silent_idx:apperror_idx]
+        src = _read("api/runs/local_failures.py")
+        inspect_idx = src.index("def inspect_terminal_result(")
+        cancel_idx = src.index("if self.ctx.cancel_event.is_set():", inspect_idx)
+        persist_idx = src.index("self._persist_error(", cancel_idx)
+        block = src[cancel_idx:persist_idx]
 
         assert "cancel_event.is_set()" in block, (
             "When a user cancels and the interrupted agent returns no assistant text, "
             "the silent-failure path must not persist a provider no_response error."
         )
-        assert "cancelled" in block.lower(), (
+        assert "self._cancel(lock_held=True)" in block, (
             "The cancellation guard should persist/report a cancelled turn, not silently drop state."
         )
 
     def test_streamed_progress_without_final_assistant_still_reports_error(self):
-        src = _read("api/runs/local.py")
-        failure_idx = src.find("_is_agent_result_terminal = _agent_result_terminal_failure(result)")
-        assert failure_idx != -1, "terminal-failure result guard not found"
-        apperror_idx = src.find("put('apperror', _error_payload)", failure_idx)
-        assert apperror_idx != -1, "terminal-failure guard must emit apperror"
-        block = src[failure_idx:apperror_idx]
+        src = _read("api/runs/local_failures.py")
+        failure_idx = src.index("result_terminal = _agent_result_terminal_failure(result)")
+        persist_idx = src.index("self._persist_error(", failure_idx)
+        block = src[failure_idx:persist_idx]
 
-        assert "_is_agent_result_terminal = _agent_result_terminal_failure(result)" in block
-        assert "_is_agent_result_terminal" in block
-        assert "if _terminal_failure or (" in block
-        assert "not _assistant_added and not event_translator.token_sent" in block, (
+        assert "captured_failure or result_terminal" in block
+        assert "lacks_answer" in block
+        assert "assistant_added or self.ctx.event_translator.token_sent" in block, (
             "Explicit terminal failures, including compression/tool-tail failures, must report "
             "an error even when interim progress already streamed."
         )
 
     def test_exception_path_classifies_after_cancel_event_before_generic_error(self):
-        src = _read("api/runs/local.py")
-        except_idx = src.find("print('[webui] stream error:")
-        assert except_idx != -1, "stream exception handler not found"
-        classify_idx = src.find("_classify_provider_error", except_idx)
-        generic_idx = src.find("_exc_label, _exc_type, _exc_hint = 'Error', 'error', ''", except_idx)
-        assert classify_idx != -1 and generic_idx != -1
+        src = _read("api/runs/local_failures.py")
+        except_idx = src.index("def handle_exception(")
+        classify_idx = src.index("classification = self.ctx.classify", except_idx)
+        generic_idx = src.index("label, error_type, hint = _exception_error_description", classify_idx)
         block = src[except_idx:generic_idx]
 
-        assert "cancel_event.is_set()" in block, (
+        assert "self.ctx.cancel_event.is_set()" in block, (
             "Exception handling must distinguish user-cancelled/aborted runs before generic errors."
         )
         assert "cancelled" in block.lower() or "interrupted" in block.lower()
@@ -190,8 +182,8 @@ class TestCancelledTurnPersistenceGuards:
 
     def test_post_run_cancel_guard_runs_before_normal_success_merge(self):
         src = _read("api/runs/local.py")
-        run_idx = src.find("result = agent.run_conversation(")
-        merge_idx = src.find("_result_messages = result.get", run_idx)
+        run_idx = src.find("result = conversation.run(agent)")
+        merge_idx = src.find("merged_result = merge_local_result(", run_idx)
         assert run_idx != -1 and merge_idx != -1, "run/merge path not found"
         block = src[run_idx:merge_idx]
 

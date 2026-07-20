@@ -478,15 +478,21 @@ def test_session_context_lookup_keeps_base_url_when_custom_helper_is_missing(mon
 # --- #3263 dual-gate MUST-FIX invariants (Codex regression gate, v0.51.192) ---
 # These pin the two consistency fixes applied after the gate found that the
 # default-only guard dropped the stale cap but didn't (a) recompute a persisted
-# stale context_length, or (b) rescale the terminal SSE threshold. Both live
-# deep inside _run_agent_streaming, so we pin them at the source-structure level
-# (the live-snapshot path already had behavioral coverage; these guard the two
-# sibling paths from silently regressing back to the stale value).
-_STREAMING_SRC = (
+# stale context_length, or (b) rescale the terminal SSE threshold. The
+# completed-turn projection now owns both durable persistence and terminal SSE
+# enrichment, so pin that shared owner and its call site. The live-snapshot path
+# remains a separate in-flight owner with behavioral coverage below.
+_CONTEXT_WINDOW_SRC = (
     _Path(__file__).resolve().parent.parent
     / "api"
     / "runs"
-    / "local.py"
+    / "local_context_window.py"
+).read_text(encoding="utf-8")
+_SUCCESS_SRC = (
+    _Path(__file__).resolve().parent.parent
+    / "api"
+    / "runs"
+    / "local_success.py"
 ).read_text(encoding="utf-8")
 _LIVE_USAGE_SRC = (
     _Path(__file__).resolve().parent.parent
@@ -500,8 +506,14 @@ def test_persistence_fallback_also_runs_when_skip_cc_cl():
     """The per-turn persistence fallback must recompute the real cap when the
     stale compressor cap was skipped — not only when context_length is falsy.
     Otherwise a previously-persisted stale 232K survives forever."""
-    assert "(not getattr(s, 'context_length', 0)) or _skip_cc_cl:" in _STREAMING_SRC, (
-        "persistence fallback gate must also fire on _skip_cc_cl (#3263 MUST-FIX 1)"
+    assert "if not compressor_cap:" in _CONTEXT_WINDOW_SRC
+    assert "metadata_cap != compressor_cap" in _CONTEXT_WINDOW_SRC, (
+        "completed-turn projection must replace an accepted stale compressor cap "
+        "with real model metadata (#3263 MUST-FIX 1)"
+    )
+    assert (
+        "_should_accept_session_context_length_refresh(compressor_cap, metadata_cap)"
+        in _CONTEXT_WINDOW_SRC
     )
 
 
@@ -509,8 +521,10 @@ def test_persistence_rescales_threshold_when_cap_skipped():
     """When the stale cap is skipped and the real cap recomputed, the persisted
     threshold_tokens must be rescaled to the real cap (or cleared), so a reload
     matches the live snapshot."""
-    assert "if _skip_cc_cl:" in _STREAMING_SRC
-    assert "s.threshold_tokens = int(_orig_thresh * _real_cap / _orig_cap)" in _STREAMING_SRC, (
+    assert "threshold = _rescale_threshold(" in _CONTEXT_WINDOW_SRC
+    assert "source_cap=compressor_cap" in _CONTEXT_WINDOW_SRC
+    assert "target_cap=metadata_cap" in _CONTEXT_WINDOW_SRC
+    assert "session.threshold_tokens = self.threshold_tokens" in _CONTEXT_WINDOW_SRC, (
         "persistence path must rescale threshold_tokens to the real cap (#3263 MUST-FIX 2)"
     )
 
@@ -519,8 +533,9 @@ def test_sse_done_payload_rescales_threshold_when_cap_dropped():
     """The terminal SSE usage payload must rescale threshold_tokens when it
     dropped the stale compressor cap, so the indicator doesn't revert on stream
     end (messages.js overwrites S.lastUsage with this payload)."""
-    assert "_dropped_stale_cap_sse" in _STREAMING_SRC
-    assert "usage['threshold_tokens'] = int(_orig_cc_thresh_sse * _fb_cl / _orig_cc_cl_sse)" in _STREAMING_SRC, (
+    assert "context_window.persist_on(session)" in _SUCCESS_SRC
+    assert "context_window.enrich_usage(usage, session=session)" in _SUCCESS_SRC
+    assert 'usage["threshold_tokens"] = self.threshold_tokens' in _CONTEXT_WINDOW_SRC, (
         "SSE done payload must rescale threshold_tokens to the resolved window (#3263 MUST-FIX 3)"
     )
 
@@ -613,14 +628,16 @@ def test_session_save_path_broadened_to_any_model_window_mismatch():
     reload shows the wrong window. It must resolve the real window via the same
     helper and honor the #4248 acceptance gate before skipping the compressor
     value."""
-    assert "_cli_cc = _context_length_lookup_inputs_for_model" in _STREAMING_SRC, (
+    assert "metadata_cap = _resolve_model_context_length(" in _CONTEXT_WINDOW_SRC, (
         "save path must resolve the real per-model window via the hydration helper (#4618)"
     )
-    assert "_accept_cc = _should_accept_session_context_length_refresh" in _STREAMING_SRC
-    assert "if _real_cc and _real_cc != _cc_cl and _accept_cc(_cc_cl, _real_cc):" in _STREAMING_SRC, (
+    assert "_context_length_lookup_inputs_for_model(" in _CONTEXT_WINDOW_SRC
+    assert "metadata_cap != compressor_cap" in _CONTEXT_WINDOW_SRC
+    assert "_should_accept_session_context_length_refresh(compressor_cap, metadata_cap)" in _CONTEXT_WINDOW_SRC, (
         "save path must skip the compressor value on ANY accepted real-window "
         "mismatch, not only the default-model exact-cap case (#4618)"
     )
+    assert "context_window.persist_on(session)" in _SUCCESS_SRC
 
 
 def test_sse_done_path_broadened_to_any_model_window_mismatch():
@@ -629,18 +646,14 @@ def test_sse_done_path_broadened_to_any_model_window_mismatch():
     end (messages.js overwrites S.lastUsage with the done payload). It must
     resolve the real window via the same helper and honor the #4248 gate before
     dropping the compressor value."""
-    assert "_cli_sse = _context_length_lookup_inputs_for_model" in _STREAMING_SRC, (
+    assert "metadata_cap = _resolve_model_context_length(" in _CONTEXT_WINDOW_SRC, (
         "SSE done path must resolve the real per-model window via the hydration helper (#4618)"
     )
-    assert "_accept_sse = _should_accept_session_context_length_refresh" in _STREAMING_SRC
-    assert "if _real_sse and _real_sse != _cc_cl_sse and _accept_sse(_cc_cl_sse, _real_sse):" in _STREAMING_SRC, (
+    assert "_context_length_lookup_inputs_for_model(" in _CONTEXT_WINDOW_SRC
+    assert "metadata_cap != compressor_cap" in _CONTEXT_WINDOW_SRC
+    assert "_should_accept_session_context_length_refresh(compressor_cap, metadata_cap)" in _CONTEXT_WINDOW_SRC, (
         "SSE done path must drop the compressor value on ANY accepted real-window "
         "mismatch so the indicator can't snap back to a stale window at turn-end (#4618)"
     )
-    # The old narrow default-only matcher must be gone from BOTH sibling paths.
-    assert "_model_matches_configured_default as _mmcd_sse" not in _STREAMING_SRC, (
-        "the old default-only SSE matcher (_mmcd_sse) must be removed (#4618)"
-    )
-    assert "_model_matches_configured_default as _mmcd_cc" not in _STREAMING_SRC, (
-        "the old default-only save matcher (_mmcd_cc) must be removed (#4618)"
-    )
+    assert "context_window.enrich_usage(usage, session=session)" in _SUCCESS_SRC
+    assert "_model_matches_configured_default" not in _CONTEXT_WINDOW_SRC

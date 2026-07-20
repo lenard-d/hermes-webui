@@ -331,19 +331,16 @@ class TestIssue765FollowupHardening:
         src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
-        stop_idx = src.find("if _checkpoint_stop is not None:\n                _checkpoint_stop.set()")
-        join_idx = src.find("if _ckpt_thread is not None:\n                _ckpt_thread.join(timeout=15)")
-        lock_idx = src.find(
-            "with _agent_lock:\n"
-            "                if not ephemeral and not _stream_writeback_is_current(s, stream_id):"
-        )
-        save_idx = src.find("_deduplicate_context_messages(_next_context_messages)")
+        run_idx = src.find("result = conversation.run(agent)")
+        close_idx = src.find("checkpoint.close()", run_idx)
+        lock_idx = src.find("with _agent_lock:", close_idx)
+        save_idx = src.find("merged_result = merge_local_result(", lock_idx)
 
-        assert stop_idx != -1, "Success path must stop the checkpoint thread"
-        assert join_idx != -1, "Success path must join the checkpoint thread"
+        assert run_idx != -1, "Local conversation call not found"
+        assert close_idx != -1, "Success path must close the checkpoint owner"
         assert lock_idx != -1, "Success path must serialize mutation with _agent_lock"
         assert save_idx != -1, "Success path restore/mutation block not found"
-        assert stop_idx < join_idx < lock_idx <= save_idx, (
+        assert run_idx < close_idx < lock_idx <= save_idx, (
             "Checkpoint stop/join must happen before the success-path session mutation block"
         )
 
@@ -353,51 +350,27 @@ class TestIssue765FollowupHardening:
         Reacquiring the same per-session lock inside the post-run_conversation block
         deadlocks because `_get_session_agent_lock()` returns a non-reentrant Lock.
         """
-        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
+        orchestrator = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
-        outer_lock_idx = src.find(
-            "with _agent_lock:\n"
-            "                if not ephemeral and not _stream_writeback_is_current(s, stream_id):"
-        )
-        silent_failure_idx = src.find(
-            "not _assistant_added and not event_translator.token_sent"
-        )
-        inner_lock_idx = src.find("with _agent_lock:", outer_lock_idx + 1)
-        compression_idx = src.find("# ── Handle context compression side effects ──")
-
-        assert outer_lock_idx != -1, "Outer success-path _agent_lock block not found"
-        assert silent_failure_idx != -1, "Silent-failure branch not found"
-        assert compression_idx != -1, "Compression marker not found"
-        assert not (
-            inner_lock_idx != -1 and silent_failure_idx < inner_lock_idx < compression_idx
-        ), "Silent-failure path must not reacquire _agent_lock inside the outer lock"
+        failure_owner = (
+            Path(__file__).parent.parent / "api" / "runs" / "local_failures.py"
+        ).read_text(encoding="utf-8")
+        lock_idx = orchestrator.index("with _agent_lock:")
+        inspect_idx = orchestrator.index("failure_owner.inspect_terminal_result(", lock_idx)
+        assert lock_idx < inspect_idx
+        assert "lock_held=True" in failure_owner
+        assert "contextlib.nullcontext()\n                if lock_held" in failure_owner
 
     def test_checkpoint_stop_initialised_before_any_raiseable_code(self):
         """Static check: `_checkpoint_stop = None` must appear before any code
         that could raise inside _run_agent_streaming's outer try."""
-        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
-            encoding="utf-8"
-        )
-        lines = src.splitlines()
-        try_line = next(
-            i for i, ln in enumerate(lines, 1)
-            if ln.rstrip().endswith("try:")
-            and any(
-                lines[j].strip().startswith("_checkpoint_stop = None")
-                for j in range(max(0, i - 4), i - 1)
-            )
-        )
-        # The assignment must precede the `try:` — not sit inside the nested
-        # block where an earlier line could raise before it runs.
-        init_line = next(
-            i for i, ln in enumerate(lines, 1)
-            if "_checkpoint_stop = None" in ln
-        )
-        assert init_line < try_line, (
-            f"_checkpoint_stop = None (line {init_line}) must precede the outer "
-            f"try block (line {try_line}) so the finally can safely check it."
-        )
+        from api.runs.local_checkpoint import LocalCheckpoint
+
+        checkpoint = LocalCheckpoint(session_id="early-failure", logger=models.logger)
+        assert checkpoint.stop_event.is_set() is False
+        checkpoint.close()
+        assert checkpoint.stop_event.is_set() is True
 
     def test_finally_path_when_early_exception_does_not_unbound_error(self):
         """Mirror the _run_agent_streaming try/finally structure — proves that
@@ -425,7 +398,7 @@ class TestIssue765FollowupHardening:
 
         The code must use a nullcontext fallback rather than unconditionally
         entering `with _agent_lock:`."""
-        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local_failures.py").read_text(
             encoding="utf-8"
         )
         # Verify contextlib.nullcontext is used as a fallback
@@ -435,23 +408,19 @@ class TestIssue765FollowupHardening:
             "entering `with _agent_lock:`"
         )
         # Verify the except block uses _lock_ctx (the guarded variable)
-        assert "_lock_ctx" in src, (
-            "The except block must assign _agent_lock / nullcontext to a "
-            "variable and use it, not enter `with _agent_lock:` directly"
-        )
+        assert "self.ctx.session_lock or contextlib.nullcontext()" in src
 
     def test_periodic_checkpoint_uses_agent_lock(self):
         """The periodic checkpoint thread must hold _agent_lock while saving
         to prevent concurrent mutation races with other endpoints."""
-        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local_checkpoint.py").read_text(
             encoding="utf-8"
         )
-        # Find the _periodic_checkpoint function
-        ckpt_idx = src.find("def _periodic_checkpoint():")
-        assert ckpt_idx != -1, "_periodic_checkpoint function not found"
+        ckpt_idx = src.find("def periodic_checkpoint()")
+        assert ckpt_idx != -1, "periodic checkpoint owner not found"
         ckpt_block = src[ckpt_idx:ckpt_idx + 600]
-        assert "with _agent_lock:" in ckpt_block, (
-            "_periodic_checkpoint must hold _agent_lock while calling s.save() "
+        assert "with session_lock:" in ckpt_block, (
+            "periodic checkpoint must hold the session lock while saving "
             "to prevent race conditions with other session-mutating endpoints"
         )
 

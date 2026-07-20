@@ -805,6 +805,8 @@ def test_auto_compression_live_repeated_starts_keep_only_current_running_row():
 def test_auto_compression_running_card_completes_on_followup_live_events():
     src = family_source("messages")
     compression = COMPRESSION_EVENTS_JS
+    content_events = _read("static/modules/messages/content-events.js")
+    live_tools = _read("static/modules/messages/live-tools.js")
 
     assert "function completeOnLiveProgress" in compression
     helper = compression.split("function completeOnLiveProgress", 1)[1].split("function attach", 1)[0]
@@ -819,16 +821,23 @@ def test_auto_compression_running_card_completes_on_followup_live_events():
     assert "message:'Context auto-compressed'" in helper
     assert "appendLiveCard({" in helper
 
-    for event_name in ("token", "interim_assistant", "reasoning", "tool", "tool_complete"):
-        start = src.find(f"source.addEventListener('{event_name}'")
+    for event_name in ("token", "interim_assistant", "reasoning"):
+        start = content_events.find(f"source.addEventListener('{event_name}'")
         assert start != -1, f"{event_name} listener not found"
-        end = src.find("source.addEventListener(", start + 1)
+        end = content_events.find("source.addEventListener(", start + 1)
         assert end != -1, f"{event_name} listener end not found"
-        block = src[start:end]
-        assert (
-            "_completeAutomaticCompressionOnLiveProgress(activeSid)" in block
-            or "completeAutomaticCompression(activeSid)" in block
-        )
+        block = content_events[start:end]
+        assert "completeCompression(activeSid)" in block
+        assert "settleLiveCompressionCards" not in block
+
+    for event_name in ("tool", "tool_complete"):
+        start = live_tools.find(f"source.addEventListener('{event_name}'")
+        assert start != -1, f"{event_name} listener not found"
+        end = live_tools.find("source.addEventListener(", start + 1)
+        if end == -1:
+            end = len(live_tools)
+        block = live_tools[start:end]
+        assert "completeAutomaticCompression(activeSid)" in block
         assert "settleLiveCompressionCards" not in block
 
 
@@ -915,34 +924,30 @@ def test_auto_compression_done_sse_refreshes_context_indicator_usage():
 
 
 def test_auto_compression_done_payload_includes_live_usage_snapshot():
-    src = _read("api/runs/local.py")
-    start = src.find("put('compressed'")
-    assert start != -1, "compressed SSE payload not found"
-    end = src.find("})", start)
-    assert end != -1, "compressed SSE payload end not found"
+    src = _read("api/runs/local_compression.py")
+    start = src.find("    def project(")
+    assert start != -1, "compression projection owner not found"
+    end = src.find("    def _migrate_agent_cache", start)
+    assert end != -1, "compression projection owner end not found"
     block = src[start:end]
 
-    assert "'session_id': _compression_origin_session_id" in block
-    assert "'old_session_id': _compression_origin_session_id" in block
-    assert "'new_session_id': _compression_continuation_session_id" in block
-    assert "'continuation_session_id': _compression_continuation_session_id" in block
-    assert "'message': 'Compression finished'" in block
-    assert "'usage': _live_usage_snapshot()" in block
+    assert 'publish(\n            "compressed"' in block
+    assert '"session_id": self.original_session_id' in block
+    assert '"old_session_id": self.original_session_id' in block
+    assert '"new_session_id": continuation_id' in block
+    assert '"continuation_session_id": continuation_id' in block
+    assert '"message": "Compression finished"' in block
+    assert '"usage": usage_snapshot()' in block
 
 
 def test_auto_compression_rotation_tracks_origin_and_continuation_ids_for_sse():
-    src = _read("api/runs/local.py")
-    rotate_start = src.find("# ── Handle context compression side effects ──")
-    assert rotate_start != -1, "compression side-effect block not found"
-    rotate_end = src.find("# Stamp 'timestamp'", rotate_start)
-    assert rotate_end != -1, "compression side-effect block end not found"
-    block = src[rotate_start:rotate_end]
+    src = _read("api/runs/local_compression.py")
 
-    assert "_compression_origin_session_id = session_id" in block
-    assert "_compression_continuation_session_id = None" in block
-    assert "_compression_origin_session_id = old_sid" in block
-    assert "_compression_continuation_session_id = new_sid" in block
-    assert "'new_session_id': _compression_continuation_session_id" in block
+    assert "self.original_session_id = original_session_id" in src
+    assert "self.continuation_session_id: str | None = None" in src
+    assert "self.continuation_session_id = new_id" in src
+    assert "continuation_id = self.continuation_session_id or session.session_id" in src
+    assert '"new_session_id": continuation_id' in src
 
 
 def test_auto_compression_card_reuses_compression_card_renderer():

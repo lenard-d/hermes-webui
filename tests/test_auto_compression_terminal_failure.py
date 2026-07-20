@@ -1,7 +1,5 @@
 """Regression coverage for compression-exhausted stream finalization."""
 
-from tests.frontend_asset_contract import family_source
-
 import copy
 import json
 import queue
@@ -11,8 +9,8 @@ from pathlib import Path
 
 from api import config
 import api.sessions as sessions_pkg
-from api.runs import local as local_run
 from api.runs import local_entrypoint as streaming
+from api.runs import local_failures
 from api.sessions import records
 from api.sessions.records import Session
 from api.runs.transcript import _agent_result_terminal_failure, _session_lacks_final_assistant_answer
@@ -178,17 +176,17 @@ def test_compression_exhausted_result_is_terminal_failure_even_after_streamed_te
 
 
 def test_terminal_failure_gates_shape_check_to_no_streamed_text():
-    src = _read("api/runs/local.py")
-    start = src.find("_is_agent_result_terminal = _agent_result_terminal_failure(result)")
+    src = _read("api/runs/local_failures.py")
+    start = src.find("result_terminal = _agent_result_terminal_failure(result)")
     assert start != -1, "terminal failure result assignment not found"
-    end = src.find("if _terminal_failure:", start)
+    end = src.find("if terminal_failure:", start)
     assert end != -1, "terminal failure guard not found"
     block = src[start:end]
 
-    assert "_is_agent_result_terminal = _agent_result_terminal_failure(result)" in block
-    assert "_is_agent_result_terminal" in block
-    assert "_saved_transcript_lacks_final_answer" in block
-    assert "_classification['type'] not in {'cancelled', 'interrupted'}" in block
+    assert "result_terminal = _agent_result_terminal_failure(result)" in block
+    assert "result_terminal" in block
+    assert "lacks_answer" in block
+    assert 'classification["type"] not in {"cancelled", "interrupted"}' in block
     assert "not _token_sent" not in block
     assert "_session_lacks_final_assistant_answer(_all_result_messages)" not in block
 
@@ -285,11 +283,11 @@ def test_assistant_tool_call_turn_followed_by_final_text_is_successful_answer():
 
 
 def test_compression_exhausted_apperror_clears_reference_ui_and_labels_error():
-    src = family_source("messages")
+    src = _read("static/modules/messages/terminal-events.js")
     start = src.find("source.addEventListener('apperror'")
     assert start != -1, "apperror listener not found"
-    end = src.find("source.addEventListener('error'", start)
-    assert end != -1, "network error listener after apperror not found"
+    end = src.find("source.addEventListener('cancel'", start)
+    assert end != -1, "cancel listener after apperror not found"
     block = src[start:end]
 
     assert "const isCompressionExhausted=d.type==='compression_exhausted';" in block
@@ -303,11 +301,11 @@ def test_compression_exhausted_apperror_clears_reference_ui_and_labels_error():
 
 
 def test_apperror_matches_only_current_or_continuation_session_for_background_errors():
-    src = family_source("messages")
+    src = _read("static/modules/messages/terminal-events.js")
     start = src.find("source.addEventListener('apperror'")
     assert start != -1, "apperror listener not found"
-    end = src.find("source.addEventListener('error'", start)
-    assert end != -1, "network error listener after apperror not found"
+    end = src.find("source.addEventListener('cancel'", start)
+    assert end != -1, "cancel listener after apperror not found"
     block = src[start:end]
 
     assert "const eventSid=d.old_session_id||d.session_id||'';" in block
@@ -417,7 +415,7 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
         m.setitem(sys.modules, "hermes_state", fake_hermes_state)
         m.setattr("api.config.get_config", lambda *_args, **_kwargs: {})
         m.setattr("api.config._resolve_cli_toolsets", lambda *_args, **_kwargs: [])
-        m.setattr(local_run, "redact_session_data", lambda s: s)
+        m.setattr(local_failures, "redact_session_data", lambda s: s)
 
         streaming.run_agent_streaming(
             session_id=old_sid,
@@ -443,12 +441,12 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
 
 
 def test_exception_apperror_payload_includes_session_id_before_enqueue():
-    src = _read("api/runs/local.py")
-    start = src.find("_error_payload = _provider_error_payload(err_str, _exc_type, _exc_hint)")
+    src = _read("api/runs/local_failures.py")
+    start = src.find("payload = _provider_error_payload(")
     assert start != -1, "exception apperror payload path not found"
-    end = src.find("put('apperror', _error_payload)", start)
+    end = src.find('self.ctx.publish("apperror", payload)', start)
     assert end != -1, "exception apperror enqueue not found"
     block = src[start:end]
 
-    assert "_error_payload['session_id'] = getattr(s, 'session_id', session_id)" in block
-    assert "_error_payload['old_session_id'] = session_id" in block
+    assert 'payload["session_id"] = getattr(' in block
+    assert 'payload["old_session_id"] = old_session_id' in block

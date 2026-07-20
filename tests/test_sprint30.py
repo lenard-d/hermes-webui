@@ -7,7 +7,7 @@ Tests for:
 - i18n keys for approval card in both locales
 - CSS for approval-btn states (loading, disabled, kbd badge)
 - respondApproval loading/disable pattern in messages.js
-- streaming.py scoping fix (_unreg_notify=None initialisation)
+- local interaction callback registration and symmetric teardown
 - Approval respond HTTP endpoint (existing + new behaviour)
 """
 from tests.frontend_asset_contract import family_asset_paths, family_source
@@ -359,34 +359,34 @@ class TestApprovalKeyboardShortcut:
 class TestStreamingApprovalScoping:
 
     def test_unreg_notify_initialised_to_none(self):
-        src = read(REPO / "api/runs/local.py")
-        assert "_unreg_notify = None" in src, \
-            "_unreg_notify must be initialised to None before the try block"
+        src = read(REPO / "api/runs/local_interactions.py")
+        assert "self._unregister_approval = None" in src, \
+            "approval unregister callback must be initialised before registration"
 
     def test_finally_checks_unreg_notify_not_none(self):
-        src = read(REPO / "api/runs/local.py")
-        assert "_unreg_notify is not None" in src, \
-            "finally block must check '_unreg_notify is not None' before calling it"
+        src = read(REPO / "api/runs/local_interactions.py")
+        assert "self._unregister_approval is not None" in src, \
+            "close() must check the approval unregister callback before calling it"
 
     def test_approval_registered_flag_present(self):
-        src = read(REPO / "api/runs/local.py")
-        assert "_approval_registered = False" in src, \
+        src = read(REPO / "api/runs/local_interactions.py")
+        assert "self._approval_registered = False" in src, \
             "_approval_registered flag must be initialised to False"
 
     def test_clarify_registered_flag_present(self):
-        src = read(REPO / "api/runs/local.py")
-        assert "_clarify_registered = False" in src, \
+        src = read(REPO / "api/runs/local_interactions.py")
+        assert "self._clarify_registered = False" in src, \
             "_clarify_registered flag must be initialised to False"
 
     def test_clarify_unreg_notify_initialised_to_none(self):
-        src = read(REPO / "api/runs/local.py")
-        assert "_unreg_clarify_notify = None" in src, \
-            "_unreg_clarify_notify must be initialised to None before the try block"
+        src = read(REPO / "api/runs/local_interactions.py")
+        assert "self._unregister_clarify = None" in src, \
+            "clarify unregister callback must be initialised before registration"
 
     def test_finally_checks_clarify_unreg_notify_not_none(self):
-        src = read(REPO / "api/runs/local.py")
-        assert "_unreg_clarify_notify is not None" in src, \
-            "finally block must check '_unreg_clarify_notify is not None' before calling it"
+        src = read(REPO / "api/runs/local_interactions.py")
+        assert "self._unregister_clarify is not None" in src, \
+            "close() must check the clarify unregister callback before calling it"
 
 
 # ── HTTP regression: approval respond ────────────────────────────────────────

@@ -19,7 +19,7 @@ import ast
 import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-AGENT_LOADER_PY = REPO / "api" / "streaming" / "agent_loader.py"
+AGENT_LOADER_PY = REPO / "api" / "runs" / "agent_loader.py"
 LOCAL_RUN_PY = REPO / "api" / "runs" / "local_environment.py"
 PROFILES_PY = REPO / "api" / "profiles" / "__init__.py"
 

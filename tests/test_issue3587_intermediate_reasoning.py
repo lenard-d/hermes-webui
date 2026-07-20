@@ -98,13 +98,11 @@ class TestSettlementLoopForward:
     The old reversed()+break pattern only wrote reasoning to the last message."""
 
     def _settlement_block(self):
-        """Extract the reasoning-persistence settlement block from streaming.py."""
-        src = read('api/runs/local.py')
-        # Anchor on the comment that appears just before the settlement block
-        start = src.find('# #3587: use per-message segments')
+        """Extract the reasoning-persistence block from its success owner."""
+        src = read('api/runs/local_success.py')
+        start = src.find('def _attach_reasoning(')
         assert start >= 0, (
-            "Settlement block comment '#3587: use per-message segments' not found; "
-            "the block may have been moved or the comment changed"
+            "Reasoning settlement owner _attach_reasoning() not found"
         )
         # Grab enough context to cover the loop
         return src[start:start + 1500]
@@ -114,7 +112,7 @@ class TestSettlementLoopForward:
         # The old pattern was: for _rm in reversed(s.messages): ... break
         # Both conditions must be gone from the settlement block.
         has_reversed_break = (
-            'reversed(s.messages)' in block and
+            'reversed(session.messages)' in block and
             re.search(r'\bbreak\b', block)
         )
         assert not has_reversed_break, (
@@ -125,19 +123,19 @@ class TestSettlementLoopForward:
     def test_settlement_iterates_forward_with_counter(self):
         block = self._settlement_block()
         # Forward iteration with an assistant counter
-        assert 'for _rm in s.messages' in block, (
-            "Settlement loop must iterate forward (for _rm in s.messages) "
+        assert 'for message in session.messages' in block, (
+            "Settlement loop must iterate forward through session.messages "
             "to match each assistant message to its reasoning segment"
         )
-        assert '_asst_count' in block, (
-            "Settlement loop must use an assistant message counter (_asst_count) "
+        assert 'assistant_index' in block, (
+            "Settlement loop must use an assistant message counter "
             "to index into _reasoning_segments"
         )
 
     def test_settlement_reads_from_segments_dict(self):
         block = self._settlement_block()
-        assert '_reasoning_segments.get' in block, (
-            "Settlement loop must read from _reasoning_segments.get(idx) "
+        assert 'segments.get' in block, (
+            "Settlement loop must read from segments.get(idx) "
             "to retrieve the per-message reasoning trace"
         )
 
@@ -151,29 +149,35 @@ class TestMultiTurnOffset:
     reasoning stored on earlier turns."""
 
     def _settlement_block(self):
-        src = read('api/runs/local.py')
-        start = src.find('# #3587: use per-message segments')
+        src = read('api/runs/local_success.py')
+        start = src.find('def _attach_reasoning(')
         assert start >= 0, 'Settlement block not found'
         return src[start:start + 1500]
 
     def test_settlement_computes_prev_asst_offset(self):
         block = self._settlement_block()
-        assert '_prev_asst' in block, (
-            "Settlement loop must compute _prev_asst (count of assistant "
+        assert 'previous_assistant_count' in block, (
+            "Settlement loop must compute the count of assistant "
             "messages in _previous_messages) to offset the segment index"
         )
 
     def test_settlement_skips_prior_turn_messages(self):
         block = self._settlement_block()
-        assert re.search(r'if\s+_turn_idx\s*<\s*_prev_asst\s*:', block), (
+        assert re.search(
+            r'if\s+turn_index\s*<\s*previous_assistant_count\s*:',
+            block,
+        ), (
             "Settlement loop must skip prior-turn messages with "
-            "if _turn_idx < _prev_asst: continue"
+            "if turn_index < previous_assistant_count: continue"
         )
 
     def test_segment_index_subtracts_offset(self):
         block = self._settlement_block()
-        assert re.search(r'_turn_idx\s*-\s*_prev_asst', block), (
-            "Segment index must subtract _prev_asst offset so indexing "
+        assert re.search(
+            r'turn_index\s*-\s*previous_assistant_count',
+            block,
+        ), (
+            "Segment index must subtract the previous-assistant offset so indexing "
             "starts at 0 for this turn's first assistant message"
         )
 
@@ -225,16 +229,16 @@ class TestSettlementCounterSingleIncrement:
     reasoning (the exact data-loss scenario the refactor was meant to fix)."""
 
     def _settlement_block(self):
-        src = read('api/runs/local.py')
-        start = src.find('# #3587: use per-message segments')
+        src = read('api/runs/local_success.py')
+        start = src.find('def _attach_reasoning(')
         assert start >= 0
         return src[start:start + 1500]
 
     def test_single_increment_per_iteration(self):
         block = self._settlement_block()
-        count = block.count('_asst_count += 1')
+        count = block.count('assistant_index += 1')
         assert count == 1, (
-            f"_asst_count must be incremented exactly once per loop iteration, "
+            f"assistant_index must be incremented exactly once per loop iteration, "
             f"found {count} increments. A double increment causes segment index "
             f"doubling: message N looks up segment 2*N instead of N."
         )

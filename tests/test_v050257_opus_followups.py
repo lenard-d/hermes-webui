@@ -34,10 +34,8 @@ from __future__ import annotations
 import os
 import stat
 import sys
-import tempfile
 from pathlib import Path
 
-import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -147,61 +145,65 @@ def test_run_agent_streaming_uses_session_enabled_toolsets():
     the surrounding `except Exception`, so the user's toolset chip silently
     no-op'd every time. Pin the source-level invariant so this exact regression
     can't return."""
-    src = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "runs" / "local_agent_runtime.py").read_text(
+        encoding="utf-8"
+    )
 
     # The bug shape that must NOT come back: dict-style access on the result.
     # Negative-pattern guard (prevents revert).
-    bad_pattern = "_session_meta.get('enabled_toolsets')"
+    bad_pattern = "metadata.get("
     assert bad_pattern not in src, (
-        f"local_run.py contains {bad_pattern!r} — Session.load_metadata_only() "
+        f"local_agent_runtime.py contains {bad_pattern!r} — Session.load_metadata_only() "
         f"returns a Session INSTANCE, not a dict, so .get() raises AttributeError. "
         f"The bare `except Exception:` swallows the failure silently and the "
         f"per-session toolset override is non-functional. Use getattr() instead. "
         f"(Opus pre-release advisor caught this in v0.50.257.)"
     )
 
-    bad_pattern2 = "_session_meta['enabled_toolsets']"
-    assert bad_pattern2 not in src, (
-        f"local_run.py contains {bad_pattern2!r} — same bug shape. "
-        f"Session.load_metadata_only() returns an instance, not a dict."
-    )
+    for bad_pattern2 in (
+        'metadata["enabled_toolsets"]',
+        "metadata['enabled_toolsets']",
+    ):
+        assert bad_pattern2 not in src, (
+            f"local_agent_runtime.py contains {bad_pattern2!r} — same bug shape. "
+            f"Session.load_metadata_only() returns an instance, not a dict."
+        )
 
     # Positive pattern: getattr() must be used.
-    assert "getattr(_session_meta, 'enabled_toolsets'" in src, (
-        "local_run.py must use getattr(_session_meta, 'enabled_toolsets', None) "
+    assert 'getattr(metadata, "enabled_toolsets"' in src, (
+        "local_agent_runtime.py must use getattr(metadata, 'enabled_toolsets', None) "
         "since load_metadata_only returns a Session instance."
     )
 
 
-def test_session_load_metadata_only_returns_instance_not_dict():
+def test_session_load_metadata_only_returns_instance_not_dict(monkeypatch, tmp_path):
     """End-to-end: Session.load_metadata_only must return a Session instance,
     not a dict. This is the contract that breaks PR #1402's toolset override
     if a future change converts it to a dict."""
     sys.path.insert(0, str(REPO))
     from api.sessions.store import Session
-    import tempfile
+    import json as _json
 
-    with tempfile.TemporaryDirectory() as tmpd:
-        # Create a fake session file
-        import json as _json
-        sid = "test1234abcd"
-        from api.sessions import store as models
-        original = models.SESSION_DIR
-        models.SESSION_DIR = Path(tmpd)
-        try:
-            session_file = Path(tmpd) / f"{sid}.json"
-            session_file.write_text(_json.dumps({
-                "session_id": sid,
-                "title": "Test",
-                "workspace": tmpd,
-                "model": "test/model",
-                "enabled_toolsets": ["bash", "file"],
-                "messages": [],
-                "tool_calls": [],
-            }))
-            result = Session.load_metadata_only(sid)
-        finally:
-            models.SESSION_DIR = original
+    sid = "test1234abcd"
+    from api.sessions import records
+
+    # Session owns path resolution in records.py. Patching the historical
+    # api.sessions.store re-export does not change the class method's owner.
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
+    session_file = tmp_path / f"{sid}.json"
+    session_file.write_text(_json.dumps({
+        "session_id": sid,
+        "title": "Test",
+        "workspace": str(tmp_path),
+        "model": "test/model",
+        "enabled_toolsets": ["bash", "file"],
+        "created_at": 1.0,
+        "updated_at": 1.0,
+        "message_count": 0,
+        "messages": [],
+        "tool_calls": [],
+    }))
+    result = Session.load_metadata_only(sid)
 
     # Result must be a Session instance — not None and not a dict.
     assert result is not None, "load_metadata_only returned None for valid session"

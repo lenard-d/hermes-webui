@@ -15,9 +15,8 @@ All three fix the same "tokens-paid-for-data-loss" class of bug.
 
 import pathlib
 import queue
-import re
 import threading
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -119,7 +118,7 @@ class TestCancelPreservesReasoningText:
         """Cancel during reasoning phase (no visible tokens) should persist reasoning."""
         sid = "test_1361_a1"
         stream_id = "stream_a1"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         # Simulate: reasoning was accumulated but no visible tokens
@@ -144,7 +143,7 @@ class TestCancelPreservesReasoningText:
         """Cancel mid-stream with both reasoning and some visible tokens."""
         sid = "test_1361_a2"
         stream_id = "stream_a2"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         reasoning = "Let me analyze the code..."
@@ -168,7 +167,7 @@ class TestCancelPreservesReasoningText:
         """If STREAM_REASONING_TEXT doesn't exist yet (pre-fix), cancel still works."""
         sid = "test_1361_a3"
         stream_id = "stream_a3"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         config.STREAM_PARTIAL_TEXT[stream_id] = "Some partial text"
@@ -199,7 +198,7 @@ class TestCancelPreservesToolCalls:
         """Cancel after tool execution should preserve the tool call info."""
         sid = "test_1361_b1"
         stream_id = "stream_b1"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         config.STREAM_PARTIAL_TEXT[stream_id] = ""
@@ -222,7 +221,7 @@ class TestCancelPreservesToolCalls:
         """Cancel after tools + partial text should keep both."""
         sid = "test_1361_b2"
         stream_id = "stream_b2"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         config.STREAM_PARTIAL_TEXT[stream_id] = "Here's what I found:"
@@ -256,7 +255,7 @@ class TestCancelWithReasoningOnlyNoText:
         """Cancel after reasoning-only output should still create a partial msg."""
         sid = "test_1361_c1"
         stream_id = "stream_c1"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         # Only reasoning, no visible tokens at all
@@ -278,7 +277,7 @@ class TestCancelWithReasoningOnlyNoText:
         """Cancel after tool-only output (no text, no reasoning) should still create a partial msg."""
         sid = "test_1361_c2"
         stream_id = "stream_c2"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         config.STREAM_PARTIAL_TEXT[stream_id] = ""
@@ -344,7 +343,7 @@ class TestCancelWithReasoningOnlyNoText:
         """Cancel with no reasoning and no tools and no text = only cancel marker (no change)."""
         sid = "test_1361_c3"
         stream_id = "stream_c3"
-        s = _make_session(session_id=sid)
+        _make_session(session_id=sid)
         _setup_cancel_state(sid, stream_id)
 
         config.STREAM_PARTIAL_TEXT[stream_id] = ""
@@ -501,51 +500,20 @@ def test_stale_stream_cleanup_recovers_journaled_visible_output():
 # ── Structural guard: pin call sites of the materialize helper at error branches ──
 
 def test_materialize_helper_called_immediately_before_error_path_clears():
-    """Pin call sites of _materialize_pending_user_turn_before_error.
+    """The failure owner must materialize the pending turn before clearing it."""
+    import inspect
 
-    Catches a future refactor that drops the call from the apperror-no-response
-    or outer-Exception paths in api/streaming.py while leaving the
-    `pending_user_message = None` clearing in place — which is exactly the
-    user-turn-data-loss regression #1361 was filed for.
+    from api.runs.local_failures import LocalFailureOwner, _clear_pending_turn
 
-    Strategy: count how many `pending_user_message = None` clearings have the
-    helper call within the preceding 4 lines. Currently 2 (apperror at 2610,
-    outer-Exception at 3072). The success path (2716) and cancel path (3375)
-    legitimately don't need the helper. If a future refactor drops the helper
-    call from one of the error sites, this assertion fires.
-    """
-    from pathlib import Path
-    local_run_src = Path(__file__).parent.parent.joinpath(
-        'api', 'runs', 'local.py'
-    ).read_text(encoding='utf-8')
-    live_controls_src = Path(__file__).parent.parent.joinpath(
-        'api', 'streaming', 'live_controls.py'
-    ).read_text(encoding='utf-8')
-    lines = local_run_src.splitlines()
-
-    helper_name = '_materialize_pending_user_turn_before_error('
-    clear_sites = [(i + 1, line) for i, line in enumerate(lines)
-                   if 'pending_user_message = None' in line]
-    clear_count = len(clear_sites) + live_controls_src.count(
-        'pending_user_message = None'
+    persist_error = inspect.getsource(LocalFailureOwner._persist_error)
+    materialize_idx = persist_error.index(
+        "_materialize_pending_user_turn_before_error(session)"
     )
-    assert clear_count >= 4, (
-        f"Expected ≥4 sites that clear pending_user_message; found {clear_count}. "
-        "If the streaming owners were refactored, re-audit this test."
-    )
+    clear_idx = persist_error.index("_clear_pending_turn(session)")
 
-    sites_with_helper = []
-    for lineno, _ in clear_sites:
-        prev_block = '\n'.join(lines[max(0, lineno - 5):lineno - 1])
-        if helper_name in prev_block:
-            sites_with_helper.append(lineno)
-
-    # Concretely, PR #1760 wired up the helper at the apperror-no-response
-    # path and the outer-Exception path. Both must remain wired.
-    assert len(sites_with_helper) >= 2, (
-        f"Expected ≥2 clear sites preceded by {helper_name} within 4 lines; "
-        f"found {sites_with_helper}. PR #1760 / #1361 regression — re-wire the "
-        f"helper at the error-branch clear sites in api/runs/local.py."
+    assert materialize_idx < clear_idx
+    assert "session.pending_user_message = None" in inspect.getsource(
+        _clear_pending_turn
     )
 
 

@@ -72,25 +72,27 @@ def test_stream_writeback_timing_log_respects_threshold():
 
 
 def test_stream_writeback_diagnostics_cover_final_writeback_stages():
-    src = Path("api/runs/local.py").read_text(encoding="utf-8")
+    local_src = Path("api/runs/local.py").read_text(encoding="utf-8")
+    success_src = Path("api/runs/local_success.py").read_text(encoding="utf-8")
 
-    expected_stages = [
+    local_stages = [
         "merge_result",
         "session_save",
         "persistent_state_scan",
         "state_sync",
-        "done_payload",
     ]
-    for stage in expected_stages:
-        assert f'_stream_writeback_stage(_writeback_timings, "{stage}")' in src
+    for stage in local_stages:
+        assert f'_stream_writeback_stage(_writeback_timings, "{stage}")' in local_src
+    assert '_stream_writeback_stage(writeback_timings, "done_payload")' in success_src
 
     assert (
         'with _stream_writeback_stage(_writeback_timings, "session_save"):\n'
         '                    s.save()'
-    ) in src
-    assert src.index('with _stream_writeback_stage(_writeback_timings, "session_save")') < src.index(
+    ) in local_src
+    assert local_src.index('with _stream_writeback_stage(_writeback_timings, "session_save")') < local_src.index(
         'with _stream_writeback_stage(_writeback_timings, "state_sync")'
     )
-    assert src.index('with _stream_writeback_stage(_writeback_timings, "state_sync")') < src.index(
-        'with _stream_writeback_stage(_writeback_timings, "done_payload")'
+    assert local_src.index('with _stream_writeback_stage(_writeback_timings, "state_sync")') < local_src.index(
+        "success.publish_terminal("
     )
+    assert "writeback_timings=_writeback_timings" in local_src

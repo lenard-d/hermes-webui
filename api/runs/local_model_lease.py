@@ -72,4 +72,3 @@ class SessionModelLease:
             self.session.model_provider = provider
             if repaired and model != (getattr(self.session, "model", None) or ""):
                 self.session.model = model
-

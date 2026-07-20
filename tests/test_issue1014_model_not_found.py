@@ -14,6 +14,7 @@ import pathlib
 import re
 
 from api.runs.provider_errors import _classify_provider_error
+from api.runs.local_failures import _sanitize_provider_exception
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 
@@ -78,27 +79,18 @@ class TestStreamingHtmlSanitization:
 
     def test_html_strip_before_classification(self):
         """HTML tags must be stripped before error classification."""
-        src = _read("api/runs/local.py")
-        # Find the HTML sanitization block in the exception handler
-        # It should appear before _exc_lower = err_str.lower()
-        sanitize_idx = src.find("re.sub(r'<[^>]+>'")
-        exc_lower_idx = src.find("_exc_lower = err_str.lower()")
-        assert sanitize_idx != -1, (
-            "HTML tag stripping (re.sub) not found in streaming.py exception handler"
+        sanitized = _sanitize_provider_exception(
+            "<html><body>invalid <strong>model</strong></body></html>"
         )
-        assert exc_lower_idx != -1, "_exc_lower not found"
-        assert sanitize_idx < exc_lower_idx, (
-            "HTML sanitization must happen before error classification"
-        )
+
+        assert sanitized == "invalid model"
+        assert _classify_provider_error(sanitized)["type"] == "model_not_found"
 
     def test_whitespace_normalization(self):
         """Stripped HTML must have whitespace collapsed."""
-        src = _read("api/runs/local.py")
-        sanitize_idx = src.find("re.sub(r'<[^>]+>'")
-        block = src[sanitize_idx:sanitize_idx + 300]
-        assert r"\s+" in block, (
-            "Whitespace normalization (\\s+) not found after HTML strip"
-        )
+        assert _sanitize_provider_exception(
+            "  request\n\t<div>failed</div>   for model  "
+        ) == "request failed for model"
 
 
 # ── 3. static/messages.js: apperror handler ──────────────────────────────────

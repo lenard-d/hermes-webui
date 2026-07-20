@@ -326,7 +326,9 @@ def test_lru_eviction_commits_outside_cache_lock():
     src = Path("api/runs/local_agent_cache.py").read_text(encoding="utf-8")
     marker = "evicted = []"
     collect_start = src.index(marker)
-    lock_start = src.index("with SESSION_AGENT_CACHE_LOCK:", collect_start)
+    lock_start = src.index(
+        "with locked_agent_cache() as session_agent_cache:", collect_start
+    )
     lock_end = src.index("for evicted_session_id, entry in evicted:", lock_start)
     locked_section = src[lock_start:lock_end]
     outside_section = src[
@@ -338,9 +340,9 @@ def test_lru_eviction_commits_outside_cache_lock():
     # Eviction now selects the oldest INACTIVE entry (active-run-aware) and pops
     # it by id under the lock, rather than a liveness-blind popitem(last=False).
     # The commit/close still happens outside the lock (asserted below).
-    assert "SESSION_AGENT_CACHE.pop(evictable)" in locked_section
+    assert "session_agent_cache.pop(evictable)" in locked_section
     assert "sid not in active_sessions" in locked_section
-    assert "SESSION_AGENT_CACHE.popitem(last=False)" not in locked_section
+    assert "session_agent_cache.popitem(last=False)" not in locked_section
     assert "_close_evicted_agent_at_session_boundary" in outside_section
     helper_start = owner_src.index("def _close_evicted_agent_at_session_boundary")
     helper_end = owner_src.index("\ndef _refresh_cached_agent_runtime", helper_start)
@@ -405,7 +407,7 @@ def test_post_turn_lifecycle_marks_completion_without_commit():
     lifecycle_marker = src.index("mark_turn_completed(s.session_id, agent=agent)", save_pos)
     cancel_check = src.index("cancel_event.is_set()", save_pos)
     completed_journal = src.index('"completed"', save_pos)
-    sync_to_state_db = src.index("# Sync to state.db", save_pos)
+    insights_sync = src.index("sync_success_to_insights(", save_pos)
 
     assert lifecycle_marker > cancel_check, (
         "mark_turn_completed must appear after the cancellation check"
@@ -413,12 +415,12 @@ def test_post_turn_lifecycle_marks_completion_without_commit():
     assert lifecycle_marker > completed_journal, (
         "mark_turn_completed must appear after the completed-turn journal event"
     )
-    assert lifecycle_marker < sync_to_state_db
+    assert lifecycle_marker < insights_sync
 
     # The post-turn block must contain mark_turn_completed but NOT
     # commit_session_memory — extraction is a boundary concern.
     block_start = src.rindex("if not ephemeral:", save_pos, lifecycle_marker)
-    block_end_pos = src.index("# Sync to state.db", save_pos)
+    block_end_pos = src.index("sync_success_to_insights(", save_pos)
     post_turn_block = src[block_start:block_end_pos]
     assert "mark_turn_completed" in post_turn_block
     assert "commit_session_memory" not in post_turn_block

@@ -11,12 +11,13 @@ from api.runs.compression_anchors import _compression_summary_from_messages, _is
 def test_legacy_duplicate_anchor_helpers_are_removed():
     routes_src = Path("api/routes.py").read_text(encoding="utf-8")
     manual_compression_src = Path("api/routes_parts/manual_compression.py").read_text(encoding="utf-8")
-    streaming_src = Path("api/runs/local.py").read_text(encoding="utf-8")
+    local_compression_src = Path("api/runs/local_compression.py").read_text(encoding="utf-8")
 
     assert "def _visible_messages_for_anchor" not in routes_src
-    assert "def _visible_messages_for_compression_anchor" not in streaming_src
+    assert "def _visible_messages_for_compression_anchor" not in local_compression_src
     assert "visible_messages_for_anchor(s.messages, auto_compression=False)" in manual_compression_src
-    assert "visible_messages_for_anchor(s.messages, auto_compression=True)" in streaming_src
+    assert "from api.compression_anchor import visible_messages_for_anchor" in local_compression_src
+    assert "visible_messages_for_anchor(\n            session.messages,\n            auto_compression=True," in local_compression_src
 
 
 def test_visible_messages_for_anchor_preserves_manual_text_part_filter():

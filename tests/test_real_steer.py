@@ -320,7 +320,6 @@ class TestFrontendWiring:
         assert "method:'POST'" in body or 'method:"POST"' in body
 
     def test_try_steer_handles_fallback_without_cancelling(self):
-        idx = self.cmds.find("async function _trySteer(")
         body = _source_between(self.cmds, "async function _trySteer(", "\nexport {cmdGoal")
         # Must check result.accepted and keep generic failures from cancelling.
         assert "result&&result.accepted" in body or "result.accepted" in body
@@ -995,28 +994,25 @@ class TestLeftoverDelivery:
     pending_steer_leftover SSE event is emitted if there's still text stashed."""
 
     def test_leftover_drain_call_in_streaming(self):
-        """Verify the streaming.py source contains the drain call before put('done', ...)."""
-        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+        """Verify the success owner drains and publishes leftover steering text."""
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local_success.py").read_text(encoding="utf-8")
         assert "_drain_pending_steer" in src, (
-            "_run_agent_streaming must call agent._drain_pending_steer() to deliver leftovers"
+            "the local success owner must drain pending steering text"
         )
         assert "pending_steer_leftover" in src, (
             "_run_agent_streaming must emit a pending_steer_leftover SSE event"
         )
 
     def test_leftover_drain_runs_before_done_event(self):
-        """The drain must happen BEFORE put('done', ...) so frontend gets both events
-        on the same turn."""
+        """Post-turn controls must run before the terminal success event."""
         src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(encoding="utf-8")
-        # Find the drain invocation and the next put('done', ...) AFTER it
-        drain_idx = src.find("_drain_pending_steer()")
+        # Local orchestration must publish post-turn controls before the owner
+        # emits the terminal done payload.
+        drain_idx = src.find("publish_post_turn_controls(")
         assert drain_idx >= 0
-        done_idx = src.find("put('done'", drain_idx)
+        done_idx = src.find("success.publish_terminal(", drain_idx)
         assert done_idx >= 0
-        # No put('done', ...) should appear BEFORE the drain in the same code block
-        # (we already check the drain is in the file; ordering matters within the
-        # non-ephemeral success path)
         assert drain_idx < done_idx, (
-            "_drain_pending_steer must run before put('done', ...) so the SSE listener "
+            "post-turn controls must publish before the terminal payload so the SSE listener "
             "sees the leftover before stream_end fires"
         )

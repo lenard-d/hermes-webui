@@ -23,6 +23,9 @@ STREAM_PROGRESS_SRC = (
 LIVE_TOOLS_SRC = (
     REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
 ).read_text(encoding="utf-8")
+CONTENT_EVENTS_SRC = (
+    REPO_ROOT / "static" / "modules" / "messages" / "content-events.js"
+).read_text(encoding="utf-8")
 SESSION_LIFECYCLE_SRC = next(
     path for path in module_family_paths("sessions")
     if path.name == "lifecycle.js"
@@ -185,7 +188,7 @@ def test_streaming_py_imports_has_pending(cleanup_test_sessions):
 
 def test_aiagent_imported_in_streaming(cleanup_test_sessions, monkeypatch):
     """R2b: the streaming loader must refresh and resolve a missing AIAgent."""
-    import api.streaming.agent_loader as loader
+    import api.runs.agent_loader as loader
 
     resolved = type("ResolvedAgent", (), {})
     calls = []
@@ -760,13 +763,17 @@ def test_live_stream_tokens_persist_partial_assistant_for_session_switch(cleanup
         "messages.js must mark the persisted in-flight assistant row so renderMessages can re-anchor it"
     assert "syncInflightAssistantMessage();" in messages_src, \
         "token handler must update INFLIGHT state before checking the active session"
-    token_match = re.search(r"source\.addEventListener\('token',e=>\{(.*?)\n\s*\}\);", messages_src, re.S)
+    token_match = re.search(
+        r"source\.addEventListener\('token',event=>\{(.*?)\n\s*\}\);",
+        CONTENT_EVENTS_SRC,
+        re.S,
+    )
     assert token_match, "token listener not found"
     token_fn = token_match.group(1)
-    assert token_fn.find("assistantText+=d.text") < token_fn.find("if(!S.session||S.session.session_id!==activeSid) return;"), (
+    assert token_fn.find("turn.appendAssistantText(data.text)") < token_fn.find("if(!S.session||S.session.session_id!==activeSid) return;"), (
         "token events must update the active stream's local state before DOM-only active-session guards"
     )
-    assert token_fn.find("syncInflightAssistantMessage();") < token_fn.find("if(!S.session||S.session.session_id!==activeSid) return;"), (
+    assert token_fn.find("turn.syncInflight();") < token_fn.find("if(!S.session||S.session.session_id!==activeSid) return;"), (
         "token events must persist INFLIGHT state even while another session is selected"
     )
     assert "assistantRow&&!assistantRow.isConnected" in messages_src, \
@@ -999,17 +1006,17 @@ def test_messages_js_supports_live_reasoning_and_tool_completion(cleanup_test_se
         "messages.js must track the currently active reasoning segment separately from cumulative reasoning"
     assert "source.addEventListener('reasoning'" in src or 'source.addEventListener("reasoning"' in src, \
         "messages.js must listen for live reasoning SSE events"
-    assert "liveReasoningText += text" in src, \
+    assert "appendReasoning:text=>{ reasoningText+=text;liveReasoningText+=text; }" in src, \
         "live reasoning SSE events must update the active Worklog Thinking Card text"
-    assert "const liveThinkingText=_liveThinkingText();" in src, \
+    assert "const liveThinkingText=turn.liveThinkingText();" in CONTENT_EVENTS_SRC, \
         "live reasoning SSE events must compute the current segment's Worklog Thinking Card text once"
-    assert "const anchorReasoningFallback={};" in src, \
+    assert "const fallback={};" in CONTENT_EVENTS_SRC, \
         "live reasoning SSE events must capture the active anchor id for fallback"
-    assert "if(!_upsertAnchorReasoning(liveThinkingText, anchorReasoningFallback))" in src, \
+    assert "if(!anchor.upsertReasoning(liveThinkingText,fallback))" in CONTENT_EVENTS_SRC, \
         "live reasoning SSE events must prefer the anchor renderer before falling back"
-    assert "_updateLiveThinkingCard(liveThinkingText,{" in src and "...anchorReasoningFallback" in src, \
+    assert "renderer.updateLiveThinking(liveThinkingText,{" in CONTENT_EVENTS_SRC and "...fallback" in CONTENT_EVENTS_SRC, \
         "live reasoning SSE events must carry anchor identity into the fallback renderer"
-    assert "anchorRenderFallback:true" in src and "sessionId:activeSid" in src and "streamId" in src, \
+    assert "anchorRenderFallback:true" in CONTENT_EVENTS_SRC and "sessionId:activeSid" in CONTENT_EVENTS_SRC and "streamId" in CONTENT_EVENTS_SRC, \
         "live reasoning SSE events must keep the current segment's Worklog Thinking Card as fallback"
     assert "source.addEventListener('tool_complete'" in src or 'source.addEventListener("tool_complete"' in src, \
         "messages.js must listen for live tool completion SSE events"
@@ -1030,7 +1037,7 @@ def test_messages_js_supports_interim_assistant_events(cleanup_test_sessions):
         "messages.js must listen for interim_assistant SSE events"
     assert "function _resetAssistantSegment()" in STREAM_RENDERER_SRC, \
         "messages.js should share live-segment reset logic between interim assistant updates and tool events"
-    assert "_resetAssistantSegment();" in src, \
+    assert "renderer.resetAssistantSegment();" in CONTENT_EVENTS_SRC, \
         "messages.js should apply segment reset when tool or interim assistant events require it"
 
 
@@ -1108,14 +1115,14 @@ def test_messages_js_live_assistant_segment_reuses_live_turn_wrapper(cleanup_tes
         "live answer content should be appended as a segment inside the live turn wrapper"
     assert "if(!force&&!assistantRow){" in src.replace(' ', ''), \
         "ensureAssistantRow must still avoid creating the live answer segment when no display text exists yet"
-    token_start = src.find("source.addEventListener('token'")
-    interim_start = src.find("source.addEventListener('interim_assistant'", token_start)
+    token_start = CONTENT_EVENTS_SRC.find("source.addEventListener('token'")
+    interim_start = CONTENT_EVENTS_SRC.find("source.addEventListener('interim_assistant'", token_start)
     assert token_start >= 0 and interim_start > token_start
-    token_body = src[token_start:interim_start]
+    token_body = CONTENT_EVENTS_SRC[token_start:interim_start]
     compact_token_body = token_body.replace(" ", "").replace("\n", "")
-    assert "if(assistantRow){ensureAssistantRow();_scheduleRender();}" in compact_token_body, \
+    assert "if(turn.assistantRow()){renderer.ensureAssistantRow();renderer.scheduleRender();}" in compact_token_body, \
         "token handler should skip the per-token full-text parse after the live answer segment exists"
-    assert "constparsed=_parseStreamState();if(String((parsed&&parsed.displayText)||'').trim())ensureAssistantRow();_scheduleRender(parsed);" in compact_token_body, \
+    assert "constparsed=renderer.parseStreamState();if(String((parsed&&parsed.displayText)||'').trim())renderer.ensureAssistantRow();renderer.scheduleRender(parsed);" in compact_token_body, \
         "token handler must only create the live answer segment once visible answer text starts"
 
 

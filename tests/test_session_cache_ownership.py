@@ -71,13 +71,16 @@ def test_get_session_metadata_only_evicts_cached_object_with_wrong_session_id(tm
 
 
 def test_compression_cache_migration_never_moves_unverified_cached_object_to_new_sid():
-    streaming_src = open(
-        "api/runs/local.py", encoding="utf-8"
+    compression_src = open(
+        "api/runs/local_compression.py", encoding="utf-8"
     ).read()
 
-    assert "SESSIONS[new_sid] = SESSIONS.pop(old_sid)" not in streaming_src
-    assert "cached_old_session is not s" in streaming_src
-    assert "SESSIONS[new_sid] = s" in streaming_src
+    assert "SESSIONS[new_id] = SESSIONS.pop(old_id)" not in compression_src
+    assert "cached_old is not None and cached_old is not session" in compression_src
+    assert 'cached_id = str(getattr(cached_old, "session_id", "") or "")' in compression_src
+    assert "if cached_id == str(old_id):" in compression_src
+    assert "SESSIONS[old_id] = cached_old" in compression_src
+    assert "SESSIONS[new_id] = session" in compression_src
 
 
 def test_cached_agent_session_identity_matches_requested_sid():

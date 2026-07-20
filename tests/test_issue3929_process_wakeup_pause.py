@@ -2578,12 +2578,12 @@ def test_success_path_clears_process_wakeup_pause_after_late_cancel_checks():
         "s.process_wakeup_pause = dict(_process_wakeup_pause_before_clear)",
         post_save_cancel_idx,
     )
-    done_payload_idx = src.index('with _stream_writeback_stage(_writeback_timings, "done_payload")')
+    terminal_publish_idx = src.index("success.publish_terminal(")
 
     assert session_save_idx < session_save_cancel_idx < state_sync_idx
     assert state_sync_idx < final_cancel_idx < pause_snapshot_idx < pause_clear_idx
     assert pause_clear_idx < post_clear_cancel_idx < post_clear_restore_idx < pause_save_idx
-    assert pause_save_idx < post_save_cancel_idx < post_save_restore_idx < done_payload_idx
+    assert pause_save_idx < post_save_cancel_idx < post_save_restore_idx < terminal_publish_idx
 
 
 def test_process_wakeup_pause_does_not_suppress_explicit_non_wakeup_turn(tmp_path, monkeypatch):

@@ -1,4 +1,7 @@
 from pathlib import Path
+import inspect
+
+from api.runs.local_failures import LocalFailureOwner
 
 
 def test_turn_execution_owns_worker_started_before_worker_body_runs():
@@ -40,9 +43,12 @@ def test_streaming_appends_completed_after_final_save():
 
 
 def test_streaming_appends_interrupted_on_provider_error_path():
-    src = Path("api/runs/local.py").read_text(encoding="utf-8")
-    err_idx = src.index("err_str = str(e)")
-    interrupted_idx = src.index('"event": "interrupted"', err_idx)
-    apperror_idx = src.index("put('apperror'", interrupted_idx)
+    exception_src = inspect.getsource(LocalFailureOwner.handle_exception)
+    persist_src = inspect.getsource(LocalFailureOwner._persist_error)
+    exception_idx = exception_src.index("_sanitize_provider_exception(str(exc))")
+    persist_idx = exception_src.index("self._persist_error(", exception_idx)
 
-    assert err_idx < interrupted_idx < apperror_idx
+    assert "append_interrupted=True" in exception_src[persist_idx:]
+    interrupted_idx = persist_src.index("if append_interrupted")
+    apperror_idx = persist_src.index('self.ctx.publish("apperror", payload)')
+    assert interrupted_idx < apperror_idx

@@ -24,7 +24,7 @@ def test_streaming_sessiondb_uses_session_profile_state_db(tmp_path, monkeypatch
     from api import config as cfg
     from api import oauth
     from api import profiles
-    from api import streaming
+    from api.runs import local_entrypoint as streaming
 
     profile_home = tmp_path / "hermes-home" / "profiles" / "zhangtingban"
     profile_home.mkdir(parents=True)
@@ -152,17 +152,17 @@ def test_streaming_sessiondb_uses_session_profile_state_db(tmp_path, monkeypatch
 
     with cfg.SESSION_AGENT_CACHE_LOCK:
         cfg.SESSION_AGENT_CACHE.clear()
-    streaming.STREAMS.clear()
-    streaming.CANCEL_FLAGS.clear()
-    streaming.AGENT_INSTANCES.clear()
-    streaming.STREAM_PARTIAL_TEXT.clear()
-    streaming.STREAM_REASONING_TEXT.clear()
-    streaming.STREAM_LIVE_TOOL_CALLS.clear()
+    cfg.STREAMS.clear()
+    cfg.CANCEL_FLAGS.clear()
+    cfg.AGENT_INSTANCES.clear()
+    cfg.STREAM_PARTIAL_TEXT.clear()
+    cfg.STREAM_REASONING_TEXT.clear()
+    cfg.STREAM_LIVE_TOOL_CALLS.clear()
 
-    streaming.STREAMS[fake_session.active_stream_id] = queue.Queue()
+    cfg.STREAMS[fake_session.active_stream_id] = queue.Queue()
     old_home = os.environ.get("HERMES_HOME")
     try:
-        streaming._run_agent_streaming(
+        streaming.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text="hello from zhangtingban",
             model="test-model",

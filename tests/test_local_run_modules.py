@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from types import SimpleNamespace
 
 from api import streaming as _streaming_facade  # noqa: F401
@@ -9,6 +10,26 @@ import api.runs.local_usage as local_usage
 from api.runs.local_agent_config import build_local_agent_configuration
 from api.runs.local_events import LocalEventTranslator
 from api.runs.local_usage import LocalUsageTracker
+
+
+def test_deep_local_run_owners_are_independently_importable():
+    owner_modules = [
+        "local_agent_runtime",
+        "local_checkpoint",
+        "local_compression",
+        "local_context_window",
+        "local_conversation",
+        "local_failures",
+        "local_interactions",
+        "local_model_lease",
+        "local_profile",
+        "local_result",
+        "local_success",
+    ]
+
+    imported = [importlib.import_module(f"api.runs.{name}") for name in owner_modules]
+
+    assert [module.__name__.rsplit(".", 1)[-1] for module in imported] == owner_modules
 
 
 class _Meter:

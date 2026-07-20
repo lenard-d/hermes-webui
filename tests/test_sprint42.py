@@ -2,8 +2,9 @@
 Sprint 42 Tests: SessionDB injection into AIAgent for WebUI sessions (PR #356).
 
 Covers:
-- streaming/agent_cache.py: SessionDB construction and non-fatal failure handling
-- runs/local.py: SessionDB injection into AIAgent before construction
+- runs/agent_cache.py: SessionDB construction and non-fatal failure handling
+- runs/local_agent_runtime.py: SessionDB creation before agent construction
+- runs/local_agent_config.py: SessionDB injection into AIAgent kwargs
 """
 from tests.frontend_asset_contract import family_source
 import ast
@@ -24,14 +25,17 @@ AGENT_CACHE_PY = (
 POST_COMPRESSION_CONTEXT_PY = (
     REPO_ROOT / "api" / "runs" / "post_compression_context.py"
 ).read_text(encoding="utf-8")
-LOCAL_RUN_PY = (
-    REPO_ROOT / "api" / "runs" / "local.py"
+LOCAL_AGENT_RUNTIME_PY = (
+    REPO_ROOT / "api" / "runs" / "local_agent_runtime.py"
 ).read_text(encoding="utf-8")
 LOCAL_AGENT_CONFIG_PY = (
     REPO_ROOT / "api" / "runs" / "local_agent_config.py"
 ).read_text(encoding="utf-8")
 LOCAL_EVENTS_PY = (
     REPO_ROOT / "api" / "runs" / "local_events.py"
+).read_text(encoding="utf-8")
+LOCAL_RESULT_PY = (
+    REPO_ROOT / "api" / "runs" / "local_result.py"
 ).read_text(encoding="utf-8")
 
 
@@ -62,9 +66,9 @@ class TestSessionDBInjection(unittest.TestCase):
     def test_session_db_kwarg_passed_to_agent(self):
         """session_db= must be passed to the AIAgent constructor call."""
         self.assertIn(
-            "session_db=_session_db",
-            LOCAL_RUN_PY,
-            "session_db kwarg not passed to AIAgent by local run owner (PR #356)",
+            '"session_db": session_db',
+            LOCAL_AGENT_CONFIG_PY,
+            "session_db missing from the canonical AIAgent constructor kwargs (PR #356)",
         )
 
     def test_sessiondb_init_in_try_except(self):
@@ -102,8 +106,10 @@ class TestSessionDBInjection(unittest.TestCase):
 
     def test_session_db_initialized_before_agent_construction(self):
         """SessionDB initialization must appear before the AIAgent(...) constructor call."""
-        db_pos = LOCAL_RUN_PY.find("_session_db = _build_session_db_for_stream")
-        agent_pos = LOCAL_RUN_PY.find("session_db=_session_db")
+        db_pos = LOCAL_AGENT_RUNTIME_PY.find(
+            "session_db = request.build_session_db(state_db_path)"
+        )
+        agent_pos = LOCAL_AGENT_RUNTIME_PY.find("build_local_agent_configuration(")
         self.assertGreater(
             agent_pos,
             db_pos,
@@ -112,17 +118,17 @@ class TestSessionDBInjection(unittest.TestCase):
 
     def test_session_db_default_is_none(self):
         """SessionDB should now be initialized through the helper call."""
-        pattern = "_state_db_path = (Path(_profile_home) / \"state.db\") if _profile_home else None"
-        helper_pattern = "_session_db = _build_session_db_for_stream(_state_db_path)"
+        pattern = 'Path(request.profile_home) / "state.db" if request.profile_home else None'
+        helper_pattern = "session_db = request.build_session_db(state_db_path)"
         self.assertIn(
             pattern,
-            LOCAL_RUN_PY,
-            "_state_db_path should be resolved from profile home in local_run.py",
+            LOCAL_AGENT_RUNTIME_PY,
+            "state_db_path should be resolved from profile home by the agent runtime owner",
         )
         self.assertIn(
             helper_pattern,
-            LOCAL_RUN_PY,
-            "_session_db should be initialized via _build_session_db_for_stream in local_run.py",
+            LOCAL_AGENT_RUNTIME_PY,
+            "session_db should be initialized through the injected builder",
         )
 
 
@@ -737,53 +743,47 @@ def test_cleanTitle_is_let_not_const():
 
 # ── Sprint 42 additional tests: thinking panel persistence (#427) ────────
 def test_streaming_persists_reasoning_in_session():
-    """streaming.py must accumulate reasoning and patch assistant messages."""
-    src = LOCAL_RUN_PY + "\n" + LOCAL_EVENTS_PY
+    """The event owner accumulates reasoning and success projection persists it."""
+    from api.runs.local_success import _attach_reasoning
 
     # #3587: per-message reasoning segments replaced the flat _reasoning_text accumulator
-    assert "reasoning_segments" in src, \
+    assert "reasoning_segments" in LOCAL_EVENTS_PY, \
         "_reasoning_segments dict not found in streaming.py"
 
     # on_reasoning must accumulate non-echo reasoning into segments
-    assert 'self.reasoning_segments[self.current_reasoning_idx]' in src, \
+    assert 'self.reasoning_segments[self.current_reasoning_idx]' in LOCAL_EVENTS_PY, \
         "on_reasoning callback does not accumulate into per-message _reasoning_segments"
-    assert 'self._is_visible_output_echo(delta)' in src, \
+    assert 'self._is_visible_output_echo(delta)' in LOCAL_EVENTS_PY, \
         "on_reasoning callback should suppress reasoning deltas that only echo visible streamed output"
 
-    # Persistence block must exist before raw_session is built
-    assert "Persist reasoning trace in the session so it survives reload" in src, \
-        "Reasoning persistence comment not found in streaming.py"
-
-    # #3455: reasoning is now persisted via the think-split path — either the
-    # merged reasoning (inline <think> + on_reasoning stream) or the existing
-    # _reasoning_text when content has no leading block. Both set _rm['reasoning'].
-    assert "_rm['reasoning'] = _merged_reasoning" in src, \
-        "Code to set the last assistant message's reasoning (merged think-split) not found"
-    assert "_split_thinking_from_content(" in src, \
-        "server-side think-split must run before save (#3455)"
-    assert "_rm['reasoning'] = _existing_reasoning" in src, \
-        "the no-think-block branch must still persist _reasoning_text into the assistant message"
-
-    # Persistence block must come BEFORE the settled raw_session payload is built
-    persist_idx = src.index("Persist reasoning trace in the session")
-    raw_session_idx = src.index("raw_session = _session_payload_with_full_messages")
-    assert persist_idx < raw_session_idx, \
-        "Reasoning persistence block must appear before raw_session assignment"
+    session = types.SimpleNamespace(
+        messages=[{"role": "assistant", "content": "visible answer"}],
+    )
+    _attach_reasoning(session, [], {0: "private chain"})
+    assert session.messages == [
+        {
+            "role": "assistant",
+            "content": "visible answer",
+            "reasoning": "private chain",
+        }
+    ]
 
 
 def test_done_handler_patches_reasoning_field():
     """messages.js done SSE handler must patch reasoningText onto the last assistant message."""
-    src = family_source("messages")
+    src = (
+        REPO_ROOT / "static" / "modules" / "messages" / "terminal-events.js"
+    ).read_text(encoding="utf-8")
 
     # The persistence comment must be present inside the done handler
     assert "Persist reasoning trace for Worklog Thinking Cards" in src, \
         "Reasoning persistence comment not found in messages.js done handler"
 
     # The guard and assignment must be present
-    assert "if(reasoningText&&lastAsst&&!lastAsst.reasoning)" in src, \
+    assert "if(_reasoningText()&&lastAsst&&!lastAsst.reasoning)" in src, \
         "reasoningText guard not found in messages.js"
 
-    assert "lastAsst.reasoning=reasoningText" in src, \
+    assert "lastAsst.reasoning=_reasoningText()" in src, \
         "lastAsst.reasoning assignment not found in messages.js"
 
     # Verify the patch is inside the done handler (after 'source.addEventListener' for done)
@@ -823,13 +823,15 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
     reasoning-only assistant segments.
     """
     owner_src = POST_COMPRESSION_CONTEXT_PY
-    run_src = LOCAL_RUN_PY
+    run_src = LOCAL_RESULT_PY
     assert "def _restore_reasoning_metadata(" in owner_src, \
         "post_compression_context.py must own prior reasoning restoration"
-    assert "_next_context_messages" in run_src and "s.context_messages" in run_src, \
-        "local_run.py must restore prior reasoning metadata into model context"
-    assert "s.messages = _merge_display_messages_after_agent_result(" in run_src, \
-        "local_run.py must merge restored result messages into the visible transcript"
+    assert "next_context = _restore_reasoning_metadata(" in run_src, \
+        "local_result.py must restore prior reasoning metadata into model context"
+    assert "session.context_messages = _deduplicate_context_messages(next_context)" in run_src, \
+        "local_result.py must persist restored reasoning in model context"
+    assert "session.messages = _merge_display_messages_after_agent_result(" in run_src, \
+        "local_result.py must merge restored result messages into the visible transcript"
     from api.runs.post_compression_context import _restore_display_reasoning_metadata
 
     reasoning_only = {

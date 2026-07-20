@@ -46,11 +46,21 @@ class TestRootWorkspaceUnblocked:
         assert "'/proc'" in src or 'Path("/proc")' in src or "Path('/proc')" in src
 
     def test_split_guard_present(self):
-        src = read("api/runs/local.py")
-        assert "'\\n\\n[Attached files:' in msg_text" in src, (
-            "base_text split must guard against missing '[Attached files:' "
-            "to avoid empty-string on plain messages"
+        from types import SimpleNamespace
+
+        from api.runs.local_success import _tag_turn_attachments
+
+        session = SimpleNamespace(
+            messages=[{"role": "user", "content": "plain message"}],
         )
+
+        _tag_turn_attachments(
+            session,
+            [{"name": "notes.txt"}],
+            "plain message",
+        )
+
+        assert session.messages[0]["attachments"] == ["notes.txt"]
 
 
 # ── Group B: custom_providers visibility ─────────────────────────────────────

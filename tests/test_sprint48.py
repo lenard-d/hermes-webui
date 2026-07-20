@@ -91,7 +91,7 @@ class TestXmlToolCallStrip:
     def test_strip_applied_to_assistant_messages(self):
         """Verify the strip call is applied to assistant message content after
         the agent run completes (server-side persistence fix)."""
-        run_src = read('api/runs/local.py')
+        run_src = read('api/runs/local_result.py')
         # Confirm the run owner calls the facade helper on message content.
         assert '_strip_xml_tool_calls' in run_src, (
             "_strip_xml_tool_calls must be called by the local run owner"

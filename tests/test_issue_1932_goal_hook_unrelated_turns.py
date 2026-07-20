@@ -39,24 +39,18 @@ def test_streaming_source_code_gates_on_stream_goal_related():
     """The streaming code must check STREAM_GOAL_RELATED[stream_id] before
     calling evaluate_goal_after_turn, so unrelated turns skip the hook."""
     from pathlib import Path
-    streaming_py = (
+    success_py = (
         Path(__file__).resolve().parents[1]
         / "api"
         / "runs"
-        / "local.py"
+        / "local_success.py"
     ).read_text()
 
-    # Must import STREAM_GOAL_RELATED
-    assert "STREAM_GOAL_RELATED" in streaming_py, (
-        "the local run owner must consume STREAM_GOAL_RELATED"
-    )
-
-    # Must check it before calling evaluate_goal_after_turn
-    goal_related_check = streaming_py.find("STREAM_GOAL_RELATED")
-    eval_call = streaming_py.find("evaluate_goal_after_turn")
+    goal_related_check = success_py.find("if goal_related and has_active_goal")
+    eval_call = success_py.find("decision = evaluate_goal_after_turn")
     assert goal_related_check != -1 and eval_call != -1
     assert goal_related_check < eval_call, (
-        "STREAM_GOAL_RELATED check must appear before evaluate_goal_after_turn call"
+        "the explicit goal_related gate must appear before evaluate_goal_after_turn"
     )
 
 
@@ -68,20 +62,20 @@ def test_streaming_sets_pending_goal_continuation_on_goal_continue():
     """When goal_continue is emitted, the local run owner must set
     PENDING_GOAL_CONTINUATION so the next /chat/start marks the stream."""
     from pathlib import Path
-    streaming_py = (
+    success_py = (
         Path(__file__).resolve().parents[1]
         / "api"
         / "runs"
-        / "local.py"
+        / "local_success.py"
     ).read_text()
 
-    assert "PENDING_GOAL_CONTINUATION" in streaming_py, (
+    assert "PENDING_GOAL_CONTINUATION" in success_py, (
         "the local run owner must reference PENDING_GOAL_CONTINUATION"
     )
 
     # The PENDING_GOAL_CONTINUATION set must happen near goal_continue
-    goal_continue_idx = streaming_py.find("goal_continue")
-    pending_idx = streaming_py.find("PENDING_GOAL_CONTINUATION")
+    goal_continue_idx = success_py.find('"goal_continue"')
+    pending_idx = success_py.find("PENDING_GOAL_CONTINUATION.add", goal_continue_idx - 500)
     assert goal_continue_idx != -1 and pending_idx != -1
 
 

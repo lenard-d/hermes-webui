@@ -46,14 +46,13 @@ def test_profile_runtime_env_includes_terminal_config_and_dotenv(tmp_path):
 
 
 def test_streaming_applies_profile_runtime_env_to_agent_run():
-    src = Path("api/runs/local.py").read_text(encoding="utf-8")
+    profile_src = Path("api/runs/local_profile.py").read_text(encoding="utf-8")
     env_src = Path("api/runs/local_environment.py").read_text(encoding="utf-8")
 
-    assert "get_profile_runtime_env" in src
-    assert "_profile_runtime_env" in src
-    assert "_safe_profile_runtime_env" in src
+    assert "get_profile_runtime_env" in profile_src
+    assert "runtime_env = get_profile_runtime_env" in profile_src
+    assert "safe_runtime_env = filter_runtime_env_for_gateway_parity" in profile_src
     assert "self._previous" in env_src
-    assert "filter_runtime_env_for_gateway_parity" in src
     assert "os.environ.update(safe_profile_runtime_env)" in env_src
     assert "os.environ.update(profile_runtime_env)" not in env_src
 
@@ -92,7 +91,7 @@ def test_profile_background_worker_uses_gateway_parity_runtime_env_filter():
 
 
 def test_streaming_thread_env_allows_profile_terminal_cwd_override():
-    from api.streaming import _build_agent_thread_env
+    from api.runs.turn_identity import _build_agent_thread_env
 
     run_src = Path("api/runs/local_environment.py").read_text(encoding="utf-8")
 
