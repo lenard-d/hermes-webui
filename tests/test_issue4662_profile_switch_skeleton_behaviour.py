@@ -12,7 +12,7 @@ assert the produced structure (group labels + single-line rows, tree rows with
 glyph/name/size), so a regression in the skeleton shape is caught. Pairs with
 the static-assertion tests in test_issue4662_profile_switch_skeleton_static.py.
 """
-from tests.frontend_asset_contract import family_asset_paths
+from tests.frontend_asset_contract import family_asset_paths, module_family_paths
 
 import json
 import shutil
@@ -22,6 +22,15 @@ import pytest
 
 def _family_path_arg(family: str) -> str:
     return json.dumps([str(path) for path in family_asset_paths(family)])
+
+
+def _session_list_owner_path_arg() -> str:
+    owner = next(
+        path for path in module_family_paths("sessions")
+        if path.name == "session-list.js"
+    )
+    return json.dumps([str(owner)])
+
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -115,6 +124,11 @@ const wsSrc = JSON.parse(process.argv[3]).map(p=>fs.readFileSync(p, 'utf8')).joi
 // Module-scope state the session builder references.
 var _sessionListSkeletonActive = false;
 var _sessionVirtualScrollRaf = 0;
+global.sidebarStateBindings = {
+  _sessionVirtualScrollRaf: 0,
+  _activeProject: null,
+  _sessionSourceFilter: null,
+};
 global.cancelAnimationFrame = function(){};
 global.requestAnimationFrame = function(){ return 0; };
 eval(extractConst(sessSrc, '_SESSION_SKELETON_GROUPS'));
@@ -165,7 +179,7 @@ def outcome(tmp_path_factory):
     driver = tmp_path_factory.mktemp("skel") / "driver.js"
     driver.write_text(_DRIVER_SRC, encoding="utf-8")
     res = subprocess.run(
-        [NODE, str(driver), _family_path_arg("sessions"), _family_path_arg("workspace")],
+        [NODE, str(driver), _session_list_owner_path_arg(), _family_path_arg("workspace")],
         capture_output=True, text=True, timeout=30,
     )
     if res.returncode != 0:

@@ -38,18 +38,17 @@ from tests._wakeup_helpers import FakeProcessRegistry as _FakeProcessRegistry
 from tests._wakeup_helpers import install_fake_registry as _install_fake_registry
 
 
-def test_background_process_is_a_real_package_without_legacy_parts():
-    from pathlib import Path
-
+def test_background_process_package_exposes_semantic_owners():
     from api import background_process as bp
+    from api.background_process import completion_events
+    from api.background_process import deferred_wakeups
+    from api.background_process import lifecycle
+    from api.background_process import process_coordination
 
-    package_dir = Path(bp.__file__).resolve().parent
-    assert Path(bp.__file__).name == "__init__.py"
-    assert (package_dir / "completion_events.py").is_file()
-    assert (package_dir / "deferred_wakeups.py").is_file()
-    assert (package_dir / "lifecycle.py").is_file()
-    assert (package_dir / "process_coordination.py").is_file()
-    assert not (package_dir.parent / "background_process_parts").exists()
+    assert bp.format_wakeup_prompt is completion_events.format_wakeup_prompt
+    assert bp.record_deferred_wakeup is deferred_wakeups.record_deferred_wakeup
+    assert bp.start_drain_thread is lifecycle.start_drain_thread
+    assert bp.register_process_session is process_coordination.register_process_session
 
 
 def test_completion_event_owner_and_background_facade_share_delivery_state():
