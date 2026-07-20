@@ -11,7 +11,7 @@ Both are regression tests — they should FAIL against the current code
 """
 from __future__ import annotations
 
-import api.sessions.store as models
+from api.sessions import reconciliation, records
 import api.webui_session_db as webui_db
 
 
@@ -36,7 +36,7 @@ def test_core_a_empty_sidecar_resurrects_deleted_turns():
         _msg("assistant", "post-edit reply", 401.0),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         [],  # empty sidecar (cold reload)
         state,
         truncation_watermark=400.0,
@@ -87,7 +87,7 @@ def test_core_a_single_deleted_turn_still_works():
 
     # Original cutoff kept through the first reply (@51); a new turn was then
     # committed (@200), advancing the watermark. boundary (51) < watermark (200).
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         [], state, truncation_watermark=200.0, truncation_boundary=51.0
     )
 
@@ -117,7 +117,7 @@ def test_core_a_not_advanced_watermark_equals_boundary_does_not_resurrect():
         _msg("assistant", "deleted-a3", 151.0),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         [], state, truncation_watermark=51.0, truncation_boundary=51.0
     )
 
@@ -142,7 +142,7 @@ def test_core_a_legacy_none_boundary_frozen_watermark_does_not_resurrect():
         _msg("assistant", "deleted-a3", 151.0),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         [], state, truncation_watermark=51.0  # boundary defaults to None
     )
 
@@ -180,7 +180,7 @@ def test_advanced_sidecar_at_watermark_keeps_state_only_post_edit_reply():
         _msg("assistant", "post-edit reply", 201.0),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         sidecar, state, truncation_watermark=200.0, truncation_boundary=51.0
     )
 
@@ -218,7 +218,7 @@ def test_advanced_does_not_resurrect_stale_post_watermark_row_before_checkpoint(
         _msg("user", "edited prompt", 200.0),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         sidecar, state, truncation_watermark=200.0, truncation_boundary=51.0
     )
 
@@ -244,7 +244,7 @@ def test_core_b_same_second_assistant_reply_dropped():
         _msg("assistant", "post-edit reply", T),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         sidecar, state, truncation_watermark=T
     )
 
@@ -269,7 +269,7 @@ def test_core_b_same_second_replaced_user_still_filtered():
         _msg("assistant", "post-edit reply", T),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         sidecar, state, truncation_watermark=T
     )
 
@@ -293,7 +293,7 @@ def test_core_b_same_second_empty_sidecar_assistant_reply():
         _msg("assistant", "post-edit reply", T),
     ]
 
-    merged = models.merge_session_messages_append_only(
+    merged = reconciliation.merge_session_messages_append_only(
         [], state, truncation_watermark=T,
         truncation_boundary=51.0,
     )
@@ -315,12 +315,12 @@ def test_truncation_boundary_survives_save_load(monkeypatch, tmp_path):
     """truncation_boundary must be persisted to JSON and restored on load."""
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    models.SESSIONS.clear()
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    records.SESSIONS.clear()
 
     sid = "boundary_save_load"
-    session = models.Session(
+    session = records.Session(
         session_id=sid,
         messages=[_msg("user", "hello", 100.0)],
         truncation_watermark=200.0,
@@ -328,10 +328,10 @@ def test_truncation_boundary_survives_save_load(monkeypatch, tmp_path):
     )
     session.save()
 
-    with models.LOCK:
-        models.SESSIONS.pop(sid, None)
+    with records.LOCK:
+        records.SESSIONS.pop(sid, None)
 
-    loaded = models.Session.load(sid)
+    loaded = records.Session.load(sid)
     assert loaded.truncation_boundary == 101.0, (
         f"truncation_boundary lost after save/load: got {loaded.truncation_boundary}"
     )
@@ -342,12 +342,12 @@ def test_truncation_boundary_none_survives_save_load(monkeypatch, tmp_path):
     """When truncation_boundary is None, it must survive save/load as None."""
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    models.SESSIONS.clear()
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    records.SESSIONS.clear()
 
     sid = "boundary_none_save"
-    session = models.Session(
+    session = records.Session(
         session_id=sid,
         messages=[_msg("user", "hello", 100.0)],
         truncation_watermark=None,
@@ -355,10 +355,10 @@ def test_truncation_boundary_none_survives_save_load(monkeypatch, tmp_path):
     )
     session.save()
 
-    with models.LOCK:
-        models.SESSIONS.pop(sid, None)
+    with records.LOCK:
+        records.SESSIONS.pop(sid, None)
 
-    loaded = models.Session.load(sid)
+    loaded = records.Session.load(sid)
     assert getattr(loaded, "truncation_boundary", None) is None
 
 
@@ -370,12 +370,12 @@ def test_reconciled_passes_truncation_boundary(monkeypatch, tmp_path):
     to merge_session_messages_append_only so empty-sidecar recovery uses it."""
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    models.SESSIONS.clear()
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    records.SESSIONS.clear()
 
     sid = "reconciled_boundary"
-    session = models.Session(
+    session = records.Session(
         session_id=sid,
         messages=[],  # empty sidecar (crash recovery)
         truncation_watermark=200.0,
@@ -395,12 +395,12 @@ def test_reconciled_passes_truncation_boundary(monkeypatch, tmp_path):
     ]
 
     monkeypatch.setattr(
-        models,
+        reconciliation,
         "get_state_db_session_messages",
         lambda sid: state_db,
     )
 
-    reconciled = models.reconciled_state_db_messages_for_session(session)
+    reconciled = reconciliation.reconciled_state_db_messages_for_session(session)
     contents = [m["content"] for m in reconciled]
 
     assert "deleted 1" not in contents, (
@@ -446,7 +446,7 @@ def test_core_a_route_full_session_load_does_not_resurrect_deleted_turns(tmp_pat
     from urllib.parse import urlparse
 
     import api.routes as routes
-    from api.sessions.store import Session
+    from api.sessions.records import Session
 
     state = [
         _msg("user", "original prompt", 100.0),
@@ -479,10 +479,10 @@ def test_core_a_route_full_session_load_does_not_resurrect_deleted_turns(tmp_pat
 
     sess_dir = tmp_path / "sessions"
     sess_dir.mkdir()
-    orig_dir, orig_index = models.SESSION_DIR, models.SESSION_INDEX_FILE
-    models.SESSION_DIR = sess_dir
-    models.SESSION_INDEX_FILE = sess_dir / "_index.json"
-    models.SESSIONS.clear()
+    orig_dir, orig_index = records.SESSION_DIR, records.SESSION_INDEX_FILE
+    records.SESSION_DIR = sess_dir
+    records.SESSION_INDEX_FILE = sess_dir / "_index.json"
+    records.SESSIONS.clear()
 
     saved = {
         "get_state_db_session_messages": getattr(routes, "get_state_db_session_messages", None),
@@ -528,5 +528,5 @@ def test_core_a_route_full_session_load_does_not_resurrect_deleted_turns(tmp_pat
         for name, val in saved.items():
             if val is not None:
                 setattr(routes, name, val)
-        models.SESSION_DIR, models.SESSION_INDEX_FILE = orig_dir, orig_index
-        models.SESSIONS.clear()
+        records.SESSION_DIR, records.SESSION_INDEX_FILE = orig_dir, orig_index
+        records.SESSIONS.clear()

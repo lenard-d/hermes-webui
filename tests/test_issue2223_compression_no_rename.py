@@ -11,16 +11,14 @@ parent_session_id to link the lineage.
 """
 import json
 import pathlib
-import textwrap
-import threading
 
 import pytest
 
 STREAMING = (
     pathlib.Path(__file__).resolve().parents[1]
     / "api"
-    / "streaming_parts"
-    / "local_run.py"
+    / "runs"
+    / "local.py"
 )
 STREAMING_FACADE = pathlib.Path(__file__).resolve().parents[1] / "api" / "streaming.py"
 streaming_src = STREAMING.read_text(encoding="utf-8")
@@ -90,16 +88,16 @@ class TestNoRenameDuringCompression:
 
     def test_preservation_helper_marks_snapshot_without_marking_continuation(self, tmp_path, monkeypatch):
         """The rotation preservation path marks only old_sid as a sidebar-hidden snapshot."""
-        import api.sessions.store as models
+        from api.sessions import records
         import api.streaming as streaming
-        from api.sessions.store import Session
+        from api.sessions.records import Session
 
         session_dir = tmp_path / "sessions"
         session_dir.mkdir()
-        monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-        monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+        monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+        monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
         monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
-        models.SESSIONS.clear()
+        records.SESSIONS.clear()
 
         old = Session(
             session_id="old_sid",

@@ -1,6 +1,6 @@
 import json
 
-from api.sessions import store as models
+from api.sessions import records
 from api import streaming
 
 
@@ -72,7 +72,7 @@ def test_preserve_pre_compression_snapshot_clears_runtime_fields_while_restoring
 
 def test_preserve_pre_compression_snapshot_load_and_mark_branch_clears_runtime_fields(tmp_path, monkeypatch):
     monkeypatch.setattr(streaming, "SESSION_DIR", tmp_path)
-    monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
     old_payload = {
         "session_id": "old_session",
         "title": "Archived parent",
@@ -120,4 +120,3 @@ def test_preserve_pre_compression_snapshot_does_not_leave_continuation_marked_as
     session.save(touch_updated_at=False)
     continuation = json.loads((tmp_path / "new_session.json").read_text(encoding="utf-8"))
     assert continuation["pre_compression_snapshot"] is False
-

@@ -10,8 +10,8 @@ import types
 from pathlib import Path
 
 from api import config, streaming
-from api.sessions import store as models
-from api.sessions.store import Session
+from api.sessions import records
+from api.sessions.records import Session
 from api.streaming import (
     _agent_result_terminal_failure,
     _session_lacks_final_assistant_answer,
@@ -29,10 +29,10 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
 ):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
-    models.SESSIONS.clear()
+    records.SESSIONS.clear()
     streaming.SESSIONS.clear()
     streaming.STREAMS.clear()
     streaming.AGENT_INSTANCES.clear()
@@ -52,7 +52,7 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
     session.pending_user_message = "Do the long task."
     session.pending_started_at = 1.0
     session.save()
-    models.SESSIONS[old_sid] = session
+    records.SESSIONS[old_sid] = session
     streaming.SESSIONS[old_sid] = session
     event_queue = queue.Queue()
     streaming.STREAMS[stream_id] = event_queue
@@ -326,10 +326,10 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
-    models.SESSIONS.clear()
+    records.SESSIONS.clear()
     streaming.SESSIONS.clear()
     streaming.STREAMS.clear()
     streaming.AGENT_INSTANCES.clear()
@@ -338,7 +338,7 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
     old_sid = "old_sid_capture"
     new_sid = "new_sid_capture"
     stream_id = "stream-compression-exhausted-capture"
-    session = models.Session(
+    session = records.Session(
         session_id=old_sid,
         title="Compression test",
         workspace=str(tmp_path),
@@ -350,7 +350,7 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
     session.pending_user_message = "Do the long task."
     session.pending_started_at = 1.0
     session.save()
-    models.SESSIONS[old_sid] = session
+    records.SESSIONS[old_sid] = session
     streaming.SESSIONS[old_sid] = session
     captured = _CaptureQueue()
     streaming.STREAMS[stream_id] = captured

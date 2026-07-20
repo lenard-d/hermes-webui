@@ -4,14 +4,14 @@ import io
 import json
 from pathlib import Path
 
-from api.sessions import store as models
+from api.sessions import records
 from api import routes
 from api.compression_recovery import (
     compression_recovery_payload_for_session,
     is_generic_continuation_intent,
     stamp_compression_exhausted_recovery,
 )
-from api.sessions.store import Session
+from api.sessions.records import Session
 from api.sessions.recovery import _state_db_row_to_sidecar
 from api.webui_session_db import WebUIJsonSessionDB
 
@@ -45,9 +45,9 @@ def _payload(handler):
 def _isolate_sessions(monkeypatch, tmp_path):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    models.SESSIONS.clear()
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    records.SESSIONS.clear()
     routes.SESSIONS.clear()
     return session_dir
 
@@ -71,7 +71,7 @@ def test_chat_start_blocks_generic_continue_after_compression_exhausted(monkeypa
         messages=[{"role": "user", "content": "long task"}],
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
 
     handler = _JSONHandler()
@@ -96,7 +96,7 @@ def test_chat_start_keeps_recovery_when_substantive_prompt_fails_validation(monk
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
     session.save()
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
     monkeypatch.setattr(
         routes,
@@ -125,7 +125,7 @@ def test_chat_start_clears_recovery_when_substantive_prompt_starts(monkeypatch, 
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
     session.save()
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
     monkeypatch.setattr(routes, "_resolve_chat_workspace_with_recovery", lambda *_args, **_kwargs: str(tmp_path))
     monkeypatch.setattr(routes, "_read_profile_model_config", lambda *_args, **_kwargs: (None, None, {}))
@@ -166,7 +166,7 @@ def test_chat_start_restores_recovery_when_substantive_prompt_start_is_rejected(
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
     session.save()
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
     monkeypatch.setattr(routes, "_resolve_chat_workspace_with_recovery", lambda *_args, **_kwargs: str(tmp_path))
     monkeypatch.setattr(routes, "_read_profile_model_config", lambda *_args, **_kwargs: (None, None, {}))
@@ -209,7 +209,7 @@ def test_recovery_start_creates_focused_linked_session(monkeypatch, tmp_path):
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
     session.save()
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
 
     handler = _JSONHandler()
@@ -250,14 +250,14 @@ def test_recovery_child_does_not_merge_parent_transcript(monkeypatch, tmp_path):
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
     session.save()
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
 
     handler = _JSONHandler()
     routes._handle_session_compression_recovery_start(handler, {"session_id": sid})
     payload = _payload(handler)
     child_id = payload["session"]["session_id"]
-    child = models.SESSIONS[child_id]
+    child = records.SESSIONS[child_id]
 
     assert child.messages == []
     assert routes._merged_webui_lineage_messages_for_display(child) == []
@@ -275,7 +275,7 @@ def test_recovery_start_reuses_existing_focused_session(monkeypatch, tmp_path):
     )
     stamp_compression_exhausted_recovery(session, message="Context length exceeded.")
     session.save()
-    models.SESSIONS[sid] = session
+    records.SESSIONS[sid] = session
     routes.SESSIONS[sid] = session
 
     first_handler = _JSONHandler()
@@ -291,7 +291,7 @@ def test_recovery_start_reuses_existing_focused_session(monkeypatch, tmp_path):
     assert second_payload["session"]["session_id"] == first_child_id
     assert second_payload["message"].startswith("Opened the existing")
 
-    models.SESSIONS.clear()
+    records.SESSIONS.clear()
     routes.SESSIONS.clear()
     third_handler = _JSONHandler()
     routes._handle_session_compression_recovery_start(third_handler, {"session_id": sid})
@@ -335,9 +335,9 @@ def test_recovery_start_ignores_existing_child_from_other_profile(monkeypatch, t
         compression_recovery_action="start_focused_continuation",
     )
     foreign_child.save()
-    models.SESSIONS.clear()
+    records.SESSIONS.clear()
     routes.SESSIONS.clear()
-    models.SESSIONS[sid] = source
+    records.SESSIONS[sid] = source
     routes.SESSIONS[sid] = source
 
     handler = _JSONHandler()
