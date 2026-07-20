@@ -988,7 +988,7 @@ def test_settled_anchor_scene_separates_final_answer_from_activity_rows():
 
 
 def test_anchor_owned_settled_turn_skips_legacy_worklog_rebuild():
-    render = _function_body(UI_JS, "renderMessages")
+    render = _function_body(UI_JS, "rebuildSettledActivity")
 
     assert "const anchorOwnedAssistantRawIdxs=new Set();" in render
     assert "msg._anchor_activity_scene" in render
@@ -1007,7 +1007,7 @@ def test_transparent_stream_renders_persisted_anchor_scene_after_reload():
     settled = _function_body(UI_JS, "_renderSettledAnchorSceneForMessage")
     transparent = _function_body(UI_JS, "_renderSettledAnchorSceneTransparentForMessage")
     row = _function_body(UI_JS, "_anchorSceneTransparentNodeForRow")
-    render = _function_body(UI_JS, "renderMessages")
+    activity = _function_body(UI_JS, "rebuildSettledActivity")
 
     assert "if(typeof isTransparentStream==='function'&&isTransparentStream())" in settled
     assert "return _renderSettledAnchorSceneTransparentForMessage(message,segment,rawIdx);" in settled
@@ -1025,7 +1025,7 @@ def test_transparent_stream_renders_persisted_anchor_scene_after_reload():
     assert "_decorateTransparentEventRow(buildToolCard(toolCall)" in row
     assert "_transparentToolStatus(toolCall,settled)" in row
     assert 'data-anchor-settled-scene-row' in row
-    assert "if(anchorOwnedAssistantRawIdxs.has(aIdx)) continue;" in render
+    assert "if(anchorOwnedAssistantRawIdxs.has(aIdx)) continue;" in activity
 
 
 def test_live_anchor_scene_snapshot_renders_transparent_rows_before_compact_gate():
@@ -1388,6 +1388,7 @@ def test_transparent_anchor_intermediate_prose_preserved_only_final_answer_suppr
 def test_settled_anchor_scene_final_answer_does_not_fold_into_worklog_source():
     belongs = _function_body(UI_JS, "_assistantMessageBelongsInWorklog")
     render = _function_body(UI_JS, "renderMessages")
+    activity = _function_body(UI_JS, "rebuildSettledActivity")
 
     assert "if(hasVisibleText&&m._anchor_activity_scene) return false;" in belongs
     assert belongs.index("if(m._live) return true;") < belongs.index(
@@ -1398,7 +1399,7 @@ def test_settled_anchor_scene_final_answer_does_not_fold_into_worklog_source():
     )
     assert "seg.classList.add('assistant-segment-worklog-source')" in render
     assert "seg.hidden=true" in render
-    assert "_renderSettledAnchorSceneForMessage(msg, seg, rawIdx)" in render
+    assert "_renderSettledAnchorSceneForMessage(msg, seg, rawIdx)" in activity
 
 
 def test_settled_anchor_scene_promotes_final_content_array_to_ordered_activity_rows():

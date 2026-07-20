@@ -14,15 +14,15 @@ empty, or a reload where ``S.toolCalls`` did not hydrate so the Worklog card has
 expandable tool steps — every segment is hidden and the turn paints as nothing, leaving
 the transcript a bare stack of date separators.
 
-The fix is a defensive fail-safe at the END of ``renderMessages``: a settled assistant
+The fix is a defensive fail-safe in the settled-turn finalization owner: a settled assistant
 turn must never render with ZERO visible content. When a turn has no visible segment,
 its folded Worklog group is expanded (or, as a last resort, its hidden worklog-source
 segments are un-hidden) so the content is never silently swallowed. The fail-safe never
 touches a turn that already has any visible segment, so the intended collapsed-Worklog
 UX is preserved whenever a visible answer exists.
 
-These are static source-structure assertions over the shipped ``renderMessages`` so the
-invariant cannot silently regress.
+These assertions target the shipped owner interface so the invariant cannot
+silently regress when transcript orchestration changes.
 """
 from __future__ import annotations
 
@@ -32,13 +32,29 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 UI_JS = family_source("ui")
+FINALIZATION_JS = (
+    REPO / "static" / "modules" / "ui" / "settled-turn-finalization.js"
+).read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
     marker = f"function {name}("
     start = src.find(marker)
     assert start != -1, f"{name} not found"
-    brace = src.find("{", start)
+    params = src.find("(", start)
+    assert params != -1, f"{name} parameters not found"
+    paren_depth = 0
+    params_end = -1
+    for idx in range(params, len(src)):
+        if src[idx] == "(":
+            paren_depth += 1
+        elif src[idx] == ")":
+            paren_depth -= 1
+            if paren_depth == 0:
+                params_end = idx
+                break
+    assert params_end != -1, f"{name} parameters not closed"
+    brace = src.find("{", params_end)
     assert brace != -1, f"{name} body not found"
     depth = 0
     for idx in range(brace, len(src)):
@@ -52,18 +68,18 @@ def _function_body(src: str, name: str) -> str:
     raise AssertionError(f"{name} body not closed")
 
 
-def test_render_messages_has_blank_turn_failsafe():
-    """#3875: renderMessages must carry the no-blank-turn fail-safe invariant."""
-    body = _function_body(UI_JS, "renderMessages")
+def test_settled_turn_finalization_has_blank_turn_failsafe():
+    """#3875: the settled-turn owner must carry the no-blank invariant."""
+    body = _function_body(FINALIZATION_JS, "finalizeSettledTurns")
     # The fail-safe is anchored by its issue tag so it is greppable + intentional.
     assert "Fail-safe invariant (#3875)" in body, (
-        "the #3875 no-blank-turn fail-safe is missing from renderMessages"
+        "the #3875 no-blank-turn fail-safe is missing from the settled-turn owner"
     )
 
 
 def test_failsafe_reveals_folded_worklog_for_blank_turns():
     """The fail-safe must expand the folded Worklog group when a turn has no visible content."""
-    body = _function_body(UI_JS, "renderMessages")
+    body = _function_body(FINALIZATION_JS, "finalizeSettledTurns")
     # It must scan turns and skip any turn that already has visible content.
     assert "_turnHasVisibleContent" in body
     # A turn is only acted on when it lacks visible content (the skip-guard).
@@ -81,7 +97,7 @@ def test_failsafe_preserves_collapsed_worklog_when_visible_answer_exists():
     this fix only ever ADDS visibility to otherwise-blank turns and can never re-expand a
     Worklog the user expects collapsed.
     """
-    body = _function_body(UI_JS, "renderMessages")
+    body = _function_body(FINALIZATION_JS, "finalizeSettledTurns")
     # The visible-content check skips worklog-source (folded) + anchor-only placeholder
     # segments, and treats any other non-empty segment as "visible".
     failsafe = body[body.find("Fail-safe invariant (#3875)") :]
@@ -144,5 +160,3 @@ def test_assistant_reasoning_payload_reads_reasoning_fields():
     payload_fn = _function_body(UI_JS, "_assistantReasoningPayloadText")
     # Reads the direct reasoning fields off the message object.
     assert "m.reasoning_content||m.reasoning||m.thinking||m._reasoning" in payload_fn
-
-

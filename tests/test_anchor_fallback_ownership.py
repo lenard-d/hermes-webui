@@ -415,6 +415,7 @@ def test_render_messages_keeps_anchor_owned_turn_out_of_legacy_activity_rebuilds
     """Drive the real renderMessages() gate, not only source-order assertions."""
 
     render_source = _function_source(_ui_js(), "renderMessages")
+    activity_source = _function_source(_ui_js(), "rebuildSettledActivity")
     transparent_source = _function_source(_ui_js(), "_transparentStreamOrderedParts")
     legacy_metadata_source = _function_source(
         _ui_js(), "_legacySettledFallbackHasToolMetadata"
@@ -696,6 +697,7 @@ def test_render_messages_keeps_anchor_owned_turn_out_of_legacy_activity_rebuilds
 
         eval({json.dumps(transparent_source)});
         eval({json.dumps(legacy_metadata_source)});
+        eval({json.dumps(activity_source)});
         eval({json.dumps(render_source)});
 
         const toolResult = {{ role: 'tool', tool_call_id: 'toolu_1', content: 'tool result' }};
@@ -887,7 +889,7 @@ def test_render_messages_keeps_anchor_owned_turn_out_of_legacy_activity_rebuilds
 
 
 def test_settled_legacy_tool_rebuild_excludes_anchor_owned_turns():
-    render = _function_body(_ui_js(), "renderMessages")
+    render = _function_body(_ui_js(), "rebuildSettledActivity")
 
     set_decl = render.index("const anchorOwnedAssistantRawIdxs=new Set();")
     collect_segments = render.index("turn.querySelectorAll('.assistant-segment[data-msg-idx]')")
@@ -903,7 +905,7 @@ def test_settled_legacy_tool_rebuild_excludes_anchor_owned_turns():
 
 
 def test_settled_legacy_activity_buckets_skip_anchor_owned_turns_before_rendering():
-    render = _function_body(_ui_js(), "renderMessages")
+    render = _function_body(_ui_js(), "rebuildSettledActivity")
 
     tool_loop = render.index("for(const tc of (S.toolCalls||[])){")
     tool_skip = render.index("if(anchorOwnedAssistantRawIdxs.has(aIdx)) continue;", tool_loop)

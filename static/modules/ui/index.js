@@ -29,6 +29,7 @@ import * as liveActivity from './live-activity.js';
 import * as liveRunStatus from './live-run-status.js';
 import * as messageRenderCache from './message-render-cache.js';
 import * as messageScrollSnapshot from './message-scroll-snapshot.js';
+import * as liveTurnPreservation from './live-turn-preservation.js';
 import * as mediaAndQuota from './media-and-quota.js';
 import * as modelCatalog from './model-catalog.js';
 import * as modelSelection from './model-selection.js';
@@ -37,6 +38,8 @@ import * as navigation from './navigation.js';
 import * as presentation from './presentation.js';
 import * as renderer from './renderer.js';
 import * as renderSupport from './render-support.js';
+import * as settledActivityRenderer from './settled-activity-renderer.js';
+import * as settledTurnFinalization from './settled-turn-finalization.js';
 import * as state from './state.js';
 import * as toolWorklog from './tool-worklog.js';
 import * as transparentWorklog from './transparent-worklog.js';
@@ -86,8 +89,11 @@ const modules = Object.assign(Object.create(null), {
   liveRunStatus,
   messageRenderCache,
   messageScrollSnapshot,
+  liveTurnPreservation,
   renderSupport,
   renderer,
+  settledActivityRenderer,
+  settledTurnFinalization,
   toolWorklog,
   contentPostprocessing,
   workspaceAndUploads,

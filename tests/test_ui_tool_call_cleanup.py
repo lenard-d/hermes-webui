@@ -181,7 +181,7 @@ class TestToolCallGroupingStatic:
         )
 
     def test_render_messages_gates_settled_activity_grouping(self):
-        fn = _function_body(UI_JS, "renderMessages")
+        fn = _function_body(UI_JS, "rebuildSettledActivity")
         helper = _function_body(UI_JS, "ensureActivityGroup")
         assert "byActivity = new Map()" in fn, (
             "Settled tool rendering should bucket by worklog segments/bursts."
@@ -200,7 +200,7 @@ class TestToolCallGroupingStatic:
         )
 
     def test_tool_call_groups_default_collapsed_with_summary_visible(self):
-        fn = _function_body(UI_JS, "renderMessages")
+        fn = _function_body(UI_JS, "rebuildSettledActivity")
         helper = _function_body(UI_JS, "ensureActivityGroup")
         assert "tool-call-group-collapsed" in fn or "collapsed" in fn, (
             "Historical tool-call groups should default to a collapsed state."
@@ -242,6 +242,7 @@ class TestToolCallGroupingStatic:
 
     def test_render_rebuild_preserves_worklog_detail_disclosure_click_state(self):
         render_fn = _function_body(UI_JS, "renderMessages")
+        activity_fn = _function_body(UI_JS, "rebuildSettledActivity")
         capture_fn = _function_body(UI_JS, "_captureWorklogDetailDisclosureState")
         restore_fn = _function_body(UI_JS, "_restoreWorklogDetailDisclosureState")
         apply_fn = _function_body(UI_JS, "_setWorklogDetailDisclosureOpen")
@@ -249,8 +250,9 @@ class TestToolCallGroupingStatic:
         cache_pos = render_fn.index("if(sid&&sid!==_sessionHtmlCacheSid&&!INFLIGHT[sid]&&!hasTransientTranscriptUi)")
         cache_return_pos = render_fn.index("return;", cache_pos)
         wipe_pos = render_fn.index("inner.innerHTML='';")
-        restore_pos = render_fn.index("_restoreWorklogDetailDisclosureState(inner, worklogDetailDisclosureState);")
-        fail_safe_pos = render_fn.find("Fail-safe invariant (#3875)")
+        rebuild_pos = render_fn.index("rebuildSettledActivity({")
+        restore_pos = activity_fn.index("_restoreWorklogDetailDisclosureState(inner, worklogDetailDisclosureState);")
+        fail_safe_pos = _function_body(UI_JS, "finalizeSettledTurns").find("Fail-safe invariant (#3875)")
         assert cache_pos < cache_return_pos < capture_pos, (
             "renderMessages() should not traverse the previous session DOM when "
             "the HTML-cache fast path can return early."
@@ -259,13 +261,13 @@ class TestToolCallGroupingStatic:
             "renderMessages() must capture manual Worklog detail open/closed state "
             "before wiping msgInner for a rebuild."
         )
-        assert restore_pos > wipe_pos, (
-            "renderMessages() must restore manual Worklog detail state after the "
-            "new Thinking/Tool DOM has been rebuilt."
+        assert rebuild_pos > wipe_pos and restore_pos >= 0, (
+            "renderMessages() must invoke the Activity owner after the wipe, and "
+            "that owner must restore manual Worklog detail state after rebuilding."
         )
-        assert fail_safe_pos == -1 or restore_pos < fail_safe_pos, (
-            "The blank-turn fail-safe must still be allowed to expand otherwise "
-            "invisible Worklog content after manual detail state is restored."
+        assert fail_safe_pos >= 0 and render_fn.index("finalizeSettledTurns({") > rebuild_pos, (
+            "Settled-turn finalization must run after Activity disclosure state "
+            "is rebuilt and restored."
         )
         assert "_worklogDetailDisclosureSelector" in capture_fn, (
             "The rebuild-state capture should use the shared Worklog detail selector."
@@ -336,7 +338,7 @@ class TestToolCallGroupingStatic:
         assert "_thinkingActivityNode(thinkingText, false, thinkingDisclosureKey)" in append_step_fn, (
             "Settled Worklog Thinking rows must stamp the stable thinking key at creation time."
         )
-        assert "thinkingDisclosureKey:thinkingText?`thinking:${entry.key}`:''" in _function_body(UI_JS, "renderMessages"), (
+        assert "thinkingDisclosureKey:thinkingText?`thinking:${entry.key}`:''" in _function_body(UI_JS, "rebuildSettledActivity"), (
             "Settled Worklog Thinking keys should come from activity coordinates, not text."
         )
 
@@ -382,7 +384,7 @@ class TestToolCallGroupingStatic:
 
     def test_live_tool_cards_use_grouping_only_when_simplified(self):
         live_fn = _function_body(UI_JS, "appendLiveToolCard")
-        settled_fn = _function_body(UI_JS, "renderMessages")
+        settled_fn = _function_body(UI_JS, "rebuildSettledActivity")
         assert "isSimplifiedToolCalling()" not in live_fn, (
             "Live streaming tool cards should no longer branch on compact/timeline mode."
         )
@@ -410,7 +412,7 @@ class TestToolCallGroupingStatic:
         helper = _function_body(UI_JS, "ensureActivityGroup")
         toggle_fn = _function_body(UI_JS, "_toggleActivityGroup")
         key_fn = _function_body(UI_JS, "_activityDisclosureStorageKey")
-        render_fn = _function_body(UI_JS, "renderMessages")
+        render_fn = _function_body(UI_JS, "rebuildSettledActivity")
         live_fn = _function_body(UI_JS, "appendLiveToolCard")
         thinking_fn = _function_body(UI_JS, "appendThinking")
         done_fn = family_source("messages")
@@ -589,6 +591,7 @@ class TestToolCallGroupingStatic:
             "The Activity disclosure needs a stable data-agent-activity-group hook."
         )
         render_fn = _function_body(UI_JS, "renderMessages")
+        activity_fn = _function_body(UI_JS, "rebuildSettledActivity")
         assert "isSimplifiedToolCalling()" in render_fn and "assistantThinking.set(rawIdx, thinkingText)" in render_fn, (
             "Compact settled transcript rendering should keep reasoning metadata available without promoting it to visible prose."
         )
@@ -600,7 +603,7 @@ class TestToolCallGroupingStatic:
         assert "data-worklog-thinking-card" in UI_JS, (
             "Thinking should be an explicit Worklog item, independent from Tool Cards."
         )
-        render_min = re.sub(r"\s+", "", render_fn)
+        render_min = re.sub(r"\s+", "", activity_fn)
         assert "thinkingKey:thinkingText?`thinking:${_normalizeThinkingEchoCompare(thinkingText)}`:''" in render_min, (
             "Settled Worklog should keep normalized-content Thinking dedupe so sibling messages do not duplicate cards."
         )
@@ -608,10 +611,10 @@ class TestToolCallGroupingStatic:
             "Settled Worklog should separately key disclosure state by stable activity coordinates "
             "so streaming text growth does not reset manual collapse state."
         )
-        assert "_appendWorklogStep" in render_fn, (
+        assert "_appendWorklogStep" in activity_fn, (
             "Visible assistant anchors, Thinking Cards, and tools should still build the compact Worklog disclosure."
         )
-        assert ".wl-reason[data-worklog-reason-source=\"reasoning\"]" in render_fn, (
+        assert ".wl-reason[data-worklog-reason-source=\"reasoning\"]" in activity_fn, (
             "Settled rerenders must remove previously inserted reasoning Worklog rows before rebuilding."
         )
         assert "seg.insertAdjacentHTML('beforeend', _thinkingCardHtml(thinkingText))" in render_fn, (

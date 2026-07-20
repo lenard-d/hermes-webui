@@ -29,6 +29,9 @@ REQUIRED_MODULES = {
     "presentation.js",
     "render-support.js",
     "renderer.js",
+    "live-turn-preservation.js",
+    "settled-activity-renderer.js",
+    "settled-turn-finalization.js",
 }
 
 
@@ -78,10 +81,7 @@ def test_ui_entrypoint_is_the_complete_module_inventory():
 def test_cohesive_ui_owners_remain_reviewable():
     for path in ui_module_paths():
         line_count = len(path.read_text(encoding="utf-8").splitlines())
-        if path.name == "renderer.js":
-            assert line_count <= 1800
-        else:
-            assert line_count <= 1500, f"{path.name} has grown beyond a cohesive owner"
+        assert line_count <= 1500, f"{path.name} has grown beyond a cohesive owner"
 
 
 def test_primary_ui_interfaces_have_one_authoritative_owner():

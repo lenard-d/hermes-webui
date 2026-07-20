@@ -29,8 +29,8 @@ Verified RED→GREEN in an isolated browser against the real shipped ``renderMes
   still land in the visible node. A settled (non-streaming) session renders normally
   (2 assistant turns + 2 user rows, both answers visible) — the fix is a no-op there.
 
-These are static source-structure assertions over the shipped ``renderMessages`` so the
-invariant cannot silently regress.
+These assertions cover the live-turn owner and its ordering inside the shipped
+transcript orchestration.
 """
 from __future__ import annotations
 
@@ -40,6 +40,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 UI_JS = family_source("ui")
+RENDERER_JS = (
+    REPO / "static" / "modules" / "ui" / "renderer.js"
+).read_text(encoding="utf-8")
+LIVE_TURN_JS = (
+    REPO / "static" / "modules" / "ui" / "live-turn-preservation.js"
+).read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -60,18 +66,20 @@ def _function_body(src: str, name: str) -> str:
     raise AssertionError(f"{name} body not closed")
 
 
-def test_render_messages_captures_live_turn_before_rebuild():
-    """#3877: renderMessages must capture the live turn node before innerHTML=''."""
-    body = _function_body(UI_JS, "renderMessages")
+def test_renderer_captures_live_turn_before_rebuild():
+    """#3877: orchestration captures the live node before innerHTML=''."""
+    owner = _function_body(LIVE_TURN_JS, "captureLiveAssistantTurn")
+    body = _function_body(RENDERER_JS, "renderMessages")
     # The capture is anchored by its issue tag so it is greppable + intentional.
-    assert "Mid-stream flicker fix (#3877)" in body, (
-        "the #3877 live-turn preservation is missing from renderMessages"
+    assert "Mid-stream flicker fix (#3877)" in LIVE_TURN_JS, (
+        "the #3877 live-turn preservation is missing from its owner"
     )
     # The capture must happen BEFORE the destructive rebuild. renderMessages has
     # several `inner.innerHTML=''` sites; the relevant one is the rebuild that
     # immediately follows the capture, so assert on the FIRST rebuild at/after the
     # capture index.
-    capture_idx = body.find("_preservedLiveTurn=null")
+    assert "_preservedLiveTurn=null" in owner
+    capture_idx = body.find("captureLiveAssistantTurn(sid)")
     assert capture_idx != -1, "_preservedLiveTurn capture not found"
     rebuild_idx = body.find("inner.innerHTML=''", capture_idx)
     assert rebuild_idx != -1, "inner.innerHTML='' rebuild after capture not found"
@@ -84,8 +92,7 @@ def test_render_messages_captures_live_turn_before_rebuild():
 def test_capture_is_gated_on_streaming_session():
     """The capture only runs for the streaming session's own live turn — never for a
     settled transcript (INFLIGHT[sid] gate + session-id match)."""
-    body = _function_body(UI_JS, "renderMessages")
-    failsafe = body[body.find("Mid-stream flicker fix (#3877)") :]
+    failsafe = _function_body(LIVE_TURN_JS, "captureLiveAssistantTurn")
     # Gated on an in-flight stream for this session.
     assert "INFLIGHT[sid]" in failsafe
     # The captured turn must belong to the current session (no cross-session revive).
@@ -104,8 +111,7 @@ def test_reattach_swaps_when_preserved_ties_or_beats_rebuilt():
     original node (the residual "disappears, then reappears" frame). On a tie the
     preserved node wins because it holds the live parser reference and nothing is lost.
     """
-    body = _function_body(UI_JS, "renderMessages")
-    reattach = body[body.find("Re-attach the preserved live turn (#3877)") :]
+    reattach = _function_body(LIVE_TURN_JS, "restoreLiveAssistantTurn")
     assert reattach, "the #3877 re-attach block is missing"
     # Length comparison still gates the swap...
     assert "_liveAssistantSegmentTextLength" in reattach
@@ -127,8 +133,7 @@ def test_reattach_swaps_at_segment_level_to_preserve_rebuilt_structure():
     caught up — the whole preserved turn is restored so nothing the user saw vanishes
     for a frame. Whole-turn replace is also the fallback when there's no live segment
     to target."""
-    body = _function_body(UI_JS, "renderMessages")
-    reattach = body[body.find("Re-attach the preserved live turn (#3877)") :]
+    reattach = _function_body(LIVE_TURN_JS, "restoreLiveAssistantTurn")
     # Structural-count comparison routes segment-swap vs whole-turn restore.
     assert "_structuralCount" in reattach
     assert "_rebuiltStructure>=_preservedStructure" in reattach, (
@@ -162,8 +167,7 @@ def test_reattach_targets_the_parser_owned_tail_segment_not_the_first():
     one whose data-live-segment-seq matches the rebuilt tail — not the first via a bare
     querySelector(). Picking the first would move the wrong segment and leave the
     parser-owned tail detached (Codex CORE finding on the #3877-reopen fix)."""
-    body = _function_body(UI_JS, "renderMessages")
-    reattach = body[body.find("Re-attach the preserved live turn (#3877)") :]
+    reattach = _function_body(LIVE_TURN_JS, "restoreLiveAssistantTurn")
     # Preserved segment is chosen from querySelectorAll (tail), not querySelector (first).
     assert "_preservedSegs=_preservedLiveTurn.querySelectorAll('[data-live-assistant=\"1\"]')" in reattach
     assert "_preservedSegs[_preservedSegs.length-1]" in reattach, (
@@ -181,8 +185,11 @@ def test_reattach_targets_the_parser_owned_tail_segment_not_the_first():
 def test_reattach_runs_after_rebuild_loop():
     """The re-attach must run AFTER the rebuild (so a freshly-rebuilt live turn exists to
     compare against / replace) but is still inside renderMessages."""
-    body = _function_body(UI_JS, "renderMessages")
-    capture_idx = body.find("_preservedLiveTurn=null")
-    reattach_idx = body.find("Re-attach the preserved live turn (#3877)")
+    body = _function_body(RENDERER_JS, "renderMessages")
+    capture_idx = body.find("captureLiveAssistantTurn(sid)")
+    rebuild_idx = body.find("inner.innerHTML=''", capture_idx)
+    reattach_idx = body.find("restoreLiveAssistantTurn(preservedLiveTurn, inner)")
     assert capture_idx != -1 and reattach_idx != -1
-    assert reattach_idx > capture_idx, "re-attach must come after the capture/rebuild"
+    assert capture_idx < rebuild_idx < reattach_idx, (
+        "capture, rebuild, and restore must remain ordered inside renderMessages"
+    )
