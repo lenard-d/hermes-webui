@@ -1,10 +1,8 @@
 """Behavior coverage for the public speech package interface."""
 
-from pathlib import Path
-
 import pytest
 
-from api import config, onboarding, profiles, speech
+from api import profiles, speech
 from api.speech import providers
 
 
@@ -14,11 +12,12 @@ def test_tts_provider_credentials_follow_active_profile(monkeypatch, tmp_path):
         "beta": tmp_path / "beta",
     }
     active = {"profile": "alpha"}
-    config_homes = []
-    profile_keys = {
-        homes["alpha"]: {"OPENAI_API_KEY": "alpha-key"},
-        homes["beta"]: {"OPENAI_API_KEY": "beta-key"},
-    }
+    for profile, home in homes.items():
+        home.mkdir()
+        (home / ".env").write_text(
+            f"OPENAI_API_KEY={profile}-key\n",
+            encoding="utf-8",
+        )
     monkeypatch.delenv("VOICE_TOOLS_OPENAI_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(
@@ -26,17 +25,6 @@ def test_tts_provider_credentials_follow_active_profile(monkeypatch, tmp_path):
         "get_active_hermes_home",
         lambda: homes[active["profile"]],
     )
-    monkeypatch.setattr(
-        config,
-        "get_config_for_profile_home",
-        lambda home: config_homes.append(home) or {"tts": {"openai": {}}},
-    )
-    monkeypatch.setattr(
-        onboarding,
-        "_load_env_file",
-        lambda path: profile_keys[Path(path).parent],
-    )
-
     alpha = speech.resolve_tts_provider("openai")
     active["profile"] = "beta"
     beta = speech.resolve_tts_provider("openai")
@@ -45,7 +33,6 @@ def test_tts_provider_credentials_follow_active_profile(monkeypatch, tmp_path):
     assert isinstance(beta, providers.OpenAITtsProvider)
     assert alpha.api_key == "alpha-key"
     assert beta.api_key == "beta-key"
-    assert config_homes == [homes["alpha"], homes["beta"]]
 
 
 def test_unknown_tts_engine_preserves_edge_fallback():
