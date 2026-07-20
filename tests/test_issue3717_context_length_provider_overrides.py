@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ROUTES_PY = (
-    REPO / "api" / "routes_parts" / "session_models.py"
+    REPO / "api" / "model_context.py"
 ).read_text(encoding="utf-8")
 
 

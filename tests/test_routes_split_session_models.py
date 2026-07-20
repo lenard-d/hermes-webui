@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import inspect
 import subprocess
 import sys
 from pathlib import Path
 
 from api import routes
 from api.routes_parts import session_models
+from api.sessions import (
+    model_compatibility,
+    model_identity,
+    profile_model_config,
+    session_model_context,
+    session_model_state,
+)
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -47,11 +55,26 @@ def test_session_models_owner_imports_without_loading_routes_facade():
 
 
 def test_session_models_implementation_is_file_backed_and_facade_stays_thin():
-    owner_source = Path(session_models.__file__).read_text(encoding="utf-8")
     facade_source = Path(routes.__file__).read_text(encoding="utf-8")
 
-    assert "def _resolve_compatible_session_model_state(" in owner_source
-    assert "def _resolve_context_length_for_session_model(" in owner_source
-    assert "def _session_model_state_from_request(" in owner_source
+    owners = (
+        model_compatibility,
+        model_identity,
+        profile_model_config,
+        session_model_context,
+        session_model_state,
+    )
+    for owner in owners:
+        assert Path(owner.__file__).is_file()
+        assert "exec(" not in Path(owner.__file__).read_text(encoding="utf-8")
+
+    assert inspect.getmodule(
+        model_compatibility._resolve_compatible_session_model_state
+    ) is model_compatibility
+    assert inspect.getmodule(
+        session_model_context._resolve_context_length_for_session_model
+    ) is session_model_context
+    assert inspect.getmodule(
+        session_model_state._session_model_state_from_request
+    ) is session_model_state
     assert "def _resolve_compatible_session_model_state(" not in facade_source
-    assert "exec(" not in owner_source

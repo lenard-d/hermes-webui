@@ -465,9 +465,11 @@ execution, terminal outcomes, transcript handling, local-agent caching, and
 provider error handling have semantic owners under `api/runs/`. The session
 store compatibility surface has been reduced to a stateless facade while
 records, external projections, recovery, reconciliation, cache, cleanup, and
-state-db behavior have semantic owners. Remaining work is concentrated in
-route-owned session projection/orchestration and the largest cohesive run and
-session implementations.
+state-db behavior have semantic owners. Session model/provider compatibility,
+profile-scoped configuration caching, persisted repair, display projection,
+and context-window refresh policy now live in explicit `api.sessions` owners.
+Remaining work is concentrated in route-owned session orchestration and the
+largest cohesive run and session implementations.
 
 - group the existing run owners under `api/runs/`
 - group session persistence, recovery, projection, sources, and events under
@@ -486,7 +488,8 @@ packages without entering the HTTP router.
 `api/http/`, but `api/routes.py` and large modules under `api/routes_parts/`
 still contain domain orchestration. Current work extracts cohesive HTTP owners
 and moves session projection and anchor-scene behavior behind session-domain
-interfaces.
+interfaces. The former 1,223-line session-model route part is now a temporary
+compatibility Adapter over session-owned Modules rather than a domain owner.
 
 - introduce the HTTP router and per-domain route adapters
 - move remaining domain behavior out of `routes.py` and `routes_parts/`

@@ -99,6 +99,11 @@ actions. The topbar remains focused on conversation context and the workspace/fi
                            runtime-environment, and cron-scope owners
       sessions/            Durable session records, recovery, projection, and foreign-session owners
         claude_code.py     Bounded read-only Claude Code JSONL discovery and parse cache
+        model_identity.py  Provider-family and catalog identity for persisted session models
+        model_compatibility.py Cross-provider repair and default-model resolution policy
+        profile_model_config.py Profile-scoped model-config cache and strict worktree defaults
+        session_model_context.py Context-window lookup identity and threshold projection
+        session_model_state.py Persisted mutation and side-effect-free display projection
         external_sidebar.py Profile-aware CLI/cron/webhook projection and single-flight cache
         gateway_identity.py Gateway registry identity projection and stat-keyed cache
         pending_recovery/  Interrupted-turn marker, journal replay/retry, sidecar, and state.db owners
@@ -467,6 +472,13 @@ larger migration remains incremental:
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining
   parallel field-copy blocks.
+- Session model compatibility is owned under `api.sessions`: provider/catalog
+  identity, custom-provider qualification, profile-config caching, compatibility
+  repair, display projection, persisted mutation, and context-window projection
+  are independently importable Modules with explicit dependencies on the public
+  `api.config` Interface. `api/routes_parts/session_models.py` is only the
+  temporary Adapter that preserves the established `api.routes` monkeypatch
+  seam; it contains no domain Implementation.
 - `api/stream_channel.py` owns bounded live-turn event fan-out, offline replay,
   slow-subscriber backpressure, event cursors, and non-sensitive diagnostics.
   `api.config` re-exports this Interface through the public adapter for

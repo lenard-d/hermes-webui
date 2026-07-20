@@ -28,8 +28,11 @@ import types
 REPO = Path(__file__).resolve().parent.parent
 STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 SESSION_MODELS_PY = (
-    REPO / "api" / "routes_parts" / "session_models.py"
-).read_text(encoding="utf-8")
+    (REPO / "api" / "sessions" / "session_model_context.py").read_text(
+        encoding="utf-8"
+    )
+    + (REPO / "api" / "model_context.py").read_text(encoding="utf-8")
+)
 
 
 # Both fallback callsites must pass these kwargs into get_model_context_length.
@@ -233,7 +236,7 @@ def test_routes_session_load_fallback_passes_config_overrides():
         "session-load fallback must pass config_context_length= "
         "so user-set model.context_length wins over the 256K default. See #1896."
     )
-    assert "provider=_ctx_lookup.provider or provider or" in helper, (
+    assert "provider=lookup.provider or provider or" in helper, (
         "session-load fallback must pass provider= "
         "so the registry lookup is provider-aware. See #1896."
     )

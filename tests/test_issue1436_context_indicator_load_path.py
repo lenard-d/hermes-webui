@@ -28,7 +28,6 @@ Reported by @AvidFuturist in Discord (May 1 2026, "the 100 comes up way too
 often").  Confirmed live on the dev server: 23 of 75 sessions had
 `context_length=0` + `input_tokens > 128K`, all rendering >100%.
 """
-import json
 from pathlib import Path
 
 from tests.frontend_asset_contract import family_source
@@ -375,11 +374,12 @@ class TestIssue1436SourceMarkers:
         src = (ROUTES.parent / "http" / "routes" / "session_queries.py").read_text(
             encoding="utf-8"
         )
-        owner_src = (ROUTES.parent / "routes_parts" / "session_models.py").read_text(
-            encoding="utf-8"
-        )
+        owner_src = (
+            ROUTES.parent / "sessions" / "session_model_context.py"
+        ).read_text(encoding="utf-8")
         # The session load owner can call a helper; agent metadata lookup stays
-        # in session_models so older/missing agent bundles degrade safely.
+        # in the session context owner so older/missing agent bundles degrade
+        # safely.
         start = src.find('if parsed.path == "/api/session":')
         end = src.find('if parsed.path == "/api/projects":', start)
         block = src[start:end]
@@ -388,7 +388,7 @@ class TestIssue1436SourceMarkers:
             "metadata for the context_length fallback (#1436)"
         )
         assert "from agent.model_metadata import get_model_context_length" in owner_src, (
-            "session_models.py must lazy-import get_model_context_length for the "
+            "session_model_context.py must lazy-import get_model_context_length for the "
             "context_length fallback (#1436)"
         )
 
