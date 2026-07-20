@@ -6,9 +6,9 @@ and tests have long patched ``api.config.RUNTIME_STATE``, and an eager import or
 captured state object would silently bypass that established seam.
 """
 
-from collections.abc import Callable
 from typing import Protocol, cast
 
+from api.config_parts.facade import config_api
 from api.runtime_state import ProcessRuntimeState
 
 
@@ -19,19 +19,8 @@ class ConfigRuntimeAPI(Protocol):
     LAST_RUN_FINISHED_AT: float | None
 
 
-_config_api_resolver: Callable[[], ConfigRuntimeAPI] | None = None
-
-
-def bind_config_api(resolver: Callable[[], ConfigRuntimeAPI]) -> None:
-    """Bind the compatibility facade without importing it circularly."""
-    global _config_api_resolver
-    _config_api_resolver = resolver
-
-
 def _config_api() -> ConfigRuntimeAPI:
-    if _config_api_resolver is None:
-        raise RuntimeError("runtime registry is not bound to the config facade")
-    return cast(ConfigRuntimeAPI, _config_api_resolver())
+    return cast(ConfigRuntimeAPI, config_api())
 
 
 def register_stream_owner(stream_id: str, session_id: str) -> None:

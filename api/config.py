@@ -32,6 +32,14 @@ from typing import Any
 from api.runtime_state import ProcessRuntimeState
 from urllib.parse import parse_qs, urlparse
 
+from api.config_parts.facade import bind_config_api
+
+
+# One late-bound compatibility facade serves every extracted config module.
+# Resolve the module object at call time so reloads and monkeypatches remain
+# observable instead of being captured during import.
+bind_config_api(lambda: sys.modules[__name__])
+
 # ── Basic layout ──────────────────────────────────────────────────────────────
 import api.paths as _paths
 from api.plugin_providers import (
@@ -51,23 +59,6 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()
 HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")
 PORT = int(os.getenv("HERMES_WEBUI_PORT", "8787"))
 
-
-def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
-    """Read a positive int from the environment, falling back on bad input.
-
-    Used for operator-tunable memory caps (issue #3506) so large installs can
-    shrink the agent/session caches without editing source. A missing, empty,
-    non-numeric, or below-``minimum`` value falls back to ``default`` so a typo
-    can never disable a cache bound entirely.
-    """
-    raw = os.getenv(name)
-    if raw is None or not str(raw).strip():
-        return default
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return default
-    return value if value >= minimum else default
 
 # ── TLS/HTTPS config (optional, env-overridable) ────────────────────────────
 TLS_CERT = os.getenv("HERMES_WEBUI_TLS_CERT", "").strip() or None
@@ -100,160 +91,24 @@ logger = logging.getLogger(__name__)
 CUSTOM_MODELS_ENDPOINT_TIMEOUT_SECONDS = 5.0
 
 
-def _env_mb_bytes(name: str, default_mb: int) -> int:
-    """Parse an optional megabyte environment variable into bytes.
+# ── Environment and installation discovery implementation ───────────────────
+from api.config_parts import path_env as _path_env
 
-    Accepts values like ``200``, ``200MB``, or ``200MiB``. Invalid or
-    non-positive values fall back to the provided default.
-    """
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default_mb * 1024 * 1024
-    m = re.match(r"^(\d+)\s*(?:m|mb|mib)?$", raw, re.IGNORECASE)
-    if not m:
-        logger.warning(
-            "Invalid %s=%r; expected a positive integer in MB. Falling back to %sMB.",
-            name,
-            raw,
-            default_mb,
-        )
-        return default_mb * 1024 * 1024
-    value_mb = int(m.group(1))
-    if value_mb <= 0:
-        logger.warning(
-            "Invalid %s=%r; expected a value greater than zero. Falling back to %sMB.",
-            name,
-            raw,
-            default_mb,
-        )
-        return default_mb * 1024 * 1024
-    return value_mb * 1024 * 1024
-
-
-# ── Hermes agent directory discovery ─────────────────────────────────────────
-def _discover_agent_dir() -> Path:
-    """
-    Locate the hermes-agent checkout using a multi-strategy search.
-
-    Priority:
-      1. HERMES_WEBUI_AGENT_DIR env var  -- explicit override always wins
-      2. HERMES_HOME / hermes-agent      -- e.g. ~/.hermes/hermes-agent
-      3. Sibling of this repo            -- ../hermes-agent
-      4. Parent of this repo             -- ../../hermes-agent (nested layout)
-      5. Common install paths            -- ~/.hermes/hermes-agent (again as fallback)
-      6. HOME / hermes-agent             -- ~/hermes-agent (simple flat layout)
-    """
-    explicit_override = os.getenv("HERMES_WEBUI_AGENT_DIR")
-    if explicit_override:
-        explicit_path = Path(explicit_override).expanduser().resolve()
-        if explicit_path.exists() and _looks_like_agent_source_root(explicit_path):
-            return explicit_path
-
-    candidates = []
-
-    # 2. HERMES_HOME / hermes-agent
-    hermes_home = os.getenv("HERMES_HOME", str(_DEFAULT_HERMES_HOME))
-    candidates.append(Path(hermes_home).expanduser() / "hermes-agent")
-
-    # 3. Sibling: <repo-root>/../hermes-agent
-    candidates.append(REPO_ROOT.parent / "hermes-agent")
-
-    # 4. Parent is the agent repo itself (repo cloned inside hermes-agent/)
-    if _looks_like_agent_source_root(REPO_ROOT.parent):
-        candidates.append(REPO_ROOT.parent)
-
-    # 5. ~/.hermes/hermes-agent (explicit common path)
-    candidates.append(_DEFAULT_HERMES_HOME / "hermes-agent")
-
-    # 6. ~/hermes-agent
-    candidates.append(HOME / "hermes-agent")
-
-    # 7. XDG_DATA_HOME / hermes-agent  (e.g. ~/.local/share/hermes-agent)
-    xdg_data = Path(os.getenv("XDG_DATA_HOME", str(HOME / ".local" / "share")))
-    candidates.append(xdg_data.expanduser() / "hermes-agent")
-
-    # 8. System-wide install paths (e.g. /opt/hermes-agent, /usr/local/hermes-agent)
-    for sys_prefix in ("/opt", "/usr/local", "/usr/local/share"):
-        candidates.append(Path(sys_prefix) / "hermes-agent")
-
-    # Prefer real source checkouts before pip-style roots so lookalikes cannot preempt them.
-    for path in candidates:
-        if path.exists() and (path / "run_agent.py").exists():
-            return path.resolve()
-
-    for path in candidates:
-        if path.exists() and _looks_like_pip_style_agent_source_root(path):
-            return path.resolve()
-
-    return None
-
-
-def _looks_like_agent_source_root(path: Path) -> bool:
-    """Return True when a directory resembles a hermes-agent source root."""
-    if (path / "run_agent.py").exists():
-        return True
-    return _looks_like_pip_style_agent_source_root(path)
-
-
-def _looks_like_pip_style_agent_source_root(path: Path) -> bool:
-    """Return True for pip-style agent roots with a real agent package signal."""
-    if not (path / "cron" / "jobs.py").exists():
-        return False
-    if (path / "hermes").exists():
-        return True
-    hermes_cli_dir = path / "hermes_cli"
-    return (
-        (hermes_cli_dir / "__init__.py").exists()
-        or (hermes_cli_dir / "main.py").exists()
-    )
-
-
-def _discover_python(agent_dir: Path) -> str:
-    """
-    Locate a Python executable that has the Hermes agent dependencies installed.
-
-    Priority:
-      1. HERMES_WEBUI_PYTHON env var
-      2. Agent venv at <agent_dir>/venv/bin/python
-      3. Local .venv inside this repo
-      4. System python3
-    """
-    if os.getenv("HERMES_WEBUI_PYTHON"):
-        return os.getenv("HERMES_WEBUI_PYTHON")
-
-    if agent_dir:
-        venv_py = agent_dir / "venv" / "bin" / "python"
-        if venv_py.exists():
-            return str(venv_py)
-        
-        venv_py = agent_dir / ".venv" / "bin" / "python"
-        if venv_py.exists():
-            return str(venv_py)
-
-        # Windows layout
-        venv_py_win = agent_dir / "venv" / "Scripts" / "python.exe"
-        if venv_py_win.exists():
-            return str(venv_py_win)
-        
-        venv_py_win = agent_dir / ".venv" / "Scripts" / "python.exe"
-        if venv_py_win.exists():
-            return str(venv_py_win)
-
-    # Local .venv inside this repo
-    for subdir, binary in (("bin", "python"), ("Scripts", "python.exe")):
-        local_venv = REPO_ROOT / ".venv" / subdir / binary
-        if local_venv.exists():
-            return str(local_venv)
-
-    # Fall back to system python3
-    import shutil
-
-    for name in ("python3", "python"):
-        found = shutil.which(name)
-        if found:
-            return found
-
-    return "python3"
+_env_int = _path_env._env_int
+_env_mb_bytes = _path_env._env_mb_bytes
+_discover_agent_dir = _path_env._discover_agent_dir
+_looks_like_agent_source_root = _path_env._looks_like_agent_source_root
+_looks_like_pip_style_agent_source_root = (
+    _path_env._looks_like_pip_style_agent_source_root
+)
+_discover_python = _path_env._discover_python
+_workspace_candidates = _path_env._workspace_candidates
+_ensure_workspace_dir = _path_env._ensure_workspace_dir
+resolve_default_workspace = _path_env.resolve_default_workspace
+_discover_default_workspace = _path_env._discover_default_workspace
+_warn_state_dir_divergence = _path_env._warn_state_dir_divergence
+print_startup_config = _path_env.print_startup_config
+verify_hermes_imports = _path_env.verify_hermes_imports
 
 
 # Run discovery
@@ -289,50 +144,11 @@ else:
 # uses a ${VAR} reference. Depends only on os + threading (both imported above).
 _thread_ctx = threading.local()
 
+# ── Config file state (reloadable -- supports profile switching) ─────────────
+from api.config_parts import config_io as _config_io
 
-def _thread_local_env_value(name: str, default: str = "") -> str:
-    """Return thread-local profile env first, then process env, for provider reads."""
-    env_name = str(name or "").strip()
-    if not env_name:
-        return default or ""
-
-    thread_env = getattr(_thread_ctx, "env", {})
-    if isinstance(thread_env, dict) and env_name in thread_env:
-        thread_value = thread_env.get(env_name)
-        if thread_value is None:
-            return default or ""
-        return str(thread_value)
-
-    if bool(getattr(_thread_ctx, "block_process_env_fallback", False)):
-        return default or ""
-
-    return str(os.getenv(env_name, default or ""))
-
-
-# ── Config file (reloadable -- supports profile switching) ──────────────────
-
-def _expand_env_vars(obj):
-    """Recursively expand ${VAR} references in config values.
-
-    Uses the thread-local-first profile env lookup (_thread_local_env_value) so a
-    ${VAR} reference in a profile's config.yaml resolves to that profile's value,
-    and — critically — does NOT fall back to the server process os.environ when a
-    profile-scoped readonly/background scope set block_process_env_fallback. The
-    raw (unexpanded) dict is what gets cached; this expansion re-runs on every
-    read against the current thread's scope, so a cross-profile credential
-    (e.g. config api_key: ${ANTHROPIC_TOKEN}) can't be reconstructed from the
-    server process env for a named profile that has no such value (#3961)."""
-    if isinstance(obj, str):
-        return re.sub(
-            r"\${([^}]+)}",
-            lambda m: _thread_local_env_value(m.group(1), m.group(0)),
-            obj,
-        )
-    if isinstance(obj, dict):
-        return {k: _expand_env_vars(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_expand_env_vars(item) for item in obj]
-    return obj
+_thread_local_env_value = _config_io._thread_local_env_value
+_expand_env_vars = _config_io._expand_env_vars
 
 
 _cfg_cache = {}
@@ -342,54 +158,9 @@ _cfg_path: Path | None = None  # active config.yaml path for the disk-loaded cac
 _cfg_fingerprint: str | None = None  # serialized snapshot from the last disk load
 
 
-def _fingerprint_config(data: dict) -> str:
-    """Return a stable fingerprint for config dictionaries.
-
-    A few tests and legacy call sites still mutate ``cfg`` directly for
-    in-memory overrides.  Path-aware reloads should not immediately discard
-    those overrides just because the active profile path differs from the last
-    disk load, but an unchanged disk-loaded cache must still reload on profile
-    switches.
-    """
-    try:
-        return json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
-    except Exception:
-        return repr(data)
-
-
-def _cfg_has_in_memory_overrides() -> bool:
-    """True when cfg was changed after the last successful reload_config().
-
-    Detects two override shapes:
-      1. ``_cfg_cache`` was mutated in place (fingerprint differs).
-      2. ``cfg`` (the module attribute) was rebound to a different dict —
-         e.g. ``monkeypatch.setattr(config, "cfg", {...})`` in tests. The
-         alias-with-the-cache pattern at module load means this is a common
-         test-isolation override, and silently reloading from disk over it
-         (the v0.51.7 path-aware reload regression) breaks any test that
-         relies on the override.
-    """
-    if _cfg_fingerprint is not None and _fingerprint_config(_cfg_cache) != _cfg_fingerprint:
-        return True
-    # Module attribute rebound away from _cfg_cache by a test or runtime caller.
-    try:
-        return cfg is not _cfg_cache
-    except NameError:
-        # cfg not yet defined (during initial reload_config() at import time).
-        return False
-
-
-def _get_config_path() -> Path:
-    """Return config.yaml path for the active profile."""
-    env_override = os.getenv("HERMES_CONFIG_PATH")
-    if env_override:
-        return Path(env_override).expanduser()
-    try:
-        from api.profiles import get_active_hermes_home
-
-        return get_active_hermes_home() / "config.yaml"
-    except ImportError:
-        return _DEFAULT_HERMES_HOME / "config.yaml"
+_fingerprint_config = _config_io._fingerprint_config
+_cfg_has_in_memory_overrides = _config_io._cfg_has_in_memory_overrides
+_get_config_path = _config_io._get_config_path
 
 
 _WEBUI_SESSION_SAVE_MODES = {"deferred", "eager"}
@@ -420,187 +191,15 @@ _DEFAULT_AGENT_PERSONALITIES = {
 }
 
 
-def _apply_config_defaults(config_data: dict) -> None:
-    """Populate documented default-only config keys in-place."""
-    agent_cfg = config_data.get("agent")
-    if not isinstance(agent_cfg, dict):
-        agent_cfg = {}
-        config_data["agent"] = agent_cfg
-
-    personalities = agent_cfg.get("personalities")
-    if isinstance(personalities, dict):
-        merged = copy.deepcopy(_DEFAULT_AGENT_PERSONALITIES)
-        merged.update(copy.deepcopy(personalities))
-        agent_cfg["personalities"] = merged
-    else:
-        # Keep behavior aligned with CLI loader defaults: if personalities are
-        # absent or malformed, replace the section entirely with built-ins.
-        agent_cfg["personalities"] = copy.deepcopy(_DEFAULT_AGENT_PERSONALITIES)
-
-    experimental = config_data.get("experimental")
-    if not isinstance(experimental, dict):
-        experimental = {}
-        config_data["experimental"] = experimental
-    for key, value in _DEFAULT_EXPERIMENTAL_CONFIG.items():
-        experimental.setdefault(key, value)
-
- 
-def reload_config_if_stale() -> None:
-    """Refresh config.yaml once for concurrent stale read paths."""
-    global cfg
-    with _cfg_lock:
-        try:
-            config_path = _get_config_path()
-            current_mtime = config_path.stat().st_mtime
-        except OSError:
-            current_mtime = 0.0
-        path_changed = _cfg_path != config_path
-        mtime_stale = current_mtime != _cfg_mtime
-        if not _cfg_cache or path_changed or (mtime_stale and not _cfg_has_in_memory_overrides()):
-            _refresh_config_cache(config_path)
-            if path_changed:
-                cfg = _cfg_cache
+_apply_config_defaults = _config_io._apply_config_defaults
+reload_config_if_stale = _config_io.reload_config_if_stale
+get_config = _config_io.get_config
+get_webui_session_save_mode = _config_io.get_webui_session_save_mode
+is_unified_session_db_enabled = _config_io.is_unified_session_db_enabled
 
 
-def get_config() -> dict:
-    """Return the cached config dict, loading from disk if needed."""
-    config_path = _get_config_path()
-    try:
-        current_mtime = config_path.stat().st_mtime
-    except OSError:
-        current_mtime = 0.0
-    path_changed = _cfg_path != config_path
-    mtime_stale = current_mtime != _cfg_mtime
-    if not _cfg_cache or path_changed or (mtime_stale and not _cfg_has_in_memory_overrides()):
-        reload_config_if_stale()
-    # When a test (or runtime caller) has rebound ``cfg`` to a different dict
-    # via monkeypatch.setattr(config, "cfg", ...), return that override rather
-    # than the underlying _cfg_cache. Without this branch, get_config() would
-    # silently bypass the override even though _cfg_has_in_memory_overrides()
-    # correctly suppressed the reload.
-    try:
-        if cfg is not _cfg_cache:
-            return cfg
-    except NameError:
-        pass
-    return _cfg_cache
-
-
-def get_webui_session_save_mode(config_data: dict | None = None) -> str:
-    """Return the validated first-turn session persistence mode.
-
-    ``deferred`` preserves the current first-turn sidecar behaviour: persist
-    pending_user_message/runtime fields before streaming, then merge the turn
-    after the agent finishes. ``eager`` additionally checkpoints the current
-    user turn into ``messages`` before launching the agent thread. Unknown
-    values fail closed to ``deferred`` so a typo never reintroduces eager disk
-    writes unexpectedly.
-    """
-    active_cfg = config_data if isinstance(config_data, dict) else cfg
-    webui_cfg = active_cfg.get("webui", {}) if isinstance(active_cfg, dict) else {}
-    if not isinstance(webui_cfg, dict):
-        return _DEFAULT_WEBUI_SESSION_SAVE_MODE
-    mode = webui_cfg.get("session_save_mode", _DEFAULT_WEBUI_SESSION_SAVE_MODE)
-    if isinstance(mode, str):
-        normalized = mode.strip().lower()
-        if normalized in _WEBUI_SESSION_SAVE_MODES:
-            return normalized
-    return _DEFAULT_WEBUI_SESSION_SAVE_MODE
-
-
-def is_unified_session_db_enabled(config_data: dict | None = None) -> bool:
-    """Return the dormant unified-session-db feature flag.
-
-    The default is intentionally false so adding the JSON adapter cannot change
-    runtime persistence until a later migration PR switches call sites.
-    """
-    active_cfg = config_data if isinstance(config_data, dict) else cfg
-    experimental = active_cfg.get("experimental", {}) if isinstance(active_cfg, dict) else {}
-    if not isinstance(experimental, dict):
-        return False
-    return experimental.get("unified_session_db") is True
-
-
-def _refresh_config_cache(config_path: Path | None = None) -> None:
-    """Refresh _cfg_cache for ``config_path``.
-
-    Callers must hold _cfg_lock when invoking this helper because it mutates
-    shared state.
-    """
-    global _cfg_mtime, _cfg_path, _cfg_fingerprint
-    if config_path is None:
-        config_path = _get_config_path()
-    _cfg_cache.clear()
-    # Remember the old mtime so we can tell whether config actually changed
-    # vs. first-ever load (mtime == 0.0, e.g. server start or profile switch).
-    _old_cfg_mtime = _cfg_mtime
-    _cfg_path = config_path
-    _cfg_mtime = 0.0
-    try:
-        if config_path.exists():
-            # Route the parse through the mtime-keyed cache (#4652) so an
-            # unchanged config.yaml isn't re-parsed (~125ms+ on a large file)
-            # on every reload_config() on the hot path (profile switch /
-            # load_settings, #4662 Phase 2). We take the RAW cached dict and
-            # run the env expansion HERE, pinned to the unscoped process-env
-            # view (below) — never the helper's per-call expansion — for the
-            # #798 TLS reason documented in the pin block.
-            loaded = _load_yaml_config_file_raw(config_path)
-            if isinstance(loaded, dict):
-                if loaded:
-                    # The process-global _cfg_cache must reflect PROCESS-env
-                    # expansion, never a profile-scoped block_process_env_fallback
-                    # view — otherwise a reload that fires while a readonly/worker
-                    # scope is active (profile alternation resolves _get_config_path
-                    # to the named profile, #798 TLS) would bake under-expanded
-                    # literal ${VAR}s into the shared cache and starve concurrent
-                    # readers of the module-level `cfg` alias. Expansion re-runs
-                    # per-read elsewhere; here we pin the cache to the unscoped view.
-                    _prev_block = getattr(_thread_ctx, "block_process_env_fallback", False)
-                    _prev_env = getattr(_thread_ctx, "env", None)
-                    try:
-                        _thread_ctx.block_process_env_fallback = False
-                        _thread_ctx.env = {}
-                        _cfg_cache.update(_expand_env_vars(loaded))
-                    finally:
-                        _thread_ctx.block_process_env_fallback = _prev_block
-                        if _prev_env is None:
-                            try:
-                                del _thread_ctx.env
-                            except AttributeError:
-                                pass
-                        else:
-                            _thread_ctx.env = _prev_env
-                # Stamp _cfg_mtime whenever the file parsed to a dict — INCLUDING
-                # an empty {} config. The cache-update above is skipped for {} (it's
-                # a no-op), but _cfg_mtime MUST still be set or get_config()'s
-                # `current_mtime != _cfg_mtime` stale check fires on every call and
-                # spins reload_config() under _cfg_lock forever (a `{}` config from a
-                # freshly created/reset profile is reachable on the switch hot path).
-                # This matches master's pre-#4662 behavior (it entered the block for
-                # {} and set the mtime); the inner `if loaded:` only gates the no-op
-                # cache update, not the mtime stamp.
-                try:
-                    _cfg_mtime = Path(config_path).stat().st_mtime
-                except OSError:
-                    _cfg_mtime = 0.0
-    except Exception:
-        logger.debug("Failed to load yaml config from %s", config_path)
-    _apply_config_defaults(_cfg_cache)
-    _cfg_fingerprint = _fingerprint_config(_cfg_cache)
-    # Bust the models cache so the next request sees fresh config values.
-    # Only delete the disk cache when config has actually changed -- not on
-    # first-ever load (when _old_cfg_mtime == 0.0, i.e. server start or
-    # profile switch) -- preserving the disk cache so the next restart
-    # still hits the fast path without a cold run.
-    if _old_cfg_mtime != 0.0:
-        _delete_models_cache_on_disk()
-
-
-def reload_config() -> None:
-    """Reload config.yaml from the active profile's directory."""
-    with _cfg_lock:
-        _refresh_config_cache(_get_config_path())
+_refresh_config_cache = _config_io._refresh_config_cache
+reload_config = _config_io.reload_config
 
 
 # Memoized parse cache for _load_yaml_config_file, keyed on (resolved path,
@@ -617,162 +216,15 @@ _yaml_file_cache: dict[str, tuple] = {}
 _yaml_file_cache_lock = threading.Lock()
 
 
-def _load_yaml_config_file_raw(config_path: Path, *, _copy: bool = True) -> dict:
-    """Return the RAW (un-env-expanded) parsed config dict, memoized on
-    (resolved path, st_mtime_ns, st_size). Shared parse core for
-    _load_yaml_config_file() and reload_config(): the former runs the helper's
-    own per-call env expansion on the result; the latter must run expansion
-    under its own process-env-pinned thread context (#798), so it takes the raw
-    dict and expands it itself. Either way the file is parsed at most once per
-    (mtime, size) — a UI sync storm can't turn into a YAML-reparse storm (#4650),
-    and an unchanged config.yaml isn't reparsed on the profile-switch hot path
-    (#4662 Phase 2).
-
-    By default returns a deep copy so a caller can never mutate the shared cache
-    entry (greptile #4741). Internal callers that immediately pass the result
-    through _expand_env_vars() (which itself returns a fresh structure and never
-    mutates its input) pass _copy=False to skip the redundant copy on the hot path.
-    """
-    try:
-        import yaml as _yaml
-    except ImportError:
-        return {}
-
-    try:
-        st = config_path.stat()
-    except OSError:
-        # Missing or unstattable file — preserve the original "no config" contract.
-        return {}
-
-    cache_key = str(config_path)
-    stat_key = (st.st_mtime_ns, st.st_size)
-    with _yaml_file_cache_lock:
-        cached = _yaml_file_cache.get(cache_key)
-        if cached is not None and cached[0] == stat_key:
-            raw = cached[1]
-            if not isinstance(raw, dict):
-                return {}
-            return copy.deepcopy(raw) if _copy else raw
-
-    # Cache miss / stale: parse off disk. Done outside the lock so a slow parse
-    # doesn't serialize unrelated paths; a concurrent duplicate parse is harmless.
-    try:
-        loaded = _yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.debug("Failed to parse yaml config from %s", config_path)
-        return {}
-
-    raw = loaded if isinstance(loaded, dict) else {}
-    with _yaml_file_cache_lock:
-        _yaml_file_cache[cache_key] = (stat_key, raw)
-    return copy.deepcopy(raw) if _copy else raw
+_load_yaml_config_file_raw = _config_io._load_yaml_config_file_raw
+_load_yaml_config_file = _config_io._load_yaml_config_file
 
 
-def _load_yaml_config_file(config_path: Path) -> dict:
-    # _copy=False: _expand_env_vars returns a fresh structure and never mutates
-    # its input, so the env-expanded result is already cache-safe — no need to
-    # deep-copy the raw dict first (keeps the /api/reasoning hot path cheap).
-    raw = _load_yaml_config_file_raw(config_path, _copy=False)
-    if not raw:
-        return {}
-    expanded = _expand_env_vars(raw)
-    return expanded if isinstance(expanded, dict) else {}
+get_config_for_profile_home = _config_io.get_config_for_profile_home
 
 
-def get_config_for_profile_home(profile_home: "Path | str | None") -> dict:
-    """Return the config dict for an explicit profile home directory.
-
-    The streaming agent runs on a detached worker thread that does NOT inherit
-    the per-request thread-local profile context (set from the ``hermes_profile``
-    cookie on the HTTP handler thread). On that worker, the ambient
-    ``get_config()`` resolves through ``get_active_profile_name()`` which falls
-    back to the process-global ``_active_profile`` (usually ``default``) — so a
-    session running under a non-default profile would silently read the
-    **default** profile's ``config.yaml`` for toolsets, prefill context, and
-    fallback chains (issue #3294).
-
-    This helper reads the config for a *known* profile home directly off disk,
-    bypassing the thread-local resolver entirely. When ``profile_home`` matches
-    the path the ambient resolver would pick (the common single-profile case),
-    we return the cached ``get_config()`` to preserve in-memory overrides used
-    by tests and runtime callers. Only when the session's profile home diverges
-    from the ambient path do we read the session profile's file directly — a
-    pure read with no global cache mutation, so it is race-free across
-    concurrent sessions on different profiles.
-    """
-    if not profile_home:
-        return get_config()
-    try:
-        target = Path(profile_home).expanduser()
-    except Exception:
-        return get_config()
-    try:
-        from api.profiles import get_active_hermes_home
-
-        if Path(get_active_hermes_home()).expanduser() == target:
-            return get_config()
-    except Exception:
-        pass
-    # If the ambient resolver already points at this profile home, defer to
-    # get_config() so in-memory overrides (monkeypatched cfg) are honored. This
-    # MUST run before the nonexistent-home guard below: a matching ambient home
-    # whose directory doesn't physically exist yet (fresh install, monkeypatched
-    # cfg) must still resolve through get_config(), not return {} (#4516 gate).
-    try:
-        if _get_config_path().parent == target:
-            return get_config()
-    except Exception:
-        pass
-    if not target.exists():
-        return {}
-    # Read the profile file directly and apply documented defaults locally so the
-    # returned dict matches ambient get_config() shape (including built-in
-    # personalities) without mutating any global cache state.
-    profile_cfg = _load_yaml_config_file(target / "config.yaml")
-    _apply_config_defaults(profile_cfg)
-    return profile_cfg
-
-
-def _config_for_yaml_save(config_data: dict) -> dict:
-    """Return a YAML-safe config copy without runtime-only expanded defaults."""
-    if not isinstance(config_data, dict):
-        return {}
-    data = copy.deepcopy(config_data)
-    agent_cfg = data.get("agent")
-    if isinstance(agent_cfg, dict):
-        personalities = agent_cfg.get("personalities")
-        if isinstance(personalities, dict):
-            custom_personalities = {
-                name: value
-                for name, value in personalities.items()
-                if _DEFAULT_AGENT_PERSONALITIES.get(name) != value
-            }
-            if custom_personalities:
-                agent_cfg["personalities"] = custom_personalities
-            else:
-                agent_cfg.pop("personalities", None)
-        if not agent_cfg:
-            data.pop("agent", None)
-    return data
-
-
-def _save_yaml_config_file(config_path: Path, config_data: dict) -> None:
-    try:
-        import yaml as _yaml
-    except ImportError as exc:
-        raise RuntimeError("PyYAML is required to write Hermes config.yaml") from exc
-
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(
-        _yaml.safe_dump(_config_for_yaml_save(config_data), sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    # Invalidate the memoized parse for this path so the next read re-parses the
-    # bytes we just wrote. mtime_ns+size keying normally catches edits, but a
-    # WebUI save that preserves size with a coarse/unchanged mtime could otherwise
-    # serve a stale dict (#4650 review) — evicting on our own write closes that gap.
-    with _yaml_file_cache_lock:
-        _yaml_file_cache.pop(str(config_path), None)
+_config_for_yaml_save = _config_io._config_for_yaml_save
+_save_yaml_config_file = _config_io._save_yaml_config_file
 
 
 # Initial load
@@ -781,194 +233,8 @@ cfg = _cfg_cache  # alias for backward compat with existing references
 
 
 # ── Default workspace discovery ───────────────────────────────────────────────
-def _workspace_candidates(raw: str | Path | None = None) -> list[Path]:
-    """Return ordered candidate workspace paths, de-duplicated."""
-    candidates: list[Path] = []
-
-    def add(candidate: str | Path | None) -> None:
-        if candidate in (None, ""):
-            return
-        try:
-            path = Path(candidate).expanduser().resolve()
-        except Exception:
-            return
-        if path not in candidates:
-            candidates.append(path)
-
-    add(raw)
-    if os.getenv("HERMES_WEBUI_DEFAULT_WORKSPACE"):
-        add(os.getenv("HERMES_WEBUI_DEFAULT_WORKSPACE"))
-
-    home_workspace = HOME / "workspace"
-    home_work = HOME / "work"
-    if home_workspace.exists():
-        add(home_workspace)
-    if home_work.exists():
-        add(home_work)
-
-    add(home_workspace)
-    add(STATE_DIR / "workspace")
-    return candidates
-
-
-
-def _ensure_workspace_dir(path: Path) -> bool:
-    """Best-effort check that a workspace directory exists and is writable."""
-    try:
-        path = path.expanduser().resolve()
-        path.mkdir(parents=True, exist_ok=True)
-        return path.is_dir() and os.access(path, os.R_OK | os.W_OK | os.X_OK)
-    except Exception:
-        return False
-
-
-
-def resolve_default_workspace(raw: str | Path | None = None) -> Path:
-    """Return the first usable workspace path, creating it when possible."""
-    for candidate in _workspace_candidates(raw):
-        if _ensure_workspace_dir(candidate):
-            return candidate
-    raise RuntimeError(
-        "Could not create or access any usable workspace directory. "
-        "Set HERMES_WEBUI_DEFAULT_WORKSPACE to a writable path."
-    )
-
-
-
-def _discover_default_workspace() -> Path:
-    """
-    Resolve the default workspace in order:
-      1. HERMES_WEBUI_DEFAULT_WORKSPACE env var
-      2. ~/workspace if it already exists
-      3. ~/work if it already exists
-      4. ~/workspace (create if needed)
-      5. STATE_DIR / workspace
-    """
-    return resolve_default_workspace()
-
-
 DEFAULT_WORKSPACE = _discover_default_workspace()
 DEFAULT_MODEL = os.getenv("HERMES_WEBUI_DEFAULT_MODEL", "")  # Empty = use provider default; avoids showing unavailable OpenAI model to non-OpenAI users (#646)
-
-
-# ── Startup diagnostics ───────────────────────────────────────────────────────
-def _warn_state_dir_divergence(warn_prefix: str) -> None:
-    """Check if SESSION_DIR is empty but a sibling state directory has session data.
-
-    If the session store looks empty (no *.json files besides _index.json in SESSION_DIR,
-    or SESSION_INDEX_FILE is absent/empty/contains only {}|[]|null), scan STATE_DIR.parent
-    for sibling directories with a sessions/ child that has .json files.
-
-    Prints a diagnostic warning if a divergence is detected, helping users identify when
-    they may have switched launch methods and the HERMES_WEBUI_STATE_DIR env var differs.
-    """
-    try:
-        # Check if session store is empty
-        session_dir_empty = False
-
-        # Check for .json files in SESSION_DIR (excluding _index.json)
-        if SESSION_DIR.exists():
-            json_files = [f for f in SESSION_DIR.glob("*.json") if f.name != "_index.json"]
-            session_dir_empty = len(json_files) == 0
-        else:
-            session_dir_empty = True
-
-        # Check if SESSION_INDEX_FILE is absent, empty, or contains only {}|[]|null
-        index_file_empty = True
-        if SESSION_INDEX_FILE.exists():
-            try:
-                with open(SESSION_INDEX_FILE, "r") as f:
-                    content = f.read().strip()
-                    if content and content not in ("{}", "[]", "null"):
-                        index_file_empty = False
-            except Exception:
-                pass
-
-        # If session store looks empty, scan for siblings with sessions
-        if session_dir_empty and index_file_empty:
-            state_parent = STATE_DIR.parent
-            if state_parent.exists():
-                for sibling in state_parent.iterdir():
-                    if not sibling.is_dir() or sibling == STATE_DIR:
-                        continue
-                    sibling_sessions = sibling / "sessions"
-                    if sibling_sessions.exists():
-                        json_files = [f for f in sibling_sessions.glob("*.json") if f.name != "_index.json"]
-                        if json_files:
-                            # Found a sibling with session data
-                            print(
-                                f"{warn_prefix}  STATE_DIR is empty but a sibling state directory has session data.\n"
-                                f"        Current : {STATE_DIR}\n"
-                                f"        Sibling : {sibling}\n"
-                                f"        If you switched launch methods (bootstrap.py / ctl.sh / systemd),\n"
-                                f"        the active HERMES_WEBUI_STATE_DIR env var may differ from the\n"
-                                f"        previous run. Set it explicitly to restore access:\n"
-                                f"          export HERMES_WEBUI_STATE_DIR={sibling}",
-                                flush=True,
-                            )
-                            return
-    except Exception:
-        pass
-
-
-def print_startup_config() -> None:
-    """Print detected configuration at startup so the user can verify what was found."""
-    ok = "\033[32m[ok]\033[0m"
-    warn = "\033[33m[!!]\033[0m"
-    err = "\033[31m[XX]\033[0m"
-
-    lines = [
-        "",
-        "  Hermes Web UI -- startup config",
-        "  --------------------------------",
-        f"  repo root   : {REPO_ROOT}",
-        f"  agent dir   : {_AGENT_DIR if _AGENT_DIR else 'NOT FOUND'}  {ok if _AGENT_DIR else err}",
-        f"  python      : {PYTHON_EXE}",
-        f"  state dir   : {STATE_DIR}",
-        f"  workspace   : {DEFAULT_WORKSPACE}",
-        f"  host:port   : {HOST}:{PORT}",
-        f"  config file : {_get_config_path()}  {'(found)' if _get_config_path().exists() else '(not found, using defaults)'}",
-        "",
-    ]
-    print("\n".join(lines), flush=True)
-
-    try:
-        _warn_state_dir_divergence(warn)
-    except Exception:
-        pass
-
-    if not _HERMES_FOUND:
-        print(
-            f"{err}  Could not find the Hermes agent directory.\n"
-            "      The server will start but agent features will not work.\n"
-            "\n"
-            "      To fix, set one of:\n"
-            "        export HERMES_WEBUI_AGENT_DIR=/path/to/hermes-agent\n"
-            "        export HERMES_HOME=/path/to/.hermes\n"
-            "\n"
-            "      Or clone hermes-agent as a sibling of this repo:\n"
-            "        git clone <hermes-agent-repo> ../hermes-agent\n",
-            flush=True,
-        )
-
-
-def verify_hermes_imports() -> tuple:
-    """
-    Attempt to import the key Hermes modules.
-    Returns (ok: bool, missing: list[str], errors: dict[str, str]).
-    """
-    required = ["run_agent"]
-    missing = []
-    errors = {}
-    for mod in required:
-        try:
-            __import__(mod)
-        except Exception as e:
-            missing.append(mod)
-            # Capture the full error message so startup logs show WHY
-            # (e.g. pydantic_core .so mismatch) instead of just the name.
-            errors[mod] = f"{type(e).__name__}: {e}"
-    return (len(missing) == 0), missing, errors
 
 
 # ── Limits ───────────────────────────────────────────────────────────────────
@@ -1094,433 +360,56 @@ CLI_TOOLSETS = _resolve_cli_toolsets()
 
 from api.model_catalog import (
     FALLBACK_MODELS as _FALLBACK_MODELS,
-    PROVIDER_ALIASES as _PROVIDER_ALIASES,
+    PROVIDER_ALIASES as _PROVIDER_ALIASES,  # noqa: F401 - facade-owned state
     PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
     PROVIDER_MODELS as _PROVIDER_MODELS,
 )
+from api.config_parts import provider_discovery as _provider_discovery
 
 
-def _get_anthropic_fallback_env_vars() -> tuple[str, ...]:
-    """Read Anthropic auth env vars from the shared agent registry when available."""
-    fallback = (
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_TOKEN",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-    )
-    try:
-        from hermes_cli.auth import PROVIDER_REGISTRY
-
-        anthropic = (
-            PROVIDER_REGISTRY.get("anthropic")
-            if isinstance(PROVIDER_REGISTRY, dict)
-            else None
-        )
-        env_vars = getattr(anthropic, "api_key_env_vars", None)
-        if not env_vars:
-            return fallback
-
-        out = []
-        for _var in env_vars:
-            if not isinstance(_var, str):
-                continue
-            _normalized = _var.strip()
-            if _normalized and _normalized not in out:
-                out.append(_normalized)
-        return tuple(out) if out else fallback
-    except Exception:
-        return fallback
+_get_anthropic_fallback_env_vars = _provider_discovery._get_anthropic_fallback_env_vars
+_resolve_provider_alias = _provider_discovery._resolve_provider_alias
 
 
-def _resolve_provider_alias(name: str) -> str:
-    """Return the canonical provider slug for *name*.
-
-    Applies the WebUI's local alias table first, then merges any
-    additional aliases the agent provides (when hermes_cli is on
-    sys.path). Lookup is case-insensitive and whitespace-trimmed.
-    Unknown names pass through unchanged.
-    """
-    if not name:
-        return name
-    raw = str(name).strip().lower()
-    # Prefer the agent's table when available so new aliases added there
-    # work automatically; otherwise fall through to our local copy.
-    try:
-        from hermes_cli.models import _PROVIDER_ALIASES as _agent_aliases
-        if raw in _agent_aliases:
-            return _agent_aliases[raw]
-    except Exception:
-        pass
-    return _PROVIDER_ALIASES.get(raw, name)
+_is_known_model_provider = _provider_discovery._is_known_model_provider
 
 
-def _is_known_model_provider(provider_id: str) -> bool:
-    """True when *provider_id* names a model provider WebUI can render.
-
-    The credential pool (``auth.json`` → ``credential_pool``) stores keys for
-    BOTH model providers (whose API keys belong in the model picker) and
-    non-model platform plugins.  The Photon iMessage plugin, for example,
-    writes ``photon`` / ``photon_project`` / ``photon_user`` pool entries that
-    are messaging-platform credentials, not LLM API keys.  Only the former
-    should surface as provider groups.
-
-    Without this gate, #4247's pool-detection loop added *every* pool key to
-    ``detected_providers``; unknown ids then fell through to the global
-    auto-detected catalog and each phantom provider was painted with the full
-    model list (#4324).  ``provider_id`` is expected to be the canonical slug
-    (post ``_resolve_provider_alias``); the lookup is case-insensitive.
-
-    A provider is "known" when it is a configured custom-provider slug
-    (``custom:*``), appears in WebUI's static ``_PROVIDER_DISPLAY`` /
-    ``_PROVIDER_MODELS`` tables, or is a registered model-provider plugin.
-    """
-    pid = (provider_id or "").strip().lower()
-    if not pid:
-        return False
-    if pid.startswith("custom:"):
-        return True
-    if pid in _PROVIDER_DISPLAY or pid in _PROVIDER_MODELS:
-        return True
-    try:
-        if _is_plugin_model_provider(pid):
-            return True
-    except Exception:
-        # A transient failure here (import/IO hiccup in the plugin registry) makes
-        # a real plugin-backed provider briefly look unknown and drop from the
-        # picker until the next successful check. Surface at warning so it's
-        # visible in default production logs rather than silently swallowed.
-        logger.warning("plugin model-provider check failed for %s", pid, exc_info=True)
-    return False
+_custom_provider_slug_from_name = _provider_discovery._custom_provider_slug_from_name
+_custom_provider_entries = _provider_discovery._custom_provider_entries
+_configured_model_ids = _provider_discovery._configured_model_ids
+_configured_model_options = _provider_discovery._configured_model_options
+_named_custom_provider_slugs = _provider_discovery._named_custom_provider_slugs
+_named_custom_provider_slug_for_provider = (
+    _provider_discovery._named_custom_provider_slug_for_provider
+)
 
 
-def _custom_provider_slug_from_name(name: object) -> str:
-    raw = str(name or "").strip().lower()
-    if not raw:
-        return ""
-    if raw.startswith("custom:"):
-        return raw
-    # Keep name-derived custom provider slugs out of the @provider:model colon
-    # grammar. Endpoint-derived slugs may still be custom:<host>:<port>, but a
-    # friendly name like "Local (127.0.0.1:15721)" should not preserve ':'.
-    slug = re.sub(r"[^a-z0-9._-]+", "-", raw).strip("-")
-    slug = re.sub(r"-{2,}", "-", slug)
-    if not slug:
-        return ""
-    return "custom:" + slug
+_resolve_configured_provider_id = _provider_discovery._resolve_configured_provider_id
 
 
-def _custom_provider_entries(config_obj: dict | None = None) -> list[dict]:
-    source = config_obj if isinstance(config_obj, dict) else cfg
-    entries = source.get("custom_providers", [])
-    if not isinstance(entries, list):
-        return []
-    return [entry for entry in entries if isinstance(entry, dict)]
-
-
-def _configured_model_ids(raw_models: object) -> list[str]:
-    """Return ordered model IDs from supported config allowlist shapes."""
-    if isinstance(raw_models, dict):
-        candidates = (key for key in raw_models if isinstance(key, str))
-    elif isinstance(raw_models, list):
-        candidates = raw_models
-    else:
-        return []
-
-    model_ids: list[str] = []
-    for item in candidates:
-        if isinstance(item, dict):
-            candidate = item.get("id") or item.get("model") or item.get("name")
-        else:
-            candidate = item
-        model_id = str(candidate or "").strip()
-        if model_id and model_id not in model_ids:
-            model_ids.append(model_id)
-    return model_ids
-
-
-def _configured_model_options(raw_models: object) -> list[dict[str, str]]:
-    """Return picker option rows from supported config allowlist shapes."""
-    labels: dict[str, str] = {}
-    if isinstance(raw_models, list):
-        for item in raw_models:
-            if not isinstance(item, dict):
-                continue
-            candidate = item.get("id") or item.get("model") or item.get("name")
-            model_id = str(candidate or "").strip()
-            if not model_id or model_id in labels:
-                continue
-            label = str(item.get("label") or model_id).strip() or model_id
-            labels[model_id] = label
-    return [
-        {"id": model_id, "label": labels.get(model_id, model_id)}
-        for model_id in _configured_model_ids(raw_models)
-    ]
-
-
-def _named_custom_provider_slugs(config_obj: dict | None = None) -> set[str]:
-    return {
-        slug
-        for slug in (
-            _custom_provider_slug_from_name(entry.get("name"))
-            for entry in _custom_provider_entries(config_obj)
-        )
-        if slug
-    }
-
-
-def _named_custom_provider_slug_for_provider(
-    provider: object,
-    config_obj: dict | None = None,
-) -> str:
-    raw = str(provider or "").strip().lower()
-    if not raw:
-        return ""
-    raw_suffix = raw.removeprefix("custom:")
-    for entry in _custom_provider_entries(config_obj):
-        entry_name = str(entry.get("name") or "").strip().lower()
-        slug = _custom_provider_slug_from_name(entry_name)
-        if not entry_name or not slug:
-            continue
-        if raw in {entry_name, slug} or raw_suffix == slug.removeprefix("custom:"):
-            return slug
-    return ""
-
-
-def _resolve_configured_provider_id(
-    provider: object,
-    config_obj: dict | None = None,
-    *,
-    base_url: object = None,
-    resolve_alias: bool = True,
-) -> str:
-    """Normalize a configured provider id.
-
-    When ``resolve_alias`` is True (default, used for active-provider /
-    badge surfaces), falls through to ``_resolve_provider_alias`` after the
-    named-custom check. When False (used by ``resolve_model_provider``),
-    preserves the raw provider value so downstream local-server detection
-    (`_LOCAL_SERVER_PROVIDERS` membership in #1625) sees the original name
-    like ``ollama`` / ``lm-studio`` rather than alias-collapsed ``custom`` /
-    ``lmstudio``. The base-url-to-named-slug fallback still runs in both
-    modes when applicable.
-
-    See in-stage absorption note on stage-313 for the #1625 regression that
-    motivated the ``resolve_alias`` flag.
-    """
-    named_slug = _named_custom_provider_slug_for_provider(provider, config_obj)
-    if named_slug:
-        return named_slug
-
-    if not resolve_alias:
-        raw = str(provider or "").strip().lower()
-        if base_url and raw == "custom":
-            by_base_url = _named_custom_provider_slug_for_base_url(base_url, config_obj)
-            if by_base_url:
-                return by_base_url
-        return str(provider or "")
-
-    resolved = _resolve_provider_alias(provider)
-    if (
-        base_url
-        and str(resolved or "").strip().lower() == "custom"
-    ):
-        by_base_url = _named_custom_provider_slug_for_base_url(base_url, config_obj)
-        if by_base_url:
-            return by_base_url
-
-    return resolved
-
-
-def _canonicalise_provider_id(name: object) -> str:
-    """Normalise a provider id slug into a stable lowercase-hyphenated form.
-
-    Folds underscores to hyphens and lowercases the result, so a user with
-    ``providers.opencode_go.api_key`` in ``config.yaml`` and
-    ``model.provider: opencode-go`` sees ONE provider group, not two
-    (#1568). Then attempts alias resolution but only if the alias target
-    is itself a known canonical id in ``_PROVIDER_DISPLAY`` —  this avoids
-    converting ``x-ai`` (canonical in WebUI's data structures) to ``xai``
-    (the hermes_cli alias target which the WebUI doesn't index by).
-
-    Examples::
-
-        opencode-go     -> opencode-go     (canonical, no change)
-        opencode_go     -> opencode-go     (underscore folded)
-        OpenCode-Go     -> opencode-go     (case folded)
-        OPENCODE_GO     -> opencode-go     (both folded)
-        z_ai            -> zai             (alias-resolved — zai is canonical)
-        x-ai            -> x-ai            (preserved — x-ai is canonical)
-
-    Empty input passes through as the empty string. Unknown ids preserve
-    their normalised form.
-    """
-    if not name:
-        return ""
-    raw = str(name).strip().lower().replace("_", "-")
-    if not raw:
-        return ""
-    # Already a canonical id known to _PROVIDER_DISPLAY/_PROVIDER_MODELS:
-    # keep as-is to avoid round-tripping through aliases (e.g. x-ai → xai).
-    if raw in _PROVIDER_DISPLAY or raw in _PROVIDER_MODELS:
-        return raw
-    # Try alias resolution. Accept the result if it's a canonical id known to
-    # either _PROVIDER_DISPLAY OR _PROVIDER_MODELS (mirroring the direct-hit
-    # check above) — some canonical targets (e.g. `gemini`) are indexed in
-    # _PROVIDER_MODELS but not _PROVIDER_DISPLAY, so a _DISPLAY-only check
-    # rejected valid aliases like `google-gemini`→`gemini`, leaving the id
-    # uncanonicalised and silently breaking provider-ownership checks (#5511).
-    # This still blocks aliases that point at non-canonical/legacy strings.
-    resolved = _resolve_provider_alias(raw)
-    if resolved and (resolved.lower() in _PROVIDER_DISPLAY or resolved.lower() in _PROVIDER_MODELS):
-        return resolved.lower()
-    return raw
-
-
-def _normalize_base_url_for_match(value: object) -> str:
-    url = str(value or "").strip().rstrip("/")
-    if not url:
-        return ""
-    parsed_url = urlparse(url if "://" in url else f"http://{url}")
-    scheme = (parsed_url.scheme or "http").lower()
-    netloc = (parsed_url.netloc or parsed_url.path).lower().rstrip("/")
-    path = parsed_url.path.rstrip("/")
-    if not parsed_url.netloc:
-        path = ""
-    return f"{scheme}://{netloc}{path}"
-
-
-def _custom_endpoint_slugs_for_base_url(value: object) -> set[str]:
-    """Return custom provider slugs that WebUI may derive from a base URL.
-
-    Model picker values for endpoint-discovered models have historically used
-    both ``custom:<host>:<port>`` and ``custom:<host>-<port>`` forms. When the
-    active config already names a local-server provider such as Ollama for that
-    same base URL, those endpoint slugs are just UI routing hints and should
-    resolve back to the configured provider rather than requiring a CUSTOM_* API
-    key.
-    """
-    url = str(value or "").strip().rstrip("/")
-    if not url:
-        return set()
-    parsed_url = urlparse(url if "://" in url else f"http://{url}")
-    host = (parsed_url.hostname or "").strip().lower()
-    if not host:
-        return set()
-    port = parsed_url.port
-    if port is None:
-        scheme = (parsed_url.scheme or "http").lower()
-        port = 443 if scheme == "https" else 80
-    return {f"custom:{host}:{port}", f"custom:{host}-{port}"}
+_canonicalise_provider_id = _provider_discovery._canonicalise_provider_id
+_normalize_base_url_for_match = _provider_discovery._normalize_base_url_for_match
+_custom_endpoint_slugs_for_base_url = (
+    _provider_discovery._custom_endpoint_slugs_for_base_url
+)
 
 
 _LEGACY_CUSTOM_API_KEY_ENV_WARNED: set[str] = set()
 
 
-def _api_key_env_name(provider_id: object) -> str:
-    """Return the POSIX-safe default API-key env var for a custom provider id."""
-    sanitized = re.sub(r"[^A-Za-z0-9]", "_", str(provider_id or "")).upper().strip("_")
-    if not sanitized:
-        sanitized = "CUSTOM"
-    if not sanitized.startswith("CUSTOM_"):
-        sanitized = f"CUSTOM_{sanitized}"
-    return f"{sanitized}_API_KEY"
+_api_key_env_name = _provider_discovery._api_key_env_name
+_legacy_custom_api_key_env_name = (
+    _provider_discovery._legacy_custom_api_key_env_name
+)
+_lookup_custom_api_key_env = _provider_discovery._lookup_custom_api_key_env
+_named_custom_provider_slug_for_base_url = (
+    _provider_discovery._named_custom_provider_slug_for_base_url
+)
 
 
-def _legacy_custom_api_key_env_name(provider_id: object) -> str:
-    """Return the pre-#2541 custom-provider env hint shape, if any."""
-    raw = str(provider_id or "").strip().upper()
-    if not raw:
-        return ""
-    return f"{raw}_API_KEY"
-
-
-def _lookup_custom_api_key_env(provider_id: object) -> str | None:
-    """Look up sanitized custom-provider env first, then legacy broken shape."""
-    env_name = _api_key_env_name(provider_id)
-    api_key = _thread_local_env_value(env_name).strip()
-    if api_key:
-        return api_key
-
-    legacy_env_name = _legacy_custom_api_key_env_name(provider_id)
-    if legacy_env_name and legacy_env_name != env_name:
-        legacy_key = _thread_local_env_value(legacy_env_name).strip()
-        if legacy_key:
-            if legacy_env_name not in _LEGACY_CUSTOM_API_KEY_ENV_WARNED:
-                _LEGACY_CUSTOM_API_KEY_ENV_WARNED.add(legacy_env_name)
-                logger.warning(
-                    "Custom provider API key env var %s is deprecated; use %s instead",
-                    legacy_env_name,
-                    env_name,
-                )
-            return legacy_key
-    return None
-
-
-def _named_custom_provider_slug_for_base_url(
-    base_url: object,
-    config_obj: dict | None = None,
-) -> str:
-    target = _normalize_base_url_for_match(base_url)
-    if not target:
-        return ""
-    for entry in _custom_provider_entries(config_obj):
-        entry_base_url = _normalize_base_url_for_match(entry.get("base_url"))
-        if entry_base_url != target:
-            continue
-        return _custom_provider_slug_from_name(entry.get("name")) or "custom"
-    return ""
-
-
-def _provider_is_known_or_configured(
-    provider_id: object,
-    config_obj: dict | None = None,
-) -> bool:
-    """True when ``provider_id`` is a provider Hermes recognizes (static registry)
-    or the user has configured (named custom provider), decided from the STATIC
-    registry + config state only — never from a live/cold catalog snapshot.
-
-    This distinguishes a provider Hermes knows how to route (e.g. ``ollama-cloud``,
-    whose model group simply isn't folded into the current cached catalog yet, or a
-    named ``custom_providers`` entry) from a *genuinely unknown* one
-    (``@removed:...`` that is in no registry and configured nowhere). The former's
-    explicitly-qualified selection is preserved across a cold catalog; the latter
-    falls back to the default so chat/start doesn't route to an unrecognized
-    provider.
-
-    DELIBERATE SCOPE (see the @provider:model guard in
-    ``_resolve_compatible_session_model_state``): registry membership counts as
-    "known" even when the user has no key configured for that built-in. We do NOT
-    require authenticated-credential evidence here, on purpose. The only fully
-    reliable "is this provider authenticated" signal is the live auth store /
-    catalog rebuild — exactly the cost the caller's ``prefer_cached_catalog`` hot
-    path avoids — and a cheap env/config-only credential check would mis-classify
-    providers authenticated via OAuth/auth-store (``ollama-cloud`` among them),
-    re-introducing the original silent-revert bug for them. A known-but-unconfigured
-    pick is therefore kept and surfaces a clear run-time auth error rather than a
-    silent swap to the default.
-
-    Deliberately does NOT consult ``get_available_models()`` / the catalog groups,
-    which are exactly what is cold here — re-deriving them live would defeat the
-    ``prefer_cached_catalog`` hot-path win this guards.
-    """
-    raw = str(provider_id or "").strip().lower()
-    if not raw:
-        return False
-    # Configured custom provider: a named slug in custom_providers, or any
-    # ``custom`` / ``custom:<slug>`` form when custom_providers are defined.
-    if _named_custom_provider_slug_for_provider(raw, config_obj):
-        return True
-    if raw == "custom" or raw.startswith("custom:"):
-        return bool(_custom_provider_entries(config_obj))
-    # Known first-party / built-in provider id (alias-resolved). Static registry
-    # knowledge that is always available, so a live-discovery provider whose
-    # catalog group is momentarily absent still counts as known.
-    canonical = _resolve_provider_alias(raw)
-    return (
-        raw in _PROVIDER_DISPLAY
-        or canonical in _PROVIDER_DISPLAY
-        or raw in _PROVIDER_MODELS
-        or canonical in _PROVIDER_MODELS
-    )
+_provider_is_known_or_configured = (
+    _provider_discovery._provider_is_known_or_configured
+)
 
 
 
@@ -2017,215 +906,34 @@ _LOCAL_SERVER_PROVIDERS = {
     "textgen",      # text-generation-webui (oobabooga) OpenAI-compat extension
     "localai",      # LocalAI project (#1625 Opus NIT)
 }
+from api.config_parts import provider_routing as _provider_routing
 
 
-def _is_local_server_provider(provider_id: str) -> bool:
-    """True when provider_id names a local model server.
-
-    Named custom providers resolve to ``custom:<slug>``. Treat those as local
-    when the bare slug is one of the known local-server provider names too.
-    """
-    provider = str(provider_id or "").strip().lower()
-    if provider in _LOCAL_SERVER_PROVIDERS:
-        return True
-    if provider.startswith("custom:"):
-        return provider.removeprefix("custom:") in _LOCAL_SERVER_PROVIDERS
-    return False
+_is_local_server_provider = _provider_routing._is_local_server_provider
 
 
-def _model_id_declared_in_config(model_id: str, config_provider: str | None) -> bool:
-    """True when the user's own config declares ``model_id`` verbatim (full form).
-
-    This is the COLD-catalog provenance signal for #5979: when the live
-    ``/v1/models`` catalog is unbuilt (fresh process, headless client), a
-    vendor-namespaced id the user configured — ``model.default``, the
-    ``model.models`` allowlist, or the matching ``custom_providers[].models`` /
-    ``.model`` for a named ``custom:<slug>`` — is still authoritative provenance
-    that the full id is intentional and must be preserved. Config is the one
-    source available with zero network and no catalog dependency, so it survives
-    a cold restart (b3nw's ``model.default: x-ai/grok-4.5``). Checked ONLY for
-    custom providers; returns False for anything not verbatim-declared so the
-    caller falls through to the legacy family heuristic.
-    """
-    model = str(model_id or "").strip()
-    if not model:
-        return False
-    model_cfg = cfg.get("model", {})
-    if isinstance(model_cfg, dict):
-        if str(model_cfg.get("default") or "").strip() == model:
-            return True
-        _declared = model_cfg.get("models")
-        if model in _configured_model_ids(_declared):
-            return True
-    # Named custom:<slug> — scan its custom_providers[] entry for a verbatim id.
-    prov = str(config_provider or "").strip().lower()
-    if prov.startswith("custom:"):
-        raw_suffix = prov.removeprefix("custom:")
-        for entry in _custom_provider_entries():
-            slug = _custom_provider_slug_from_name(entry.get("name"))
-            entry_name = str(entry.get("name") or "").strip().lower()
-            if not (prov in {entry_name, slug} or (slug and raw_suffix == slug.removeprefix("custom:"))):
-                continue
-            if str(entry.get("model") or "").strip() == model:
-                return True
-            if model in _configured_model_ids(entry.get("models")):
-                return True
-    return False
+_model_id_declared_in_config = _provider_routing._model_id_declared_in_config
 
 
-def _is_first_party_model(provider_id: str, model_id: str) -> bool:
-    """True when ``model_id`` is listed in ``provider_id``'s own static catalog.
-
-    Used to tell a *redundant* first-party prefix from an *intrinsic* routing
-    prefix on a bare ``custom`` endpoint. ``openai/gpt-5.4`` → gpt-5.4 is a real
-    OpenAI model, so ``openai/`` is a redundant leftover and strippable (#433).
-    But ``bedrock/opus-4-6`` → opus-4-6 is NOT in bedrock's first-party catalog
-    (those ids look like ``global.anthropic.claude-…``), so ``bedrock/`` is a
-    vendor-routing segment a proxy needs whole (#3872). Returns False on any
-    unknown provider or empty model so callers preserve the id.
-    """
-    provider = str(provider_id or "").strip().lower()
-    model = str(model_id or "").strip()
-    if not provider or not model:
-        return False
-    catalog = _PROVIDER_MODELS.get(provider)
-    if not isinstance(catalog, list):
-        return False
-    return any(
-        isinstance(entry, dict) and entry.get("id") == model
-        for entry in catalog
-    )
+_is_first_party_model = _provider_routing._is_first_party_model
 
 
-def _base_url_points_at_local_server(base_url: str) -> bool:
-    """True if base_url's host is a loopback or private IP (likely local server).
-
-    Reuses ipaddress.is_loopback / is_private / is_link_local — the same
-    heuristic used in the `api/config.py` SSRF/credential-routing code.
-    Errors (DNS failure, malformed URL) return False so callers fall back to
-    the static-provider-name check.
-    """
-    if not base_url:
-        return False
-    try:
-        from urllib.parse import urlparse
-        import ipaddress
-        host = (urlparse(base_url).hostname or "").lower()
-        if not host:
-            return False
-        # Plain-text "localhost" doesn't ipaddress-parse but is unambiguous.
-        if host in ("localhost", "ip6-localhost", "ip6-loopback"):
-            return True
-        try:
-            addr = ipaddress.ip_address(host)
-        except ValueError:
-            # Not an IP literal — could be a hostname like "ollama.internal".
-            # Don't try DNS resolution here (slow + ambient): only IP literals
-            # and the `localhost` alias get the no-strip treatment via this path.
-            return False
-        return addr.is_loopback or addr.is_private or addr.is_link_local
-    except Exception:
-        return False
+_base_url_points_at_local_server = _provider_routing._base_url_points_at_local_server
 
 
-def _custom_slug_rest_looks_like_host_port(rest: str) -> bool:
-    """True when ``custom:<rest>`` is an endpoint-style slug ``host:port``.
-
-    WebUI sometimes derives ``custom:10.8.71.41:8080`` from ``base_url`` authority.
-    The #1776 peel must not treat that middle colon as part of an eaten model
-    segment — otherwise ``@custom:10.8.71.41:8080:Qwen3`` wrongly becomes model
-    ``8080:Qwen3``.
-    """
-    rest = str(rest or "").strip()
-    if ":" not in rest:
-        return False
-    host, port_s = rest.rsplit(":", 1)
-    if not host or ":" in host:
-        return False
-    if not port_s.isdigit():
-        return False
-    try:
-        port_n = int(port_s)
-    except ValueError:
-        return False
-    if not (1 <= port_n <= 65535):
-        return False
-    try:
-        import ipaddress
-
-        ipaddress.ip_address(host)
-        return True
-    except ValueError:
-        pass
-    hl = host.lower()
-    if hl == "localhost":
-        return True
-    # Typical DNS hostname used as proxy slug (contains at least one label dot).
-    if "." in host:
-        return True
-    return False
+_custom_slug_rest_looks_like_host_port = (
+    _provider_routing._custom_slug_rest_looks_like_host_port
+)
 
 
-def _parse_provider_qualified_model_id(model_id: str) -> tuple[str, str] | None:
-    """Parse WebUI's ``@provider:model`` route hint into ``(model, provider)``.
-
-    The provider segment can contain colons for named custom providers, while
-    the model segment can also contain colons for tags such as ``:free``.
-    Keep this parser shared with ``resolve_model_provider`` so any caller that
-    compares route-hinted model lanes uses the same grammar.
-    """
-    candidate = str(model_id or "").strip()
-    if not candidate.startswith("@") or ":" not in candidate:
-        return None
-    inner = candidate[1:]
-    provider_hint, bare_model = inner.rsplit(":", 1)
-    if provider_hint.startswith("custom:") and provider_hint.count(":") >= 2:
-        _slug_rest = provider_hint[len("custom:"):]
-        if not _custom_slug_rest_looks_like_host_port(_slug_rest):
-            provider_hint, extra = provider_hint.rsplit(":", 1)
-            bare_model = f"{extra}:{bare_model}"
-    elif (provider_hint not in _PROVIDER_MODELS
-            and provider_hint not in _PROVIDER_DISPLAY
-            and not provider_hint.startswith("custom:")):
-        provider_hint, bare_model = inner.split(":", 1)
-    return bare_model, provider_hint
+_parse_provider_qualified_model_id = (
+    _provider_routing._parse_provider_qualified_model_id
+)
 
 
-def _get_provider_base_url(provider_id):
-    """Look up the configured base_url for a provider (e.g. lmstudio).
-
-    Checks two locations, in order:
-      1. ``cfg["providers"][<provider_id>]["base_url"]`` — the explicit
-         per-provider override.
-      2. ``cfg["model"]["base_url"]`` — falls back here when
-         ``cfg["model"]["provider"] == provider_id``. This is the historical
-         shape (the model block carries both the active provider AND the
-         base URL for that provider in a single record).
-
-    Returns the URL stripped of trailing ``/`` if configured, otherwise None.
-    """
-    prov_cfg = _get_provider_cfg(provider_id)
-    explicit = (prov_cfg.get("base_url") or "").strip().rstrip("/")
-    if explicit:
-        return explicit
-    model_cfg = cfg.get("model", {}) or {}
-    if isinstance(model_cfg, dict):
-        model_provider = str(model_cfg.get("provider") or "").strip().lower()
-        if model_provider == str(provider_id).strip().lower():
-            model_base = (model_cfg.get("base_url") or "").strip().rstrip("/")
-            if model_base:
-                return model_base
-    return None
-
-
-def _get_providers_cfg() -> dict:
-    providers_cfg = cfg.get("providers")
-    return providers_cfg if isinstance(providers_cfg, dict) else {}
-
-
-def _get_provider_cfg(provider_id) -> dict:
-    provider_cfg = _get_providers_cfg().get(provider_id, {})
-    return provider_cfg if isinstance(provider_cfg, dict) else {}
+_get_provider_base_url = _provider_routing._get_provider_base_url
+_get_providers_cfg = _provider_routing._get_providers_cfg
+_get_provider_cfg = _provider_routing._get_provider_cfg
 
 
 def resolve_model_provider(model_id: str, *, explicitly_picked: bool = False) -> tuple:
@@ -8377,8 +7085,6 @@ RUNTIME_STATE = ProcessRuntimeState(
 # implementations live in a cohesive leaf module.  The resolver is late-bound
 # so patched facade state remains authoritative for every adapter call.
 from api.config_parts import runtime_registry as _runtime_registry
-
-_runtime_registry.bind_config_api(lambda: sys.modules[__name__])
 
 register_stream_owner = _runtime_registry.register_stream_owner
 stream_owner_session_id = _runtime_registry.stream_owner_session_id
