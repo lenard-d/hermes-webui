@@ -1,10 +1,12 @@
-"""Compatibility checks for the external-notes route-domain extraction."""
+"""Architecture checks for the knowledge-backed notes HTTP adapter."""
+
+from __future__ import annotations
 
 from pathlib import Path
 
+import api.knowledge as knowledge
 import api.routes as routes
 from api.routes_parts import notes_sources
-
 
 EXPECTED_EXPORTS = {
     "_webui_truthy",
@@ -33,69 +35,99 @@ EXPECTED_EXPORTS = {
 }
 
 
-def test_notes_part_declares_the_complete_coherent_export_surface():
+def test_notes_adapter_preserves_the_legacy_route_exports_without_rebinding():
     assert set(notes_sources.__routes_exports__) == EXPECTED_EXPORTS
-
-
-def test_notes_exports_remain_owned_by_routes_facade():
     for name in EXPECTED_EXPORTS:
-        value = getattr(routes, name)
-        if callable(value):
-            assert value.__module__ == "api.routes"
-            assert value.__globals__ is vars(routes)
-        else:
-            assert value is getattr(notes_sources, name)
+        assert getattr(routes, name) is getattr(notes_sources, name)
+    assert notes_sources._handle_notes_search.__module__ == "api.routes_parts.notes_sources"
+    assert notes_sources._handle_notes_search.__globals__ is vars(notes_sources)
 
 
-def test_joplin_search_keeps_routes_monkeypatch_seams(monkeypatch):
-    calls = []
-
-    monkeypatch.setattr(
-        routes,
-        "_joplin_api_get",
-        lambda path, params: calls.append((path, params))
-        or {
-            "items": [
-                {
-                    "id": "abc123def4567890",
-                    "title": "Patched result",
-                    "body": "A matching Hermes note",
-                    "parent_id": "parent",
-                    "updated_time": 42,
-                }
-            ]
-        },
-    )
-
-    [result] = routes._joplin_search_notes("Hermes", limit=3)
-
-    assert calls == [
-        (
-            "/search",
-            {
-                "query": "Hermes",
-                "type": "note",
-                "fields": "id,title,body,parent_id,updated_time",
-                "limit": 3,
-            },
-        )
-    ]
-    assert result["title"] == "Patched result"
+def test_notes_domain_interface_owns_discovery_search_and_parsing():
+    assert routes._notes_sources_from_mcp_inventory is knowledge.discover_note_sources
+    assert routes._note_snippet is knowledge.note_snippet
+    assert routes._script_path_from_config_value is knowledge.script_path_from_config_value
+    assert routes._joplin_search_notes is knowledge.search_joplin_notes
+    assert routes._joplin_get_note is knowledge.get_joplin_note
 
 
-def test_script_path_parser_resolves_shlex_through_routes_facade():
+def test_notes_knowledge_modules_do_not_import_route_facades():
+    package_dir = Path(knowledge.__file__).parent
+    for path in package_dir.glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        assert "api.routes" not in source
+        assert "routes_parts" not in source
+        assert "sys.modules" not in source
+
+
+def test_notes_adapter_is_transport_only_and_file_backed():
+    source = Path(notes_sources.__file__).read_text(encoding="utf-8")
+    assert "def _handle_notes_sources_list(" in source
+    assert "def _handle_notes_search(" in source
+    assert "def _handle_notes_item(" in source
+    assert "urlopen(" not in source
+    assert "read_text(" not in source
+    assert "exec(" not in source
+
+
+def test_script_path_parser_stays_available_through_route_compatibility():
     assert routes._script_path_from_config_value("python /tmp/recall.py") == Path(
         "/tmp/recall.py"
     )
 
 
-def test_notes_implementation_is_file_backed_and_mcp_crud_stays_in_facade():
-    part_source = Path(notes_sources.__file__).read_text(encoding="utf-8")
-    facade_source = Path(routes.__file__).read_text(encoding="utf-8")
+def test_active_knowledge_config_is_resolved_from_the_request_profile(monkeypatch, tmp_path):
+    from api import config, profiles
 
-    assert "def _handle_notes_item(" in part_source
-    assert "def _webui_truthy(" not in facade_source
-    assert "def _handle_notes_item(" not in facade_source
-    assert "def _handle_mcp_servers_list(" in facade_source
-    assert "def _handle_mcp_servers_list(" not in part_source
-    assert "exec(" not in part_source
+    profile_home = tmp_path / "profiles" / "research"
+    expected = {"mcp_servers": {"joplin": {"enabled": True}}}
+    captured = []
+    monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: profile_home)
+    monkeypatch.setattr(
+        config,
+        "get_config_for_profile_home",
+        lambda home: captured.append(Path(home)) or expected,
+    )
+
+    assert knowledge.active_config_snapshot() is expected
+    assert captured == [profile_home]
+
+
+def test_notes_list_adapter_projects_runtime_inventory_without_route_globals(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        notes_sources.knowledge,
+        "active_config_snapshot",
+        lambda: {
+            "webui_external_notes_sources": True,
+            "mcp_servers": {"joplin": {"enabled": True, "command": "joplin"}},
+        },
+    )
+    monkeypatch.setattr(
+        notes_sources,
+        "_mcp_runtime_status_by_name",
+        lambda: {"joplin": {"connected": True, "tools": 1}},
+    )
+    monkeypatch.setattr(
+        notes_sources,
+        "_mcp_tools_from_runtime_status",
+        lambda runtime, summaries: [
+            {
+                "server": "joplin",
+                "name": "search_notes",
+                "description": "Search notes token=secret-placeholder",
+            }
+        ],
+    )
+    monkeypatch.setattr(notes_sources.knowledge, "recent_ai_notes", lambda **kwargs: [])
+    monkeypatch.setattr(
+        notes_sources,
+        "j",
+        lambda handler, payload, **kwargs: captured.update(payload) or payload,
+    )
+
+    notes_sources._handle_notes_sources_list(object())
+
+    assert captured["source"] == "mcp_runtime_status"
+    assert captured["sources"][0]["name"] == "joplin"
+    assert "secret-placeholder" not in repr(captured["sources"])

@@ -2713,7 +2713,6 @@ def _handle_logs(handler, parsed) -> bool:
 
 # ── LLM Wiki status and filesystem owner ──────────────────────────────────────
 
-from api.routes_parts import llm_wiki as _llm_wiki_routes_part
 from api.routes_parts.llm_wiki import (  # noqa: F401 - compatibility facade re-exports
     _LLM_WIKI_DOCS_URL,
     _LLM_WIKI_PAGE_DIRS,
@@ -2743,8 +2742,6 @@ from api.routes_parts.llm_wiki import (  # noqa: F401 - compatibility facade re-
     _handle_llm_wiki_browse,
     _handle_llm_wiki_page,
 )
-
-_install_routes_part(globals(), _llm_wiki_routes_part)
 
 
 # ── Insights endpoint ──────────────────────────────────────────────────────────
@@ -10178,7 +10175,6 @@ from api.routes_parts.mcp_inventory import (  # noqa: F401 - compatibility facad
 _install_routes_part(globals(), _mcp_inventory_routes_part)
 del _mcp_inventory_routes_part
 
-from api.routes_parts import notes_sources as _notes_sources_routes_part
 from api.routes_parts.notes_sources import (  # noqa: F401 - compatibility facade re-exports
     _webui_truthy,
     _external_notes_sources_enabled,
@@ -10204,9 +10200,6 @@ from api.routes_parts.notes_sources import (  # noqa: F401 - compatibility facad
     _handle_notes_search,
     _handle_notes_item,
 )
-
-_install_routes_part(globals(), _notes_sources_routes_part)
-del _notes_sources_routes_part
 
 def _handle_mcp_servers_list(handler):
     """List configured MCP servers with safe, read-only runtime visibility."""

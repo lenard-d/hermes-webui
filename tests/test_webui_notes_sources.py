@@ -4,7 +4,7 @@ from tests.frontend_asset_contract import family_asset_paths, family_source
 
 
 def test_notes_sources_identifies_note_or_knowledge_mcp_servers():
-    from api.routes import _notes_sources_from_mcp_inventory
+    from api.knowledge import discover_note_sources
 
     servers = {
         "joplin": {"name": "joplin", "enabled": True, "active": True, "status": "healthy"},
@@ -18,7 +18,7 @@ def test_notes_sources_identifies_note_or_knowledge_mcp_servers():
         {"server": "llm-wiki", "name": "query_knowledge_base", "description": "Search wiki knowledge"},
     ]
 
-    sources = _notes_sources_from_mcp_inventory(servers, tools)
+    sources = discover_note_sources(servers, tools)
 
     assert [source["name"] for source in sources] == ["joplin", "llm-wiki"]
     assert sources[0]["label"] == "Joplin"
@@ -28,14 +28,14 @@ def test_notes_sources_identifies_note_or_knowledge_mcp_servers():
 
 
 def test_notes_sources_redacts_tool_descriptions_and_omits_plain_file_tools():
-    from api.routes import _notes_sources_from_mcp_inventory
+    from api.knowledge import discover_note_sources
 
     servers = {"notion": {"name": "notion", "enabled": True, "active": True, "status": "healthy"}}
     tools = [
         {"server": "notion", "name": "search_pages", "description": "Search notes api_key=redaction-test-placeholder"},
     ]
 
-    [source] = _notes_sources_from_mcp_inventory(servers, tools)
+    [source] = discover_note_sources(servers, tools)
 
     assert source["name"] == "notion"
     assert "token" not in source["tools"][0]["description"].lower()
@@ -43,7 +43,7 @@ def test_notes_sources_redacts_tool_descriptions_and_omits_plain_file_tools():
 
 
 def test_notes_sources_shows_configured_third_party_note_servers_without_tool_inventory():
-    from api.routes import _notes_sources_from_mcp_inventory
+    from api.knowledge import discover_note_sources
 
     servers = {
         "joplin": {"name": "joplin", "enabled": True, "active": False, "status": "configured"},
@@ -53,7 +53,7 @@ def test_notes_sources_shows_configured_third_party_note_servers_without_tool_in
         "filesystem": {"name": "filesystem", "enabled": True, "active": True, "status": "healthy"},
     }
 
-    sources = _notes_sources_from_mcp_inventory(servers, [])
+    sources = discover_note_sources(servers, [])
 
     assert [source["name"] for source in sources] == ["joplin", "llm-wiki", "notion", "obsidian"]
     by_name = {source["name"]: source for source in sources}
@@ -68,27 +68,33 @@ def test_notes_sources_shows_configured_third_party_note_servers_without_tool_in
 
 
 def test_external_notes_sources_drawer_is_default_off(monkeypatch):
-    from api import routes
+    from api.knowledge import external_notes_sources_enabled
 
     monkeypatch.delenv("HERMES_WEBUI_EXTERNAL_NOTES_SOURCES", raising=False)
 
-    assert routes._external_notes_sources_enabled({}) is False
-    assert routes._external_notes_sources_enabled({"webui_external_notes_sources": False}) is False
+    assert external_notes_sources_enabled({}, environ={}) is False
+    assert external_notes_sources_enabled(
+        {"webui_external_notes_sources": False}, environ={}
+    ) is False
 
 
 def test_external_notes_sources_drawer_can_be_enabled_by_config_or_env(monkeypatch):
-    from api import routes
+    from api.knowledge import external_notes_sources_enabled
 
     monkeypatch.delenv("HERMES_WEBUI_EXTERNAL_NOTES_SOURCES", raising=False)
-    assert routes._external_notes_sources_enabled({"webui_external_notes_sources": True}) is True
-    assert routes._external_notes_sources_enabled({"external_notes_sources": "yes"}) is True
+    assert external_notes_sources_enabled(
+        {"webui_external_notes_sources": True}, environ={}
+    ) is True
+    assert external_notes_sources_enabled({"external_notes_sources": "yes"}, environ={}) is True
 
     monkeypatch.setenv("HERMES_WEBUI_EXTERNAL_NOTES_SOURCES", "1")
-    assert routes._external_notes_sources_enabled({}) is True
+    assert external_notes_sources_enabled(
+        {}, environ={"HERMES_WEBUI_EXTERNAL_NOTES_SOURCES": "1"}
+    ) is True
 
 
 def test_joplin_search_notes_returns_safe_snippets(monkeypatch):
-    from api import routes
+    from api.knowledge import search_joplin_notes
 
     def fake_get(path, params=None):
         assert path == "/search"
@@ -101,9 +107,8 @@ def test_joplin_search_notes_returns_safe_snippets(monkeypatch):
             "updated_time": 123,
         }]}
 
-    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
-
-    results = routes._joplin_search_notes("Hermes")
+    adapter = type("Adapter", (), {"get": staticmethod(fake_get)})()
+    results = search_joplin_notes("Hermes", adapter=adapter)
 
     assert results == [{
         "id": "abc123def4567890",
@@ -116,7 +121,7 @@ def test_joplin_search_notes_returns_safe_snippets(monkeypatch):
 
 
 def test_joplin_get_note_validates_id_and_truncates_body(monkeypatch):
-    from api import routes
+    from api.knowledge import get_joplin_note
 
     def fake_get(path, params=None):
         assert path == "/notes/abc123def4567890"
@@ -129,9 +134,8 @@ def test_joplin_get_note_validates_id_and_truncates_body(monkeypatch):
             "created_time": 123,
         }
 
-    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
-
-    note = routes._joplin_get_note("abc123def4567890")
+    adapter = type("Adapter", (), {"get": staticmethod(fake_get)})()
+    note = get_joplin_note("abc123def4567890", adapter=adapter)
 
     assert note["title"] == "Big Note"
     assert note["source"] == "joplin"
@@ -151,20 +155,21 @@ def test_joplin_api_get_converts_bare_timeout_to_valueerror(monkeypatch):
     log). It must be converted to a "not reachable" ValueError at the route.
     """
     import pytest
-    from api import routes
+    from api.knowledge import JoplinHTTPAdapter
 
     def fake_urlopen(request, timeout):
         raise TimeoutError("timed out")
 
-    monkeypatch.setattr(routes, "_joplin_connection_from_config", lambda: ("http://127.0.0.1:41184", "secret-token"))
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
     with pytest.raises(ValueError, match="not reachable"):
-        routes._joplin_api_get("/search", {"query": "hello world"})
+        JoplinHTTPAdapter("http://127.0.0.1:41184", "secret-token").get(
+            "/search", {"query": "hello world"}
+        )
 
 
 def test_joplin_api_get_sends_header_and_query_token_for_clip_search_compat(monkeypatch):
-    from api import routes
+    from api.knowledge import JoplinHTTPAdapter
 
     captured = {}
 
@@ -184,10 +189,11 @@ def test_joplin_api_get_sends_header_and_query_token_for_clip_search_compat(monk
         captured["timeout"] = timeout
         return FakeResponse()
 
-    monkeypatch.setattr(routes, "_joplin_connection_from_config", lambda: ("http://127.0.0.1:41184", "secret-token"))
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
-    data = routes._joplin_api_get("/search", {"query": "hello world"})
+    data = JoplinHTTPAdapter("http://127.0.0.1:41184", "secret-token").get(
+        "/search", {"query": "hello world"}
+    )
 
     assert data == {"ok": True}
     assert captured["timeout"] == 8
@@ -197,7 +203,7 @@ def test_joplin_api_get_sends_header_and_query_token_for_clip_search_compat(monk
 
 
 def test_joplin_api_get_keeps_non_search_token_out_of_url(monkeypatch):
-    from api import routes
+    from api.knowledge import JoplinHTTPAdapter
 
     captured = {}
 
@@ -216,10 +222,11 @@ def test_joplin_api_get_keeps_non_search_token_out_of_url(monkeypatch):
         captured["authorization"] = request.get_header("Authorization")
         return FakeResponse()
 
-    monkeypatch.setattr(routes, "_joplin_connection_from_config", lambda: ("http://127.0.0.1:41184", "secret-token"))
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
-    routes._joplin_api_get("/notes", {"query": "hello world"})
+    JoplinHTTPAdapter("http://127.0.0.1:41184", "secret-token").get(
+        "/notes", {"query": "hello world"}
+    )
 
     assert "token=" not in captured["url"]
     assert "query=hello+world" in captured["url"]
@@ -227,7 +234,7 @@ def test_joplin_api_get_keeps_non_search_token_out_of_url(monkeypatch):
 
 
 def test_joplin_recent_ai_notes_uses_configured_prefill_script(monkeypatch, tmp_path):
-    from api import routes
+    from api.knowledge import recent_ai_notes
 
     script = tmp_path / "joplin_context.py"
     script.write_text(
@@ -239,8 +246,6 @@ def test_joplin_recent_ai_notes_uses_configured_prefill_script(monkeypatch, tmp_
         ]),
         encoding="utf-8",
     )
-    monkeypatch.setattr(routes, "get_config", lambda: {"prefill_messages_script": str(script)})
-
     def fake_get(path, params=None):
         note_id = path.rsplit("/", 1)[-1]
         titles = {
@@ -251,9 +256,12 @@ def test_joplin_recent_ai_notes_uses_configured_prefill_script(monkeypatch, tmp_
         assert note_id in titles
         return {"id": note_id, "title": titles[note_id], "updated_time": 123, "parent_id": "folder"}
 
-    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
-
-    notes = routes._joplin_recent_ai_notes(limit=3)
+    adapter = type("Adapter", (), {"get": staticmethod(fake_get)})()
+    notes = recent_ai_notes(
+        limit=3,
+        config={"prefill_messages_script": str(script)},
+        adapter=adapter,
+    )
 
     assert [note["title"] for note in notes] == ["Current Context", "Open Issues", "Agent Memory"]
     assert all(note["source"] == "joplin" for note in notes)
@@ -262,7 +270,7 @@ def test_joplin_recent_ai_notes_uses_configured_prefill_script(monkeypatch, tmp_
 
 
 def test_joplin_recent_ai_notes_prefers_webui_prefill_script_hook(monkeypatch, tmp_path):
-    from api import routes
+    from api.knowledge import recent_ai_notes
 
     legacy_script = tmp_path / "legacy_context.py"
     legacy_script.write_text('CURRENT_CONTEXT_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n', encoding="utf-8")
@@ -272,10 +280,10 @@ def test_joplin_recent_ai_notes_prefers_webui_prefill_script_hook(monkeypatch, t
         'OPEN_ISSUES_ID = "623aeb6e55cb4aa39a0541f2ac09aa36"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(routes, "get_config", lambda: {
+    config = {
         "prefill_messages_script": str(legacy_script),
         "webui_prefill_messages_script": ["python3", str(webui_script)],
-    })
+    }
 
     def fake_get(path, params=None):
         note_id = path.rsplit("/", 1)[-1]
@@ -286,21 +294,19 @@ def test_joplin_recent_ai_notes_prefers_webui_prefill_script_hook(monkeypatch, t
         }
         return {"id": note_id, "title": titles[note_id], "updated_time": 123, "parent_id": "folder"}
 
-    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
-
-    notes = routes._joplin_recent_ai_notes(limit=2)
+    adapter = type("Adapter", (), {"get": staticmethod(fake_get)})()
+    notes = recent_ai_notes(limit=2, config=config, adapter=adapter)
 
     assert [note["title"] for note in notes] == ["Current Context", "Open Issues"]
 
 
 def test_joplin_recent_ai_notes_mirrors_webui_prefill_env_hook(monkeypatch, tmp_path):
-    from api import routes
+    from api.knowledge import recent_ai_notes
 
     legacy_script = tmp_path / "legacy_context.py"
     legacy_script.write_text('CURRENT_CONTEXT_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n', encoding="utf-8")
     env_script = tmp_path / "env context.py"
     env_script.write_text('CURRENT_CONTEXT_ID = "5ba9ab822c344115939205ca4e8eaec0"\n', encoding="utf-8")
-    monkeypatch.setattr(routes, "get_config", lambda: {"prefill_messages_script": str(legacy_script)})
     monkeypatch.setenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT", f'python3 "{env_script}"')
 
     def fake_get(path, params=None):
@@ -308,21 +314,24 @@ def test_joplin_recent_ai_notes_mirrors_webui_prefill_env_hook(monkeypatch, tmp_
         assert note_id != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         return {"id": note_id, "title": "Current Context", "updated_time": 123, "parent_id": "folder"}
 
-    monkeypatch.setattr(routes, "_joplin_api_get", fake_get)
-
-    notes = routes._joplin_recent_ai_notes(limit=1)
+    adapter = type("Adapter", (), {"get": staticmethod(fake_get)})()
+    notes = recent_ai_notes(
+        limit=1,
+        config={"prefill_messages_script": str(legacy_script)},
+        adapter=adapter,
+    )
 
     assert [note["title"] for note in notes] == ["Current Context"]
 
 
 def test_prefill_script_path_keeps_plain_existing_paths_with_spaces(tmp_path):
-    from api import routes
+    from api.knowledge import script_path_from_config_value
 
     script = tmp_path / "context scripts" / "recall.py"
     script.parent.mkdir()
     script.write_text('CURRENT_CONTEXT_ID = "5ba9ab822c344115939205ca4e8eaec0"\n', encoding="utf-8")
 
-    assert routes._script_path_from_config_value(str(script)) == script
+    assert script_path_from_config_value(str(script)) == script
 
 
 

@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from api.config import get_config_for_profile_home
-    from api.helpers import _redact_text, j
-    from api.profiles import get_active_hermes_home
+from api.config import get_config_for_profile_home
+from api.helpers import _redact_text, j
+from api.profiles import get_active_hermes_home
 
 
 def _mask_secrets(obj):
