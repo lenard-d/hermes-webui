@@ -66,9 +66,15 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       background_process_parts/ Completion-event and deferred-wakeup lifecycle owners
       config/              Compatibility package plus config I/O, discovery, routing,
                            settings, reasoning, snapshot, and catalog-state owners
+        environment.py     Profile-scoped thread environment and restoration invariant
+        gateway_capabilities.py Gateway capability probing and bounded cache
+        media_types.py     Shared file-size and MIME/extension policy
         model_catalog.py   Complete model discovery/catalog lifecycle; intentionally kept cohesive
+        model_resolution.py Selected model/provider routing and connection resolution
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
         model_cache.py     Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
+        session_limits.py  Bounded compact-session cache policy
+        toolsets.py        CLI toolset normalization and platform resolution
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       http/                Explicit HTTP composition root and semantic transport owners
         router.py          Method dispatch across independently importable route groups
@@ -371,12 +377,28 @@ larger migration remains incremental:
   parallel field-copy blocks.
 - `api/stream_channel.py` owns bounded live-turn event fan-out, offline replay,
   slow-subscriber backpressure, event cursors, and non-sensitive diagnostics.
-  `api.config` re-exports its Interface for compatibility but no longer contains
-  the queueing Implementation.
+  `api.config` re-exports this Interface through the public adapter for
+  compatibility but no longer imports the private `api.runs` owner or contains
+  the queueing Implementation. Runtime-state compatibility aliases follow the
+  same direction through `api/runtime_state.py`; their object identities remain
+  the canonical owner objects.
 - `api/config/static_catalog.py` owns the static provider display names, aliases,
   and fallback model rows. `api/model_catalog.py` is a compatibility export.
   Runtime discovery works on private copies so seeding from Hermes Agent cannot
   mutate the static catalog shared with provider management.
+- `api/config/model_resolution.py` owns selected-model/provider routing;
+  `gateway_capabilities.py` owns capability probe caching; `environment.py`
+  owns profile-scoped thread environment restoration; and `media_types.py`,
+  `toolsets.py`, and `session_limits.py` own their compact policy domains. The
+  package entrypoint re-exports these Interfaces and resolves mutable facade
+  state at call time where profile switching or compatibility monkeypatches
+  require it.
+- `api/agent_cache.py` is the temporary one-operation Adapter for cached-agent
+  eviction. It prevents `api.config` from reaching into session lifecycle
+  internals while cache storage remains on the compatibility facade. Remove the
+  Adapter and move operation plus storage together under `api.runs` after the
+  unchanged route and test callers stop importing the cache through
+  `api.config`.
 - `api/insights.py` owns usage aggregation across the WebUI session index and
   Hermes `state.db`. Its Interface accepts query text and storage collaborators
   and returns a payload; the route wrapper only supplies those values and

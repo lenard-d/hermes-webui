@@ -4,7 +4,21 @@ from dataclasses import replace
 from pathlib import Path
 
 import api.config as config
-from api.config import catalog_state, hooks, io, model_cache, model_catalog, snapshot
+from api import runtime_state, stream_channel
+from api.config import (
+    catalog_state,
+    environment,
+    gateway_capabilities,
+    hooks,
+    io,
+    media_types,
+    model_cache,
+    model_catalog,
+    model_resolution,
+    session_limits,
+    snapshot,
+    toolsets,
+)
 
 
 def test_package_entrypoint_has_no_binding_dispatch():
@@ -18,6 +32,22 @@ def test_config_reexports_real_owner_functions():
     assert config.get_config is io.get_config
     assert config._get_models_cache_path is model_cache._get_models_cache_path
     assert config.get_available_models is model_catalog.get_available_models
+    assert config.resolve_model_provider is model_resolution.resolve_model_provider
+    assert config.get_gateway_caps is gateway_capabilities.get_gateway_caps
+    assert config.thread_env_scope is environment.thread_env_scope
+    assert config.MAX_UPLOAD_BYTES is media_types.MAX_UPLOAD_BYTES
+    assert config.resolve_cli_toolsets is toolsets.resolve_cli_toolsets
+    assert config.get_sessions_cache_max is session_limits.get_sessions_cache_max
+
+
+def test_config_entrypoint_uses_public_runtime_and_channel_adapters():
+    source = Path(config.__file__).read_text(encoding="utf-8")
+    assert "from api.runs.channels" not in source
+    assert "from api.runs.runtime_state" not in source
+    assert "from api.sessions.lifecycle" not in source
+    assert config.RUNTIME_STATE is runtime_state.RUNTIME_STATE
+    assert config.ACTIVE_RUNS is runtime_state.ACTIVE_RUNS
+    assert config.StreamChannel is stream_channel.StreamChannel
 
 
 def test_model_catalog_state_has_one_canonical_owner():

@@ -6,7 +6,6 @@ from tests.frontend_asset_contract import family_source
 
 
 WORKSPACE_JS = family_source("workspace")
-CONFIG_PY = Path("api/config/__init__.py").read_text(encoding="utf-8")
 
 
 def _open_file_block() -> str:
@@ -34,7 +33,11 @@ def test_large_markdown_preview_limits_are_source_controlled():
 
 
 def test_backend_file_read_limit_allows_plain_text_markdown_fallback():
-    assert "MAX_FILE_BYTES = 400_000" in CONFIG_PY
+    from api.config import MAX_FILE_BYTES
+    from api.config.media_types import MAX_FILE_BYTES as OWNED_MAX_FILE_BYTES
+
+    assert MAX_FILE_BYTES is OWNED_MAX_FILE_BYTES
+    assert MAX_FILE_BYTES >= 400_000
 
 
 def test_large_markdown_force_render_affordance_exists():
