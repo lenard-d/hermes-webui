@@ -338,3 +338,71 @@ def test_stale_user_public_helpers_keep_streaming_module_identity():
     )
 
     assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_compression_marker_observes_facade_classifier(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "is_context_compression_marker",
+        lambda message: message == "patched marker",
+    )
+
+    assert streaming._is_context_compression_marker("patched marker")
+    assert not streaming._is_context_compression_marker("other")
+
+
+def test_compression_summary_observes_facade_helpers(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_is_context_compression_marker",
+        lambda message: message.get("marker") is True,
+    )
+    monkeypatch.setattr(
+        streaming,
+        "_message_text",
+        lambda content: seen.append(content) or f"visible:{content}",
+    )
+
+    result = streaming._compression_summary_from_messages([
+        {"role": "assistant", "content": "ignored"},
+        {"role": "assistant", "content": "summary", "marker": True},
+    ])
+
+    assert result == "visible:summary"
+    assert seen == ["summary"]
+
+
+def test_drop_checkpointed_user_observes_facade_identity(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_message_identity",
+        lambda message: seen.append(message) or message.get("content"),
+    )
+    history = [
+        {"role": "assistant", "content": "before"},
+        {"role": "user", "content": "current"},
+    ]
+
+    assert streaming._drop_checkpointed_current_user_from_context(
+        history,
+        "current",
+    ) == history[:-1]
+    assert seen == [
+        {"role": "user", "content": "current"},
+        history[-1],
+    ]
+
+
+def test_compression_anchor_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._is_context_compression_marker,
+        streaming._compact_summary_text,
+        streaming._compression_anchor_message_key,
+        streaming._compression_summary_from_messages,
+        streaming._find_current_user_turn,
+        streaming._drop_checkpointed_current_user_from_context,
+    )
+
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
