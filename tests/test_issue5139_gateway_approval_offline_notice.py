@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_source
-
 import io
 import json
+import shutil
+import subprocess
 import urllib.error
 from collections import OrderedDict
 from pathlib import Path
@@ -18,7 +18,7 @@ from api.gateway_chat import _run_gateway_chat_streaming
 
 REPO = Path(__file__).resolve().parents[1]
 GATEWAY_CHAT = (REPO / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
-MESSAGES_JS = family_source("messages")
+MESSAGES_STREAM_MODULE = REPO / "static" / "modules" / "messages" / "stream.js"
 
 
 def _gateway_session(tmp_path, monkeypatch, *, session_id: str, stream_id: str):
@@ -249,11 +249,97 @@ def test_gateway_chat_keeps_unsupported_warning_for_timeout_capabilities_probe(t
 
 
 def test_messages_js_handles_offline_warning_without_touching_unsupported_branch():
-    assert "d.type==='approval_gateway_offline'" in MESSAGES_JS
-    assert "Gateway offline" in MESSAGES_JS
-    assert "d.type==='approval_gateway_unsupported'" in MESSAGES_JS
-    assert "Approvals not supported" in MESSAGES_JS
-    assert "setComposerStatus(`${d.message||'Warning'}`);" in MESSAGES_JS
+    node = shutil.which("node")
+    if node is None:
+        return
+
+    runner = f"""
+globalThis.window=globalThis;
+globalThis.document={{
+  baseURI:'http://localhost/',hidden:false,visibilityState:'visible',wasDiscarded:false,
+  addEventListener(){{}},removeEventListener(){{}},getElementById(){{return null;}},
+  querySelector(){{return null;}},querySelectorAll(){{return [];}}
+}};
+globalThis.location={{href:'http://localhost/'}};
+globalThis.addEventListener=()=>{{}};
+globalThis.removeEventListener=()=>{{}};
+globalThis.S={{session:{{session_id:'sid-1'}},messages:[],activeStreamId:'stream-1',todos:[]}};
+globalThis.INFLIGHT={{}};
+globalThis.api=async()=>({{}});
+
+let toasts=[];
+let statuses=[];
+let translations=[];
+globalThis.showToast=(...args)=>toasts.push(args);
+globalThis.setComposerStatus=(value)=>statuses.push(value);
+globalThis.t=(key)=>{{translations.push(key);return 'Approvals not supported';}};
+
+class FakeEventSource {{
+  static instances=[];
+  static OPEN=1;
+  static CONNECTING=0;
+  static CLOSED=2;
+  constructor(url){{
+    this.url=url;
+    this.listeners=Object.create(null);
+    this.readyState=FakeEventSource.OPEN;
+    FakeEventSource.instances.push(this);
+  }}
+  addEventListener(name,listener){{(this.listeners[name]??=[]).push(listener);}}
+  emit(name,data){{
+    for(const listener of this.listeners[name]??[]){{
+      listener({{data:JSON.stringify(data),lastEventId:''}});
+    }}
+  }}
+  close(){{this.readyState=FakeEventSource.CLOSED;}}
+}}
+globalThis.EventSource=FakeEventSource;
+
+const {{attachLiveStream}}=await import({json.dumps(MESSAGES_STREAM_MODULE.as_uri())});
+attachLiveStream('sid-1','stream-1');
+await Promise.resolve();
+const source=FakeEventSource.instances[0];
+if(!source) throw new Error('stream owner did not create an EventSource');
+
+function emitWarning(data){{
+  toasts=[];
+  statuses=[];
+  translations=[];
+  source.emit('warning',data);
+  return {{toasts,statuses,translations}};
+}}
+
+console.log(JSON.stringify({{
+  offline:emitWarning({{
+    type:'approval_gateway_offline',
+    message:'Gateway connection failed.',
+  }}),
+  unsupported:emitWarning({{
+    type:'approval_gateway_unsupported',
+    message:'Upgrade the gateway.',
+  }}),
+}}));
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", runner],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    observed = json.loads(result.stdout)
+
+    assert observed["offline"] == {
+        "toasts": [["Gateway connection failed.", 4000, "warning"]],
+        "statuses": [],
+        "translations": [],
+    }
+    assert observed["unsupported"] == {
+        "toasts": [["Approvals not supported", 4000, "warning"]],
+        "statuses": [],
+        "translations": ["approval_gateway_unsupported_label"],
+    }
 
 
 def test_gateway_chat_source_mentions_offline_warning_type():
