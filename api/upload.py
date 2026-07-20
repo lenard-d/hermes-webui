@@ -5,12 +5,14 @@ import mimetypes
 import os
 import re as _re
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 
 from api.config import MAX_UPLOAD_BYTES, STATE_DIR
 from api.helpers import j
 from api.models import get_session
 from api.profiles import _profiles_match, get_active_profile_name as _get_active_profile_name
+from api.session_repository import session_write_owner
 from api.workspace import (
     safe_resolve_ws,
     resolve_trusted_workspace,
@@ -217,23 +219,26 @@ def handle_upload(handler):
         filename, file_bytes = files['file']
         if not filename:
             return j(handler, {'error': 'No filename in upload'}, status=400)
+        owner = ExitStack()
         try:
-            s = get_session(session_id)
+            s = owner.enter_context(session_write_owner(session_id))
         except KeyError:
+            owner.close()
             return j(handler, {'error': 'Session not found'}, status=404)
-        if _reject_invisible_session(handler, s):
-            return True
-        safe_name = _sanitize_upload_name(filename)
-        dest = _upload_destination(session_id, safe_name)
-        dest.write_bytes(file_bytes)
-        mime = mimetypes.guess_type(safe_name)[0] or 'application/octet-stream'
-        return j(handler, {
-            'filename': dest.name,
-            'path': str(dest),
-            'size': dest.stat().st_size,
-            'mime': mime,
-            'is_image': mime.startswith('image/'),
-        })
+        with owner:
+            if _reject_invisible_session(handler, s):
+                return True
+            safe_name = _sanitize_upload_name(filename)
+            dest = _upload_destination(session_id, safe_name)
+            dest.write_bytes(file_bytes)
+            mime = mimetypes.guess_type(safe_name)[0] or 'application/octet-stream'
+            return j(handler, {
+                'filename': dest.name,
+                'path': str(dest),
+                'size': dest.stat().st_size,
+                'mime': mime,
+                'is_image': mime.startswith('image/'),
+            })
     except ValueError as e:
         return j(handler, {'error': str(e)}, status=400)
     except Exception:
@@ -395,16 +400,19 @@ def handle_upload_extract(handler):
         filename, file_bytes = files['file']
         if not filename:
             return j(handler, {'error': 'No filename in upload'}, status=400)
+        owner = ExitStack()
         try:
-            s = get_session(session_id)
+            s = owner.enter_context(session_write_owner(session_id))
         except KeyError:
+            owner.close()
             return j(handler, {'error': 'Session not found'}, status=404)
-        if _reject_invisible_session(handler, s):
-            return True
-        session_dir = _session_attachment_dir(session_id)
-        session_dir.mkdir(parents=True, exist_ok=True)
-        result = extract_archive(file_bytes, filename, session_dir)
-        return j(handler, {'ok': True, **result})
+        with owner:
+            if _reject_invisible_session(handler, s):
+                return True
+            session_dir = _session_attachment_dir(session_id)
+            session_dir.mkdir(parents=True, exist_ok=True)
+            result = extract_archive(file_bytes, filename, session_dir)
+            return j(handler, {'ok': True, **result})
     except ValueError as e:
         return j(handler, {'error': str(e)}, status=400)
     except Exception:

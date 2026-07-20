@@ -458,13 +458,25 @@ def commit_stream_writeback(
 
 
 @contextmanager
-def admission_write_owner(sid: str, *, session: object | None = None) -> Iterator[object]:
-    """Yield admission's authoritative session unless a durable delete won."""
+def session_write_owner(sid: str, *, session: object | None = None) -> Iterator[object]:
+    """Yield authoritative session-owned state unless a durable delete won.
+
+    The owner covers side effects that belong to the session as well as sidecar
+    mutation.  Callers therefore serialize with ``delete_session_state`` and
+    re-resolve durable truth only after acquiring the same per-session lock.
+    """
     with _default_repository().write_owner(
         sid,
         session=session,
         reject_when=lambda: session_deleted_for_write(sid),
     ) as current:
+        yield current
+
+
+@contextmanager
+def admission_write_owner(sid: str, *, session: object | None = None) -> Iterator[object]:
+    """Yield admission's authoritative session unless a durable delete won."""
+    with session_write_owner(sid, session=session) as current:
         yield current
 
 
