@@ -5,14 +5,18 @@ from pathlib import Path
 
 
 STREAMING_PY = Path(__file__).parent.parent / "api" / "streaming.py"
-LOCAL_RUN_PY = Path(__file__).parent.parent / "api" / "runs" / "local.py"
+LOCAL_RUN_PY = Path(__file__).parent.parent / "api" / "runs" / "local_events.py"
 
 
 def _emit_todo_state_calls() -> list[ast.Call]:
     tree = ast.parse(LOCAL_RUN_PY.read_text(encoding="utf-8"))
     calls: list[ast.Call] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "emit_todo_state":
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "emit_todo_state"
+        ):
             calls.append(node)
     return calls
 
@@ -40,6 +44,6 @@ def test_streaming_emits_todo_state_on_both_tool_callback_shapes():
 def test_streaming_prefers_full_tool_result_when_available():
     src = LOCAL_RUN_PY.read_text(encoding="utf-8")
 
-    assert "cb_kwargs.get('result')" in src
+    assert 'callback_kwargs.get("result")' in src
     assert "else preview" in src
     assert "function_result=function_result" in src

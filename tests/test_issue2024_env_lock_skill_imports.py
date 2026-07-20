@@ -17,11 +17,10 @@ hermes-agent package which may not be installed in the test venv.
 """
 import ast
 import pathlib
-import textwrap
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 STREAMING_PY = REPO / "api" / "streaming.py"
-LOCAL_RUN_PY = REPO / "api" / "runs" / "local.py"
+LOCAL_RUN_PY = REPO / "api" / "runs" / "local_environment.py"
 PROFILES_PY = REPO / "api" / "profiles" / "__init__.py"
 
 
@@ -49,7 +48,12 @@ def _find_env_lock_with_bodies(source: str) -> list[list[ast.stmt]]:
             # Check whether any context-expression is a simple Name `_ENV_LOCK`
             for item in node.items:
                 ctx = item.context_expr
-                if isinstance(ctx, ast.Name) and ctx.id == "_ENV_LOCK":
+                is_env_lock = (
+                    isinstance(ctx, ast.Name) and ctx.id == "_ENV_LOCK"
+                ) or (
+                    isinstance(ctx, ast.Attribute) and ctx.attr == "_ENV_LOCK"
+                )
+                if is_env_lock:
                     bodies.append(node.body)
                     break
             self.generic_visit(node)
@@ -129,7 +133,7 @@ class TestPrewarmHelperExists:
         for i, line in enumerate(lines, 1):
             if "_prewarm_skill_tool_modules()" in line and prewarm_line is None:
                 prewarm_line = i
-            if "with _ENV_LOCK:" in line and first_env_lock_line is None:
+            if "with self.api._ENV_LOCK:" in line and first_env_lock_line is None:
                 first_env_lock_line = i
         assert prewarm_line is not None, "_prewarm_skill_tool_modules() call not found"
         assert first_env_lock_line is not None, "with _ENV_LOCK: not found"
@@ -153,7 +157,7 @@ class TestSysModulesLookupInEnvLock:
         depth = 0
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith("with _ENV_LOCK:"):
+            if stripped.startswith("with self.api._ENV_LOCK:"):
                 in_lock = True
                 depth = 0
                 continue

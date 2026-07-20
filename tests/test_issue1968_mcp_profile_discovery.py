@@ -18,7 +18,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_RUN_PY = (
-    ROOT / "api" / "runs" / "local.py"
+    ROOT / "api" / "runs" / "local_environment.py"
 ).read_text(encoding="utf-8")
 
 
@@ -27,7 +27,7 @@ def _line_of(pattern: str) -> int:
     for idx, line in enumerate(LOCAL_RUN_PY.splitlines(), start=1):
         if re.search(pattern, line):
             return idx
-    raise AssertionError(f"pattern not found in api/runs/local.py: {pattern!r}")
+    raise AssertionError(f"pattern not found in local_environment.py: {pattern!r}")
 
 
 def test_discover_mcp_tools_called_after_hermes_home_mutation():
@@ -35,7 +35,7 @@ def test_discover_mcp_tools_called_after_hermes_home_mutation():
     `HERMES_HOME = _profile_home` assignment, otherwise non-default profile
     MCP servers are never discovered.
     """
-    home_set_line = _line_of(r"os\.environ\['HERMES_HOME'\]\s*=\s*_profile_home")
+    home_set_line = _line_of(r'os\.environ\["HERMES_HOME"\]\s*=\s*profile_home')
     discover_call_line = _line_of(r"discover_mcp_tools\(\)\s*$")
     assert discover_call_line > home_set_line, (
         f"discover_mcp_tools() at line {discover_call_line} must be AFTER the "
@@ -53,7 +53,7 @@ def test_discover_mcp_tools_called_after_env_lock_release():
     Lexical check: the discover call must come after the `# Lock released` marker
     that follows the `with _ENV_LOCK:` block.
     """
-    lock_release_marker = _line_of(r"# Lock released — agent runs without holding it")
+    lock_release_marker = _line_of(r"# Discovery intentionally happens after HERMES_HOME")
     discover_call_line = _line_of(r"discover_mcp_tools\(\)\s*$")
     assert discover_call_line > lock_release_marker, (
         f"discover_mcp_tools() at line {discover_call_line} should run AFTER "

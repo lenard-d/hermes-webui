@@ -12,7 +12,6 @@ from tests.frontend_asset_contract import family_source
 import ast
 import threading
 import pathlib
-import re
 import queue
 import sys
 import types
@@ -23,6 +22,12 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
     REPO_ROOT / "api" / "runs" / "local.py"
+).read_text(encoding="utf-8")
+LOCAL_AGENT_CONFIG_PY = (
+    REPO_ROOT / "api" / "runs" / "local_agent_config.py"
+).read_text(encoding="utf-8")
+LOCAL_EVENTS_PY = (
+    REPO_ROOT / "api" / "runs" / "local_events.py"
 ).read_text(encoding="utf-8")
 
 
@@ -128,14 +133,14 @@ class TestRuntimeRouteInjection(unittest.TestCase):
         so the WebUI degrades gracefully against older hermes-agent builds.
         """
         for snippet in (
-            "_agent_kwargs['api_mode'] = _rt.get('api_mode')",
-            "_agent_kwargs['acp_command'] = _rt.get('command')",
-            "_agent_kwargs['acp_args'] = _rt.get('args')",
-            "_agent_kwargs['credential_pool'] = _rt.get('credential_pool')",
+            '"api_mode": runtime.get("api_mode")',
+            '"acp_command": runtime.get("command")',
+            '"acp_args": runtime.get("args")',
+            '"credential_pool": runtime.get("credential_pool")',
         ):
             self.assertIn(
                 snippet,
-                LOCAL_RUN_PY,
+                LOCAL_AGENT_CONFIG_PY,
                 f"Missing defensive runtime route forwarding in local_run.py: {snippet}",
             )
 
@@ -730,16 +735,16 @@ def test_cleanTitle_is_let_not_const():
 # ── Sprint 42 additional tests: thinking panel persistence (#427) ────────
 def test_streaming_persists_reasoning_in_session():
     """streaming.py must accumulate reasoning and patch assistant messages."""
-    src = LOCAL_RUN_PY
+    src = LOCAL_RUN_PY + "\n" + LOCAL_EVENTS_PY
 
     # #3587: per-message reasoning segments replaced the flat _reasoning_text accumulator
-    assert "_reasoning_segments" in src, \
+    assert "reasoning_segments" in src, \
         "_reasoning_segments dict not found in streaming.py"
 
     # on_reasoning must accumulate non-echo reasoning into segments
-    assert '_reasoning_segments[_current_reasoning_idx]' in src or '_reasoning_segments.get(_current_reasoning_idx' in src, \
+    assert 'self.reasoning_segments[self.current_reasoning_idx]' in src, \
         "on_reasoning callback does not accumulate into per-message _reasoning_segments"
-    assert '_is_visible_output_echo(reasoning_delta)' in src, \
+    assert 'self._is_visible_output_echo(delta)' in src, \
         "on_reasoning callback should suppress reasoning deltas that only echo visible streamed output"
 
     # Persistence block must exist before raw_session is built

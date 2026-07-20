@@ -93,12 +93,13 @@ def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     sources = [
         open("api/streaming.py", encoding="utf-8").read(),
         open("api/runs/local.py", encoding="utf-8").read(),
+        open("api/runs/local_agent_cache.py", encoding="utf-8").read(),
         open("api/streaming_parts/live_controls.py", encoding="utf-8").read(),
     ]
 
     expected_markers = [
-        "_identity_mismatch_entry = SESSION_AGENT_CACHE.pop(session_id, None)",
-        "_stale_runtime_entry = SESSION_AGENT_CACHE.pop(session_id, None)",
+        "identity_mismatch = SESSION_AGENT_CACHE.pop(session_id, None)",
+        "stale = SESSION_AGENT_CACHE.pop(session_id, None)",
         "_skipped_agent_migration_entry = _cached_entry",
         "evicted_cached_entry = _cfg.SESSION_AGENT_CACHE.pop(sid, None)",
         "_evicted_entry = SESSION_AGENT_CACHE.pop(session_id, None)",
@@ -106,9 +107,17 @@ def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     for marker in expected_markers:
         assert any(marker in source for source in sources)
 
+    cache_owner = sources[2]
+    for variable in ("identity_mismatch", "stale"):
+        pop_idx = cache_owner.index(
+            f"{variable} = SESSION_AGENT_CACHE.pop(session_id, None)"
+        )
+        close_idx = cache_owner.index(
+            "api._close_cached_agent_entry_at_session_boundary(", pop_idx
+        )
+        assert pop_idx < close_idx
+
     close_markers = [
-        "_close_cached_agent_entry_at_session_boundary(session_id, _identity_mismatch_entry)",
-        "_close_cached_agent_entry_at_session_boundary(session_id, _stale_runtime_entry)",
         "_close_cached_agent_entry_at_session_boundary(old_sid, _skipped_agent_migration_entry)",
         "close_cached_agent_entry(sid, evicted_cached_entry)",
         "_close_cached_agent_entry_at_session_boundary(session_id, _evicted_entry)",

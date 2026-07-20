@@ -22,6 +22,7 @@ from api import streaming
 
 ROOT = Path(__file__).resolve().parents[1]
 STREAMING_PY = (ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+EVENT_OWNER_PY = (ROOT / "api" / "runs" / "local_events.py").read_text(encoding="utf-8")
 
 
 # The exact shape the Agent emits (agent/conversation_loop.py:3780) wrapping the
@@ -64,12 +65,12 @@ def test_no_response_reserved_for_genuinely_empty_completion():
 def test_status_callback_captures_terminal_error():
     """The status-callback bridge must capture a non-retryable terminal error
     into the turn-local container (not drop it like other lifecycle messages)."""
-    assert "_captured_terminal_error = [None]" in STREAMING_PY, (
+    assert "self.captured_terminal_error = [None]" in EVENT_OWNER_PY, (
         "the turn-local capture container must be declared before _agent_status_callback"
     )
     # capture condition matches the Agent's emitted 'non-retryable error (HTTP ...)' shape
-    assert "'non-retryable error' in _lower" in STREAMING_PY
-    assert "_captured_terminal_error[0] = _message" in STREAMING_PY
+    assert '"non-retryable error" in lowered' in EVENT_OWNER_PY
+    assert "self.captured_terminal_error[0] = text" in EVENT_OWNER_PY
 
 
 def test_captured_terminal_error_seeds_last_err_on_completion():

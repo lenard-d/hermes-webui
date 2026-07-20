@@ -443,25 +443,27 @@ def test_auto_compression_running_sse_uses_active_session_running_card():
 
 
 def test_agent_status_callback_emits_compressing_and_warning_events():
-    src = _read("api/runs/local.py")
+    src = _read("api/runs/local_events.py")
+    config_src = _read("api/runs/local_agent_config.py")
+    cache_src = _read("api/runs/local_agent_cache.py")
     runtime_src = _read("api/streaming_parts/runtime_resolution.py")
-    start = src.find("def _agent_status_callback")
+    start = src.find("def status(")
     assert start != -1, "agent status callback bridge not found"
-    end = src.find("# Initialised here", start)
+    end = src.find("def flush_reasoning", start)
     assert end != -1, "status callback block end marker not found"
     block = src[start:end]
 
     # compressing events only via the narrowed helper (no broad substring matcher)
-    assert "put('compressing'" in block
-    assert "'session_id': session_id" in block
-    assert "'message': 'Compressing context'" in block
-    assert "_is_agent_compression_start_status(_kind, _message)" in block
+    assert 'self.publish(\n                "compressing"' in block
+    assert '"session_id": self.session_id' in block
+    assert '"message": "Compressing context"' in block
+    assert "self.api._is_agent_compression_start_status(kind_text, text)" in block
     assert "or 'compressing' in _lower" not in block
     assert "or 'preflight compression' in _lower" not in block
 
     # warning events with type:fallback for rate-limit/fallback lifecycle notices
-    assert "put('warning'" in block
-    assert "'type': 'fallback'" in block
+    assert 'self.publish("warning"' in block
+    assert '"type": "fallback"' in block
     assert "'rate limited'" in runtime_src
     assert "'switching to fallback'" in runtime_src
     assert "'falling back'" in runtime_src
@@ -469,9 +471,8 @@ def test_agent_status_callback_emits_compressing_and_warning_events():
     assert "'trying fallback'" in runtime_src
 
     # Verify callback is wired to agent
-    assert "'status_callback' in _agent_params" in src
-    assert "_agent_kwargs['status_callback'] = _agent_status_callback" in src
-    assert "agent.status_callback = _agent_kwargs.get('status_callback')" in src
+    assert '"status_callback": callbacks.status' in config_src
+    assert '("status_callback", "status_callback")' in cache_src
 
 
 def test_agent_compression_start_status_matches_real_emitters_only():
@@ -546,9 +547,8 @@ def test_snapshot_anchor_hydration_does_not_invent_compressing_rows():
 
 
 def test_agent_status_callback_wiring():
-    src = _read("api/runs/local.py")
-    assert "_agent_status_callback" in src
-    assert "_agent_kwargs['status_callback'] = _agent_status_callback" in src
+    src = _read("api/runs/local_agent_config.py")
+    assert '"status_callback": callbacks.status' in src
 
 
 def test_fallback_lifecycle_message_predicate_matches_agent_emitters():

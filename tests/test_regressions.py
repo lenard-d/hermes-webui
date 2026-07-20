@@ -171,7 +171,7 @@ def test_streaming_py_imports_has_pending(cleanup_test_sessions):
     """R4: api/streaming.py must import an approval-check function.
     When missing, the approval check mid-stream caused NameError.
     """
-    src = (REPO_ROOT / "api/runs/local.py").read_text()
+    src = (REPO_ROOT / "api/runs/local_events.py").read_text()
     assert "has_blocking_approval" in src, "has_blocking_approval not found in local_run.py"
     assert "import" in src and "has_blocking_approval" in src, \
         "has_blocking_approval must be imported in local_run.py"
@@ -924,12 +924,13 @@ def test_streaming_bridge_accepts_current_tool_progress_callback_signature(clean
     The agent now calls tool_progress_callback(event_type, name, preview, args, **kwargs).
     If the WebUI bridge only accepts (name, preview, args), live tool updates silently vanish.
     """
-    src = (REPO_ROOT / "api/runs/local.py").read_text()
-    assert "def on_tool(*cb_args, **cb_kwargs):" in src, \
+    src = (REPO_ROOT / "api/runs/local_events.py").read_text()
+    assert "def tool(self, *callback_args, **callback_kwargs)" in src, \
         "streaming.py must accept variable callback args for tool progress events"
-    assert "reasoning_callback=on_reasoning" in src, \
+    config_src = (REPO_ROOT / "api/runs/local_agent_config.py").read_text()
+    assert '"reasoning_callback": callbacks.reasoning' in config_src, \
         "streaming.py must wire the agent's reasoning callback into the SSE bridge"
-    assert "put('tool_complete'" in src or 'put("tool_complete"' in src, \
+    assert '"tool_complete"' in src, \
         "streaming.py must emit live tool completion SSE events"
 
 
@@ -942,10 +943,10 @@ def test_streaming_reads_reasoning_effort_from_config_dict(cleanup_test_sessions
     regardless of what `/reasoning <level>` had been set to.  This static
     source assertion pins the fix because the runtime symptom is silent.
     """
-    src = (REPO_ROOT / "api/runs/local.py").read_text()
+    src = (REPO_ROOT / "api/runs/local_agent_config.py").read_text()
     assert "_cfg.cfg" not in src, \
         "get_config() returns a dict; accessing _cfg.cfg drops reasoning_config to None"
-    assert "_cfg.get('agent', {})" in src or '_cfg.get("agent", {})' in src, \
+    assert 'config.get("agent", {})' in src, \
         "streaming.py must read agent.reasoning_effort via the config dict"
 
 
@@ -956,12 +957,8 @@ def test_streaming_agent_cache_signature_includes_reasoning_config(cleanup_test_
     matches the old entry and the operator's `/reasoning xhigh` change has
     no effect on the live session.
     """
-    src = (REPO_ROOT / "api/runs/local.py").read_text()
-    start = src.find("_sig_blob = _json.dumps")
-    end = src.find("_agent_sig", start)
-    assert start >= 0 and end > start, "agent cache signature block not found"
-    sig_block = src[start:end]
-    assert "_reasoning_config" in sig_block, \
+    src = (REPO_ROOT / "api/runs/local_agent_cache.py").read_text()
+    assert "reasoning or {}" in src, \
         "agent cache signature must include reasoning_config so xhigh/medium changes take effect"
 
 

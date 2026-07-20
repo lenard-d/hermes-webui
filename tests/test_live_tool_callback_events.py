@@ -1,67 +1,47 @@
-from pathlib import Path
 from tests.frontend_asset_contract import family_source
-
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def _read(relpath: str) -> str:
-    return (ROOT / relpath).read_text(encoding="utf-8")
-
-
-def _function_block(src: str, name: str) -> str:
-    start = src.find(f"def {name}")
-    assert start != -1, f"{name} not found"
-    next_def = src.find("\n            def ", start + 1)
-    assert next_def != -1, f"end of {name} not found"
-    return src[start:next_def]
-
+from tests.test_local_run_modules import _translator
 
 def test_tool_start_callback_emits_existing_tool_sse_event_with_tool_id():
-    src = _read("api/runs/local.py")
-    block = _function_block(src, "on_tool_start")
-
-    assert "put('tool'" in block, (
-        "The dedicated Hermes Agent tool_start_callback must emit the existing "
-        "tool SSE event; otherwise WebUI stays visually silent while tools run."
-    )
-    assert "'event_type': 'tool.started'" in block
-    assert "'tid': tool_call_id" in block, (
-        "Live frontend cards need the tool_call_id so tool_complete can update "
-        "the running card in place."
-    )
-    assert "_live_tool_event_start_ids" in block, (
-        "Tool start SSE emission should be idempotent per callback id."
-    )
-    assert "start_runtime_tool_call(" in block
-    assert "tool_call_id=tool_call_id" in block
+    api, events, translator = _translator()
+    translator.tool_start("tool-1", "terminal", {"command": "pwd"})
+    translator.tool_start("tool-1", "terminal", {"command": "pwd"})
+    tool_events = [payload for event, payload in events if event == "tool"]
+    assert tool_events == [{
+        "event_type": "tool.started",
+        "name": "terminal",
+        "preview": None,
+        "args": {"command": "pwd"},
+        "tid": "tool-1",
+    }]
+    assert api._test_started[0][1]["tool_call_id"] == "tool-1"
 
 
 def test_tool_complete_callback_emits_existing_tool_complete_sse_event_with_tool_id():
-    src = _read("api/runs/local.py")
-    block = _function_block(src, "on_tool_complete")
-
-    assert "put('tool_complete'" in block, (
-        "The dedicated Hermes Agent tool_complete_callback must emit the existing "
-        "tool_complete SSE event so the frontend can settle the running tool card."
-    )
-    assert "'event_type': 'tool.completed'" in block
-    assert "'tid': tool_call_id" in block
-    assert "_live_tool_event_complete_ids" in block, (
-        "Tool completion SSE emission should be idempotent per callback id."
-    )
-    assert "result_snippet = _tool_result_snippet(function_result)" in block
-    assert "_checkpoint_activity[0] += 1" in block
+    api, events, translator = _translator()
+    translator.tool_complete("tool-1", "terminal", {}, "done")
+    translator.tool_complete("tool-1", "terminal", {}, "done")
+    complete_events = [payload for event, payload in events if event == "tool_complete"]
+    assert complete_events == [{
+        "event_type": "tool.completed",
+        "name": "terminal",
+        "preview": "done",
+        "args": {},
+        "tid": "tool-1",
+        "is_error": False,
+    }]
+    assert api._test_finished[0][1]["tool_call_id"] == "tool-1"
+    assert translator.checkpoint_activity == [1]
 
 
 def test_legacy_progress_events_are_suppressed_when_structured_callbacks_are_wired():
-    src = _read("api/runs/local.py")
-    block = _function_block(src, "on_tool")
-
-    assert "event_type in (None, 'tool.started') and 'tool_start_callback' in _agent_params" in block
-    assert "event_type == 'tool.completed' and 'tool_complete_callback' in _agent_params" in block
-    assert block.index("'tool_start_callback' in _agent_params") < block.index("put('tool'")
-    assert block.index("'tool_complete_callback' in _agent_params") < block.index("put('tool_complete'")
+    api, events, translator = _translator(
+        parameters={"tool_start_callback", "tool_complete_callback"}
+    )
+    translator.tool("tool.started", "terminal", None, {})
+    translator.tool("tool.completed", "terminal", "done", {})
+    assert not [event for event, _payload in events if event in {"tool", "tool_complete"}]
+    assert api._test_started == []
+    assert api._test_finished == []
 
 
 def test_tool_callback_events_keep_existing_frontend_event_contract():

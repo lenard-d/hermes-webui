@@ -28,12 +28,13 @@ def test_webui_injects_process_notifications_without_persisting_them_as_user_tex
 
 def test_webui_sets_gateway_session_platform_for_background_watchers():
     facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
-    run_src = Path("api/runs/local.py").read_text(encoding="utf-8")
+    run_src = Path("api/runs/local_environment.py").read_text(encoding="utf-8")
 
     assert "'HERMES_SESSION_PLATFORM': 'webui'" in facade_src
-    assert "os.environ['HERMES_SESSION_PLATFORM'] = 'webui'" in run_src
-    assert "old_session_platform = os.environ.get('HERMES_SESSION_PLATFORM')" in run_src
-    assert "os.environ.pop('HERMES_SESSION_PLATFORM', None)" in run_src
+    assert '"HERMES_SESSION_PLATFORM": "webui"' in run_src
+    assert "self._previous = {key: os.environ.get(key) for key in keys}" in run_src
+    assert "for key, value in self._previous.items():" in run_src
+    assert "self.api.os.environ.pop(key, None)" in run_src
 
 
 def test_webui_age_gates_stale_background_completion_events():

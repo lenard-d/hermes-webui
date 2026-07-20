@@ -262,10 +262,16 @@ console.log(JSON.stringify({
         local_run_py = (
             ROOT / "api" / "runs" / "local.py"
         ).read_text(encoding="utf-8")
+        config_owner_py = (
+            ROOT / "api" / "runs" / "local_agent_config.py"
+        ).read_text(encoding="utf-8")
+        cache_owner_py = (
+            ROOT / "api" / "runs" / "local_agent_cache.py"
+        ).read_text(encoding="utf-8")
         assert "_main_model_request_overrides" in local_run_py
-        assert "'request_overrides' in _agent_params" in local_run_py
-        assert "_agent_kwargs['request_overrides'] = _main_request_overrides" in local_run_py
-        assert "_main_request_overrides or {}" in local_run_py
+        assert '"request_overrides" in parameters' in config_owner_py
+        assert 'kwargs["request_overrides"] = request_overrides' in config_owner_py
+        assert "request_overrides or {}" in cache_owner_py
 
     def test_advanced_modal_uses_defined_theme_tokens_and_inline_button_styles(self):
         """The modal is appended outside #mainSettings, so scoped button CSS must not be required."""

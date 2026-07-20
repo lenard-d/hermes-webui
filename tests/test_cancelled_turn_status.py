@@ -169,7 +169,8 @@ class TestCancelledTurnPersistenceGuards:
 
         assert "_is_agent_result_terminal = _agent_result_terminal_failure(result)" in block
         assert "_is_agent_result_terminal" in block
-        assert "if _terminal_failure or (not _assistant_added and not _token_sent):" in block, (
+        assert "if _terminal_failure or (" in block
+        assert "not _assistant_added and not event_translator.token_sent" in block, (
             "Explicit terminal failures, including compression/tool-tail failures, must report "
             "an error even when interim progress already streamed."
         )

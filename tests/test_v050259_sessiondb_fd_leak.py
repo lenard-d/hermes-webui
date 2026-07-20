@@ -24,7 +24,6 @@ Policy now (``_adopt_session_db_for_cached_agent``):
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -39,18 +38,18 @@ def test_cached_agent_reuse_uses_adopt_helper():
     """Cached-agent reuse must go through `_adopt_session_db_for_cached_agent`
     so a still-open SessionDB is reused (subagent-safe) and only a dead handle
     is closed+replaced (still EMFILE-safe)."""
-    src = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "runs" / "local_agent_cache.py").read_text(encoding="utf-8")
 
-    reuse_idx = src.find("Refresh per-turn callbacks")
+    reuse_idx = src.find("if agent is not None:")
     assert reuse_idx != -1, "cached-agent reuse block missing"
     block = src[reuse_idx : reuse_idx + 2500]
 
-    assert "_adopt_session_db_for_cached_agent" in block, (
+    assert "api._adopt_session_db_for_cached_agent" in block, (
         "cached-agent reuse path must call _adopt_session_db_for_cached_agent "
         "instead of unconditionally closing agent._session_db. Unconditional "
         "close breaks background subagents that share the handle by reference."
     )
-    assert "agent._session_db = _session_db" in block, (
+    assert "agent._session_db = session_db" in block, (
         "reuse path must still assign the adopted SessionDB onto the agent"
     )
     # The old unconditional-close pattern must not remain in the reuse block.
@@ -94,12 +93,12 @@ def test_lru_eviction_closes_evicted_agent_session_db():
     dropping the reference. (Eviction is a true session boundary — no live
     subagents are expected to still be writing into that agent.)
     """
-    run_src = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+    run_src = (REPO / "api" / "runs" / "local_agent_cache.py").read_text(encoding="utf-8")
     src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 
-    eviction_idx = run_src.find("Evicted LRU agent from cache")
-    assert eviction_idx != -1, "LRU eviction debug log missing"
-    block = run_src[max(0, eviction_idx - 1500) : eviction_idx + 200]
+    eviction_idx = run_src.find("for evicted_session_id, entry in evicted:")
+    assert eviction_idx != -1, "LRU eviction close loop missing"
+    block = run_src[max(0, eviction_idx - 1500) : eviction_idx + 800]
 
     assert "evicted_sid, _ = SESSION_AGENT_CACHE.popitem" not in block, (
         "LRU eviction must capture the evicted entry so the agent's "
@@ -107,7 +106,7 @@ def test_lru_eviction_closes_evicted_agent_session_db():
         "is the original bug shape."
     )
 
-    assert "_close_evicted_agent_at_session_boundary(_evicted_sid, _evicted_agent)" in block, (
+    assert "api._close_evicted_agent_at_session_boundary(\n                evicted_session_id, evicted_agent" in block, (
         "LRU eviction must route the evicted agent through the session-boundary "
         "close helper."
     )

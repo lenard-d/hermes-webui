@@ -14,6 +14,8 @@ reasoning segment.
 import pathlib
 import re
 
+from tests.test_local_run_modules import _translator
+
 REPO = pathlib.Path(__file__).parent.parent
 
 
@@ -38,20 +40,13 @@ class TestAccumulatorReplaced:
         )
 
     def test_segments_dict_declared(self):
-        src = read('api/runs/local.py')
-        assert '_reasoning_segments' in src, (
-            "_reasoning_segments dict must be declared in api/streaming.py"
-        )
-        assert '_current_reasoning_idx' in src, (
-            "_current_reasoning_idx counter must be declared in api/streaming.py"
-        )
+        _api, _events, translator = _translator()
+        assert translator.reasoning_segments == {}
+        assert translator.current_reasoning_idx == 0
 
     def test_segments_dict_is_dict_type(self):
-        src = read('api/runs/local.py')
-        # Declaration must be an empty dict, not a string
-        assert re.search(r'_reasoning_segments\s*(?::\s*dict\s*)?\=\s*\{\}', src), (
-            "_reasoning_segments must be initialized as an empty dict"
-        )
+        _api, _events, translator = _translator()
+        assert isinstance(translator.reasoning_segments, dict)
 
 
 # ── 2. on_reasoning indexes into per-message dict ────────────────────────────
@@ -61,39 +56,23 @@ class TestOnReasoningPerMessageIndexing:
     """The on_reasoning callback must index into _reasoning_segments using
     _current_reasoning_idx instead of appending to a flat string."""
 
-    def _on_reasoning_body(self):
-        src = read('api/runs/local.py')
-        m = re.search(
-            r'def on_reasoning\(text\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
-            src, re.DOTALL,
-        )
-        assert m, "on_reasoning function not found in api/streaming.py"
-        return m.group(1)
-
     def test_on_reasoning_uses_segments_not_flat_string(self):
-        body = self._on_reasoning_body()
-        assert '_reasoning_segments' in body, (
-            "on_reasoning must accumulate into _reasoning_segments, not a flat string"
-        )
-        assert "_reasoning_text +=" not in body, (
-            "on_reasoning must not use the old flat _reasoning_text += pattern"
-        )
+        _api, _events, translator = _translator()
+        translator.reasoning("first")
+        assert translator.reasoning_segments == {0: "first"}
 
     def test_on_reasoning_indexes_by_current_idx(self):
-        body = self._on_reasoning_body()
-        assert '_current_reasoning_idx' in body, (
-            "on_reasoning must reference _current_reasoning_idx to attribute "
-            "reasoning deltas to the correct assistant message"
-        )
+        _api, _events, translator = _translator()
+        translator.current_reasoning_idx = 2
+        translator.reasoning("third")
+        assert translator.reasoning_segments == {2: "third"}
 
     def test_stream_reasoning_text_mirror_still_present(self):
         """cancel_stream() uses STREAM_REASONING_TEXT for its own partial-message
         persist path; this mirror must remain even after the per-message fix."""
-        body = self._on_reasoning_body()
-        assert 'append_runtime_reasoning_text' in body, (
-            "on_reasoning must still mirror through the runtime owner so "
-            "cancel_stream() can persist reasoning on mid-stream cancellation"
-        )
+        api, _events, translator = _translator()
+        translator.reasoning("persist me")
+        assert api._test_reasoning == [("stream-1", "persist me")]
 
 
 # ── 3. on_interim_assistant advances the index ───────────────────────────────
@@ -104,24 +83,10 @@ class TestInterimAssistantAdvancesIndex:
     results. It must increment _current_reasoning_idx so subsequent reasoning
     deltas are attributed to the next assistant message."""
 
-    def _interim_body(self):
-        src = read('api/runs/local.py')
-        m = re.search(
-            r'def on_interim_assistant\(text.*?\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
-            src, re.DOTALL,
-        )
-        assert m, "on_interim_assistant function not found in api/streaming.py"
-        return m.group(1)
-
     def test_interim_assistant_increments_idx(self):
-        body = self._interim_body()
-        assert '_current_reasoning_idx' in body, (
-            "on_interim_assistant must increment _current_reasoning_idx to "
-            "advance the per-message reasoning segment pointer (#3587)"
-        )
-        assert re.search(r'_current_reasoning_idx\s*\+=\s*1', body), (
-            "on_interim_assistant must use += 1 to advance the segment index"
-        )
+        _api, _events, translator = _translator()
+        translator.interim_assistant(None)
+        assert translator.current_reasoning_idx == 1
 
 
 # ── 4. Settlement loop iterates forward, not reversed+break ──────────────────
@@ -222,49 +187,32 @@ class TestToolCallBoundary:
     reasoning index must advance at tool-call boundaries instead, so reasoning
     accumulated before a tool-call-only assistant message gets its own segment."""
 
-    def _on_tool_body(self):
-        src = read('api/runs/local.py')
-        m = re.search(
-            r'def on_tool\(\*cb_args.*?\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
-            src, re.DOTALL,
-        )
-        assert m, "on_tool function not found in api/streaming.py"
-        return m.group(1)
-
     def test_on_tool_advances_reasoning_idx(self):
-        body = self._on_tool_body()
-        assert '_current_reasoning_idx' in body, (
-            "on_tool must reference _current_reasoning_idx to advance the "
-            "reasoning segment at tool-call boundaries (#3587)"
-        )
+        _api, _events, translator = _translator()
+        translator.reasoning("before")
+        translator.tool("tool.started", "terminal", None, {})
+        assert translator.current_reasoning_idx == 1
 
     def test_tool_boundary_guard_prevents_double_advance(self):
-        body = self._on_tool_body()
-        assert '_tool_boundary_advanced' in body, (
-            "on_tool must use a _tool_boundary_advanced guard so multiple "
-            "tool calls in one assistant message only advance the index once"
-        )
+        _api, _events, translator = _translator()
+        translator.reasoning("before")
+        translator.tool("tool.started", "terminal", None, {})
+        translator.tool("tool.started", "browser", None, {})
+        assert translator.current_reasoning_idx == 1
 
     def test_tool_boundary_flag_declared(self):
-        src = read('api/runs/local.py')
-        assert '_tool_boundary_advanced' in src, (
-            "_tool_boundary_advanced flag must be declared in streaming.py"
-        )
+        _api, _events, translator = _translator()
+        assert translator.tool_boundary_advanced is False
 
     def test_reasoning_resets_tool_boundary_flag(self):
         """New reasoning arriving after a tool boundary must reset the guard
         so the next tool-call batch can advance the index again."""
-        src = read('api/runs/local.py')
-        m = re.search(
-            r'def on_reasoning\(text\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
-            src, re.DOTALL,
-        )
-        assert m, "on_reasoning function not found"
-        body = m.group(1)
-        assert '_tool_boundary_advanced' in body, (
-            "on_reasoning must reset _tool_boundary_advanced so the next "
-            "tool-call batch can advance the reasoning index"
-        )
+        _api, _events, translator = _translator()
+        translator.reasoning("before")
+        translator.tool("tool.started", "terminal", None, {})
+        assert translator.tool_boundary_advanced is True
+        translator.reasoning("after")
+        assert translator.tool_boundary_advanced is False
 
 
 # ── 7. Settlement counter increments exactly once per assistant message ────

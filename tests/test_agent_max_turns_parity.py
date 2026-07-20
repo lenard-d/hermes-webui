@@ -10,21 +10,18 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+CONFIG_OWNER = (REPO / "api" / "runs" / "local_agent_config.py").read_text(encoding="utf-8")
+CACHE_OWNER = (REPO / "api" / "runs" / "local_agent_cache.py").read_text(encoding="utf-8")
 
 
 def test_streaming_agent_reads_agent_max_turns_from_config():
-    assert "_agent_cfg_for_iterations" in STREAMING_PY
-    assert "_agent_cfg_for_iterations.get('max_turns')" in STREAMING_PY
-    assert "_cfg.get('max_turns')" in STREAMING_PY
+    assert 'agent_config.get("max_turns", config.get("max_turns"))' in CONFIG_OWNER
 
 
 def test_streaming_agent_passes_max_iterations_to_aiagent():
-    assert "if 'max_iterations' in _agent_params and _max_iterations_cfg is not None:" in STREAMING_PY
-    assert "_agent_kwargs['max_iterations'] = _max_iterations_cfg" in STREAMING_PY
+    assert 'if "max_iterations" in parameters and max_iterations is not None:' in CONFIG_OWNER
+    assert 'kwargs["max_iterations"] = max_iterations' in CONFIG_OWNER
 
 
 def test_streaming_agent_cache_signature_includes_max_iterations():
-    sig_start = STREAMING_PY.index("_sig_blob = _json.dumps")
-    sig_block = STREAMING_PY[sig_start:STREAMING_PY.index("], sort_keys=True)", sig_start)]
-    assert "_max_iterations_cfg or ''" in sig_block
+    assert "max_iterations or \"\"" in CACHE_OWNER

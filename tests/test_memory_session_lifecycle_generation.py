@@ -323,29 +323,29 @@ def test_lru_eviction_commits_outside_cache_lock():
     import api.streaming as streaming_mod
 
     facade_src = Path(streaming_mod.__file__).read_text(encoding="utf-8")
-    src = Path("api/runs/local.py").read_text(encoding="utf-8")
-    marker = "_evicted_items = []"
+    src = Path("api/runs/local_agent_cache.py").read_text(encoding="utf-8")
+    marker = "evicted = []"
     collect_start = src.index(marker)
     lock_start = src.index("with SESSION_AGENT_CACHE_LOCK:", collect_start)
-    lock_end = src.index("# Commit and close evicted agents outside the cache lock", lock_start)
+    lock_end = src.index("for evicted_session_id, entry in evicted:", lock_start)
     locked_section = src[lock_start:lock_end]
-    outside_section = src[lock_end:src.index("logger.debug('[webui] Created new agent", lock_end)]
+    outside_section = src[lock_end:src.index('api.logger.debug("[webui] Created new agent', lock_end)]
 
     assert "commit_session_memory" not in locked_section
     assert "_lifecycle_commit" not in locked_section
     # Eviction now selects the oldest INACTIVE entry (active-run-aware) and pops
     # it by id under the lock, rather than a liveness-blind popitem(last=False).
     # The commit/close still happens outside the lock (asserted below).
-    assert "SESSION_AGENT_CACHE.pop(_evictable_sid)" in locked_section
-    assert "_sid not in _active_sids" in locked_section
+    assert "SESSION_AGENT_CACHE.pop(evictable)" in locked_section
+    assert "sid not in active_sessions" in locked_section
     assert "SESSION_AGENT_CACHE.popitem(last=False)" not in locked_section
-    assert "_close_evicted_agent_at_session_boundary" in outside_section
+    assert "api._close_evicted_agent_at_session_boundary" in outside_section
     helper_start = facade_src.index("def _close_evicted_agent_at_session_boundary")
     helper_end = facade_src.index("\ndef _refresh_cached_agent_runtime", helper_start)
     helper_section = facade_src[helper_start:helper_end]
     assert "_lifecycle_commit_session_memory" in helper_section
     assert "wait=True" in helper_section
-    assert "outside the cache lock" in outside_section
+    assert lock_end < outside_section.find("api._close_evicted_agent_at_session_boundary") + lock_end
 
 
 def test_clear_session_evicts_outside_session_lock(monkeypatch, tmp_path):

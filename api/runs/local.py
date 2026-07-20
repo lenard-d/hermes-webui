@@ -10,6 +10,12 @@ from __future__ import annotations
 
 from types import ModuleType
 
+from .local_agent_cache import acquire_local_agent
+from .local_agent_config import build_local_agent_configuration
+from .local_environment import LocalRunEnvironment
+from .local_events import LocalEventTranslator
+from .local_usage import LocalUsageTracker
+
 
 def run_agent_streaming(
     api: ModuleType,
@@ -39,8 +45,6 @@ def run_agent_streaming(
     PENDING_GOAL_CONTINUATION = api.PENDING_GOAL_CONTINUATION
     Path = api.Path
     SESSIONS = api.SESSIONS
-    STREAM_PARTIAL_TEXT = api.STREAM_PARTIAL_TEXT
-    STREAM_REASONING_TEXT = api.STREAM_REASONING_TEXT
     TurnExecution = api.TurnExecution
     _ENV_LOCK = api._ENV_LOCK
     _STREAMING_CRON_PROFILE_HOME = api._STREAMING_CRON_PROFILE_HOME
@@ -141,33 +145,22 @@ def run_agent_streaming(
     _workspace_context_prefix = api._workspace_context_prefix
     alias_session_agent_lock = api.alias_session_agent_lock
     append_turn_journal_event_for_stream = api.append_turn_journal_event_for_stream
-    append_runtime_partial_text = api.append_runtime_partial_text
-    append_runtime_reasoning_text = api.append_runtime_reasoning_text
     attach_runtime_agent = api.attach_runtime_agent
     clear_process_wakeup_pause = api.clear_process_wakeup_pause
-    coerce_reasoning_effort_for_model = api.coerce_reasoning_effort_for_model
     contextlib = api.contextlib
-    ensure_agent_runtime_current = api.ensure_agent_runtime_current
-    emit_todo_state = api.emit_todo_state
-    finish_runtime_tool_call = api.finish_runtime_tool_call
     get_session = api.get_session
     get_state_db_session_messages = api.get_state_db_session_messages
     logger = api.logger
-    json = api.json
-    live_usage_prompt_estimate_after_tool_delta = api.live_usage_prompt_estimate_after_tool_delta
     meter = api.meter
     model_with_provider_context = api.model_with_provider_context
     os = api.os
-    parse_reasoning_effort = api.parse_reasoning_effort
     prompt_cache_hit_percent = api.prompt_cache_hit_percent
     re = api.re
     reconciled_state_db_messages_for_session = api.reconciled_state_db_messages_for_session
     record_process_wakeup_provider_unavailable_pause = api.record_process_wakeup_provider_unavailable_pause
     redact_session_data = api.redact_session_data
-    replace_runtime_reasoning_text = api.replace_runtime_reasoning_text
     resolve_model_provider = api.resolve_model_provider
     stamp_compression_exhausted_recovery = api.stamp_compression_exhausted_recovery
-    start_runtime_tool_call = api.start_runtime_tool_call
     threading = api.threading
     time = api.time
     title_from = api.title_from
@@ -195,13 +188,7 @@ def run_agent_streaming(
     event_sink = execution.event_sink
     s = None
     _rt = {}
-    old_cwd = None
-    old_exec_ask = None
-    old_session_key = None
-    old_session_id = None
-    old_session_platform = None
-    old_hermes_home = None
-    old_profile_env = {}
+    run_environment = LocalRunEnvironment(api)
 
     # MCP discovery moved to AFTER the per-profile HERMES_HOME mutation below
     # (was here at v0.51.30) — the previous placement always read the default
@@ -209,272 +196,18 @@ def run_agent_streaming(
     # rewritten yet.  See https://github.com/nesquena/hermes-webui/issues/1968.
 
     agent = None
-    _live_prompt_estimate_tokens = [0]
-    _live_prompt_exact_tokens = [0]
-    _live_prompt_estimate_tool_delta_tokens = [0]
-    _live_prompt_estimate_seen_ids = set()
-    # Per-stream cache for the real per-model context_length (#3256 perf).
-    # _live_usage_snapshot() runs on every metering tick (~10x/sec during
-    # streaming); recomputing get_model_context_length() there triggered a
-    # config read + potential metadata/network probe on every token for
-    # non-default models (e.g. claude-opus-4.7-1m), freezing the stream while
-    # the default model was unaffected. The value is constant for a given
-    # (model, base_url, provider) within one stream, so resolve it at most
-    # once. Sentinel: None=not computed, 0=not applicable/failed, >0=real cap.
-    _real_ctx_cache = [None]
-    _live_usage_session_cache = [None]
-
-    def _current_live_usage_session():
-        return _live_usage_session_snapshot(
-            session_id,
-            s,
-            _live_usage_session_cache,
-        )
-
-    def _seed_live_prompt_estimate() -> int:
-        """Capture the latest exact prompt size before adding live tool deltas."""
-        if _live_prompt_estimate_tokens[0] > 0:
-            return _live_prompt_estimate_tokens[0]
-        _base = 0
-        _agent = agent
-        if _agent is not None:
-            try:
-                _cc = getattr(_agent, 'context_compressor', None)
-                if _cc:
-                    _base = getattr(_cc, 'last_prompt_tokens', 0) or 0
-            except Exception:
-                _base = 0
-        if not _base:
-            try:
-                _session_obj = _current_live_usage_session()
-                _base = getattr(_session_obj, 'last_prompt_tokens', 0) or 0
-            except Exception:
-                _base = 0
-        _live_prompt_estimate_tokens[0] = int(_base or 0)
-        _live_prompt_exact_tokens[0] = _live_prompt_estimate_tokens[0]
-        return _live_prompt_estimate_tokens[0]
-
-    def _bump_live_prompt_estimate(messages) -> int:
-        """Increment a rough next-prompt estimate from live tool activity."""
-        if not messages:
-            return _live_prompt_estimate_tokens[0]
-        _seed_live_prompt_estimate()
-        _usage = live_usage_prompt_estimate_after_tool_delta(
-            base_prompt_tokens=_live_prompt_exact_tokens[0],
-            exact_prompt_tokens=_live_prompt_exact_tokens[0],
-            messages=messages,
-            turn_tool_prompt_tokens=_live_prompt_estimate_tool_delta_tokens[0],
-        )
-        _live_prompt_estimate_tokens[0] = _usage['last_prompt_tokens']
-        _live_prompt_estimate_tool_delta_tokens[0] = _usage['turn_tool_prompt_tokens']
-        return _live_prompt_estimate_tokens[0]
+    usage_tracker = LocalUsageTracker(
+        api,
+        session_id=session_id,
+        session_getter=lambda: s,
+        agent_getter=lambda: agent,
+    )
 
     def _live_usage_snapshot():
-        """Best-effort live usage payload for mid-stream UI updates.
+        return usage_tracker.snapshot()
 
-        During tool execution the final `done` event has not fired yet, but the
-        frontend still benefits from seeing the latest known token / context
-        values. These are exact for the most recent model call and a truthful
-        lower bound for the pending next call after a tool result is appended.
-        """
-        _usage = {
-            'input_tokens': 0,
-            'output_tokens': 0,
-            'estimated_cost': 0,
-            'cache_read_tokens': 0,
-            'cache_write_tokens': 0,
-            'cache_hit_percent': None,
-            'context_length': 0,
-            'threshold_tokens': 0,
-            'last_prompt_tokens': 0,
-            'post_compression_context_tokens_estimate': None,
-        }
-        _session_obj = _current_live_usage_session()
-
-        _agent = agent
-        if _agent is not None:
-            try:
-                _usage['input_tokens'] = getattr(_agent, 'session_prompt_tokens', 0) or 0
-                _usage['output_tokens'] = getattr(_agent, 'session_completion_tokens', 0) or 0
-                _usage['estimated_cost'] = getattr(_agent, 'session_estimated_cost_usd', 0) or 0
-                _usage['cache_read_tokens'] = getattr(_agent, 'session_cache_read_tokens', 0) or 0
-                _usage['cache_write_tokens'] = getattr(_agent, 'session_cache_write_tokens', 0) or 0
-            except Exception:
-                pass
-            try:
-                _cc = getattr(_agent, 'context_compressor', None)
-                if _cc:
-                    _cc_cl_u = getattr(_cc, 'context_length', 0) or 0
-                    # Stale-compressor self-heal (#3256, broadened): the
-                    # agent-side compressor caches a context_length from the
-                    # model it was *built/last-updated* with. After an in-place
-                    # model switch (or when agent_init seeded it with the global
-                    # model.context_length cap), that cached value can be the
-                    # WRONG model's window — e.g. a session on claude-opus-4.8
-                    # (1M / 936k prompt on Copilot) whose compressor still holds
-                    # claude-opus-4.5's 168k. The original guard only corrected
-                    # the narrow case where the cached value equalled the config
-                    # cap exactly; a leftover *other-model* value (168k) slipped
-                    # straight through to the live usage payload. Broaden it:
-                    # ALWAYS resolve the real per-model window for the agent's
-                    # CURRENT model and, when that differs from the cached value,
-                    # surface the real one. Frontend hydration (GET /api/session)
-                    # already does this; this aligns the streaming path with it
-                    # so "refresh shows 1M, send-a-message drops to 168k" can't
-                    # happen.
-                    # PERF: resolve at most once per stream (cached in
-                    # _real_ctx_cache). This snapshot runs on every metering
-                    # tick; doing the config read + metadata lookup per tick
-                    # froze non-default-model streams.
-                    if _real_ctx_cache[0] is None:
-                        _resolved_real = 0  # 0 = no correction / lookup failed
-                        try:
-                            _sm_u = str(getattr(_agent, 'model', '') or '').strip()
-                            _prov_u = str(getattr(_agent, 'provider', '') or '').strip()
-                            _base_u = str(getattr(_agent, 'base_url', '') or '').strip()
-                            _key_u = getattr(_agent, 'api_key', '') or ''
-                            if _sm_u:
-                                # Resolve the real window through the SAME helper
-                                # hydration uses (routes._context_length_lookup_inputs_for_model
-                                # + get_model_context_length). This honors the
-                                # nested per-model config override
-                                # (model.<provider>.models.<model>.context_length,
-                                # e.g. claude-opus-4.8 -> 1,000,000) and custom-
-                                # provider keys, so the streaming/SSE path and the
-                                # GET /api/session path land on the IDENTICAL value.
-                                # Reusing the helper (instead of hand-reading the
-                                # flat top-level model.context_length, which is
-                                # None here) is what prevents a new mismatch like
-                                # "refresh shows 1M, send-a-message shows 936k".
-                                try:
-                                    _cli_u = api._context_length_lookup_inputs_for_model
-                                    _accept_u = api._should_accept_session_context_length_refresh
-                                    from agent.model_metadata import get_model_context_length as _g_u
-                                    # Resolve the SESSION's own profile config, not
-                                    # the ambient one. This worker is a detached
-                                    # thread that does NOT inherit the per-request
-                                    # thread-local profile context, so a bare
-                                    # get_config() resolves the process-global
-                                    # (default) profile (#3294) — for a non-default
-                                    # profile that pins a different per-model
-                                    # context_length, that would surface the WRONG
-                                    # profile's window in the live payload. Read the
-                                    # session's profile home explicitly, mirroring
-                                    # the worker's own _cfg resolution below.
-                                    try:
-                                        from api.config import get_config_for_profile_home as _gch_u
-                                        from api.profiles import get_hermes_home_for_profile as _ghp_u
-                                        _ph_u = _ghp_u(getattr(_session_obj, 'profile', None))
-                                        _cfg_u = _gch_u(_ph_u)
-                                    except Exception:
-                                        from api.config import get_config as _gc_u
-                                        _cfg_u = _gc_u()
-                                    _lk_u = _cli_u(
-                                        _sm_u,
-                                        _prov_u,
-                                        base_url=_base_u,
-                                        api_key=_key_u,
-                                        cfg=_cfg_u if isinstance(_cfg_u, dict) else {},
-                                    )
-                                    _real_u = _g_u(
-                                        _sm_u,
-                                        _lk_u.base_url,
-                                        api_key=_lk_u.api_key,
-                                        config_context_length=_lk_u.config_context_length,
-                                        provider=_lk_u.provider or _prov_u or '',
-                                        custom_providers=_lk_u.custom_providers,
-                                    ) or 0
-                                    # Only treat it as a correction when the real
-                                    # window is valid AND disagrees with the
-                                    # compressor's cached value. Equal => nothing
-                                    # to fix, leave the fast path untouched.
-                                    # #4248: never let a low-confidence 256k metadata
-                                    # fallback clobber a LARGER cached window — that
-                                    # would reintroduce the very "drops to a smaller
-                                    # window mid-stream" regression this guard fixes.
-                                    # Reuse the exact acceptance gate hydration uses.
-                                    # NOTE: we deliberately omit model_changed (=False
-                                    # default) here, unlike hydration. The streaming
-                                    # path can't cheaply know if the model changed
-                                    # since the compressor was seeded, so we err
-                                    # toward the LARGER window (auto-compress fires
-                                    # late, not early — the safe direction), and the
-                                    # next GET /api/session hydration self-heals any
-                                    # genuine downward 256k case via model_changed.
-                                    if (
-                                        _real_u and _real_u != _cc_cl_u
-                                        and _accept_u(_cc_cl_u, _real_u)
-                                    ):
-                                        _resolved_real = _real_u
-                                except TypeError:
-                                    # Older hermes-agent: legacy 2-arg form.
-                                    try:
-                                        _accept2_u = api._should_accept_session_context_length_refresh
-                                        from agent.model_metadata import get_model_context_length as _g2_u
-                                        _real_u = _g2_u(_sm_u, _base_u) or 0
-                                        if (
-                                            _real_u and _real_u != _cc_cl_u
-                                            and _accept2_u(_cc_cl_u, _real_u)
-                                        ):
-                                            _resolved_real = _real_u
-                                    except Exception:
-                                        pass
-                                except Exception:
-                                    pass
-                        except Exception:
-                            _resolved_real = 0
-                        _real_ctx_cache[0] = _resolved_real
-                    # Apply the cached real cap when the guard determined one.
-                    if _real_ctx_cache[0]:
-                        # Also rescale threshold_tokens by the same ratio so the
-                        # auto-compress trigger reflects the real window, not
-                        # the stale global cap (e.g. 197.2k @ 232K cap → ~850k
-                        # @ 1M real cap).
-                        _orig_cc_cl = getattr(_cc, 'context_length', 0) or 0
-                        _orig_thresh = getattr(_cc, 'threshold_tokens', 0) or 0
-                        _cc_cl_u = _real_ctx_cache[0]
-                        if _orig_cc_cl > 0 and _orig_thresh > 0:
-                            _scaled_thresh = int(_orig_thresh * _real_ctx_cache[0] / _orig_cc_cl)
-                            _usage['context_length'] = _cc_cl_u
-                            _usage['threshold_tokens'] = _scaled_thresh
-                            _usage['last_prompt_tokens'] = getattr(_cc, 'last_prompt_tokens', 0) or 0
-                        else:
-                            _usage['context_length'] = _cc_cl_u
-                            _usage['threshold_tokens'] = _orig_thresh
-                            _usage['last_prompt_tokens'] = getattr(_cc, 'last_prompt_tokens', 0) or 0
-                    else:
-                        _usage['context_length'] = _cc_cl_u
-                        _usage['threshold_tokens'] = getattr(_cc, 'threshold_tokens', 0) or 0
-                        _usage['last_prompt_tokens'] = getattr(_cc, 'last_prompt_tokens', 0) or 0
-            except Exception:
-                pass
-
-        if _session_obj is not None:
-            for _field in ('input_tokens', 'output_tokens', 'estimated_cost', 'cache_read_tokens', 'cache_write_tokens', 'context_length', 'threshold_tokens', 'last_prompt_tokens'):
-                if not _usage.get(_field):
-                    try:
-                        _usage[_field] = getattr(_session_obj, _field, 0) or 0
-                    except Exception:
-                        pass
-            _post_compression_estimate = getattr(
-                _session_obj, 'post_compression_context_tokens_estimate', None,
-            )
-            if isinstance(_post_compression_estimate, int) and _post_compression_estimate > 0:
-                _usage['post_compression_context_tokens_estimate'] = _post_compression_estimate
-
-        _real_prompt_tokens = int(_usage.get('last_prompt_tokens') or 0)
-        _usage['cache_hit_percent'] = prompt_cache_hit_percent(
-            _usage.get('cache_read_tokens') or 0,
-            _usage.get('input_tokens') or 0,
-        )
-        if _real_prompt_tokens and _real_prompt_tokens != _live_prompt_exact_tokens[0]:
-            _live_prompt_exact_tokens[0] = _real_prompt_tokens
-            _live_prompt_estimate_tokens[0] = _real_prompt_tokens
-            _live_prompt_estimate_tool_delta_tokens[0] = 0
-        elif _live_prompt_estimate_tokens[0] > _real_prompt_tokens:
-            _usage['last_prompt_tokens'] = _live_prompt_estimate_tokens[0]
-
-        return _usage
+    def _bump_live_prompt_estimate(messages):
+        return usage_tracker.add_tool_messages(messages)
 
     # Metering ticker — emits a metering event at 1 Hz while sessions are active.
     # When get_interval() returns >= 10.0 (no active sessions), the ticker exits
@@ -511,51 +244,16 @@ def run_agent_streaming(
             return
         event_sink.publish(event, data)
 
-    # #5940: capture a terminal (non-retryable) provider error the Agent emits via
-    # its lifecycle status_callback. The Agent aborts a non-retryable API error
-    # (e.g. HTTP 400 "invalid model / no credentials") with
-    # `_emit_status("❌ Non-retryable error (HTTP <code>): <detail>")` but the run
-    # result / agent._last_error are empty for that path, so turn-completion below
-    # fell through to the misleading `no_response` "silent rate limit, try again"
-    # message. Stash the emitted terminal error here (single-element list = closure
-    # write without nonlocal) so it can seed `_last_err` and let the classifier
-    # surface the real, actionable cause (model_not_found / auth_mismatch).
-    _captured_terminal_error = [None]
-
-    def _agent_status_callback(kind, message):
-        """Bridge Agent lifecycle status into WebUI SSE.
-
-        Passes compression events as 'compressing' events and rate-limit/fallback
-        events as 'warning' events so the frontend can surface them to the user.
-        Also captures a terminal non-retryable provider error (#5940) so the
-        turn-completion classifier can report the real cause instead of the
-        generic no_response fallback. All other lifecycle messages are dropped.
-        """
-        _message = str(message or '').strip()
-        _kind = str(kind or '').strip().lower()
-        if not _message:
-            return
-        _lower = _message.lower()
-        # #5940: a non-retryable terminal provider error the Agent aborted on. Keep
-        # the FIRST one seen this turn (the original cause; later fallback notices
-        # are handled separately below). Matched on the Agent's emitted shape.
-        if (
-            _captured_terminal_error[0] is None
-            and 'non-retryable error' in _lower
-            and 'http' in _lower
-        ):
-            _captured_terminal_error[0] = _message
-        if _is_agent_compression_start_status(_kind, _message):
-            put('compressing', {
-                'session_id': session_id,
-                'message': 'Compressing context',
-            })
-            return
-        # Pass through rate-limit and fallback messages so the frontend can
-        # show them as warnings via the existing messages.js 'warning' listener.
-        _is_fallback_notice = _is_fallback_lifecycle_message(_kind, _message)
-        if _is_fallback_notice:
-            put('warning', {'type': 'fallback', 'message': _message})
+    event_translator = LocalEventTranslator(
+        api,
+        session_id=session_id,
+        stream_id=stream_id,
+        publish=put,
+        usage=usage_tracker,
+        agent_params=lambda: _agent_params,
+    )
+    _agent_status_callback = event_translator.status
+    _captured_terminal_error = event_translator.captured_terminal_error
 
     # xsession wakeup misroute root fix (Option 1): pre-init so the outer
     # finally can always reset even if an exception fires before the bind.
@@ -687,84 +385,14 @@ def run_agent_streaming(
             except Exception:
                 _resolved_profile_name = None
 
-        _thread_env = _build_agent_thread_env(
-            _profile_runtime_env,
-            str(s.workspace),
-            session_id,
-            _profile_home,
+        run_environment.enter(
+            session_id=session_id,
+            workspace=str(s.workspace),
+            profile_home=_profile_home,
+            profile_runtime_env=_profile_runtime_env,
+            safe_profile_runtime_env=_safe_profile_runtime_env,
+            patch_skill_home_modules=patch_skill_home_modules,
         )
-        _set_thread_env(**_thread_env)
-        # process_complete agent-wakeup wiring (ours-original, Option B): bind
-        # this session's HERMES_SESSION_KEY to its WebUI session_id so the
-        # drain thread can route notify_on_complete events back to the right
-        # SSE channel / server-side wakeup.
-        try:
-            from api.background_process import register_process_session
-            register_process_session(session_id, session_id)
-        except Exception:
-            logger.debug("register_process_session failed", exc_info=True)
-        # first-time module initialisation (which can be slow) does not
-        # block other concurrent sessions waiting on _ENV_LOCK (#2024).
-        ensure_agent_runtime_current()
-        _prewarm_skill_tool_modules()
-        _install_streaming_cronjob_profile_wrapper()
-        # Still set process-level env as fallback for tools that bypass thread-local
-        # Acquire lock only for the env mutation, then release before the agent runs.
-        # The finally block re-acquires to restore — keeping critical sections short
-        # and preventing a deadlock where the restore would re-enter the same lock.
-        with _ENV_LOCK:
-            old_profile_env = {key: os.environ.get(key) for key in _safe_profile_runtime_env}
-            old_cwd = os.environ.get('TERMINAL_CWD')
-            old_exec_ask = os.environ.get('HERMES_EXEC_ASK')
-            old_session_key = os.environ.get('HERMES_SESSION_KEY')
-            old_session_id = os.environ.get('HERMES_SESSION_ID')
-            old_session_platform = os.environ.get('HERMES_SESSION_PLATFORM')
-            old_session_chat_id = os.environ.get('HERMES_SESSION_CHAT_ID')
-            old_hermes_home = os.environ.get('HERMES_HOME')
-            os.environ.update(_safe_profile_runtime_env)
-            os.environ['TERMINAL_CWD'] = str(s.workspace)
-            os.environ['HERMES_EXEC_ASK'] = '1'
-            os.environ['HERMES_SESSION_KEY'] = session_id
-            os.environ['HERMES_SESSION_ID'] = session_id
-            os.environ['HERMES_SESSION_PLATFORM'] = 'webui'
-            # process_complete wiring (ours-original, Option B): see
-            # _build_agent_thread_env above.
-            os.environ['HERMES_SESSION_CHAT_ID'] = str(session_id)
-            if _profile_home:
-                os.environ['HERMES_HOME'] = _profile_home
-                # Patch skill module caches to match the active profile.
-                # _set_hermes_home() does this for process-wide switches
-                # but per-request switches skip it (#1700). The in-chat
-                # cronjob tool is wrapped separately at its tool-call boundary
-                # with cron_profile_context_for_home (#4580) so cron.jobs path
-                # caches are not mutated for the entire agent turn.
-                # Modules were prewarmed by _prewarm_skill_tool_modules()
-                # above, so we only do lightweight sys.modules lookups and
-                # attribute assignments here — no first-time import under
-                # the lock (#2024).
-                if patch_skill_home_modules is not None:
-                    patch_skill_home_modules(Path(_profile_home))
-        # Lock released — agent runs without holding it
-        # ── MCP Server Discovery (lazy import, idempotent) ──
-        # MUST run AFTER the HERMES_HOME mutation above — `discover_mcp_tools()`
-        # reads `~/.hermes/config.yaml` via `get_hermes_home()`, which uses
-        # `os.environ['HERMES_HOME']`.  Calling it before the mutation always
-        # loaded the default profile's `mcp_servers`, even when the session
-        # was stamped with a non-default profile.  See issue #1968.
-        #
-        # NOTE: `_servers` in `tools/mcp_tool.py` is a process-global registry
-        # keyed by server name.  This means once profile A registers a server
-        # named e.g. `postgres`, profile B's discovery sees it as already
-        # connected and skips it — even if B's config points at a different
-        # binary.  Fully fixing multi-profile concurrent use requires keying
-        # `_servers` by `(profile_home, name)` upstream in hermes-agent; that
-        # lives outside this WebUI repo.  This change fixes the headline bug
-        # for users who run a single non-default profile per WebUI process.
-        try:
-            from tools.mcp_tool import discover_mcp_tools
-            discover_mcp_tools()
-        except Exception:
-            pass  # MCP not available or not configured — non-fatal
 
         # Register a gateway-style notify callback so the approval system can
         # push the `approval` SSE event the moment a dangerous command is
@@ -867,486 +495,11 @@ def run_agent_streaming(
                     )
 
         try:
-            _token_sent = False  # tracks whether any streamed tokens were sent
-            _self_healed = False  # (#1401) prevents infinite self-heal retries
-            # Per-message reasoning: dict maps assistant-message index → accumulated text
-            # (#3587) replaces the flat _reasoning_text string so each intermediate
-            # assistant turn (before tool calls) keeps its own reasoning segment.
-            _reasoning_segments: dict = {}
-            _current_reasoning_idx = 0
-            _tool_boundary_advanced = False
-            _live_tool_calls = []  # tool progress fallback when final messages omit tool IDs
-
-            # Throttle: emit metering events at most every 100 ms so the per-message
-            # TPS label feels live during fast token streams without flooding SSE.
-            _metering_last_emit = [time.monotonic() - 1]  # fire immediately on first token
-            _reasoning_last_put = [0.0]
-            _reasoning_buffer = ['']
-            _metering_output_deltas = [0]
-            _metering_reasoning_deltas = [0]
-
-            def _flush_reasoning_buffer():
-                # #4729: emit any coalesced-but-not-yet-flushed reasoning text immediately.
-                # The ~10 Hz throttle in on_reasoning leaves a sub-100ms tail in the buffer;
-                # the agent never calls reasoning_callback(None), and reasoning can transition
-                # to tool calls / visible output, so we must flush at every boundary that
-                # closes or reorders the live reasoning stream — otherwise the tail is
-                # silently lost from the live Thinking view (the frontend appends deltas).
-                if _reasoning_buffer[0]:
-                    put('reasoning', {'text': _reasoning_buffer[0]})
-                    _reasoning_buffer[0] = ''
-
-
-            def _emit_metering():
-                now = time.monotonic()
-                if now - _metering_last_emit[0] < 0.1:
-                    return
-                _metering_last_emit[0] = now
-                stats = meter().get_stats(stream_id)
-                stats['session_id'] = session_id
-                stats['usage'] = _live_usage_snapshot()
-                stats.setdefault('tps_available', False)
-                stats.setdefault('estimated', False)
-                put('metering', stats)
-
-            def _is_visible_output_echo(text: str) -> bool:
-                candidate = _compact_for_echo_compare(text)
-                if not candidate:
-                    return False
-                visible_output = STREAM_PARTIAL_TEXT.get(stream_id, '')
-                visible_tail = _compact_for_echo_compare(
-                    visible_output[-max(len(str(text)) * 2, 512):]
-                )
-                if visible_tail and visible_tail.endswith(candidate):
-                    return True
-                # Some runtimes can report a prefix of the already-streamed final
-                # answer through reasoning after visible output has completed. That
-                # prefix is not a tail echo, so catch only substantial chunks that
-                # are already present in the visible assistant stream. Short text
-                # stays on the stricter suffix path to avoid hiding genuine
-                # reasoning that happens to reuse an answer phrase.
-                if len(candidate) < 80:
-                    return False
-                visible_compact = _compact_for_echo_compare(visible_output)
-                return bool(visible_compact and candidate in visible_compact)
-
-            def _strip_reasoning_output_echo(text: str) -> bool:
-                nonlocal _reasoning_segments
-                removed = False
-                if stream_id in STREAM_REASONING_TEXT:
-                    next_text, did_remove = _strip_compact_echo_suffix(
-                        STREAM_REASONING_TEXT.get(stream_id, ''),
-                        text,
-                    )
-                    if did_remove:
-                        replace_runtime_reasoning_text(stream_id, next_text)
-                        removed = True
-                next_buffer, did_remove_buffer = _strip_compact_echo_suffix(_reasoning_buffer[0], text)
-                if did_remove_buffer:
-                    _reasoning_buffer[0] = next_buffer
-                    removed = True
-                for idx in (_current_reasoning_idx, _current_reasoning_idx - 1):
-                    if idx not in _reasoning_segments:
-                        continue
-                    next_segment, did_remove_segment = _strip_compact_echo_suffix(
-                        _reasoning_segments.get(idx, ''),
-                        text,
-                    )
-                    if not did_remove_segment:
-                        continue
-                    if next_segment:
-                        _reasoning_segments[idx] = next_segment
-                    else:
-                        _reasoning_segments.pop(idx, None)
-                    removed = True
-                    break
-                return removed
-
-            def on_token(text):
-                nonlocal _token_sent
-                if text is None:
-                    return  # end-of-stream sentinel
-                # #4729: visible output is starting — flush any buffered reasoning tail
-                # first so the live Thinking stream is complete before/at the transition.
-                _flush_reasoning_buffer()
-                _token_sent = True
-                # Mirror recoverable partial text through its lifecycle owner;
-                # a late callback cannot recreate buffers after teardown.
-                append_runtime_partial_text(stream_id, text)
-                put('token', {'text': text})
-                # Update live throughput from stream delta callbacks, not from
-                # byte/character length. If a backend cannot provide live deltas,
-                # the frontend hides TPS rather than showing an estimate.
-                _metering_output_deltas[0] += 1
-                meter().record_token(stream_id, _metering_output_deltas[0])
-                _emit_metering()
-
-            def on_reasoning(text):
-                nonlocal _reasoning_segments, _current_reasoning_idx, _tool_boundary_advanced
-                if text is None:
-                    # Flush any remaining coalesced reasoning buffer so the last
-                    # partial window is not lost when the reasoning phase ends.
-                    _flush_reasoning_buffer()
-                    return
-                _tool_boundary_advanced = False
-                reasoning_delta = str(text)
-                # Some runtimes mirror user-visible progress text through the
-                # reasoning channel after it already streamed as normal assistant
-                # output. Treat that as an echo, otherwise the UI renders the
-                # same sentence again inside a Thinking card.
-                if _is_visible_output_echo(reasoning_delta):
-                    return
-                # Accumulate into the current message's segment (#3587)
-                _reasoning_segments[_current_reasoning_idx] = (
-                    _reasoning_segments.get(_current_reasoning_idx, '') + reasoning_delta
-                )
-                # Mirror full concatenation to shared dict so cancel_stream() can persist
-                # it (#1361 §A). Cancel only creates one partial message, so the flat
-                # concatenation is correct there.
-                append_runtime_reasoning_text(stream_id, reasoning_delta)
-                # Accumulate into a coalescing buffer so every delta reaches the
-                # browser — reasoning deltas are incremental, not idempotent.
-                _reasoning_buffer[0] += reasoning_delta
-                # Throttle reasoning SSE events to ~10 Hz to avoid overwhelming the
-                # frontend renderer. Each event triggers _parseStreamState() which
-                # scans the full accumulated text — 10k+ reasoning tokens/second
-                # builds up and locks the JS main thread. The user still sees live
-                # Thinking updates, just at a sustainable rate.
-                now = time.monotonic()
-                if now - _reasoning_last_put[0] >= 0.1:
-                    _reasoning_last_put[0] = now
-                    put('reasoning', {'text': _reasoning_buffer[0]})
-                    _reasoning_buffer[0] = ''
-                # Track reasoning deltas in the meter so live TPS reflects all AI output.
-                _metering_reasoning_deltas[0] += 1
-                meter().record_reasoning(stream_id, _metering_reasoning_deltas[0])
-                _emit_metering()
-
-            def on_interim_assistant(text, **cb_kwargs):
-                nonlocal _current_reasoning_idx
-                # Advance the per-message reasoning index unconditionally (#3587):
-                # even if this callback fires with empty text, a new assistant
-                # segment is starting and subsequent reasoning must be attributed
-                # to the next message.
-                _current_reasoning_idx += 1
-                if text is None:
-                    return
-                visible = str(text).strip()
-                if not visible:
-                    return
-                reasoning_echo = _strip_reasoning_output_echo(visible)
-                already_streamed = bool(cb_kwargs.get('already_streamed', False)) or _is_visible_output_echo(visible)
-                payload = {
-                    'text': visible,
-                    'already_streamed': already_streamed,
-                }
-                if reasoning_echo:
-                    payload['reasoning_echo'] = True
-                put('interim_assistant', payload)
-
-            # Pre-initialise the activity counter here so on_tool (which
-            # closes over it) never captures an unbound name even if this
-            # block is reordered later (Issue #765).
-            _checkpoint_activity = [0]
-            _live_tool_event_start_ids = set()
-            _live_tool_event_complete_ids = set()
-
-            def _tool_args_snapshot(args):
-                args_snap = {}
-                if isinstance(args, dict):
-                    for k, v in list(args.items())[:4]:
-                        s2 = str(v)
-                        cap = _TOOL_ARG_CONTENT_CAP if str(k).lower() in _TOOL_ARG_CONTENT_KEYS else 120
-                        args_snap[k] = s2[:cap] + ('...' if len(s2) > cap else '')
-                return args_snap
-
-            def _record_live_tool_start(tool_call_id, name, args):
-                if not tool_call_id or tool_call_id in _live_prompt_estimate_seen_ids:
-                    return False
-                _live_prompt_estimate_seen_ids.add(tool_call_id)
-                _tool_call = {
-                    'id': tool_call_id,
-                    'type': 'function',
-                    'function': {
-                        'name': str(name or ''),
-                        'arguments': json.dumps(args if isinstance(args, dict) else {}, ensure_ascii=False, sort_keys=True),
-                    },
-                }
-                _bump_live_prompt_estimate([{
-                    'role': 'assistant',
-                    'content': '',
-                    'tool_calls': [_tool_call],
-                }])
-                return True
-
-            def _record_live_tool_complete(tool_call_id, name, function_result):
-                if not tool_call_id:
-                    return False
-                _result_text = _tool_result_snippet(function_result)
-                _bump_live_prompt_estimate([{
-                    'role': 'tool',
-                    'name': str(name or ''),
-                    'tool_call_id': tool_call_id,
-                    'content': _result_text,
-                }])
-                return True
-
-            def on_tool(*cb_args, **cb_kwargs):
-                nonlocal _reasoning_segments, _current_reasoning_idx, _tool_boundary_advanced
-                # #4729: a tool boundary closes/reorders the live reasoning stream — flush
-                # any buffered reasoning tail first so it isn't stranded behind the tool event.
-                _flush_reasoning_buffer()
-                event_type = None
-                name = None
-                preview = None
-                args = None
-
-                if len(cb_args) >= 4:
-                    event_type, name, preview, args = cb_args[:4]
-                elif len(cb_args) == 3:
-                    name, preview, args = cb_args
-                    event_type = 'tool.started'
-                elif len(cb_args) == 2:
-                    event_type, name = cb_args
-                elif len(cb_args) == 1:
-                    name = cb_args[0]
-                    event_type = 'tool.started'
-
-                if event_type in ('reasoning.available', '_thinking'):
-                    reason_text = preview if event_type == 'reasoning.available' else name
-                    if reason_text:
-                        reason_delta = str(reason_text)
-                        # Older tool-progress paths can mirror the same visible
-                        # progress text already emitted through stream_delta_callback.
-                        # Suppress those echoes like the dedicated reasoning callback.
-                        if _is_visible_output_echo(reason_delta):
-                            return
-                        # Accumulate into the current message's segment (#3587)
-                        _reasoning_segments[_current_reasoning_idx] = (
-                            _reasoning_segments.get(_current_reasoning_idx, '') + reason_delta
-                        )
-                        # Mirror full concatenation for cancellation recovery.
-                        append_runtime_reasoning_text(stream_id, reason_delta)
-                        put('reasoning', {'text': reason_delta})
-                        _metering_reasoning_deltas[0] += 1
-                        meter().record_reasoning(stream_id, _metering_reasoning_deltas[0])
-                        _emit_metering()
-                    return
-
-                # (#3587) Advance reasoning index at tool-call boundaries.
-                # on_interim_assistant is suppressed for contentless tool-call
-                # messages (run_agent.py:3834), so the index never advances
-                # there. The first tool.started event after reasoning indicates
-                # a new assistant message boundary.
-                if not _tool_boundary_advanced and _current_reasoning_idx in _reasoning_segments:
-                    _current_reasoning_idx += 1
-                    _tool_boundary_advanced = True
-
-                args_snap = _tool_args_snapshot(args)
-
-                # Modern Hermes Agent builds can call both tool_progress_callback
-                # and the structured tool_start/tool_complete callbacks for the
-                # same tool. Prefer the structured path when it is supported so
-                # the browser receives one tid-tagged tool card per real call.
-                if event_type in (None, 'tool.started') and 'tool_start_callback' in _agent_params:
-                    return
-
-                if event_type in (None, 'tool.started'):
-                    _live_tool_calls.append({
-                        'name': name,
-                        'args': args if isinstance(args, dict) else {},
-                    })
-                    # Mirror to the runtime owner so cancellation can persist it.
-                    start_runtime_tool_call(
-                        stream_id,
-                        name=name,
-                        args=args if isinstance(args, dict) else {},
-                    )
-                    put('tool', {
-                        'event_type': event_type or 'tool.started',
-                        'name': name,
-                        'preview': preview,
-                        'args': args_snap,
-                    })
-                    _tool_stats = meter().get_stats(stream_id)
-                    _tool_stats['session_id'] = session_id
-                    _tool_stats['usage'] = _live_usage_snapshot()
-                    put('metering', _tool_stats)
-                    # Fallback: poll for pending approval in case notify_cb wasn't
-                    # registered (e.g. older approval module without gateway support).
-                    try:
-                        from api.route_approvals import (
-                            _gateway_queues as _approval_gateway_queues,
-                            _lock as _approval_lock,
-                            _pending as _approval_pending,
-                            reconcile_gateway_pending_mirror_locked as _reconcile_gateway_pending_mirror_locked,
-                        )
-                        from tools.approval import has_blocking_approval as _has_blocking_approval
-                        if _has_blocking_approval(session_id):
-                            p = None
-                            with _approval_lock:
-                                _reconcile_gateway_pending_mirror_locked(session_id)
-                                queue = _approval_pending.get(session_id)
-                                if isinstance(queue, list):
-                                    p = dict(queue[0]) if queue else None
-                                elif queue:
-                                    p = dict(queue)
-                                if p is None:
-                                    gw_queue = _approval_gateway_queues.get(session_id) or []
-                                    if gw_queue:
-                                        raw = getattr(gw_queue[0], 'data', None) or {}
-                                        if raw:
-                                            p = dict(raw)
-                                        else:
-                                            logger.warning("Gateway queue entry for %s has no .data attribute", session_id)
-                            if p:
-                                put('approval', p)
-                    except ImportError:
-                        pass
-                    return
-
-                if event_type == 'tool.completed' and 'tool_complete_callback' in _agent_params:
-                    return
-
-                if event_type == 'tool.completed':
-                    for live_tc in reversed(_live_tool_calls):
-                        if live_tc.get('done'):
-                            continue
-                        if not name or live_tc.get('name') == name:
-                            live_tc['done'] = True
-                            live_tc['duration'] = cb_kwargs.get('duration')
-                            live_tc['is_error'] = bool(cb_kwargs.get('is_error', False))
-                            break
-                    finish_runtime_tool_call(
-                        stream_id,
-                        name=name,
-                        duration=cb_kwargs.get('duration'),
-                        is_error=bool(cb_kwargs.get('is_error', False)),
-                    )
-                    # Signal the checkpoint thread that new work has completed (Issue #765).
-                    # Each completed tool call is a meaningful unit of progress worth persisting.
-                    _checkpoint_activity[0] += 1
-                    put('tool_complete', {
-                        'event_type': event_type,
-                        'name': name,
-                        'preview': preview,
-                        'args': args_snap,
-                        'duration': cb_kwargs.get('duration'),
-                        'is_error': bool(cb_kwargs.get('is_error', False)),
-                    })
-                    # Mirror the todo tool's in-memory state into a
-                    # dedicated SSE event so the Todos panel can update
-                    # in real-time without waiting for the turn to
-                    # settle. The helper guards on name=='todo', sends
-                    # the full snapshot (idempotent under SSE replay)
-                    # and swallows internal errors so emission never
-                    # breaks tool delivery. Prefer the structured
-                    # `result` kwarg from modern Hermes builds; fall
-                    # back to the truncated `preview` only when the
-                    # callback was invoked without one (older builds).
-                    #
-                    # Graceful degradation on old builds: `preview` is a
-                    # truncated snippet, so its JSON is usually unparseable.
-                    # parse_todo_tool_result() then returns None and NO
-                    # todo_state event is emitted — live panel updates are
-                    # silently unavailable on pre-`result` builds. This is
-                    # intended: the panel still hydrates via cold-load on the
-                    # next session GET; it just won't update mid-stream.
-                    emit_todo_state(
-                        put,
-                        name=name,
-                        function_result=(
-                            cb_kwargs.get('result')
-                            if cb_kwargs.get('result') is not None
-                            else preview
-                        ),
-                        session_id=session_id,
-                        stream_id=stream_id,
-                    )
-                    _tool_stats = meter().get_stats(stream_id)
-                    _tool_stats['session_id'] = session_id
-                    _tool_stats['usage'] = _live_usage_snapshot()
-                    put('metering', _tool_stats)
-                    return
-
-            def on_tool_start(tool_call_id, name, args):
-                try:
-                    _record_live_tool_start(tool_call_id, name, args)
-                    if tool_call_id and tool_call_id not in _live_tool_event_start_ids:
-                        _live_tool_event_start_ids.add(tool_call_id)
-                        _live_tool_calls.append({
-                            'name': name,
-                            'args': args if isinstance(args, dict) else {},
-                            'tid': tool_call_id,
-                        })
-                        start_runtime_tool_call(
-                            stream_id,
-                            name=name,
-                            args=args if isinstance(args, dict) else {},
-                            tool_call_id=tool_call_id,
-                        )
-                        put('tool', {
-                            'event_type': 'tool.started',
-                            'name': name,
-                            'preview': None,
-                            'args': _tool_args_snapshot(args),
-                            'tid': tool_call_id,
-                        })
-                    _tool_stats = meter().get_stats(stream_id)
-                    _tool_stats['session_id'] = session_id
-                    _tool_stats['usage'] = _live_usage_snapshot()
-                    put('metering', _tool_stats)
-                except Exception:
-                    logger.debug('Failed to update live prompt estimate on tool start', exc_info=True)
-
-            def on_tool_complete(tool_call_id, name, args, function_result):
-                try:
-                    _record_live_tool_complete(tool_call_id, name, function_result)
-                    if tool_call_id and tool_call_id not in _live_tool_event_complete_ids:
-                        _live_tool_event_complete_ids.add(tool_call_id)
-                        result_snippet = _tool_result_snippet(function_result)
-                        for live_tc in reversed(_live_tool_calls):
-                            if live_tc.get('done'):
-                                continue
-                            if live_tc.get('tid') == tool_call_id or (not live_tc.get('tid') and live_tc.get('name') == name):
-                                live_tc['done'] = True
-                                live_tc['snippet'] = result_snippet
-                                break
-                        finish_runtime_tool_call(
-                            stream_id,
-                            name=name,
-                            tool_call_id=tool_call_id,
-                            snippet=result_snippet,
-                        )
-                        _checkpoint_activity[0] += 1
-                        put('tool_complete', {
-                            'event_type': 'tool.completed',
-                            'name': name,
-                            'preview': result_snippet,
-                            'args': _tool_args_snapshot(args),
-                            'tid': tool_call_id,
-                            'is_error': False,
-                        })
-                        # Mirror the todo tool's in-memory state into
-                        # a dedicated SSE event so the Todos panel can
-                        # update in real-time without waiting for the
-                        # turn to settle. See the legacy path above
-                        # for the contract; the helper handles the
-                        # name guard, payload shape, and swallow-all
-                        # error policy.
-                        emit_todo_state(
-                            put,
-                            name=name,
-                            function_result=function_result,
-                            session_id=session_id,
-                            stream_id=stream_id,
-                        )
-                    _tool_stats = meter().get_stats(stream_id)
-                    _tool_stats['session_id'] = session_id
-                    _tool_stats['usage'] = _live_usage_snapshot()
-                    put('metering', _tool_stats)
-                except Exception:
-                    logger.debug('Failed to update live prompt estimate on tool completion', exc_info=True)
+            _flush_reasoning_buffer = event_translator.flush_reasoning
+            _reasoning_segments = event_translator.reasoning_segments
+            _live_tool_calls = event_translator.live_tool_calls
+            _checkpoint_activity = event_translator.checkpoint_activity
+            _self_healed = False
 
             _AIAgent = _get_ai_agent()
             if _AIAgent is None:
@@ -1475,363 +628,56 @@ def run_agent_streaming(
             except Exception as _ts_err:
                 print(f"[webui] WARNING: failed to read per-session toolsets for {session_id}: {_ts_err}", flush=True)
 
-            # Fallback model chain from profile config (e.g. for rate-limit or
-            # provider recovery). Match Hermes CLI/gateway semantics:
-            # fallback_providers entries are tried first, then legacy
-            # fallback_model entries are appended unless they duplicate an
-            # earlier provider/model/base_url route.
-            def _fallback_entries(_raw):
-                if isinstance(_raw, dict):
-                    _items = [_raw]
-                elif isinstance(_raw, list):
-                    _items = _raw
-                else:
-                    return []
-                _entries = []
-                for _entry in _items:
-                    if not isinstance(_entry, dict):
-                        continue
-                    _provider = str(_entry.get('provider') or '').strip()
-                    _model = str(_entry.get('model') or '').strip()
-                    if not _provider or not _model:
-                        continue
-                    _entries.append({
-                        'model': _model,
-                        'provider': _provider,
-                        'base_url': _entry.get('base_url'),
-                        'api_key': _entry.get('api_key'),
-                        'key_env': _entry.get('key_env'),
-                    })
-                return _entries
-
-            _fallback_chain = []
-            _fallback_seen = set()
-            _fallback_resolved = None
-            for _fallback_key in ('fallback_providers', 'fallback_model'):
-                for _fb_entry in _fallback_entries(_cfg.get(_fallback_key)):
-                    _identity = (
-                        str(_fb_entry.get('provider') or '').strip().lower(),
-                        str(_fb_entry.get('model') or '').strip().lower(),
-                        str(_fb_entry.get('base_url') or '').strip().rstrip('/').lower(),
-                    )
-                    if _identity in _fallback_seen:
-                        continue
-                    _fallback_seen.add(_identity)
-                    _fallback_chain.append(_fb_entry)
-            _fallback_resolved = _fallback_chain or None
-
-            # Build kwargs defensively — guard newer params so the WebUI
-            # degrades gracefully when run against an older hermes-agent build.
-            # (fixes: TypeError: AIAgent.__init__() got an unexpected keyword
-            # argument 'credential_pool' — issue #772)
-            import inspect as _inspect
-            _agent_params = set(_inspect.signature(_AIAgent.__init__).parameters)
-
-            # CLI-parity max-iteration budget: read config.yaml's
-            # agent.max_turns and pass it to AIAgent when supported. Without
-            # this WebUI-created agents silently use AIAgent's constructor
-            # default (90), so long browser-originated tasks hit the
-            # "maximum number of tool-calling iterations" summary path even
-            # after the operator raises Hermes' global turn budget.
-            _max_iterations_cfg = None
-            try:
-                _raw_max_iterations = None
-                _agent_cfg_for_iterations = _cfg.get('agent', {}) if isinstance(_cfg, dict) else {}
-                if isinstance(_agent_cfg_for_iterations, dict):
-                    _raw_max_iterations = _agent_cfg_for_iterations.get('max_turns')
-                if _raw_max_iterations is None and isinstance(_cfg, dict):
-                    # Back-compat for older Hermes config files that used a
-                    # root-level max_turns key.
-                    _raw_max_iterations = _cfg.get('max_turns')
-                if _raw_max_iterations is not None:
-                    _parsed_max_iterations = int(_raw_max_iterations)
-                    if _parsed_max_iterations > 0:
-                        _max_iterations_cfg = _parsed_max_iterations
-            except Exception:
-                _max_iterations_cfg = None
-
-            # CLI-parity max output cap: read config.yaml's max_tokens and pass
-            # it to AIAgent when supported. Without this WebUI-created agents use
-            # provider-native output ceilings (e.g. Claude via OpenRouter can
-            # request 64k), which may turn an otherwise usable fallback into a
-            # 402 "more credits / fewer max_tokens" failure.
-            _max_tokens_cfg = None
-            try:
-                _raw_max_tokens = _cfg.get('max_tokens')
-                if _raw_max_tokens is None:
-                    _agent_cfg_for_tokens = _cfg.get('agent', {})
-                    if isinstance(_agent_cfg_for_tokens, dict):
-                        _raw_max_tokens = _agent_cfg_for_tokens.get('max_tokens')
-                if _raw_max_tokens is not None:
-                    _parsed_max_tokens = int(_raw_max_tokens)
-                    if _parsed_max_tokens > 0:
-                        _max_tokens_cfg = _parsed_max_tokens
-            except Exception:
-                _max_tokens_cfg = None
-
-            # CLI-parity reasoning effort: read agent.reasoning_effort from the
-            # active profile's config.yaml (the same key the CLI writes via
-            # `/reasoning <level>`) and hand the parsed dict to AIAgent.  When
-            # the key is absent or invalid, pass None → agent uses its default.
-            try:
-                _effort_cfg = _cfg.get('agent', {}) if isinstance(_cfg, dict) else {}
-                _effort_raw = _effort_cfg.get('reasoning_effort') if isinstance(_effort_cfg, dict) else None
-                _effort = coerce_reasoning_effort_for_model(
-                    _effort_raw,
-                    resolved_model,
-                    provider_id=resolved_provider,
-                    base_url=resolved_base_url,
-                )
-                _reasoning_config = parse_reasoning_effort(_effort)
-            except Exception:
-                _reasoning_config = None
-
-            _agent_kwargs = dict(
+            agent_configuration = build_local_agent_configuration(
+                api,
+                agent_class=_AIAgent,
+                config=_cfg,
                 model=resolved_model,
                 provider=resolved_provider,
                 base_url=resolved_base_url,
                 api_key=resolved_api_key,
-                # Identify browser-originated sessions as WebUI so Hermes Agent
-                # does not inject CLI-specific terminal/output guidance.
-                platform='webui',
-                quiet_mode=True,
-                enabled_toolsets=_toolsets,
-                fallback_model=_fallback_resolved,
+                toolsets=_toolsets,
                 session_id=session_id,
                 session_db=_session_db,
                 prefill_messages=_prefill_messages,
-                stream_delta_callback=on_token,
-                reasoning_callback=on_reasoning,
-                tool_progress_callback=on_tool,
-                clarify_callback=(
-                    lambda question, choices: _clarify_callback_impl(
-                        question, choices, session_id, cancel_event, put
-                    )
+                callbacks=event_translator,
+                clarify_callback=lambda question, choices: _clarify_callback_impl(
+                    question, choices, session_id, cancel_event, put
                 ),
+                runtime=_rt,
+                request_overrides=_main_request_overrides,
             )
-            # reasoning_config has been an AIAgent param for several releases,
-            # but guard defensively to avoid TypeError on an older agent build.
-            if 'reasoning_config' in _agent_params and _reasoning_config is not None:
-                _agent_kwargs['reasoning_config'] = _reasoning_config
-            if 'prefill_messages' not in _agent_params:
-                _agent_kwargs.pop('prefill_messages', None)
-            if 'interim_assistant_callback' in _agent_params:
-                _agent_kwargs['interim_assistant_callback'] = on_interim_assistant
-            if 'tool_start_callback' in _agent_params:
-                _agent_kwargs['tool_start_callback'] = on_tool_start
-            if 'tool_complete_callback' in _agent_params:
-                _agent_kwargs['tool_complete_callback'] = on_tool_complete
-            if 'status_callback' in _agent_params:
-                _agent_kwargs['status_callback'] = _agent_status_callback
-            if 'max_iterations' in _agent_params and _max_iterations_cfg is not None:
-                _agent_kwargs['max_iterations'] = _max_iterations_cfg
-            if 'max_tokens' in _agent_params and _max_tokens_cfg is not None:
-                _agent_kwargs['max_tokens'] = _max_tokens_cfg
-            if 'request_overrides' in _agent_params and _main_request_overrides:
-                _agent_kwargs['request_overrides'] = _main_request_overrides
-            # Params added in newer hermes-agent — skip if not supported
-            if 'api_mode' in _agent_params:
-                _agent_kwargs['api_mode'] = _rt.get('api_mode')
-            if 'acp_command' in _agent_params:
-                _agent_kwargs['acp_command'] = _rt.get('command')
-            if 'acp_args' in _agent_params:
-                _agent_kwargs['acp_args'] = _rt.get('args')
-            if 'credential_pool' in _agent_params:
-                _agent_kwargs['credential_pool'] = _rt.get('credential_pool')
-            # Pin Honcho memory sessions to the stable WebUI session ID.
-            # Without this, 'per-session' Honcho strategy creates a new Honcho
-            # session on every streaming request because HonchoSessionManager is
-            # re-instantiated fresh each turn (#855).
-            if 'gateway_session_key' in _agent_params:
-                _agent_kwargs['gateway_session_key'] = session_id
+            _agent_params = agent_configuration.parameters
+            _agent_kwargs = agent_configuration.kwargs
+            _fallback_resolved = agent_configuration.fallback_models
+            _max_iterations_cfg = agent_configuration.max_iterations
+            _max_tokens_cfg = agent_configuration.max_tokens
+            _reasoning_config = agent_configuration.reasoning
 
-            # ── Agent cache: reuse across messages in the same session ──
-            # Mirrors gateway _agent_cache.  Keeps _user_turn_count alive so
-            # injectionFrequency: "first-turn" actually suppresses after turn 1.
-            if ephemeral:
-                agent = _AIAgent(**_agent_kwargs)
-                logger.debug('[webui] Created ephemeral agent for session %s', session_id)
-            else:
-                import hashlib as _hashlib
-                import json as _json
-                from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
-                _credential_pool = _rt.get('credential_pool')
-                _sig_blob = _json.dumps([
-                    resolved_model or '',
-                    _agent_cache_api_key_sig(resolved_api_key, _credential_pool),
-                    resolved_base_url or '',
-                    resolved_provider or '',
-                    _rt.get('api_mode') or '',
-                    _rt.get('command') or '',
-                    _rt.get('args') or [],
-                    bool(_credential_pool),
-                    _max_iterations_cfg or '',
-                    _max_tokens_cfg or '',
-                    _fallback_resolved or {},
-                    sorted(_toolsets) if _toolsets else [],
-                    _reasoning_config or {},
-                    _main_request_overrides or {},
-                    _public_prefill_context_status(_prefill_context),
-                    # #1897: profile_home is part of the agent's identity because
-                    # AIAgent caches `_cached_system_prompt` from `load_soul_md()`
-                    # at construction time, sourced from HERMES_HOME. Same-session
-                    # profile switches keep `session_id` stable, so without this
-                    # field the cached agent silently retains the previous
-                    # profile's SOUL.md (and any other profile-scoped context).
-                    _profile_home or '',
-                ], sort_keys=True)
-                _agent_sig = _hashlib.sha256(_sig_blob.encode()).hexdigest()[:16]
-
-                agent = None
-                _identity_mismatch_entry = None
-                with SESSION_AGENT_CACHE_LOCK:
-                    _cached = SESSION_AGENT_CACHE.get(session_id)
-                    if _cached and _cached[1] == _agent_sig:
-                        _cached_agent = _cached[0]
-                        if _cached_agent_matches_session(_cached_agent, session_id):
-                            agent = _cached_agent
-                            SESSION_AGENT_CACHE.move_to_end(session_id)  # LRU: mark as recently used
-                            logger.debug('[webui] Reusing cached agent for session %s', session_id)
-                        else:
-                            _identity_mismatch_entry = SESSION_AGENT_CACHE.pop(session_id, None)
-                            logger.warning(
-                                '[webui] Evicted cached agent with mismatched session identity: cache_key=%s agent_session_id=%s',
-                                session_id,
-                                _cached_agent_session_identity(_cached_agent),
-                            )
-                    if agent is not None:
-                        # Reopened/cache-hit sessions must register the agent
-                        # so later lifecycle commits can find it.
-                        try:
-                            from api.sessions import register_agent
-                            register_agent(session_id, agent)
-                        except Exception:
-                            logger.debug("Lifecycle register_agent failed for cached session %s", session_id, exc_info=True)
-
-                if _identity_mismatch_entry is not None:
-                    try:
-                        _close_cached_agent_entry_at_session_boundary(session_id, _identity_mismatch_entry)
-                    except Exception:
-                        logger.debug("Failed to close identity-mismatched cached agent for session %s", session_id, exc_info=True)
-
-                if agent is not None:
-                    # Refresh volatile runtime credentials selected from provider
-                    # pools without discarding cross-turn agent/provider state.
-                    if not _refresh_cached_agent_runtime(agent, _agent_kwargs):
-                        logger.warning(
-                            '[webui] Cached agent runtime could not be safely refreshed; rebuilding agent for session %s',
-                            session_id,
-                        )
-                        _stale_runtime_entry = None
-                        with SESSION_AGENT_CACHE_LOCK:
-                            _stale_runtime_entry = SESSION_AGENT_CACHE.pop(session_id, None)
-                        if _stale_runtime_entry is not None:
-                            try:
-                                _close_cached_agent_entry_at_session_boundary(session_id, _stale_runtime_entry)
-                            except Exception:
-                                logger.debug("Failed to close stale-runtime cached agent for session %s", session_id, exc_info=True)
-                        agent = None
-
-                if agent is not None:
-                    # Refresh per-turn callbacks — these close over request-scoped
-                    # objects (put queue, cancel_event) that are new each request.
-                    agent.stream_delta_callback = _agent_kwargs.get('stream_delta_callback')
-                    agent.tool_progress_callback = _agent_kwargs.get('tool_progress_callback')
-                    if hasattr(agent, 'tool_start_callback'):
-                        agent.tool_start_callback = _agent_kwargs.get('tool_start_callback')
-                    if hasattr(agent, 'tool_complete_callback'):
-                        agent.tool_complete_callback = _agent_kwargs.get('tool_complete_callback')
-                    if hasattr(agent, 'status_callback'):
-                        agent.status_callback = _agent_kwargs.get('status_callback')
-                    if hasattr(agent, 'interim_assistant_callback'):
-                        agent.interim_assistant_callback = _agent_kwargs.get('interim_assistant_callback')
-                    if hasattr(agent, 'reasoning_callback'):
-                        agent.reasoning_callback = _agent_kwargs.get('reasoning_callback')
-                    if hasattr(agent, 'clarify_callback'):
-                        agent.clarify_callback = _agent_kwargs.get('clarify_callback')
-                    if 'prefill_messages' in _agent_kwargs and hasattr(agent, 'prefill_messages'):
-                        agent.prefill_messages = list(_agent_kwargs.get('prefill_messages') or [])
-                    if _session_db is not None:
-                        # Prefer reusing a still-open SessionDB on the cached
-                        # agent. Closing it mid-turn breaks background
-                        # subagents that hold a reference to the same object
-                        # (delegate_tool copies parent._session_db by ref) —
-                        # they then fail with
-                        # 'NoneType' object has no attribute 'execute'.
-                        # When the existing handle is already closed/missing,
-                        # adopt the fresh per-request SessionDB (and close the
-                        # dead one) so we still avoid the EMFILE FD-leak from
-                        # PR #1421.
-                        _session_db = _adopt_session_db_for_cached_agent(
-                            agent, _session_db
-                        )
-                        agent._session_db = _session_db
-                    if hasattr(agent, '_api_call_count'):
-                        agent._api_call_count = 0
-                    # Reset interrupt state from a prior cancel so the reused
-                    # agent does not think it is still interrupted.
-                    if hasattr(agent, '_interrupted'):
-                        agent._interrupted = False
-                    if hasattr(agent, '_interrupt_message'):
-                        agent._interrupt_message = None
-                else:
-                    agent = _AIAgent(**_agent_kwargs)
-                    # Register the new agent with the memory lifecycle so
-                    # its commit_memory_session() can be found later.
-                    try:
-                        from api.sessions import register_agent
-                        register_agent(session_id, agent)
-                    except Exception:
-                        logger.debug("Lifecycle register_agent failed for new session %s", session_id, exc_info=True)
-                    _evicted_items = []
-                    # Snapshot the set of session_ids with a LIVE agent worker
-                    # BEFORE taking SESSION_AGENT_CACHE_LOCK, so LRU eviction never
-                    # closes an agent mid-run AND we never nest ACTIVE_RUNS_LOCK
-                    # inside SESSION_AGENT_CACHE_LOCK (avoids any lock-ordering
-                    # deadlock). A cancel/reconnect can drop STREAMS while the
-                    # worker is still unwinding or blocked in a provider call, so
-                    # ACTIVE_RUNS (worker lifecycle) is the authoritative liveness
-                    # signal, not STREAMS. (#3536 review round 2)
-                    _active_sids = set()
-                    try:
-                        from api.config import ACTIVE_RUNS, ACTIVE_RUNS_LOCK
-                        with ACTIVE_RUNS_LOCK:
-                            for _entry in (ACTIVE_RUNS or {}).values():
-                                _sid = (_entry or {}).get("session_id")
-                                if _sid:
-                                    _active_sids.add(_sid)
-                    except Exception:
-                        _active_sids = set()
-                    with SESSION_AGENT_CACHE_LOCK:
-                        SESSION_AGENT_CACHE[session_id] = (agent, _agent_sig)
-                        SESSION_AGENT_CACHE.move_to_end(session_id)  # LRU: mark as recently used
-                        from api.config import SESSION_AGENT_CACHE_MAX
-                        # Evict the oldest INACTIVE entries first. Walk LRU order
-                        # (front = oldest); skip any session with a live run. If
-                        # every over-cap entry is active, leave the cache
-                        # temporarily above cap rather than close a live worker's
-                        # agent — a later insertion/finalization trims it once the
-                        # run ends.
-                        while len(SESSION_AGENT_CACHE) > SESSION_AGENT_CACHE_MAX:
-                            _evictable_sid = None
-                            for _sid in list(SESSION_AGENT_CACHE.keys()):
-                                if _sid not in _active_sids:
-                                    _evictable_sid = _sid
-                                    break
-                            if _evictable_sid is None:
-                                break  # all over-cap entries are active; defer
-                            evicted_entry = SESSION_AGENT_CACHE.pop(_evictable_sid)
-                            _evicted_items.append((_evictable_sid, evicted_entry))
-                    # Commit and close evicted agents outside the cache lock so
-                    # concurrent cache users are not blocked by provider I/O.
-                    for _evicted_sid, _evicted_entry in _evicted_items:
-                        try:
-                            _evicted_agent = _evicted_entry[0] if isinstance(_evicted_entry, tuple) else None
-                            _close_evicted_agent_at_session_boundary(_evicted_sid, _evicted_agent)
-                        except Exception:
-                            logger.debug("Failed to close evicted agent for session %s", _evicted_sid, exc_info=True)
-                        logger.debug('[webui] Evicted LRU agent from cache: %s', _evicted_sid)
-                    logger.debug('[webui] Created new agent for session %s', session_id)
+            cached_agent = acquire_local_agent(
+                api,
+                agent_class=_AIAgent,
+                session_id=session_id,
+                ephemeral=ephemeral,
+                kwargs=_agent_kwargs,
+                session_db=_session_db,
+                model=resolved_model,
+                provider=resolved_provider,
+                base_url=resolved_base_url,
+                api_key=resolved_api_key,
+                runtime=_rt,
+                max_iterations=_max_iterations_cfg,
+                max_tokens=_max_tokens_cfg,
+                fallback_models=_fallback_resolved,
+                toolsets=_toolsets,
+                reasoning=_reasoning_config,
+                request_overrides=_main_request_overrides,
+                prefill_status=_public_prefill_context_status(_prefill_context),
+                profile_home=_profile_home,
+            )
+            agent = cached_agent.agent
+            _agent_sig = cached_agent.signature
+            _session_db = cached_agent.session_db
 
             # Store agent instance for cancel/interrupt propagation
             if not attach_runtime_agent(stream_id, agent):
@@ -2389,8 +1235,10 @@ def run_agent_streaming(
                     _assistant_added = False
                 elif _tool_limit_reached and not _session_lacks_final_assistant_answer(s.messages):
                     _mark_latest_assistant_tool_limit_status(s.messages)
-                # _token_sent tracks whether on_token() was called (any streamed text)
-                if _terminal_failure or (not _assistant_added and not _token_sent):
+                # The event translator owns whether any visible token was emitted.
+                if _terminal_failure or (
+                    not _assistant_added and not event_translator.token_sent
+                ):
                     if cancel_event.is_set():
                         _finalize_cancelled_turn(s, ephemeral=ephemeral)
                         if not ephemeral:
@@ -2456,7 +1304,7 @@ def run_agent_streaming(
                                 _SAC.move_to_end(session_id)
                             # Retry the conversation once with fresh credentials
                             _self_healed = True
-                            _token_sent = False
+                            event_translator.token_sent = False
                             try:
                                 _heal_kwargs = dict(
                                     user_message=user_message,
@@ -2475,7 +1323,10 @@ def run_agent_streaming(
                                     _heal_kwargs["moa_config"] = moa_config
                                 _heal_result = agent.run_conversation(**_heal_kwargs)
                                 _heal_all_msgs = _heal_result.get('messages') or []
-                                _heal_ok = _has_new_assistant_reply(_heal_all_msgs, _prev_len) or _token_sent
+                                _heal_ok = (
+                                    _has_new_assistant_reply(_heal_all_msgs, _prev_len)
+                                    or event_translator.token_sent
+                                )
                             except Exception as _retry_exc:
                                 logger.warning(
                                     '[webui] self-heal: retry also failed: %s', _retry_exc,
@@ -3548,24 +2399,7 @@ def run_agent_streaming(
                     _unreg_clarify_notify(session_id)
                 except Exception:
                     logger.debug("Failed to unregister clarify callback")
-            with _ENV_LOCK:
-                for _key, _old_value in old_profile_env.items():
-                    if _old_value is None: os.environ.pop(_key, None)
-                    else: os.environ[_key] = _old_value
-                if old_cwd is None: os.environ.pop('TERMINAL_CWD', None)
-                else: os.environ['TERMINAL_CWD'] = old_cwd
-                if old_exec_ask is None: os.environ.pop('HERMES_EXEC_ASK', None)
-                else: os.environ['HERMES_EXEC_ASK'] = old_exec_ask
-                if old_session_key is None: os.environ.pop('HERMES_SESSION_KEY', None)
-                else: os.environ['HERMES_SESSION_KEY'] = old_session_key
-                if old_session_id is None: os.environ.pop('HERMES_SESSION_ID', None)
-                else: os.environ['HERMES_SESSION_ID'] = old_session_id
-                if old_session_platform is None: os.environ.pop('HERMES_SESSION_PLATFORM', None)
-                else: os.environ['HERMES_SESSION_PLATFORM'] = old_session_platform
-                if old_session_chat_id is None: os.environ.pop('HERMES_SESSION_CHAT_ID', None)
-                else: os.environ['HERMES_SESSION_CHAT_ID'] = old_session_chat_id
-                if old_hermes_home is None: os.environ.pop('HERMES_HOME', None)
-                else: os.environ['HERMES_HOME'] = old_hermes_home
+            run_environment.close()
 
     except Exception as e:
         print('[webui] stream error:\n' + traceback.format_exc(), flush=True)
@@ -3680,7 +2514,7 @@ def run_agent_streaming(
                         _SAC2[session_id] = (_heal_agent, _agent_sig)
                         _SAC2.move_to_end(session_id)
                     # Retry the conversation
-                    _token_sent = False
+                    event_translator.token_sent = False
                     try:
                         _heal_kwargs2 = dict(
                             user_message=user_message,
