@@ -687,7 +687,7 @@ def test_limited_state_db_prefix_count_mismatch_skips_visible_key_normalization(
 
 
 def test_limited_state_db_prefix_exact_match_runs_key_comparison(monkeypatch, tmp_path):
-    import api.routes as routes
+    import api.sessions.detail_projection as detail_projection
 
     sid = "webui_reconcile_prefix_exact"
     sidecar_messages = _large_timestamped_sidecar_messages()
@@ -696,9 +696,9 @@ def test_limited_state_db_prefix_exact_match_runs_key_comparison(monkeypatch, tm
     summary_calls = []
     key_calls = []
     visible_key_calls = 0
-    real_summary_reader = routes.get_state_db_session_message_prefix_summary
-    real_key_reader = routes.get_state_db_session_message_keys_before_timestamp
-    real_visible_key = routes._session_message_visible_key
+    real_summary_reader = detail_projection.get_state_db_session_message_prefix_summary
+    real_key_reader = detail_projection.get_state_db_session_message_keys_before_timestamp
+    real_visible_key = detail_projection._session_message_visible_key
 
     def prefix_summary(*args, **kwargs):
         summary_calls.append((args, kwargs))
@@ -714,19 +714,21 @@ def test_limited_state_db_prefix_exact_match_runs_key_comparison(monkeypatch, tm
         return real_visible_key(message)
 
     monkeypatch.setattr(
-        routes,
+        detail_projection,
         "get_state_db_session_message_prefix_summary",
         prefix_summary,
         raising=False,
     )
     monkeypatch.setattr(
-        routes,
+        detail_projection,
         "get_state_db_session_message_keys_before_timestamp",
         counted_key_reader,
     )
-    monkeypatch.setattr(routes, "_session_message_visible_key", counted_visible_key)
+    monkeypatch.setattr(
+        detail_projection, "_session_message_visible_key", counted_visible_key
+    )
 
-    floor, returned_sidecar = routes._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = detail_projection._state_db_since_timestamp_for_limited_display(
         session,
         30,
     )
@@ -739,7 +741,7 @@ def test_limited_state_db_prefix_exact_match_runs_key_comparison(monkeypatch, tm
 
 
 def test_limited_state_db_prefix_equal_count_different_content_falls_back(monkeypatch, tmp_path):
-    import api.routes as routes
+    import api.sessions.detail_projection as detail_projection
 
     sid = "webui_reconcile_prefix_content_mismatch"
     sidecar_messages = _large_timestamped_sidecar_messages()
@@ -749,8 +751,8 @@ def test_limited_state_db_prefix_equal_count_different_content_falls_back(monkey
     _make_state_db(tmp_path / "state.db", sid, state_messages)
     summary_calls = []
     key_calls = []
-    real_summary_reader = routes.get_state_db_session_message_prefix_summary
-    real_key_reader = routes.get_state_db_session_message_keys_before_timestamp
+    real_summary_reader = detail_projection.get_state_db_session_message_prefix_summary
+    real_key_reader = detail_projection.get_state_db_session_message_keys_before_timestamp
 
     def prefix_summary(*args, **kwargs):
         summary_calls.append((args, kwargs))
@@ -761,18 +763,18 @@ def test_limited_state_db_prefix_equal_count_different_content_falls_back(monkey
         return real_key_reader(*args, **kwargs)
 
     monkeypatch.setattr(
-        routes,
+        detail_projection,
         "get_state_db_session_message_prefix_summary",
         prefix_summary,
         raising=False,
     )
     monkeypatch.setattr(
-        routes,
+        detail_projection,
         "get_state_db_session_message_keys_before_timestamp",
         counted_key_reader,
     )
 
-    floor, returned_sidecar = routes._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = detail_projection._state_db_since_timestamp_for_limited_display(
         session,
         30,
     )
@@ -787,7 +789,7 @@ def test_limited_state_db_prefix_equal_empty_assistant_different_tool_calls_fall
     monkeypatch,
     tmp_path,
 ):
-    import api.routes as routes
+    import api.sessions.detail_projection as detail_projection
 
     sid = "webui_reconcile_prefix_tool_calls_mismatch"
     sidecar_messages = _large_timestamped_sidecar_messages()
@@ -808,8 +810,8 @@ def test_limited_state_db_prefix_equal_empty_assistant_different_tool_calls_fall
     _make_state_db(tmp_path / "state.db", sid, state_messages)
     summary_calls = []
     key_calls = []
-    real_summary_reader = routes.get_state_db_session_message_prefix_summary
-    real_key_reader = routes.get_state_db_session_message_keys_before_timestamp
+    real_summary_reader = detail_projection.get_state_db_session_message_prefix_summary
+    real_key_reader = detail_projection.get_state_db_session_message_keys_before_timestamp
 
     def prefix_summary(*args, **kwargs):
         summary_calls.append((args, kwargs))
@@ -820,18 +822,18 @@ def test_limited_state_db_prefix_equal_empty_assistant_different_tool_calls_fall
         return real_key_reader(*args, **kwargs)
 
     monkeypatch.setattr(
-        routes,
+        detail_projection,
         "get_state_db_session_message_prefix_summary",
         prefix_summary,
         raising=False,
     )
     monkeypatch.setattr(
-        routes,
+        detail_projection,
         "get_state_db_session_message_keys_before_timestamp",
         counted_key_reader,
     )
 
-    floor, returned_sidecar = routes._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = detail_projection._state_db_since_timestamp_for_limited_display(
         session,
         30,
     )

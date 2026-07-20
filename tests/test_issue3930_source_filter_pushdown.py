@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import api.agent_ops.session_discovery as session_discovery
 import api.sessions.external_sidebar as external_sessions
+import api.sessions.materialization as session_materialization
 import api.profiles as profiles
 import api.routes as routes
 
@@ -332,12 +333,12 @@ def test_non_sidebar_cli_session_callers_keep_default_get_cli_sessions_signature
     captured = []
 
     monkeypatch.setattr(
-        routes,
+        session_materialization,
         "get_cli_sessions",
         lambda *, all_profiles=False: captured.append(all_profiles) or [{"session_id": "cli-session", "title": "CLI Session"}],
     )
 
-    assert routes._lookup_cli_session_metadata("cli-session") == {
+    assert session_materialization._lookup_cli_session_metadata("cli-session") == {
         "session_id": "cli-session",
         "title": "CLI Session",
     }
