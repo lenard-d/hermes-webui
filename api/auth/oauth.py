@@ -114,7 +114,7 @@ def _pending_oauth_flow_for(provider: str, hermes_home: Path) -> tuple[str, dict
 
 def _clear_process_anthropic_env_values() -> None:
     """Clear Anthropic process env fallbacks under the streaming env lock."""
-    from api.streaming import _ENV_LOCK
+    from api.streaming.diagnostics import _ENV_LOCK
 
     with _ENV_LOCK:
         for key in _ANTHROPIC_ENV_KEYS:
@@ -129,7 +129,7 @@ def resolve_runtime_provider_with_anthropic_env_lock(resolver, *args, **kwargs):
     the process-env lock prevents a chat stream from observing one stale
     Anthropic env value while onboarding has already cleared the other.
     """
-    from api.streaming import _ENV_LOCK
+    from api.streaming.diagnostics import _ENV_LOCK
 
     with _ENV_LOCK:
         return resolver(*args, **kwargs)

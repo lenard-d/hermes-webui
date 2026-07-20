@@ -355,7 +355,7 @@ def _write_env_file(env_path: Path, updates: dict[str, str | None]) -> None:
     calls (each reading the same file baseline and overwriting the other's key).
     Also serialises os.environ mutations with streaming sessions.
     """
-    from api.streaming import _ENV_LOCK
+    from api.streaming.diagnostics import _ENV_LOCK
     import stat as _stat
 
     with _ENV_LOCK:

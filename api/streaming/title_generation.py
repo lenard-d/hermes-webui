@@ -4,11 +4,28 @@ from __future__ import annotations
 
 import re
 import threading
-from types import ModuleType
 from typing import Optional
 
+import logging
 
-def first_exchange_snippets(api: ModuleType, messages):
+from api.sessions.cache import get_session
+from api.sessions.operations import mark_session_title_generated, session_has_manual_title
+from api.sessions.projects import title_from
+from api.sessions.repository import edit_session
+
+from .thinking_content import (
+    _looks_invalid_generated_title,
+    _message_text,
+    _sanitize_generated_title,
+    _strip_thinking_markup,
+)
+from api.workspace_context import _strip_workspace_prefix
+
+
+logger = logging.getLogger(__name__)
+
+
+def _first_exchange_snippets(messages):
     """Return (first_user_text, first_assistant_text) snippets for title generation.
 
     Prefer the first substantive assistant answer in the opening exchange,
@@ -21,20 +38,20 @@ def first_exchange_snippets(api: ModuleType, messages):
             continue
         role = m.get('role')
         if role == 'user':
-            candidate = api._message_text(m.get('content'))
+            candidate = _message_text(m.get('content'))
             if not user_text and candidate:
                 user_text = candidate
                 continue
             if user_text and candidate:
                 break
         elif role == 'assistant' and user_text:
-            candidate = api._message_text(m.get('content'))
+            candidate = _message_text(m.get('content'))
             # Skip tool-call preambles *only* when content is empty or looks
             # like meta-reasoning ("Let me check my memory first.", "The user
             # is asking...", etc.). Assistant rows that carry tool_calls but
             # also contain a substantive answer text are kept — those are
             # agentic first-turn plans that are legitimate title candidates.
-            if m.get('tool_calls') and (not candidate or api._looks_invalid_generated_title(candidate)):
+            if m.get('tool_calls') and (not candidate or _looks_invalid_generated_title(candidate)):
                 continue
             if candidate:
                 asst_text = candidate
@@ -43,7 +60,7 @@ def first_exchange_snippets(api: ModuleType, messages):
     return user_text[:500], asst_text[:500]
 
 
-def latest_exchange_snippets(api: ModuleType, messages):
+def _latest_exchange_snippets(messages):
     """Return (last_user_text, last_assistant_text) snippets for title refresh.
 
     Walks the message list backwards to find the last user+assistant pair,
@@ -56,14 +73,14 @@ def latest_exchange_snippets(api: ModuleType, messages):
             continue
         role = m.get('role')
         if role == 'assistant' and not asst_text:
-            candidate = api._message_text(m.get('content'))
+            candidate = _message_text(m.get('content'))
             # Skip tool-call-only preambles
-            if m.get('tool_calls') and (not candidate or api._looks_invalid_generated_title(candidate)):
+            if m.get('tool_calls') and (not candidate or _looks_invalid_generated_title(candidate)):
                 continue
             if candidate:
                 asst_text = candidate
         elif role == 'user' and not user_text:
-            candidate = api._message_text(m.get('content'))
+            candidate = _message_text(m.get('content'))
             if candidate:
                 user_text = candidate
         if user_text and asst_text:
@@ -71,7 +88,7 @@ def latest_exchange_snippets(api: ModuleType, messages):
     return user_text[:500], asst_text[:500]
 
 
-def count_exchanges(api: ModuleType, messages):
+def _count_exchanges(messages):
     """Count the number of user messages (rough exchange count)."""
     count = 0
     for m in messages or []:
@@ -84,7 +101,7 @@ def count_exchanges(api: ModuleType, messages):
     return count
 
 
-def get_title_refresh_interval(api: ModuleType) -> int:
+def _get_title_refresh_interval() -> int:
     """Read the auto_title_refresh_every setting (0 = disabled)."""
     try:
         from api.config import load_settings
@@ -95,9 +112,9 @@ def get_title_refresh_interval(api: ModuleType) -> int:
         return 0
 
 
-def is_provisional_title(api: ModuleType, current_title: str, messages) -> bool:
+def _is_provisional_title(current_title: str, messages) -> bool:
     """Heuristic: title equals first-message substring placeholder."""
-    derived = api.title_from(messages, '') or ''
+    derived = title_from(messages, '') or ''
     if not derived:
         return False
     current = re.sub(r'\s+', ' ', str(current_title or '')).strip()
@@ -107,7 +124,7 @@ def is_provisional_title(api: ModuleType, current_title: str, messages) -> bool:
     return current == candidate
 
 
-def detect_title_language(api: ModuleType, text: str) -> str:
+def _detect_title_language(text: str) -> str:
     """Best-effort language hint for title generation/validation."""
     s = re.sub(r'\s+', ' ', str(text or '')).strip().lower()
     if not s:
@@ -124,7 +141,7 @@ def detect_title_language(api: ModuleType, text: str) -> str:
     return ''
 
 
-def script_counts(api: ModuleType, text: str) -> dict:
+def _script_counts(text: str) -> dict:
     """Return per-script alphabetic character counts for *text*.
 
     Buckets: ``latin``, ``cjk`` (Han/Hiragana/Katakana/Hangul), ``cyrillic``,
@@ -160,7 +177,7 @@ def script_counts(api: ModuleType, text: str) -> dict:
     return counts
 
 
-def dominant_script(api: ModuleType, text: str) -> str:
+def _dominant_script(text: str) -> str:
     """Return a coarse writing-script bucket for *text*, or '' when undecidable.
 
     Script-level (not language-level) classification is cheap and dependency-free.
@@ -169,7 +186,7 @@ def dominant_script(api: ModuleType, text: str) -> str:
     to establish the conversation start's expected script for cross-script title
     drift detection (#3293).
     """
-    counts = api._script_counts(text)
+    counts = _script_counts(text)
     total = sum(counts.values())
     if total < 2:
         return ''
@@ -179,11 +196,11 @@ def dominant_script(api: ModuleType, text: str) -> str:
     return ''
 
 
-def title_prompt_language_rule(api: ModuleType, user_text: str) -> str:
+def _title_prompt_language_rule(user_text: str) -> str:
     return "Match the language of the user question.\n"
 
 
-def title_language_mismatch(api: ModuleType, user_text: str, title: str) -> bool:
+def _title_language_mismatch(user_text: str, title: str) -> bool:
     """Reject titles whose language clearly diverges from the conversation start.
 
     Two independent signals:
@@ -207,9 +224,9 @@ def title_language_mismatch(api: ModuleType, user_text: str, title: str) -> bool
         return False
 
     # (1) Cross-script mismatch — language-agnostic.
-    user_script = api._dominant_script(user_text)
+    user_script = _dominant_script(user_text)
     if user_script:
-        title_counts = api._script_counts(candidate)
+        title_counts = _script_counts(candidate)
         title_total = sum(title_counts.values())
         if title_total >= 2:
             for script, n in title_counts.items():
@@ -217,10 +234,10 @@ def title_language_mismatch(api: ModuleType, user_text: str, title: str) -> bool
                     return True
 
     # (2) Legacy same-script German→English heuristic.
-    if api._detect_title_language(user_text) != 'de':
+    if _detect_title_language(user_text) != 'de':
         return False
     candidate_lower = candidate.lower()
-    if api._detect_title_language(candidate_lower) == 'de':
+    if _detect_title_language(candidate_lower) == 'de':
         return False
     english_markers = {
         'old', 'image', 'display', 'issue', 'problem', 'discussion', 'conversation',
@@ -231,9 +248,9 @@ def title_language_mismatch(api: ModuleType, user_text: str, title: str) -> bool
     return english_hits >= 2
 
 
-def title_prompts(api: ModuleType, user_text: str, assistant_text: str) -> tuple[str, list[str]]:
+def _title_prompts(user_text: str, assistant_text: str) -> tuple[str, list[str]]:
     qa = f"User question:\n{user_text[:500]}\n\nAssistant answer:\n{assistant_text[:500]}"
-    language_rule = api._title_prompt_language_rule(user_text)
+    language_rule = _title_prompt_language_rule(user_text)
     prompts = [
         (
             "Generate a short session title from this conversation start.\n"
@@ -259,7 +276,7 @@ def title_prompts(api: ModuleType, user_text: str, assistant_text: str) -> tuple
     return qa, prompts
 
 
-def is_minimax_route(api: ModuleType, provider: str = '', model: str = '', base_url: str = '') -> bool:
+def _is_minimax_route(provider: str = '', model: str = '', base_url: str = '') -> bool:
     text = ' '.join([
         str(provider or '').lower(),
         str(model or '').lower(),
@@ -268,7 +285,7 @@ def is_minimax_route(api: ModuleType, provider: str = '', model: str = '', base_
     return 'minimax' in text or 'minimaxi.com' in text
 
 
-def route_rejects_reasoning_extra(api: ModuleType, provider: str = '', model: str = '', base_url: str = '') -> bool:
+def _route_rejects_reasoning_extra(provider: str = '', model: str = '', base_url: str = '') -> bool:
     """Routes known to reject an ``extra_body`` ``reasoning`` parameter with HTTP 400.
 
     Title generation injects ``extra_body={"reasoning": {"enabled": False}}`` to
@@ -291,7 +308,7 @@ def route_rejects_reasoning_extra(api: ModuleType, provider: str = '', model: st
         host = (urlsplit(str(base_url or '').strip()).hostname or '').lower()
     except Exception:
         host = ''
-    if host == 'api.openai.com' or host.endswith('.openai.azure.com'):
+    if host == 'openai.com' or host.endswith('.openai.azure.com'):
         return True
     # Azure AI Foundry chat-completions hosts (also reject the reasoning param).
     if host.endswith('.services.ai.azure.com') or host.endswith('.cognitiveservices.azure.com'):
@@ -310,7 +327,7 @@ def route_rejects_reasoning_extra(api: ModuleType, provider: str = '', model: st
     return False
 
 
-def get_aux_title_config(api: ModuleType) -> dict:
+def _get_aux_title_config() -> dict:
     """Return title_generation auxiliary config, or an empty dict on errors."""
     try:
         from agent.auxiliary_client import _get_auxiliary_task_config
@@ -320,16 +337,16 @@ def get_aux_title_config(api: ModuleType) -> dict:
         return {}
 
 
-def aux_title_configured(api: ModuleType) -> bool:
+def _aux_title_configured() -> bool:
     """Return True when any auxiliary title_generation config field is meaningfully set."""
-    tg = api._get_aux_title_config()
+    tg = _get_aux_title_config()
     provider = tg.get('provider', '') or ''
     model = tg.get('model', '') or ''
     base_url = tg.get('base_url', '') or ''
     return bool(model or base_url or (provider and provider.lower() != 'auto'))
 
 
-def aux_title_timeout(api: ModuleType, default: float = 15.0) -> float:
+def _aux_title_timeout(default: float = 15.0) -> float:
     """Return the configured timeout (seconds) for auxiliary title generation.
 
     Only accepts positive numeric values.  Falls back to *default* when the
@@ -337,24 +354,24 @@ def aux_title_timeout(api: ModuleType, default: float = 15.0) -> float:
     so mis-configurations are visible in server output.
     """
     try:
-        tg = api._get_aux_title_config()
+        tg = _get_aux_title_config()
         raw = tg.get('timeout')
         if raw is None:
             return default
         try:
             value = float(raw)
         except (ValueError, TypeError):
-            api.logger.debug("aux title timeout: non-numeric value %r, falling back to %s", raw, default)
+            logger.debug("aux title timeout: non-numeric value %r, falling back to %s", raw, default)
             return default
         if value > 0:
             return value
-        api.logger.debug("aux title timeout: non-positive value %s, falling back to %s", value, default)
+        logger.debug("aux title timeout: non-positive value %s, falling back to %s", value, default)
         return default
     except Exception:
         return default
 
 
-def title_completion_budget(api: ModuleType, provider: str = '', model: str = '', base_url: str = '') -> int:
+def _title_completion_budget(provider: str = '', model: str = '', base_url: str = '') -> int:
     # Title generation is a small auxiliary task, but reasoning models may
     # spend a surprising amount of the completion budget before emitting final
     # content.  Keep the budget high enough for MiniMax/Kimi-style reasoning
@@ -363,11 +380,11 @@ def title_completion_budget(api: ModuleType, provider: str = '', model: str = ''
     return 512
 
 
-def title_retry_completion_budget(api: ModuleType, provider: str = '', model: str = '', base_url: str = '') -> int:
-    return max(1024, api._title_completion_budget(provider, model, base_url) * 2)
+def _title_retry_completion_budget(provider: str = '', model: str = '', base_url: str = '') -> int:
+    return max(1024, _title_completion_budget(provider, model, base_url) * 2)
 
 
-def title_retry_status(api: ModuleType, status: str) -> bool:
+def _title_retry_status(status: str) -> bool:
     # Whether to grant a second budget attempt within the same prompt+model
     # combination.  ``llm_length`` indicates the model would have produced
     # content with more headroom, so doubling the budget can help.
@@ -386,7 +403,7 @@ def title_retry_status(api: ModuleType, status: str) -> bool:
     }
 
 
-def title_should_skip_remaining_attempts(api: ModuleType, status: str) -> bool:
+def _title_should_skip_remaining_attempts(status: str) -> bool:
     """Statuses where re-issuing the next prompt against the same model
     produces the same failing shape (model burned its budget on hidden
     reasoning, hit a hard provider gate, etc.).
@@ -408,7 +425,7 @@ def title_should_skip_remaining_attempts(api: ModuleType, status: str) -> bool:
     }
 
 
-def safe_obj_value(api: ModuleType, obj, key: str):
+def _safe_obj_value(obj, key: str):
     if obj is None:
         return None
     if isinstance(obj, dict):
@@ -421,7 +438,7 @@ def safe_obj_value(api: ModuleType, obj, key: str):
     return value
 
 
-def safe_text_value(api: ModuleType, value) -> str:
+def _safe_text_value(value) -> str:
     if value is None:
         return ''
     if value.__class__.__module__.startswith('unittest.mock'):
@@ -429,21 +446,21 @@ def safe_text_value(api: ModuleType, value) -> str:
     return str(value or '').strip()
 
 
-def extract_title_response(api: ModuleType, resp, *, aux: bool = False) -> tuple[str, str]:
+def _extract_title_response(resp, *, aux: bool = False) -> tuple[str, str]:
     """Return (content, empty_status) from an OpenAI-compatible response."""
     suffix = '_aux' if aux else ''
     try:
-        choices = api._safe_obj_value(resp, 'choices') or []
+        choices = _safe_obj_value(resp, 'choices') or []
         choice = choices[0] if choices else None
-        message = api._safe_obj_value(choice, 'message')
-        content = api._safe_text_value(api._safe_obj_value(message, 'content'))
+        message = _safe_obj_value(choice, 'message')
+        content = _safe_text_value(_safe_obj_value(message, 'content'))
         if content:
             return content, ''
-        finish_reason = api._safe_text_value(api._safe_obj_value(choice, 'finish_reason')).lower()
+        finish_reason = _safe_text_value(_safe_obj_value(choice, 'finish_reason')).lower()
         reasoning = (
-            api._safe_text_value(api._safe_obj_value(message, 'reasoning'))
-            or api._safe_text_value(api._safe_obj_value(message, 'reasoning_content'))
-            or api._safe_text_value(api._safe_obj_value(message, 'thinking'))
+            _safe_text_value(_safe_obj_value(message, 'reasoning'))
+            or _safe_text_value(_safe_obj_value(message, 'reasoning_content'))
+            or _safe_text_value(_safe_obj_value(message, 'thinking'))
         )
         # When the model emitted reasoning tokens but no visible content, it
         # burned its budget on hidden thinking — retrying with a larger budget
@@ -461,7 +478,6 @@ def extract_title_response(api: ModuleType, resp, *, aux: bool = False) -> tuple
 
 
 def generate_title_raw_via_aux(
-    api: ModuleType,
     user_text: str,
     assistant_text: str,
     provider: str = '',
@@ -471,8 +487,8 @@ def generate_title_raw_via_aux(
     """Return (raw_text, status) via auxiliary LLM route."""
     if not user_text or not assistant_text:
         return None, 'missing_exchange'
-    qa, prompts = api._title_prompts(user_text, assistant_text)
-    configured = api._get_aux_title_config()
+    qa, prompts = _title_prompts(user_text, assistant_text)
+    configured = _get_aux_title_config()
     caller_supplied_route = bool(provider or model or base_url)
     provider = provider or configured.get('provider', '') or ''
     if str(provider).strip().lower() == 'auto':
@@ -495,14 +511,14 @@ def generate_title_raw_via_aux(
     api_key = ''
     if not caller_supplied_route:
         api_key = str(configured.get('api_key', '') or '').strip()
-    base_max_tokens = api._title_completion_budget(provider, model, base_url)
+    base_max_tokens = _title_completion_budget(provider, model, base_url)
     reasoning_extra = {}
-    if not api._route_rejects_reasoning_extra(provider, model, base_url):
+    if not _route_rejects_reasoning_extra(provider, model, base_url):
         reasoning_extra["reasoning"] = {"enabled": False}
-    if api._is_minimax_route(provider, model, base_url):
+    if _is_minimax_route(provider, model, base_url):
         reasoning_extra["reasoning_split"] = True
     try:
-        _timeout = api._aux_title_timeout()
+        _timeout = _aux_title_timeout()
         from agent.auxiliary_client import call_llm
         last_status = 'llm_error_aux'
         for idx, prompt in enumerate(prompts):
@@ -525,39 +541,39 @@ def generate_title_raw_via_aux(
                         timeout=_timeout,
                         extra_body=reasoning_extra or None,
                     )
-                    raw, empty_status = api._extract_title_response(resp, aux=True)
+                    raw, empty_status = _extract_title_response(resp, aux=True)
                     if raw:
                         return raw, ('llm_aux' if idx == 0 and budget_idx == 0 else 'llm_aux_retry')
                     last_status = empty_status or 'llm_empty_aux'
-                    if budget_idx == 0 and api._title_retry_status(last_status):
-                        budgets.append(api._title_retry_completion_budget(provider, model, base_url))
+                    if budget_idx == 0 and _title_retry_status(last_status):
+                        budgets.append(_title_retry_completion_budget(provider, model, base_url))
             except Exception as e:
                 last_status = 'llm_error_aux'
-                api.logger.debug("Aux title generation attempt %s failed: %s", idx + 1, e)
+                logger.debug("Aux title generation attempt %s failed: %s", idx + 1, e)
             # If the model just burned its budget on hidden reasoning, retrying
             # the next prompt against the same model produces the same shape.
             # Short-circuit to the local fallback path (#2083).
-            if api._title_should_skip_remaining_attempts(last_status):
-                api.logger.debug(
+            if _title_should_skip_remaining_attempts(last_status):
+                logger.debug(
                     "Aux title generation short-circuiting after %s (reasoning-only response).",
                     last_status,
                 )
                 break
         return None, last_status
     except Exception as e:
-        api.logger.debug("Aux title generation failed: %s", e)
+        logger.debug("Aux title generation failed: %s", e)
         return None, 'llm_error_aux'
 
 
-def generate_title_raw_via_agent(api: ModuleType, agent, user_text: str, assistant_text: str) -> tuple[Optional[str], str]:
+def generate_title_raw_via_agent(agent, user_text: str, assistant_text: str) -> tuple[Optional[str], str]:
     """Return (raw_text, status) via active-agent route."""
     if not user_text or not assistant_text:
         return None, 'missing_exchange'
     if agent is None:
         return None, 'missing_agent'
 
-    qa, prompts = api._title_prompts(user_text, assistant_text)
-    base_max_tokens = api._title_completion_budget(
+    qa, prompts = _title_prompts(user_text, assistant_text)
+    base_max_tokens = _title_completion_budget(
         getattr(agent, 'provider', ''),
         getattr(agent, 'model', ''),
         getattr(agent, 'base_url', ''),
@@ -623,7 +639,7 @@ def generate_title_raw_via_agent(api: ModuleType, agent, user_text: str, assista
                         # (#4161). MiniMax still needs reasoning_split, which the
                         # profile path does not add.
                         _tg_extra = dict(api_kwargs.get('extra_body') or {})
-                        if api._is_minimax_route(getattr(agent, 'provider', ''), getattr(agent, 'model', ''), getattr(agent, 'base_url', '')):
+                        if _is_minimax_route(getattr(agent, 'provider', ''), getattr(agent, 'model', ''), getattr(agent, 'base_url', '')):
                             _tg_extra['reasoning_split'] = True
                         if _tg_extra:
                             api_kwargs['extra_body'] = _tg_extra
@@ -634,20 +650,20 @@ def generate_title_raw_via_agent(api: ModuleType, agent, user_text: str, assista
                         resp = agent._ensure_primary_openai_client(reason='title_generation').chat.completions.create(
                             **api_kwargs,
                         )
-                        raw, empty_status = api._extract_title_response(resp)
+                        raw, empty_status = _extract_title_response(resp)
                     raw = str(raw or '').strip()
                     if raw:
                         return raw, ('llm' if idx == 0 and budget_idx == 0 else 'llm_retry')
                     last_status = empty_status or 'llm_empty'
-                    if budget_idx == 0 and api._title_retry_status(last_status):
-                        budgets.append(api._title_retry_completion_budget(
+                    if budget_idx == 0 and _title_retry_status(last_status):
+                        budgets.append(_title_retry_completion_budget(
                             getattr(agent, 'provider', ''),
                             getattr(agent, 'model', ''),
                             getattr(agent, 'base_url', ''),
                         ))
             except Exception as e:
                 last_status = 'llm_error'
-                api.logger.debug(
+                logger.debug(
                     "Agent title generation attempt %s failed: provider=%s model=%s error=%s",
                     idx + 1,
                     getattr(agent, 'provider', None),
@@ -657,34 +673,34 @@ def generate_title_raw_via_agent(api: ModuleType, agent, user_text: str, assista
             # If the model just burned its budget on hidden reasoning, retrying
             # the next prompt against the same model produces the same shape.
             # Short-circuit to the local fallback path (#2083).
-            if api._title_should_skip_remaining_attempts(last_status):
-                api.logger.debug(
+            if _title_should_skip_remaining_attempts(last_status):
+                logger.debug(
                     "Agent title generation short-circuiting after %s (reasoning-only response).",
                     last_status,
                 )
                 break
         return None, last_status
     except Exception as e:
-        api.logger.debug("Agent title generation failed: %s", e)
+        logger.debug("Agent title generation failed: %s", e)
         return None, 'llm_error'
     finally:
         agent.reasoning_config = prev_reasoning
 
 
-def generate_llm_session_title_for_agent(api: ModuleType, agent, user_text: str, assistant_text: str) -> tuple[Optional[str], str, str]:
+def _generate_llm_session_title_for_agent(agent, user_text: str, assistant_text: str) -> tuple[Optional[str], str, str]:
     """Generate a title via active-agent route, then sanitize/validate result."""
-    raw, status = api.generate_title_raw_via_agent(agent, user_text, assistant_text)
+    raw, status = generate_title_raw_via_agent(agent, user_text, assistant_text)
     if not raw:
         return None, status, ''
-    title = api._sanitize_generated_title(raw)
+    title = _sanitize_generated_title(raw)
     if title:
-        if api._title_language_mismatch(user_text, title):
+        if _title_language_mismatch(user_text, title):
             return None, 'llm_language_mismatch', str(raw)[:120]
         return title, status, ''
     return None, 'llm_invalid', str(raw)[:120]
 
 
-def generate_llm_session_title_via_aux(api: ModuleType, user_text: str, assistant_text: str, agent=None, *, use_agent_model: bool = False) -> tuple[Optional[str], str, str]:
+def _generate_llm_session_title_via_aux(user_text: str, assistant_text: str, agent=None, *, use_agent_model: bool = False) -> tuple[Optional[str], str, str]:
     """Generate a title via dedicated auxiliary LLM route, then sanitize/validate result.
 
     When use_agent_model is False (default), the auxiliary client resolves
@@ -701,7 +717,7 @@ def generate_llm_session_title_via_aux(api: ModuleType, user_text: str, assistan
         provider = ''
         model = ''
         base_url = ''
-    raw, status = api.generate_title_raw_via_aux(
+    raw, status = generate_title_raw_via_aux(
         user_text,
         assistant_text,
         provider=provider,
@@ -710,15 +726,15 @@ def generate_llm_session_title_via_aux(api: ModuleType, user_text: str, assistan
     )
     if not raw:
         return None, status, ''
-    title = api._sanitize_generated_title(raw)
+    title = _sanitize_generated_title(raw)
     if title:
-        if api._title_language_mismatch(user_text, title):
+        if _title_language_mismatch(user_text, title):
             return None, 'llm_language_mismatch_aux', str(raw)[:120]
         return title, status, ''
     return None, 'llm_invalid_aux', str(raw)[:120]
 
 
-def put_title_status(api: ModuleType, put_event, session_id: str, status: str, reason: str = '', title: str = '', raw_preview: str = '') -> None:
+def _put_title_status(put_event, session_id: str, status: str, reason: str = '', title: str = '', raw_preview: str = '') -> None:
     payload = {'session_id': session_id, 'status': status}
     if reason:
         payload['reason'] = reason
@@ -727,7 +743,7 @@ def put_title_status(api: ModuleType, put_event, session_id: str, status: str, r
     if raw_preview:
         payload['raw_preview'] = raw_preview
     put_event('title_status', payload)
-    api.logger.info(
+    logger.info(
         "title_status session=%s status=%s reason=%s title=%r raw_preview=%r",
         session_id,
         status,
@@ -737,13 +753,13 @@ def put_title_status(api: ModuleType, put_event, session_id: str, status: str, r
     )
 
 
-def fallback_title_from_exchange(api: ModuleType, user_text: str, assistant_text: str) -> Optional[str]:
+def _fallback_title_from_exchange(user_text: str, assistant_text: str) -> Optional[str]:
     """Generate a readable local fallback title when LLM title generation fails."""
     user_text = (user_text or '').strip()
-    assistant_text = api._strip_thinking_markup(assistant_text or '').strip()
+    assistant_text = _strip_thinking_markup(assistant_text or '').strip()
     if not user_text:
         return None
-    user_text = api._strip_workspace_prefix(user_text)
+    user_text = _strip_workspace_prefix(user_text)
     user_text = re.sub(r'\s+', ' ', user_text).strip()
     assistant_text = re.sub(r'\s+', ' ', assistant_text).strip()
     combined = f"{user_text} {assistant_text}".strip().lower()
@@ -816,58 +832,58 @@ def fallback_title_from_exchange(api: ModuleType, user_text: str, assistant_text
     return 'Conversation topic'
 
 
-def is_generic_fallback_title(api: ModuleType, title: str) -> bool:
+def _is_generic_fallback_title(title: str) -> bool:
     """Return True for low-information fallback labels that should not be persisted."""
     return str(title or '').strip().lower() in {'conversation topic'}
 
 
-def run_background_title_update(api: ModuleType, session_id: str, user_text: str, assistant_text: str, placeholder_title: str, put_event, agent=None):
+def _run_background_title_update(session_id: str, user_text: str, assistant_text: str, placeholder_title: str, put_event, agent=None):
     """Generate and publish a better title after `done`, then end the stream."""
     try:
         try:
-            s = api.get_session(session_id)
+            s = get_session(session_id)
         except KeyError:
-            api._put_title_status(put_event, session_id, 'skipped', 'missing_session')
+            _put_title_status(put_event, session_id, 'skipped', 'missing_session')
             return
         # Allow self-heal when a previously generated title leaked thinking text.
-        _invalid_existing = api._looks_invalid_generated_title(s.title)
+        _invalid_existing = _looks_invalid_generated_title(s.title)
         if getattr(s, 'llm_title_generated', False) and not _invalid_existing:
-            api._put_title_status(put_event, session_id, 'skipped', 'already_generated', str(s.title or ''))
+            _put_title_status(put_event, session_id, 'skipped', 'already_generated', str(s.title or ''))
             return
         current = str(s.title or '').strip()
-        if api.session_has_manual_title(s):
-            api._put_title_status(put_event, session_id, 'skipped', 'manual_title', current)
+        if session_has_manual_title(s):
+            _put_title_status(put_event, session_id, 'skipped', 'manual_title', current)
             return
         still_auto = (
             current == placeholder_title
             or current in ('Untitled', 'New Chat', '')
-            or api._is_provisional_title(current, s.messages)
+            or _is_provisional_title(current, s.messages)
             or _invalid_existing
         )
         if not still_auto:
-            api._put_title_status(put_event, session_id, 'skipped', 'manual_title', current)
+            _put_title_status(put_event, session_id, 'skipped', 'manual_title', current)
             return
         from api import profiles as profiles_api
 
-        with profiles_api.profile_env_for_background_worker(s, "background title", logger_override=api.logger):
-            aux_title_configured = api._aux_title_configured()
+        with profiles_api.profile_env_for_background_worker(s, "background title", logger_override=logger):
+            aux_title_configured = _aux_title_configured()
             if agent and not aux_title_configured:
-                next_title, llm_status, raw_preview = api._generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+                next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
                 if not next_title and llm_status in ('llm_error', 'llm_invalid'):
-                    next_title, llm_status, raw_preview = api._generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
+                    next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
             else:
-                next_title, llm_status, raw_preview = api._generate_llm_session_title_via_aux(user_text, assistant_text)
+                next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text)
                 if not next_title and agent and llm_status in ('llm_error_aux', 'llm_invalid_aux'):
-                    next_title, llm_status, raw_preview = api._generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+                    next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
             source = llm_status
             if not next_title:
-                fallback_title = api._fallback_title_from_exchange(user_text, assistant_text)
-                if fallback_title and not api._is_generic_fallback_title(fallback_title):
-                    api.logger.debug("Using local fallback for session title generation")
+                fallback_title = _fallback_title_from_exchange(user_text, assistant_text)
+                if fallback_title and not _is_generic_fallback_title(fallback_title):
+                    logger.debug("Using local fallback for session title generation")
                     next_title = fallback_title
                     source = 'fallback'
                 elif fallback_title:
-                    api.logger.debug("Skipping generic local fallback for session title generation: %r", fallback_title)
+                    logger.debug("Skipping generic local fallback for session title generation: %r", fallback_title)
         fallback_reason = (
             f'local_summary:{llm_status}'
             if source == 'fallback' and llm_status
@@ -878,47 +894,47 @@ def run_background_title_update(api: ModuleType, session_id: str, user_text: str
         if next_title:
             skip_for_newer_title = False
             try:
-                with api.edit_session(
+                with edit_session(
                     session_id,
                     touch_updated_at=False,
                     save_when=lambda _session: wrote_title,
                 ) as current_session:
                     effective_title = str(current_session.title or '').strip()
-                    manual_title = api.session_has_manual_title(current_session)
-                    invalid_existing_now = api._looks_invalid_generated_title(current_session.title)
+                    manual_title = session_has_manual_title(current_session)
+                    invalid_existing_now = _looks_invalid_generated_title(current_session.title)
                     still_auto = (
                         effective_title == placeholder_title
                         or effective_title in ('Untitled', 'New Chat', '')
-                        or api._is_provisional_title(effective_title, current_session.messages)
+                        or _is_provisional_title(effective_title, current_session.messages)
                         or invalid_existing_now
                     )
                     if manual_title or not still_auto:
                         skip_for_newer_title = True
                     elif next_title != effective_title:
                         current_session.title = next_title
-                        api.mark_session_title_generated(current_session)
+                        mark_session_title_generated(current_session)
                         effective_title = current_session.title
                         wrote_title = True
             except KeyError:
-                api._put_title_status(put_event, session_id, 'skipped', 'missing_session')
+                _put_title_status(put_event, session_id, 'skipped', 'missing_session')
                 return
             if skip_for_newer_title:
-                api._put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
+                _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
                 return
 
         if wrote_title:
             if source == 'fallback':
-                api._put_title_status(put_event, session_id, source, fallback_reason, effective_title, raw_preview)
+                _put_title_status(put_event, session_id, source, fallback_reason, effective_title, raw_preview)
             else:
-                api._put_title_status(put_event, session_id, source, llm_status, effective_title, raw_preview)
+                _put_title_status(put_event, session_id, source, llm_status, effective_title, raw_preview)
             put_event('title', {'session_id': session_id, 'title': effective_title})
         else:
-            api._put_title_status(put_event, session_id, 'skipped', source or 'unchanged', effective_title, raw_preview)
+            _put_title_status(put_event, session_id, 'skipped', source or 'unchanged', effective_title, raw_preview)
     finally:
         put_event('stream_end', {'session_id': session_id})
 
 
-def run_background_title_refresh(api: ModuleType, session_id: str, user_text: str, assistant_text: str, current_title: str, put_event, agent=None):
+def _run_background_title_refresh(session_id: str, user_text: str, assistant_text: str, current_title: str, put_event, agent=None):
     """Refresh an existing LLM-generated title using the latest exchange text.
 
     Unlike _run_background_title_update, this does NOT guard on
@@ -928,44 +944,44 @@ def run_background_title_refresh(api: ModuleType, session_id: str, user_text: st
     """
     try:
         try:
-            s = api.get_session(session_id)
+            s = get_session(session_id)
         except KeyError:
             return
         # Safety: skip if user manually renamed since the check
         effective = str(s.title or '').strip()
-        if api.session_has_manual_title(s):
-            api._put_title_status(put_event, session_id, 'skipped', 'manual_title', effective)
+        if session_has_manual_title(s):
+            _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective)
             return
         if effective != current_title:
-            api._put_title_status(put_event, session_id, 'skipped', 'manual_title', effective)
+            _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective)
             return
         if not effective or effective in ('Untitled', 'New Chat'):
             return
         from api import profiles as profiles_api
 
-        with profiles_api.profile_env_for_background_worker(s, "background title", logger_override=api.logger):
-            aux_title_configured = api._aux_title_configured()
+        with profiles_api.profile_env_for_background_worker(s, "background title", logger_override=logger):
+            aux_title_configured = _aux_title_configured()
             if agent and not aux_title_configured:
-                next_title, llm_status, raw_preview = api._generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+                next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
                 if not next_title and llm_status in ('llm_error', 'llm_invalid'):
-                    next_title, llm_status, raw_preview = api._generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
+                    next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
             else:
-                next_title, llm_status, raw_preview = api._generate_llm_session_title_via_aux(user_text, assistant_text)
+                next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text)
                 if not next_title and agent and llm_status in ('llm_error_aux', 'llm_invalid_aux'):
-                    next_title, llm_status, raw_preview = api._generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+                    next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
         if not next_title:
-            api._put_title_status(put_event, session_id, 'refresh_skipped', llm_status or 'empty', effective, raw_preview)
+            _put_title_status(put_event, session_id, 'refresh_skipped', llm_status or 'empty', effective, raw_preview)
             return
         # Skip if the new title is essentially the same (after normalization)
         normalized_current = re.sub(r'\s+', ' ', effective).strip().lower()
         normalized_new = re.sub(r'\s+', ' ', next_title).strip().lower()
         if normalized_current == normalized_new:
-            api._put_title_status(put_event, session_id, 'refresh_skipped', 'same_title', effective, raw_preview)
+            _put_title_status(put_event, session_id, 'refresh_skipped', 'same_title', effective, raw_preview)
             return
         wrote_title = False
         skip_for_newer_title = False
         try:
-            with api.edit_session(
+            with edit_session(
                 session_id,
                 touch_updated_at=False,
                 save_when=lambda _session: wrote_title,
@@ -973,26 +989,26 @@ def run_background_title_refresh(api: ModuleType, session_id: str, user_text: st
                 effective_title = str(current_session.title or '').strip()
                 # Re-check under the session owner lock: a user rename or a
                 # newer automatic publication must win over this slow worker.
-                if api.session_has_manual_title(current_session) or effective_title != current_title:
+                if session_has_manual_title(current_session) or effective_title != current_title:
                     skip_for_newer_title = True
                 else:
                     current_session.title = next_title
-                    api.mark_session_title_generated(current_session)
+                    mark_session_title_generated(current_session)
                     effective_title = current_session.title
                     wrote_title = True
         except KeyError:
             return
         if skip_for_newer_title:
-            api._put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
+            _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
             return
-        api._put_title_status(put_event, session_id, 'refreshed', llm_status, effective_title, raw_preview)
+        _put_title_status(put_event, session_id, 'refreshed', llm_status, effective_title, raw_preview)
         put_event('title', {'session_id': session_id, 'title': effective_title})
-        api.logger.info("Adaptive title refresh: session=%s new_title=%r", session_id, effective_title)
+        logger.info("Adaptive title refresh: session=%s new_title=%r", session_id, effective_title)
     except Exception:
-        api.logger.debug("Background title refresh failed for session %s", session_id, exc_info=True)
+        logger.debug("Background title refresh failed for session %s", session_id, exc_info=True)
 
 
-def generate_session_title_for_session(api: ModuleType, session, *, prefer_latest: bool = False, agent=None) -> tuple[Optional[str], str, str]:
+def generate_session_title_for_session(session, *, prefer_latest: bool = False, agent=None) -> tuple[Optional[str], str, str]:
     """Generate a session title on demand from persisted conversation messages.
 
     This helper powers explicit UI title-regeneration controls. It intentionally
@@ -1001,44 +1017,44 @@ def generate_session_title_for_session(api: ModuleType, session, *, prefer_lates
     """
     messages = getattr(session, 'messages', None) or []
     if prefer_latest:
-        user_text, assistant_text = api._latest_exchange_snippets(messages)
+        user_text, assistant_text = _latest_exchange_snippets(messages)
     else:
-        user_text, assistant_text = api._first_exchange_snippets(messages)
+        user_text, assistant_text = _first_exchange_snippets(messages)
     if not user_text:
         return None, 'empty_user_message', ''
     from api import profiles as profiles_api
 
-    with profiles_api.profile_env_for_background_worker(session, "manual title regeneration", logger_override=api.logger):
-        next_title, llm_status, raw_preview = api._generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent)
+    with profiles_api.profile_env_for_background_worker(session, "manual title regeneration", logger_override=logger):
+        next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent)
     if next_title:
         return next_title, llm_status, raw_preview
-    fallback_title = api._fallback_title_from_exchange(user_text, assistant_text)
-    if fallback_title and not api._is_generic_fallback_title(fallback_title):
+    fallback_title = _fallback_title_from_exchange(user_text, assistant_text)
+    if fallback_title and not _is_generic_fallback_title(fallback_title):
         reason = f'local_summary:{llm_status}' if llm_status else 'local_summary'
         return fallback_title, reason, raw_preview
     return None, llm_status or 'empty_title', raw_preview
 
 
-def maybe_schedule_title_refresh(api: ModuleType, session, put_event, agent):
+def _maybe_schedule_title_refresh(session, put_event, agent):
     """Check if the session is due for an adaptive title refresh and schedule it."""
-    refresh_interval = api._get_title_refresh_interval()
+    refresh_interval = _get_title_refresh_interval()
     if refresh_interval <= 0:
         return
     current_title = str(session.title or '').strip()
     if not current_title or current_title in ('Untitled', 'New Chat'):
         return
-    if api.session_has_manual_title(session):
+    if session_has_manual_title(session):
         return
     if not getattr(session, 'llm_title_generated', False):
         return
-    exchange_count = api._count_exchanges(session.messages)
+    exchange_count = _count_exchanges(session.messages)
     if exchange_count <= 0 or exchange_count % refresh_interval != 0:
         return
-    last_u, last_a = api._latest_exchange_snippets(session.messages)
+    last_u, last_a = _latest_exchange_snippets(session.messages)
     if not last_u and not last_a:
         return
     threading.Thread(
-        target=api._run_background_title_refresh,
+        target=_run_background_title_refresh,
         args=(session.session_id, last_u, last_a, current_title, put_event, agent),
         daemon=True,
     ).start()

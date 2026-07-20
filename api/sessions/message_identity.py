@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import datetime
 import copy
 import json
 import re
+
+from api.workspace_context import _strip_workspace_prefix
 
 
 def _message_content_text(message) -> str:
@@ -174,11 +175,8 @@ def _session_message_content_key(msg: dict):
         # state.db copy as a NEW row, and appends a duplicate user turn. The
         # agent then merges the two adjacent user rows into a permanent
         # composite -- the post-restart stale-user-prepend bug (#5339). Reuse
-        # the SAME helper as the streaming side (imported lazily to avoid a
-        # circular import; api.streaming imports the session store at module load) so
-        # the two dedup layers can't drift apart again.
-        from api.streaming import _strip_workspace_prefix
-
+        # the SAME owner as the streaming side so the two dedup layers cannot
+        # drift apart again.
         content = " ".join(
             _strip_workspace_prefix(content, include_legacy=True).split()
         )

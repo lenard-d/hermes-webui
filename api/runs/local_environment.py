@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from types import ModuleType
+import logging
+import os
+from pathlib import Path
+
+from api.config import set_thread_env
+from api.runs.agent_runtime import ensure_agent_runtime_current
+from api.streaming.diagnostics import (
+    _ENV_LOCK,
+    _install_streaming_cronjob_profile_wrapper,
+)
+from api.streaming.agent_loader import _prewarm_skill_tool_modules
+from api.streaming.turn_identity import _build_agent_thread_env
+
+
+logger = logging.getLogger(__name__)
 
 
 class LocalRunEnvironment:
@@ -18,8 +32,7 @@ class LocalRunEnvironment:
         "HERMES_HOME",
     )
 
-    def __init__(self, api: ModuleType) -> None:
-        self.api = api
+    def __init__(self) -> None:
         self._previous: dict[str, str | None] = {}
         self._entered = False
 
@@ -33,26 +46,25 @@ class LocalRunEnvironment:
         safe_profile_runtime_env: dict,
         patch_skill_home_modules,
     ) -> None:
-        thread_env = self.api._build_agent_thread_env(
+        thread_env = _build_agent_thread_env(
             profile_runtime_env,
             workspace,
             session_id,
             profile_home,
         )
-        self.api._set_thread_env(**thread_env)
+        set_thread_env(thread_env)
         try:
             from api.background_process import register_process_session
 
             register_process_session(session_id, session_id)
         except Exception:
-            self.api.logger.debug("register_process_session failed", exc_info=True)
+            logger.debug("register_process_session failed", exc_info=True)
 
         # Potentially slow imports happen before the process-global env lock.
-        self.api.ensure_agent_runtime_current()
-        self.api._prewarm_skill_tool_modules()
-        self.api._install_streaming_cronjob_profile_wrapper()
-        os = self.api.os
-        with self.api._ENV_LOCK:
+        ensure_agent_runtime_current()
+        _prewarm_skill_tool_modules()
+        _install_streaming_cronjob_profile_wrapper()
+        with _ENV_LOCK:
             keys = {*self._PROCESS_KEYS, *safe_profile_runtime_env}
             self._previous = {key: os.environ.get(key) for key in keys}
             os.environ.update(safe_profile_runtime_env)
@@ -69,7 +81,7 @@ class LocalRunEnvironment:
             if profile_home:
                 os.environ["HERMES_HOME"] = profile_home
                 if patch_skill_home_modules is not None:
-                    patch_skill_home_modules(self.api.Path(profile_home))
+                    patch_skill_home_modules(Path(profile_home))
             self._entered = True
 
         # Discovery intentionally happens after HERMES_HOME is installed.
@@ -83,10 +95,10 @@ class LocalRunEnvironment:
     def close(self) -> None:
         if not self._entered:
             return
-        with self.api._ENV_LOCK:
+        with _ENV_LOCK:
             for key, value in self._previous.items():
                 if value is None:
-                    self.api.os.environ.pop(key, None)
+                    os.environ.pop(key, None)
                 else:
-                    self.api.os.environ[key] = value
+                    os.environ[key] = value
         self._entered = False

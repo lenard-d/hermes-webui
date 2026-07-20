@@ -3,37 +3,69 @@
 from __future__ import annotations
 
 import time
-from types import ModuleType
+
+import logging
+
+from .terminal_copy import (
+    _cancelled_turn_hint,
+    _preferred_agent_display_name_for_session,
+)
+from .thinking_content import _message_text
 
 
-def is_synthetic_max_iteration_summary_request(api: ModuleType, message) -> bool:
+logger = logging.getLogger(__name__)
+_CANCEL_MARKER_PATTERNS = ("task cancelled", "task canceled", "response interrupted")
+_MAX_ITERATION_SUMMARY_REQUEST = (
+    "You've reached the maximum number of tool-calling iterations allowed. "
+    "Please provide a final response summarizing what you've found and accomplished "
+    "so far, without calling any more tools."
+)
+_SYNTHETIC_CONTROL_MESSAGE_FLAGS = (
+    "_verification_stop_synthetic",
+    "_pre_verify_synthetic",
+)
+
+
+def _materialize_pending_user_turn_before_error(session) -> bool:
+    from .transcript import _materialize_pending_user_turn_before_error as owner
+
+    return owner(session)
+
+
+def _session_lacks_final_assistant_answer(messages) -> bool:
+    from .transcript import _session_lacks_final_assistant_answer as owner
+
+    return owner(messages)
+
+
+def _is_synthetic_max_iteration_summary_request(message) -> bool:
     """Return True for Hermes Agent's internal max-iteration summary prompt."""
     if not isinstance(message, dict) or message.get('role') != 'user':
         return False
-    text = " ".join(api._message_text(message.get('content', '')).split())
-    expected = " ".join(api._MAX_ITERATION_SUMMARY_REQUEST.split())
+    text = " ".join(_message_text(message.get('content', '')).split())
+    expected = " ".join(_MAX_ITERATION_SUMMARY_REQUEST.split())
     return text == expected
 
 
-def drop_synthetic_max_iteration_summary_requests(api: ModuleType, messages, *, enabled: bool = True):
+def _drop_synthetic_max_iteration_summary_requests(messages, *, enabled: bool = True):
     """Remove Agent-internal max-iteration summary prompts from WebUI state."""
     if not enabled:
         return list(messages or [])
     return [
         msg
         for msg in list(messages or [])
-        if not api._is_synthetic_max_iteration_summary_request(msg)
+        if not _is_synthetic_max_iteration_summary_request(msg)
     ]
 
 
-def is_synthetic_control_message(api: ModuleType, message) -> bool:
+def _is_synthetic_control_message(message) -> bool:
     """Return True for an Agent-internal synthetic scaffolding turn flagged by marker."""
     return isinstance(message, dict) and any(
-        message.get(flag) for flag in api._SYNTHETIC_CONTROL_MESSAGE_FLAGS
+        message.get(flag) for flag in _SYNTHETIC_CONTROL_MESSAGE_FLAGS
     )
 
 
-def drop_synthetic_control_messages(api: ModuleType, messages):
+def _drop_synthetic_control_messages(messages):
     """Remove Agent-internal synthetic scaffolding turns from the WebUI transcript.
 
     Honors the structured ``_verification_stop_synthetic`` / ``_pre_verify_synthetic``
@@ -42,11 +74,11 @@ def drop_synthetic_control_messages(api: ModuleType, messages):
     return [
         msg
         for msg in list(messages or [])
-        if not api._is_synthetic_control_message(msg)
+        if not _is_synthetic_control_message(msg)
     ]
 
 
-def agent_result_tool_limit_reached(api: ModuleType, result) -> bool:
+def _agent_result_tool_limit_reached(result) -> bool:
     """Return True when current-turn metadata says the tool iteration cap fired."""
     if not isinstance(result, dict):
         return False
@@ -67,7 +99,7 @@ def agent_result_tool_limit_reached(api: ModuleType, result) -> bool:
     return False
 
 
-def maybe_inject_max_iteration_summary_fallback(api: ModuleType, messages, result) -> list:
+def _maybe_inject_max_iteration_summary_fallback(messages, result) -> list:
     """Append the agent's graceful summary text as an assistant turn when one is missing.
 
     When ``AIAgent`` exhausts its iteration budget, ``agent.handle_max_iterations``
@@ -80,7 +112,7 @@ def maybe_inject_max_iteration_summary_fallback(api: ModuleType, messages, resul
 
     When ``_tool_limit_reached`` is true and ``messages`` ends without a final
     assistant answer, inject ``result['final_response']`` as a new assistant
-    turn so ``api._mark_latest_assistant_tool_limit_status`` can attach the status
+    turn so ``_mark_latest_assistant_tool_limit_status`` can attach the status
     card in the normal flow and the user sees the same closure text as
     hermes-agent. Returns the (possibly new) messages list; does nothing when
     a usable assistant answer already exists or when ``result`` carries no
@@ -92,7 +124,7 @@ def maybe_inject_max_iteration_summary_fallback(api: ModuleType, messages, resul
     if not isinstance(fallback, str) or not fallback.strip():
         return list(messages or [])
     out = list(messages or [])
-    if not api._session_lacks_final_assistant_answer(out):
+    if not _session_lacks_final_assistant_answer(out):
         return out
     # Append a synthetic summary turn. Tag it so downstream consumers can
     # distinguish it from model-emitted assistant turns if needed; mirrors the
@@ -101,7 +133,7 @@ def maybe_inject_max_iteration_summary_fallback(api: ModuleType, messages, resul
     return out
 
 
-def mark_latest_assistant_tool_limit_status(api: ModuleType, messages) -> bool:
+def _mark_latest_assistant_tool_limit_status(messages) -> bool:
     """Annotate the latest usable assistant final answer as limit-stopped."""
     for msg in reversed(list(messages or [])):
         if not isinstance(msg, dict):
@@ -133,7 +165,7 @@ def mark_latest_assistant_tool_limit_status(api: ModuleType, messages) -> bool:
     return False
 
 
-def session_has_cancel_marker(api: ModuleType, session) -> bool:
+def _session_has_cancel_marker(session) -> bool:
     """Return True if a visible cancel/interrupted marker is already persisted."""
     for msg in reversed(getattr(session, 'messages', None) or []):
         if not isinstance(msg, dict):
@@ -153,40 +185,40 @@ def session_has_cancel_marker(api: ModuleType, session) -> bool:
                     parts.append(str(part.get('text') or part.get('content') or ''))
             text = '\n'.join(parts)
         normalized = text.strip().lower()
-        if any(pattern in normalized for pattern in api._CANCEL_MARKER_PATTERNS):
+        if any(pattern in normalized for pattern in _CANCEL_MARKER_PATTERNS):
             return True
     return False
 
 
-def cancelled_turn_content(api: ModuleType, message: str = 'Task cancelled.', agent_name: str | None = None) -> str:
+def _cancelled_turn_content(message: str = 'Task cancelled.', agent_name: str | None = None) -> str:
     """Return cancelled-turn copy matching the verbose provider-error layout."""
     _message = str(message or 'Task cancelled.').strip()
     if not _message.endswith('.'):
         _message += '.'
     return (
         f"**Task cancelled:** {_message}\n\n"
-        f"*{api._cancelled_turn_hint(agent_name)}*"
+        f"*{_cancelled_turn_hint(agent_name)}*"
     )
 
 
-def persist_cancelled_turn(api: ModuleType, session, *, message: str = 'Task cancelled.') -> None:
+def _persist_cancelled_turn(session, *, message: str = 'Task cancelled.') -> None:
     """Persist a user-cancelled terminal state without provider-error wording.
 
     cancel_stream() usually writes this marker first, but the streaming thread can
     later unwind through the silent-failure or exception path. Those paths must
     not append a misleading provider no-response error after an explicit cancel.
     """
-    api._materialize_pending_user_turn_before_error(session)
+    _materialize_pending_user_turn_before_error(session)
     session.active_stream_id = None
     session.pending_user_message = None
     session.pending_attachments = []
     session.pending_started_at = None
     session.pending_user_source = None
-    if not api._session_has_cancel_marker(session):
-        agent_name = api._preferred_agent_display_name_for_session(session)
+    if not _session_has_cancel_marker(session):
+        agent_name = _preferred_agent_display_name_for_session(session)
         session.messages.append({
             'role': 'assistant',
-            'content': api._cancelled_turn_content(message, agent_name),
+            'content': _cancelled_turn_content(message, agent_name),
             '_error': True,
             'provider_details': str(message or 'Task cancelled.').strip(),
             'provider_details_label': 'Cancellation details',
@@ -194,7 +226,7 @@ def persist_cancelled_turn(api: ModuleType, session, *, message: str = 'Task can
         })
 
 
-def cleanup_ephemeral_cancelled_turn(api: ModuleType, session) -> None:
+def _cleanup_ephemeral_cancelled_turn(session) -> None:
     """Remove transient /btw session state after a cancel without saving it."""
     session.active_stream_id = None
     session.pending_user_message = None
@@ -205,22 +237,22 @@ def cleanup_ephemeral_cancelled_turn(api: ModuleType, session) -> None:
         import pathlib
         pathlib.Path(session.path).unlink(missing_ok=True)
     except Exception:
-        api.logger.debug("Failed to clean up ephemeral cancelled session", exc_info=True)
+        logger.debug("Failed to clean up ephemeral cancelled session", exc_info=True)
 
 
-def finalize_cancelled_turn(api: ModuleType, session, *, ephemeral: bool = False, message: str = 'Task cancelled.') -> None:
+def _finalize_cancelled_turn(session, *, ephemeral: bool = False, message: str = 'Task cancelled.') -> None:
     """Finalize a cancelled turn for persistent or ephemeral sessions."""
     if ephemeral:
-        api._cleanup_ephemeral_cancelled_turn(session)
+        _cleanup_ephemeral_cancelled_turn(session)
         return
-    api._persist_cancelled_turn(session, message=message)
+    _persist_cancelled_turn(session, message=message)
     try:
         session.save()
     except Exception:
-        api.logger.debug("Failed to persist cancelled turn", exc_info=True)
+        logger.debug("Failed to persist cancelled turn", exc_info=True)
 
 
-def aiagent_import_error_detail(api: ModuleType) -> str:
+def _aiagent_import_error_detail() -> str:
     """Return a multi-line diagnostic string for the "AIAgent not available" path.
 
     The bare ImportError ("AIAgent not available -- check that hermes-agent is

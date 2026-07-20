@@ -4,8 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
-from types import ModuleType
+
+from api.streaming.agent_cache import (
+    _adopt_session_db_for_cached_agent,
+    _agent_cache_api_key_sig,
+    _cached_agent_matches_session,
+    _cached_agent_session_identity,
+    _close_cached_agent_entry_at_session_boundary,
+    _close_evicted_agent_at_session_boundary,
+    _refresh_cached_agent_runtime,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -15,13 +28,13 @@ class CachedLocalAgent:
     session_db: object
 
 
-def _register_agent(api: ModuleType, session_id: str, agent) -> None:
+def _register_agent(session_id: str, agent) -> None:
     try:
-        from api.sessions import register_agent
+        from api.sessions.lifecycle import register_agent
 
         register_agent(session_id, agent)
     except Exception:
-        api.logger.debug(
+        logger.debug(
             "Lifecycle register_agent failed for session %s",
             session_id,
             exc_info=True,
@@ -42,14 +55,13 @@ def _active_session_ids() -> set[str]:
         return set()
 
 
-def _cache_signature(api: ModuleType, *, identity: list) -> str:
+def _cache_signature(*, identity: list) -> str:
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[
         :16
     ]
 
 
 def acquire_local_agent(
-    api: ModuleType,
     *,
     agent_class,
     session_id: str,
@@ -73,7 +85,7 @@ def acquire_local_agent(
     """Reuse or create one agent without evicting an active worker."""
     if ephemeral:
         agent = agent_class(**kwargs)
-        api.logger.debug("[webui] Created ephemeral agent for session %s", session_id)
+        logger.debug("[webui] Created ephemeral agent for session %s", session_id)
         return CachedLocalAgent(agent, None, session_db)
 
     from api.config import (
@@ -84,10 +96,9 @@ def acquire_local_agent(
 
     credential_pool = runtime.get("credential_pool")
     signature = _cache_signature(
-        api,
         identity=[
             model or "",
-            api._agent_cache_api_key_sig(api_key, credential_pool),
+            _agent_cache_api_key_sig(api_key, credential_pool),
             base_url or "",
             provider or "",
             runtime.get("api_mode") or "",
@@ -111,37 +122,37 @@ def acquire_local_agent(
         cached = SESSION_AGENT_CACHE.get(session_id)
         if cached and cached[1] == signature:
             candidate = cached[0]
-            if api._cached_agent_matches_session(candidate, session_id):
+            if _cached_agent_matches_session(candidate, session_id):
                 agent = candidate
                 SESSION_AGENT_CACHE.move_to_end(session_id)
             else:
                 identity_mismatch = SESSION_AGENT_CACHE.pop(session_id, None)
-                api.logger.warning(
+                logger.warning(
                     "[webui] Evicted cached agent with mismatched session identity: "
                     "cache_key=%s agent_session_id=%s",
                     session_id,
-                    api._cached_agent_session_identity(candidate),
+                    _cached_agent_session_identity(candidate),
                 )
     if identity_mismatch is not None:
         try:
-            api._close_cached_agent_entry_at_session_boundary(
+            _close_cached_agent_entry_at_session_boundary(
                 session_id, identity_mismatch
             )
         except Exception:
-            api.logger.debug(
+            logger.debug(
                 "Failed to close identity-mismatched cached agent for %s",
                 session_id,
                 exc_info=True,
             )
 
-    if agent is not None and not api._refresh_cached_agent_runtime(agent, kwargs):
+    if agent is not None and not _refresh_cached_agent_runtime(agent, kwargs):
         with SESSION_AGENT_CACHE_LOCK:
             stale = SESSION_AGENT_CACHE.pop(session_id, None)
         if stale is not None:
             try:
-                api._close_cached_agent_entry_at_session_boundary(session_id, stale)
+                _close_cached_agent_entry_at_session_boundary(session_id, stale)
             except Exception:
-                api.logger.debug(
+                logger.debug(
                     "Failed to close stale-runtime cached agent for %s",
                     session_id,
                     exc_info=True,
@@ -149,7 +160,7 @@ def acquire_local_agent(
         agent = None
 
     if agent is not None:
-        _register_agent(api, session_id, agent)
+        _register_agent(session_id, agent)
         for attribute, key in (
             ("stream_delta_callback", "stream_delta_callback"),
             ("tool_progress_callback", "tool_progress_callback"),
@@ -165,7 +176,7 @@ def acquire_local_agent(
         if "prefill_messages" in kwargs and hasattr(agent, "prefill_messages"):
             agent.prefill_messages = list(kwargs.get("prefill_messages") or [])
         if session_db is not None:
-            session_db = api._adopt_session_db_for_cached_agent(agent, session_db)
+            session_db = _adopt_session_db_for_cached_agent(agent, session_db)
             agent._session_db = session_db
         if hasattr(agent, "_api_call_count"):
             agent._api_call_count = 0
@@ -173,11 +184,11 @@ def acquire_local_agent(
             agent._interrupted = False
         if hasattr(agent, "_interrupt_message"):
             agent._interrupt_message = None
-        api.logger.debug("[webui] Reusing cached agent for session %s", session_id)
+        logger.debug("[webui] Reusing cached agent for session %s", session_id)
         return CachedLocalAgent(agent, signature, session_db)
 
     agent = agent_class(**kwargs)
-    _register_agent(api, session_id, agent)
+    _register_agent(session_id, agent)
     active_sessions = _active_session_ids()
     evicted = []
     with SESSION_AGENT_CACHE_LOCK:
@@ -194,14 +205,14 @@ def acquire_local_agent(
     for evicted_session_id, entry in evicted:
         try:
             evicted_agent = entry[0] if isinstance(entry, tuple) else None
-            api._close_evicted_agent_at_session_boundary(
+            _close_evicted_agent_at_session_boundary(
                 evicted_session_id, evicted_agent
             )
         except Exception:
-            api.logger.debug(
+            logger.debug(
                 "Failed to close evicted agent for session %s",
                 evicted_session_id,
                 exc_info=True,
             )
-    api.logger.debug("[webui] Created new agent for session %s", session_id)
+    logger.debug("[webui] Created new agent for session %s", session_id)
     return CachedLocalAgent(agent, signature, session_db)

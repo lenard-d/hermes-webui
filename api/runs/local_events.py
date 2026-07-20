@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
-from types import ModuleType
+
+from api.config import STREAM_PARTIAL_TEXT, STREAM_REASONING_TEXT
+from api.metering import meter
+from api.todo_state import emit_todo_state
+from api.streaming.payloads import _compact_for_echo_compare, _strip_compact_echo_suffix
+from api.streaming.runtime_resolution import (
+    _is_agent_compression_start_status,
+    _is_fallback_lifecycle_message,
+)
+from api.streaming.tool_events import (
+    _TOOL_ARG_CONTENT_CAP,
+    _TOOL_ARG_CONTENT_KEYS,
+    _tool_result_snippet,
+)
+
+from .runtime_state import (
+    append_runtime_partial_text,
+    append_runtime_reasoning_text,
+    finish_runtime_tool_call,
+    replace_runtime_reasoning_text,
+    start_runtime_tool_call,
+)
 
 from .local_usage import LocalUsageTracker
+
+
+logger = logging.getLogger(__name__)
 
 
 class LocalEventTranslator:
@@ -14,7 +39,6 @@ class LocalEventTranslator:
 
     def __init__(
         self,
-        api: ModuleType,
         *,
         session_id: str,
         stream_id: str,
@@ -22,7 +46,6 @@ class LocalEventTranslator:
         usage: LocalUsageTracker,
         agent_params: Callable[[], set[str]],
     ) -> None:
-        self.api = api
         self.session_id = session_id
         self.stream_id = stream_id
         self.publish = publish
@@ -56,12 +79,12 @@ class LocalEventTranslator:
             and "http" in lowered
         ):
             self.captured_terminal_error[0] = text
-        if self.api._is_agent_compression_start_status(kind_text, text):
+        if _is_agent_compression_start_status(kind_text, text):
             self.publish(
                 "compressing",
                 {"session_id": self.session_id, "message": "Compressing context"},
             )
-        elif self.api._is_fallback_lifecycle_message(kind_text, text):
+        elif _is_fallback_lifecycle_message(kind_text, text):
             self.publish("warning", {"type": "fallback", "message": text})
 
     def flush_reasoning(self) -> None:
@@ -74,7 +97,7 @@ class LocalEventTranslator:
         if now - self._metering_last_publish < 0.1:
             return
         self._metering_last_publish = now
-        stats = self.api.meter().get_stats(self.stream_id)
+        stats = meter().get_stats(self.stream_id)
         stats["session_id"] = self.session_id
         stats["usage"] = self.usage.snapshot()
         stats.setdefault("tps_available", False)
@@ -82,36 +105,36 @@ class LocalEventTranslator:
         self.publish("metering", stats)
 
     def _emit_tool_metering(self) -> None:
-        stats = self.api.meter().get_stats(self.stream_id)
+        stats = meter().get_stats(self.stream_id)
         stats["session_id"] = self.session_id
         stats["usage"] = self.usage.snapshot()
         self.publish("metering", stats)
 
     def _is_visible_output_echo(self, text: str) -> bool:
-        candidate = self.api._compact_for_echo_compare(text)
+        candidate = _compact_for_echo_compare(text)
         if not candidate:
             return False
-        visible_output = self.api.STREAM_PARTIAL_TEXT.get(self.stream_id, "")
-        visible_tail = self.api._compact_for_echo_compare(
+        visible_output = STREAM_PARTIAL_TEXT.get(self.stream_id, "")
+        visible_tail = _compact_for_echo_compare(
             visible_output[-max(len(str(text)) * 2, 512) :]
         )
         if visible_tail and visible_tail.endswith(candidate):
             return True
         if len(candidate) < 80:
             return False
-        visible_compact = self.api._compact_for_echo_compare(visible_output)
+        visible_compact = _compact_for_echo_compare(visible_output)
         return bool(visible_compact and candidate in visible_compact)
 
     def _strip_reasoning_output_echo(self, text: str) -> bool:
         removed = False
-        if self.stream_id in self.api.STREAM_REASONING_TEXT:
-            next_text, did_remove = self.api._strip_compact_echo_suffix(
-                self.api.STREAM_REASONING_TEXT.get(self.stream_id, ""), text
+        if self.stream_id in STREAM_REASONING_TEXT:
+            next_text, did_remove = _strip_compact_echo_suffix(
+                STREAM_REASONING_TEXT.get(self.stream_id, ""), text
             )
             if did_remove:
-                self.api.replace_runtime_reasoning_text(self.stream_id, next_text)
+                replace_runtime_reasoning_text(self.stream_id, next_text)
                 removed = True
-        next_buffer, did_remove = self.api._strip_compact_echo_suffix(
+        next_buffer, did_remove = _strip_compact_echo_suffix(
             self._reasoning_buffer, text
         )
         if did_remove:
@@ -120,7 +143,7 @@ class LocalEventTranslator:
         for idx in (self.current_reasoning_idx, self.current_reasoning_idx - 1):
             if idx not in self.reasoning_segments:
                 continue
-            next_segment, did_remove = self.api._strip_compact_echo_suffix(
+            next_segment, did_remove = _strip_compact_echo_suffix(
                 self.reasoning_segments.get(idx, ""), text
             )
             if not did_remove:
@@ -138,10 +161,10 @@ class LocalEventTranslator:
             return
         self.flush_reasoning()
         self.token_sent = True
-        self.api.append_runtime_partial_text(self.stream_id, text)
+        append_runtime_partial_text(self.stream_id, text)
         self.publish("token", {"text": text})
         self._output_deltas += 1
-        self.api.meter().record_token(self.stream_id, self._output_deltas)
+        meter().record_token(self.stream_id, self._output_deltas)
         self._emit_metering()
 
     def reasoning(self, text) -> None:
@@ -155,14 +178,14 @@ class LocalEventTranslator:
         self.reasoning_segments[self.current_reasoning_idx] = (
             self.reasoning_segments.get(self.current_reasoning_idx, "") + delta
         )
-        self.api.append_runtime_reasoning_text(self.stream_id, delta)
+        append_runtime_reasoning_text(self.stream_id, delta)
         self._reasoning_buffer += delta
         now = time.monotonic()
         if now - self._reasoning_last_publish >= 0.1:
             self._reasoning_last_publish = now
             self.flush_reasoning()
         self._reasoning_deltas += 1
-        self.api.meter().record_reasoning(self.stream_id, self._reasoning_deltas)
+        meter().record_reasoning(self.stream_id, self._reasoning_deltas)
         self._emit_metering()
 
     def interim_assistant(self, text, **callback_kwargs) -> None:
@@ -188,8 +211,8 @@ class LocalEventTranslator:
             for key, value in list(args.items())[:4]:
                 rendered = str(value)
                 cap = (
-                    self.api._TOOL_ARG_CONTENT_CAP
-                    if str(key).lower() in self.api._TOOL_ARG_CONTENT_KEYS
+                    _TOOL_ARG_CONTENT_CAP
+                    if str(key).lower() in _TOOL_ARG_CONTENT_KEYS
                     else 120
                 )
                 snapshot[key] = rendered[:cap] + ("..." if len(rendered) > cap else "")
@@ -207,10 +230,10 @@ class LocalEventTranslator:
         self.reasoning_segments[self.current_reasoning_idx] = (
             self.reasoning_segments.get(self.current_reasoning_idx, "") + delta
         )
-        self.api.append_runtime_reasoning_text(self.stream_id, delta)
+        append_runtime_reasoning_text(self.stream_id, delta)
         self.publish("reasoning", {"text": delta})
         self._reasoning_deltas += 1
-        self.api.meter().record_reasoning(self.stream_id, self._reasoning_deltas)
+        meter().record_reasoning(self.stream_id, self._reasoning_deltas)
         self._emit_metering()
         return True
 
@@ -241,7 +264,7 @@ class LocalEventTranslator:
                         if raw:
                             pending = dict(raw)
                         else:
-                            self.api.logger.warning(
+                            logger.warning(
                                 "Gateway queue entry for %s has no .data attribute",
                                 self.session_id,
                             )
@@ -279,7 +302,7 @@ class LocalEventTranslator:
             self.live_tool_calls.append(
                 {"name": name, "args": args if isinstance(args, dict) else {}}
             )
-            self.api.start_runtime_tool_call(
+            start_runtime_tool_call(
                 self.stream_id,
                 name=name,
                 args=args if isinstance(args, dict) else {},
@@ -309,7 +332,7 @@ class LocalEventTranslator:
                         is_error=bool(callback_kwargs.get("is_error", False)),
                     )
                     break
-            self.api.finish_runtime_tool_call(
+            finish_runtime_tool_call(
                 self.stream_id,
                 name=name,
                 duration=callback_kwargs.get("duration"),
@@ -327,7 +350,7 @@ class LocalEventTranslator:
                     "is_error": bool(callback_kwargs.get("is_error", False)),
                 },
             )
-            self.api.emit_todo_state(
+            emit_todo_state(
                 self.publish,
                 name=name,
                 function_result=(
@@ -352,7 +375,7 @@ class LocalEventTranslator:
                         "tid": tool_call_id,
                     }
                 )
-                self.api.start_runtime_tool_call(
+                start_runtime_tool_call(
                     self.stream_id,
                     name=name,
                     args=args if isinstance(args, dict) else {},
@@ -370,7 +393,7 @@ class LocalEventTranslator:
                 )
             self._emit_tool_metering()
         except Exception:
-            self.api.logger.debug(
+            logger.debug(
                 "Failed to update live prompt estimate on tool start", exc_info=True
             )
 
@@ -379,7 +402,7 @@ class LocalEventTranslator:
             self.usage.record_tool_complete(tool_call_id, name, function_result)
             if tool_call_id and tool_call_id not in self._tool_complete_ids:
                 self._tool_complete_ids.add(tool_call_id)
-                result_snippet = self.api._tool_result_snippet(function_result)
+                result_snippet = _tool_result_snippet(function_result)
                 for live_tool in reversed(self.live_tool_calls):
                     if live_tool.get("done"):
                         continue
@@ -388,7 +411,7 @@ class LocalEventTranslator:
                     ):
                         live_tool.update(done=True, snippet=result_snippet)
                         break
-                self.api.finish_runtime_tool_call(
+                finish_runtime_tool_call(
                     self.stream_id,
                     name=name,
                     tool_call_id=tool_call_id,
@@ -406,7 +429,7 @@ class LocalEventTranslator:
                         "is_error": False,
                     },
                 )
-                self.api.emit_todo_state(
+                emit_todo_state(
                     self.publish,
                     name=name,
                     function_result=function_result,
@@ -415,7 +438,7 @@ class LocalEventTranslator:
                 )
             self._emit_tool_metering()
         except Exception:
-            self.api.logger.debug(
+            logger.debug(
                 "Failed to update live prompt estimate on tool completion",
                 exc_info=True,
             )

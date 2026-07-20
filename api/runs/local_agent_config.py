@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from types import ModuleType
 from typing import Any
+
+from api.config import coerce_reasoning_effort_for_model, parse_reasoning_effort
 
 from .local_events import LocalEventTranslator
 
@@ -70,7 +71,6 @@ def _fallback_chain(config: dict) -> list[dict[str, Any]] | None:
 
 
 def build_local_agent_configuration(
-    api: ModuleType,
     *,
     agent_class,
     config: dict,
@@ -98,13 +98,13 @@ def build_local_agent_configuration(
     )
     max_tokens = _positive_int(config.get("max_tokens", agent_config.get("max_tokens")))
     try:
-        effort = api.coerce_reasoning_effort_for_model(
+        effort = coerce_reasoning_effort_for_model(
             agent_config.get("reasoning_effort"),
             model,
             provider_id=provider,
             base_url=base_url,
         )
-        reasoning = api.parse_reasoning_effort(effort)
+        reasoning = parse_reasoning_effort(effort)
     except Exception:
         reasoning = None
 

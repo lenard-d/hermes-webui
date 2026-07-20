@@ -2,10 +2,61 @@
 
 from __future__ import annotations
 
-from types import ModuleType
+import logging
+from pathlib import Path
+
+from api.config import resolve_custom_provider_connection
 
 
-def file_signature(api: ModuleType, path) -> tuple[int, int] | None:
+logger = logging.getLogger(__name__)
+_KEYLESS_CUSTOM_API_KEY = "dummy-key"
+_PERSISTENT_MEMORY_FILES = (
+    ("memory", ("memories", "MEMORY.md")),
+    ("user", ("memories", "USER.md")),
+    ("soul", ("SOUL.md",)),
+)
+
+_PROVIDER_ALIASES = {
+    "claude": "anthropic",
+    "gpt": "openai",
+    "gemini": "google",
+    "openai-codex": "openai",
+    "openai-api": "openai",
+    "google-gemini": "google",
+    "google-ai-studio": "google",
+    "claude-code": "anthropic",
+}
+
+
+def _starts_provider_token(raw: str, prefix: str) -> bool:
+    if not raw.startswith(prefix):
+        return False
+    rest = raw[len(prefix):]
+    return rest == "" or rest[0] in ":/"
+
+
+def _normalize_provider_id(value: str | None) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    if raw in _PROVIDER_ALIASES:
+        return _PROVIDER_ALIASES[raw]
+    for prefix, normalized in (
+        ("openai-codex", "openai"),
+        ("openai", "openai"),
+        ("anthropic", "anthropic"),
+        ("claude", "anthropic"),
+        ("google", "google"),
+        ("gemini", "google"),
+        ("openrouter", "openrouter"),
+        ("custom", "custom"),
+    ):
+        if _starts_provider_token(raw, prefix):
+            return normalized
+    return ""
+
+
+def _file_signature(path) -> tuple[int, int] | None:
     try:
         st = path.stat()
         return (int(st.st_mtime_ns), int(st.st_size))
@@ -13,14 +64,14 @@ def file_signature(api: ModuleType, path) -> tuple[int, int] | None:
         return None
 
 
-def persistent_state_snapshot(api: ModuleType, profile_home: str | None) -> dict:
+def _persistent_state_snapshot(profile_home: str | None) -> dict:
     """Capture lightweight memory/skill file signatures for save toasts."""
     if not profile_home:
         return {"memory": {}, "skills": {}}
-    root = api.Path(profile_home)
+    root = Path(profile_home)
     memory = {}
-    for key, parts in api._PERSISTENT_MEMORY_FILES:
-        sig = api._file_signature(root.joinpath(*parts))
+    for key, parts in _PERSISTENT_MEMORY_FILES:
+        sig = _file_signature(root.joinpath(*parts))
         if sig is not None:
             memory[key] = sig
     skills = {}
@@ -31,7 +82,7 @@ def persistent_state_snapshot(api: ModuleType, profile_home: str | None) -> dict
                 rel = str(skill_md.relative_to(skills_dir)).replace("\\", "/")
             except ValueError:
                 rel = str(skill_md)
-            sig = api._file_signature(skill_md)
+            sig = _file_signature(skill_md)
             if sig is not None:
                 skills[rel] = sig
     except OSError:
@@ -39,7 +90,7 @@ def persistent_state_snapshot(api: ModuleType, profile_home: str | None) -> dict
     return {"memory": memory, "skills": skills}
 
 
-def persistent_state_changes(api: ModuleType, before: dict | None, after: dict | None) -> dict:
+def _persistent_state_changes(before: dict | None, after: dict | None) -> dict:
     before = before or {"memory": {}, "skills": {}}
     after = after or {"memory": {}, "skills": {}}
     memory_before = before.get("memory") or {}
@@ -52,7 +103,7 @@ def persistent_state_changes(api: ModuleType, before: dict | None, after: dict |
         old_sig = skills_before.get(rel)
         if old_sig == sig:
             continue
-        name = api.Path(rel).parent.name or api.Path(rel).stem
+        name = Path(rel).parent.name or Path(rel).stem
         skills.append({
             "name": name,
             "path": rel,
@@ -61,8 +112,7 @@ def persistent_state_changes(api: ModuleType, before: dict | None, after: dict |
     return {"memory_saved": memory_changed, "skills": skills[:10]}
 
 
-def apply_profile_provider_context_to_streaming_model(
-    api: ModuleType,
+def _apply_profile_provider_context_to_streaming_model(
     model: str | None,
     provider_context: str | None,
     profile_provider: str | None,
@@ -75,8 +125,6 @@ def apply_profile_provider_context_to_streaming_model(
     provider_context = profile_provider.lower()
     if not profile_default_model:
         return model, provider_context, False
-
-    from api.routes import _normalize_provider_id
 
     profile_provider_normalized = _normalize_provider_id(profile_provider)
     model_lower = (model or "").lower()
@@ -108,8 +156,7 @@ def apply_profile_provider_context_to_streaming_model(
     return model, provider_context, False
 
 
-def apply_profile_home_context_to_streaming_model(
-    api: ModuleType,
+def _apply_profile_home_context_to_streaming_model(
     model: str | None,
     provider_context: str | None,
     profile_home: str | None,
@@ -122,7 +169,7 @@ def apply_profile_home_context_to_streaming_model(
     try:
         import yaml as _yaml_pp
 
-        _pp_cfg_path = api.Path(profile_home) / "config.yaml"
+        _pp_cfg_path = Path(profile_home) / "config.yaml"
         if not _pp_cfg_path.is_file():
             return model, provider_context, False
 
@@ -135,19 +182,18 @@ def apply_profile_home_context_to_streaming_model(
             return model, provider_context, False
 
         _pp_default = (_pp_cfg.get("model", {}).get("default") or "").strip()
-        return api._apply_profile_provider_context_to_streaming_model(
+        return _apply_profile_provider_context_to_streaming_model(
             model,
             provider_context,
             _pp,
             _pp_default,
         )
     except Exception:
-        api.logger.warning("profile provider read failed", exc_info=True)
+        logger.warning("profile provider read failed", exc_info=True)
         return model, provider_context, False
 
 
-def resolve_custom_provider_runtime_overrides(
-    api: ModuleType,
+def _resolve_custom_provider_runtime_overrides(
     resolved_provider: str | None,
     resolved_api_key: str | None,
     resolved_base_url: str | None,
@@ -163,7 +209,7 @@ def resolve_custom_provider_runtime_overrides(
     if not (isinstance(resolved_provider, str) and resolved_provider.startswith("custom:")):
         return resolved_provider, resolved_api_key, resolved_base_url
 
-    _cp_key, _cp_base = api.resolve_custom_provider_connection(resolved_provider)
+    _cp_key, _cp_base = resolve_custom_provider_connection(resolved_provider)
     if not resolved_api_key and _cp_key:
         resolved_api_key = _cp_key
     if not resolved_base_url and _cp_base:
@@ -175,11 +221,11 @@ def resolve_custom_provider_runtime_overrides(
         # env-var hints like CUSTOM:SOMETHING-8000_API_KEY on keyless setups.
         resolved_provider = "custom"
         if not resolved_api_key:
-            resolved_api_key = api._KEYLESS_CUSTOM_API_KEY
+            resolved_api_key = _KEYLESS_CUSTOM_API_KEY
     return resolved_provider, resolved_api_key, resolved_base_url
 
 
-def same_base_url_endpoint(api: ModuleType, url_a: str, url_b: str) -> bool:
+def _same_base_url_endpoint(url_a: str, url_b: str) -> bool:
     """True if two base URLs point at the same scheme+host+port endpoint.
 
     Used to decide whether a runtime base_url is just a normalized form of the
@@ -204,8 +250,7 @@ def same_base_url_endpoint(api: ModuleType, url_a: str, url_b: str) -> bool:
     return bool(a_host) and a_host == b_host and a_scheme == b_scheme and a_port == b_port
 
 
-def runtime_preferred_base_url(
-    api: ModuleType,
+def _runtime_preferred_base_url(
     runtime_provider: dict | None,
     resolved_provider: str | None,
     configured_base_url: str | None,
@@ -243,12 +288,12 @@ def runtime_preferred_base_url(
 
     # An explicit configured override at a DIFFERENT endpoint must be preserved;
     # only prefer the runtime URL when it's the same endpoint (path-normalized).
-    if api._same_base_url_endpoint(configured_base_url, runtime_base_url):
+    if _same_base_url_endpoint(configured_base_url, runtime_base_url):
         return runtime_base_url
     return configured_base_url
 
 
-def is_fallback_lifecycle_message(api: ModuleType, kind: str, message: str) -> bool:
+def _is_fallback_lifecycle_message(kind: str, message: str) -> bool:
     """Return True if an agent lifecycle status should surface as a fallback warning."""
     k = str(kind or '').strip().lower()
     m = str(message or '').strip().lower()
@@ -264,7 +309,7 @@ def is_fallback_lifecycle_message(api: ModuleType, kind: str, message: str) -> b
     )
 
 
-def is_agent_compression_start_status(api: ModuleType, kind: str, message: str) -> bool:
+def _is_agent_compression_start_status(kind: str, message: str) -> bool:
     """Return True only for real Hermes context-compression start notices.
 
     WebUI bridges matching lifecycle statuses into an SSE ``compressing`` event

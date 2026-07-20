@@ -1,25 +1,38 @@
 """Active-run steering and cancellation transitions.
 
-The public compatibility interface remains in :mod:`api.streaming`.  This
+The public compatibility interface remains in :mod:`streaming`.  This
 module owns the implementation so active-run control decisions, progress
 recovery, terminal persistence, and transport notification stay together.
 """
 
 from __future__ import annotations
 
-from types import ModuleType
+import logging
+import time
+
+from api.sessions import edit_session, get_session
+
+from .agent_cache import (
+    _cached_agent_matches_session,
+    _cached_agent_session_identity,
+    _close_cached_agent_entry_at_session_boundary,
+)
+from .payloads import _cancel_event_payload, _redacted_session_payload_with_full_messages
+from .terminal_copy import _preferred_agent_display_name_for_session
+from .terminal_outcomes import _cancelled_turn_content, _session_has_cancel_marker
+from .tool_events import _partial_marker_already_present
+from .transcript import _build_partial_message
+from .turn_context import _stream_writeback_is_current
 
 
-def handle_chat_steer(api: ModuleType, handler, body: dict) -> bool:
+logger = logging.getLogger(__name__)
+_CANCEL_MARKER_PATTERNS = ("task cancelled", "task canceled", "response interrupted")
+
+
+def _handle_chat_steer(handler, body: dict) -> bool:
     """Inject a /steer payload into the active agent for a session."""
     from api.helpers import j, bad
     from api import config as _cfg
-
-    logger = api.logger
-    get_session = api.get_session
-    cached_agent_matches_session = api._cached_agent_matches_session
-    cached_agent_session_identity = api._cached_agent_session_identity
-    close_cached_agent_entry = api._close_cached_agent_entry_at_session_boundary
 
     sid = str((body or {}).get("session_id", "") or "").strip()
     text = str((body or {}).get("text", "") or "").strip()
@@ -33,17 +46,17 @@ def handle_chat_steer(api: ModuleType, handler, body: dict) -> bool:
         cached = _cfg.SESSION_AGENT_CACHE.get(sid)
         if cached:
             agent = cached[0]
-            if not cached_agent_matches_session(agent, sid):
+            if not _cached_agent_matches_session(agent, sid):
                 evicted_cached_entry = _cfg.SESSION_AGENT_CACHE.pop(sid, None)
                 logger.warning(
                     '[webui] Evicted cached agent before steer due to mismatched session identity: cache_key=%s agent_session_id=%s',
                     sid,
-                    cached_agent_session_identity(agent),
+                    _cached_agent_session_identity(agent),
                 )
                 cached = None
     if evicted_cached_entry is not None:
         try:
-            close_cached_agent_entry(sid, evicted_cached_entry)
+            _close_cached_agent_entry_at_session_boundary(sid, evicted_cached_entry)
         except Exception:
             logger.debug(
                 "Failed to close steer identity-mismatched cached agent for session %s",
@@ -126,22 +139,9 @@ def handle_chat_steer(api: ModuleType, handler, body: dict) -> bool:
     )
 
 
-def cancel_stream(api: ModuleType, stream_id: str) -> bool:
+def cancel_stream(stream_id: str) -> bool:
     """Cancel a run while preserving its recoverable and terminal state."""
     from api import config as _live_config
-
-    logger = api.logger
-    time = api.time
-    edit_session = api.edit_session
-    cached_agent_matches_session = api._cached_agent_matches_session
-    stream_writeback_is_current = api._stream_writeback_is_current
-    build_partial_message = api._build_partial_message
-    session_has_cancel_marker = api._session_has_cancel_marker
-    partial_marker_already_present = api._partial_marker_already_present
-    cancelled_turn_content = api._cancelled_turn_content
-    preferred_agent_display_name = api._preferred_agent_display_name_for_session
-    redacted_session_payload = api._redacted_session_payload_with_full_messages
-    cancel_event_payload = api._cancel_event_payload
 
     cancellation = _live_config.begin_runtime_cancel(stream_id)
     if cancellation is None:
@@ -160,7 +160,7 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
         try:
             with _live_config.SESSION_AGENT_CACHE_LOCK:
                 cached = _live_config.SESSION_AGENT_CACHE.get(active_run_session_id)
-            if cached and cached_agent_matches_session(cached[0], active_run_session_id):
+            if cached and _cached_agent_matches_session(cached[0], active_run_session_id):
                 agent = cached[0]
         except Exception:
             pass
@@ -204,7 +204,7 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
             ) as current_session:
                 if not isinstance(getattr(current_session, "messages", None), list):
                     current_session.messages = []
-                if not stream_writeback_is_current(current_session, stream_id):
+                if not _stream_writeback_is_current(current_session, stream_id):
                     logger.info(
                         "Skipping stale cancel writeback for session %s stream %s; active_stream_id=%s",
                         cancel_session_id,
@@ -268,12 +268,12 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
                 current_session.pending_started_at = None
                 current_session.pending_user_source = None
 
-                partial_message = build_partial_message(
+                partial_message = _build_partial_message(
                     cancel_partial_text,
                     cancel_reasoning,
                     cancel_tool_calls,
                 )
-                cancel_marker_exists = session_has_cancel_marker(current_session)
+                cancel_marker_exists = _session_has_cancel_marker(current_session)
                 cancel_marker_index = len(current_session.messages)
                 if cancel_marker_exists:
                     for index in range(len(current_session.messages) - 1, -1, -1):
@@ -281,10 +281,10 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
                         if not isinstance(message, dict) or message.get("role") != "assistant":
                             continue
                         content = str(message.get("content") or "").strip().lower()
-                        if any(pattern in content for pattern in api._CANCEL_MARKER_PATTERNS):
+                        if any(pattern in content for pattern in _CANCEL_MARKER_PATTERNS):
                             cancel_marker_index = index
                             break
-                if partial_message is not None and not partial_marker_already_present(
+                if partial_message is not None and not _partial_marker_already_present(
                     current_session.messages,
                     partial_message,
                     before_idx=cancel_marker_index,
@@ -294,9 +294,9 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
                     current_session.messages.append(
                         {
                             "role": "assistant",
-                            "content": cancelled_turn_content(
+                            "content": _cancelled_turn_content(
                                 "Task cancelled.",
-                                preferred_agent_display_name(current_session),
+                                _preferred_agent_display_name_for_session(current_session),
                             ),
                             "_error": True,
                             "provider_details": "Task cancelled.",
@@ -306,7 +306,7 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
                     )
                 cancel_persisted = True
             if cancel_persisted:
-                cancel_session_payload = redacted_session_payload(current_session)
+                cancel_session_payload = _redacted_session_payload_with_full_messages(current_session)
         except Exception:
             logger.debug("Failed to clear session state on cancel for %s", cancel_session_id)
 
@@ -323,7 +323,7 @@ def cancel_stream(api: ModuleType, stream_id: str) -> bool:
                     exc_info=True,
                 )
         try:
-            payload = cancel_event_payload(
+            payload = _cancel_event_payload(
                 "Cancelled by user",
                 session=cancel_session_payload,
             )

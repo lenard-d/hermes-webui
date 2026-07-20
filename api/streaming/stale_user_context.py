@@ -3,25 +3,31 @@
 from __future__ import annotations
 
 import copy
-from types import ModuleType
+
+from .thinking_content import _message_content_part_text
+from api.workspace_context import (
+    _LEGACY_WORKSPACE_PREFIX_ANY_RE,
+    _WORKSPACE_PREFIX_ANY_RE,
+    _strip_workspace_prefix,
+)
 
 
-def strip_workspace_prefixes_for_compare(api: ModuleType, text: str) -> str:
+def _strip_workspace_prefixes_for_compare(text: str) -> str:
     """Remove WebUI workspace sentinels anywhere before text comparison."""
-    value = api._strip_workspace_prefix(text, include_legacy=True)
-    for pattern in (api._WORKSPACE_PREFIX_ANY_RE, api._LEGACY_WORKSPACE_PREFIX_ANY_RE):
+    value = _strip_workspace_prefix(text, include_legacy=True)
+    for pattern in (_WORKSPACE_PREFIX_ANY_RE, _LEGACY_WORKSPACE_PREFIX_ANY_RE):
         value = pattern.sub('', value)
     return value.strip()
 
 
-def normalize_user_text(api: ModuleType, text):
+def _normalize_user_text(text):
     """Collapse whitespace and strip workspace sentinels for tail comparisons."""
     if not isinstance(text, str):
         return ""
-    return " ".join(api._strip_workspace_prefixes_for_compare(text).split())
+    return " ".join(_strip_workspace_prefixes_for_compare(text).split())
 
 
-def raw_message_text(api: ModuleType, value) -> str:
+def _raw_message_text(value) -> str:
     """Extract text from a message content payload without stripping markup.
 
     Used for the stale-user-merge detector so the literal boundary between
@@ -31,24 +37,24 @@ def raw_message_text(api: ModuleType, value) -> str:
     """
     if isinstance(value, list):
         return ' '.join(
-            api._message_content_part_text(p)
+            _message_content_part_text(p)
             for p in value
             if isinstance(p, dict)
         )
     return str(value or '')
 
 
-def stale_user_tail_candidate(api: ModuleType, msg):
+def _stale_user_tail_candidate(msg):
     """Return normalized text if msg is a user row that could be a stale tail."""
     if not isinstance(msg, dict) or msg.get('role') != 'user':
         return None
-    raw = api._raw_message_text(msg.get('content', ''))
+    raw = _raw_message_text(msg.get('content', ''))
     if not raw.strip():
         return None
-    return api._normalize_user_text(raw)
+    return _normalize_user_text(raw)
 
 
-def last_user_row(api: ModuleType, messages):
+def _last_user_row(messages):
     """Return the last user-role row in `messages`, or None."""
     for msg in reversed(list(messages or [])):
         if isinstance(msg, dict) and msg.get('role') == 'user':
@@ -56,8 +62,7 @@ def last_user_row(api: ModuleType, messages):
     return None
 
 
-def stale_prefix_matches_prior_user_context(
-    api: ModuleType,
+def _stale_prefix_matches_prior_user_context(
     stale_prefix,
     stale_segments,
     previous_context,
@@ -71,7 +76,7 @@ def stale_prefix_matches_prior_user_context(
     while still requiring all evidence to come from prior user-role rows.
     """
     prior_rows = [
-        api._stale_user_tail_candidate(msg)
+        _stale_user_tail_candidate(msg)
         for msg in previous_context or []
     ]
     prior_rows = [row for row in prior_rows if row]
@@ -117,7 +122,7 @@ def stale_prefix_matches_prior_user_context(
         if matched_all_segments:
             return True
 
-    prefix_norm = api._normalize_user_text(stale_prefix)
+    prefix_norm = _normalize_user_text(stale_prefix)
     if not prefix_norm:
         return False
     for row in prior_rows:
@@ -126,8 +131,7 @@ def stale_prefix_matches_prior_user_context(
     return False
 
 
-def detect_stale_user_merge(
-    api: ModuleType,
+def _detect_stale_user_merge(
     message,
     msg_text,
     previous_user_tail,
@@ -145,11 +149,11 @@ def detect_stale_user_merge(
     """
     if not isinstance(message, dict) or message.get('role') != 'user':
         return False
-    current_norm = api._normalize_user_text(msg_text)
+    current_norm = _normalize_user_text(msg_text)
     if not current_norm:
         return False
 
-    merged = api._raw_message_text(message.get('content', '')).replace("\r\n", "\n")
+    merged = _raw_message_text(message.get('content', '')).replace("\r\n", "\n")
     if "\n\n" not in merged:
         return False
 
@@ -165,10 +169,10 @@ def detect_stale_user_merge(
         if boundary_idx < 0:
             break
         suffix = merged[boundary_idx + 2:]
-        if api._normalize_user_text(suffix) == current_norm:
+        if _normalize_user_text(suffix) == current_norm:
             prefix = merged[:boundary_idx]
             candidate_segments = [
-                api._normalize_user_text(segment)
+                _normalize_user_text(segment)
                 for segment in prefix.split("\n\n")
             ]
             if candidate_segments and all(candidate_segments):
@@ -181,7 +185,7 @@ def detect_stale_user_merge(
     if not stale_segments:
         return False
 
-    if previous_context is not None and api._stale_prefix_matches_prior_user_context(
+    if previous_context is not None and _stale_prefix_matches_prior_user_context(
         stale_prefix,
         stale_segments,
         previous_context,
@@ -191,12 +195,11 @@ def detect_stale_user_merge(
     return bool(
         previous_context is None
         and len(stale_segments) == 1
-        and api._normalize_user_text(previous_user_tail) == stale_segments[0]
+        and _normalize_user_text(previous_user_tail) == stale_segments[0]
     )
 
 
-def strip_stale_user_merge_from_messages(
-    api: ModuleType,
+def _strip_stale_user_merge_from_messages(
     messages,
     msg_text,
     previous_user_tail,
@@ -213,7 +216,7 @@ def strip_stale_user_merge_from_messages(
         return messages
     out = []
     for msg in messages:
-        if api._detect_stale_user_merge(
+        if _detect_stale_user_merge(
             msg,
             msg_text,
             previous_user_tail,

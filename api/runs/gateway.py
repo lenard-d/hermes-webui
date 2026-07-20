@@ -33,6 +33,24 @@ from .runtime_state import (
     start_runtime_tool_call,
     update_active_run,
 )
+from api.streaming.attachments import _build_native_multimodal_message
+from api.streaming.compression_anchors import _is_context_compression_marker
+from api.streaming.message_sanitization import _assign_stable_message_ids, _strip_oob_blocks
+from api.streaming.payloads import _session_payload_with_full_messages
+from api.streaming.prompts import _webui_ephemeral_system_prompt
+from api.streaming.provider_errors import _classify_provider_error, _provider_error_payload
+from api.streaming.terminal_outcomes import _persist_cancelled_turn
+from api.streaming.transcript import (
+    _materialize_pending_user_turn_before_error,
+    _merge_display_messages_after_agent_result,
+    _snapshot_and_append_partial_on_error,
+)
+from api.streaming.webui_prefill import (
+    _load_webui_prefill_context,
+    _normalize_prefill_messages_before_user_turn,
+    _prefill_messages_with_webui_context,
+    _public_prefill_context_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -378,14 +396,10 @@ def _run_gateway_runs_api_streaming(
     message_content: Any = str(msg_text or "")
     if attachments:
         try:
-            from api.streaming import _build_native_multimodal_message
-
             message_content = _build_native_multimodal_message("", str(msg_text or ""), attachments, str(workspace), cfg=cfg)
         except Exception:
             logger.debug("Failed to build runs-API multimodal attachment payload", exc_info=True)
             message_content = str(msg_text or "")
-    from api.streaming import _strip_oob_blocks
-
     instructions_parts = []
     conversation_history = []
     for entry in getattr(session, "context_messages", None) or []:
@@ -553,14 +567,6 @@ def _settle_gateway_terminal_error(
     event_payload=None,
     session=None,
 ):
-    from api.streaming import (
-        _classify_provider_error,
-        _materialize_pending_user_turn_before_error,
-        _provider_error_payload,
-        _session_payload_with_full_messages,
-        _snapshot_and_append_partial_on_error,
-    )
-
     if event_payload is None:
         error_classification = _classify_provider_error(terminal_error)
         error_payload = _provider_error_payload(
@@ -648,12 +654,6 @@ def _settle_gateway_cancel(
     session=None,
     message="Cancelled by gateway",
 ):
-    from api.streaming import (
-        _materialize_pending_user_turn_before_error,
-        _persist_cancelled_turn,
-        _snapshot_and_append_partial_on_error,
-    )
-
     def settle(current):
         _materialize_pending_user_turn_before_error(current)
         try:
@@ -782,14 +782,6 @@ def _run_gateway_chat_streaming(
             model_provider=model_provider,
         )
         try:
-            from api.streaming import (
-                _load_webui_prefill_context,
-                _prefill_messages_with_webui_context,
-                _normalize_prefill_messages_before_user_turn,
-                _public_prefill_context_status,
-                _webui_ephemeral_system_prompt,
-            )
-
             prefill_context = _load_webui_prefill_context(cfg)
             # #3324: the WebUI session/delivery context (connected platforms,
             # home channels, delivery hints, session framing) is now carried in
@@ -894,8 +886,6 @@ def _run_gateway_chat_streaming(
             message_content: Any = str(msg_text or "")
             if attachments:
                 try:
-                    from api.streaming import _build_native_multimodal_message
-
                     message_content = _build_native_multimodal_message("", str(msg_text or ""), attachments, str(workspace), cfg=cfg)
                 except Exception:
                     logger.debug("Failed to build gateway multimodal attachment payload", exc_info=True)
@@ -1056,12 +1046,6 @@ def _run_gateway_chat_streaming(
             # before success writeback. Persist an honest cancelled terminal
             # state rather than letting final cleanup discard the pending turn.
             if cancel_event.is_set():
-                from api.streaming import (
-                    _materialize_pending_user_turn_before_error,
-                    _persist_cancelled_turn,
-                    _snapshot_and_append_partial_on_error,
-                )
-
                 _materialize_pending_user_turn_before_error(current)
                 try:
                     _snapshot_and_append_partial_on_error(current, stream_id)
@@ -1108,8 +1092,6 @@ def _run_gateway_chat_streaming(
             # below) so display and model-context copies share an id for the
             # fork/truncate aligner (#context-message-stable-id).
             try:
-                from api.streaming import _assign_stable_message_ids
-
                 _assign_stable_message_ids(
                     [user_msg, assistant_msg],
                     previous_context,
@@ -1119,8 +1101,6 @@ def _run_gateway_chat_streaming(
                 logger.debug("Failed to stamp stable ids on gateway turn rows", exc_info=True)
             current.context_messages = previous_context + [user_msg, assistant_msg]
             try:
-                from api.streaming import _is_context_compression_marker
-
                 display_context = [
                     msg
                     for msg in previous_context
@@ -1134,8 +1114,6 @@ def _run_gateway_chat_streaming(
                 display_context,
             )
             try:
-                from api.streaming import _merge_display_messages_after_agent_result
-
                 current.messages = _merge_display_messages_after_agent_result(
                     display,
                     previous_context,
@@ -1255,7 +1233,6 @@ def _run_gateway_chat_streaming(
                 session_id,
                 goal_exc,
             )
-        from api.streaming import _session_payload_with_full_messages
         gateway_session_payload = _session_payload_with_full_messages(s, tool_calls=[])
         put_gateway_event("done", {"session": redact_session_data(gateway_session_payload), "usage": usage})
         put_gateway_event("stream_end", {"session_id": session_id})

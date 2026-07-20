@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import copy
 import json
-from types import ModuleType
+
+from .stale_user_context import (
+    _detect_stale_user_merge,
+    _last_user_row,
+    _stale_user_tail_candidate,
+    _strip_stale_user_merge_from_messages,
+)
+from .thinking_content import _message_text
+from api.workspace_context import _looks_like_current_user_turn, _strip_workspace_prefix
 
 
-def session_context_messages(api: ModuleType, session):
+def _session_context_messages(session):
     """Return model-facing history without assuming it matches the UI transcript."""
     context_messages = getattr(session, 'context_messages', None)
     if isinstance(context_messages, list) and context_messages:
@@ -15,18 +23,18 @@ def session_context_messages(api: ModuleType, session):
     return session.messages or []
 
 
-def message_identity(api: ModuleType, msg):
+def _message_identity(msg):
     if not isinstance(msg, dict):
         return None
     role = str(msg.get('role') or '')
     content = msg.get('content', '')
-    text = api._message_text(content)
+    text = _message_text(content)
     if role == 'user':
         # WebUI sends the model a workspace-prefixed user_message while the
         # visible optimistic bubble contains only the human text. Treat them as
         # the same turn for merge/dedup purposes; otherwise compaction results
         # render two adjacent user bubbles ("Ok" and "[Workspace...]\nOk").
-        text = api._strip_workspace_prefix(text, include_legacy=True)
+        text = _strip_workspace_prefix(text, include_legacy=True)
     if not text and not msg.get('tool_call_id') and not msg.get('tool_calls'):
         # Empty assistant messages (e.g. _partial markers with no visible
         # content) previously returned None, making them invisible to the
@@ -53,31 +61,31 @@ def message_identity(api: ModuleType, msg):
     )
 
 
-def messages_have_prefix(api: ModuleType, messages, prefix):
+def _messages_have_prefix(messages, prefix):
     if len(messages or []) < len(prefix or []):
         return False
     for idx, expected in enumerate(prefix or []):
-        if api._message_identity((messages or [])[idx]) != api._message_identity(expected):
+        if _message_identity((messages or [])[idx]) != _message_identity(expected):
             return False
     return True
 
 
-def message_replay_key(api: ModuleType, msg):
+def _message_replay_key(msg):
     """Return a stable comparison key for replay/overlap de-duplication."""
-    identity = api._message_identity(msg)
+    identity = _message_identity(msg)
     if identity is not None:
         return identity
     if not isinstance(msg, dict):
         return None
     return (
         str(msg.get('role') or ''),
-        api._message_text(msg.get('content', '')),
+        _message_text(msg.get('content', '')),
         str(msg.get('tool_call_id') or ''),
         json.dumps(msg.get('tool_calls') or [], sort_keys=True, ensure_ascii=False),
     )
 
 
-def strip_replayed_prefix(api: ModuleType, existing_messages, candidates):
+def _strip_replayed_prefix(existing_messages, candidates):
     """Drop a candidate prefix that is already the suffix of existing_messages.
 
     Compression/continuation can replay the active tail from state.db after the
@@ -89,14 +97,14 @@ def strip_replayed_prefix(api: ModuleType, existing_messages, candidates):
     candidates = list(candidates or [])
     max_overlap = min(len(existing_messages), len(candidates))
     for overlap in range(max_overlap, 0, -1):
-        left = [api._message_replay_key(m) for m in existing_messages[-overlap:]]
-        right = [api._message_replay_key(m) for m in candidates[:overlap]]
+        left = [_message_replay_key(m) for m in existing_messages[-overlap:]]
+        right = [_message_replay_key(m) for m in candidates[:overlap]]
         if left == right:
             return candidates[overlap:]
     return candidates
 
 
-def looks_like_replayed_session_arc_summary(api: ModuleType, previous_msg, candidate_msg):
+def _looks_like_replayed_session_arc_summary(previous_msg, candidate_msg):
     """Return True for repeated LCM/session summaries with refreshed hints.
 
     LCM summary cards can be re-injected with the same long recovered context
@@ -107,8 +115,8 @@ def looks_like_replayed_session_arc_summary(api: ModuleType, previous_msg, candi
         return False
     if previous_msg.get('role') != candidate_msg.get('role'):
         return False
-    previous_text = " ".join(api._message_text(previous_msg.get('content', '')).split())
-    candidate_text = " ".join(api._message_text(candidate_msg.get('content', '')).split())
+    previous_text = " ".join(_message_text(previous_msg.get('content', '')).split())
+    candidate_text = " ".join(_message_text(candidate_msg.get('content', '')).split())
     if len(previous_text) < 2000 or len(candidate_text) < 2000:
         return False
     marker = '[Session Arc Summary'
@@ -117,15 +125,15 @@ def looks_like_replayed_session_arc_summary(api: ModuleType, previous_msg, candi
     return previous_text[:1500] == candidate_text[:1500]
 
 
-def strip_replayed_context_items(api: ModuleType, existing_messages, candidates):
+def _strip_replayed_context_items(existing_messages, candidates):
     """Drop replayed non-adjacent context blocks before persisting context."""
     existing_messages = list(existing_messages or [])
     candidates = list(candidates or [])
     if not existing_messages or not candidates:
         return candidates
 
-    existing_keys = [api._message_replay_key(m) for m in existing_messages]
-    candidate_keys = [api._message_replay_key(m) for m in candidates]
+    existing_keys = [_message_replay_key(m) for m in existing_messages]
+    candidate_keys = [_message_replay_key(m) for m in candidates]
     existing_large = [m for m in existing_messages if isinstance(m, dict)]
     cleaned = []
     idx = 0
@@ -133,7 +141,7 @@ def strip_replayed_context_items(api: ModuleType, existing_messages, candidates)
     while idx < len(candidates):
         msg = candidates[idx]
         if any(
-            api._looks_like_replayed_session_arc_summary(prev, msg)
+            _looks_like_replayed_session_arc_summary(prev, msg)
             for prev in existing_large
         ):
             idx += 1
@@ -159,8 +167,7 @@ def strip_replayed_context_items(api: ModuleType, existing_messages, candidates)
     return cleaned
 
 
-def dedupe_replayed_context_messages(
-    api: ModuleType,
+def _dedupe_replayed_context_messages(
     previous_context,
     result_messages,
     msg_text=None,
@@ -170,8 +177,8 @@ def dedupe_replayed_context_messages(
     result_messages = list(result_messages or [])
     if not previous_context or not result_messages:
         return result_messages
-    previous_user_tail = api._stale_user_tail_candidate(api._last_user_row(previous_context))
-    if not api._messages_have_prefix(result_messages, previous_context):
+    previous_user_tail = _stale_user_tail_candidate(_last_user_row(previous_context))
+    if not _messages_have_prefix(result_messages, previous_context):
         # Agent-side role-sequence repair can replace the last prior user row
         # with a repaired current-user row. In that shape the result no longer
         # has `previous_context` as an exact prefix, but it should still be
@@ -180,20 +187,20 @@ def dedupe_replayed_context_messages(
             msg_text
             and len(previous_context) >= 1
             and len(result_messages) >= len(previous_context)
-            and api._messages_have_prefix(result_messages, previous_context[:-1])
+            and _messages_have_prefix(result_messages, previous_context[:-1])
         ):
             boundary_idx = len(previous_context) - 1
             boundary_row = result_messages[boundary_idx]
             is_stale_merge = bool(
                 previous_user_tail
-                and api._detect_stale_user_merge(
+                and _detect_stale_user_merge(
                     boundary_row,
                     msg_text,
                     previous_user_tail,
                     previous_context=previous_context,
                 )
             )
-            if is_stale_merge or api._looks_like_current_user_turn(boundary_row, msg_text):
+            if is_stale_merge or _looks_like_current_user_turn(boundary_row, msg_text):
                 if is_stale_merge:
                     # Clean only the stale-merged boundary row; leave all prior
                     # history in previous_context untouched.
@@ -202,9 +209,9 @@ def dedupe_replayed_context_messages(
                     candidates = [cleaned_boundary] + result_messages[boundary_idx + 1:]
                 else:
                     candidates = result_messages[boundary_idx:]
-                candidates = api._strip_replayed_prefix(previous_context, candidates)
+                candidates = _strip_replayed_prefix(previous_context, candidates)
                 if candidates:
-                    candidates = api._strip_replayed_context_items(previous_context, candidates)
+                    candidates = _strip_replayed_context_items(previous_context, candidates)
                 return previous_context + candidates
         return result_messages
     candidates = result_messages[len(previous_context):]
@@ -212,23 +219,22 @@ def dedupe_replayed_context_messages(
     # legitimate historical user rows in the already-committed previous_context
     # prefix are never rewritten.
     if msg_text and previous_user_tail:
-        candidates = api._strip_stale_user_merge_from_messages(
+        candidates = _strip_stale_user_merge_from_messages(
             candidates,
             msg_text,
             previous_user_tail,
             previous_context=previous_context,
         )
-    candidates = api._strip_replayed_prefix(previous_context, candidates)
+    candidates = _strip_replayed_prefix(previous_context, candidates)
     if candidates:
-        candidates = api._strip_replayed_context_items(previous_context, candidates)
+        candidates = _strip_replayed_context_items(previous_context, candidates)
     return previous_context + candidates
 
 
-def dedupe_replayed_active_context(
-    api: ModuleType,
+def _dedupe_replayed_active_context(
     previous_context,
     result_messages,
     msg_text=None,
 ):
     """Keep model context append-only without re-appending a replayed tail."""
-    return api._dedupe_replayed_context_messages(previous_context, result_messages, msg_text)
+    return _dedupe_replayed_context_messages(previous_context, result_messages, msg_text)

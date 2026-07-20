@@ -2,30 +2,40 @@
 
 from __future__ import annotations
 
-from types import ModuleType
+import logging
+import re
+import time
+
+from .compression_anchors import _drop_checkpointed_current_user_from_context
+from .context_replay import _session_context_messages
+from .thinking_content import _message_text
+from api.workspace_context import _strip_workspace_prefix
 
 
-def save_streaming_checkpoint(api: ModuleType, session):
+logger = logging.getLogger(__name__)
+
+
+def _save_streaming_checkpoint(session):
     """Persist a streaming checkpoint under the session's profile context."""
     from api import profiles as profiles_api
 
     with profiles_api.profile_env_for_background_worker(
         session,
         "streaming checkpoint",
-        logger_override=api.logger,
+        logger_override=logger,
     ):
         session.save(skip_index=True)
 
 
-def normalize_fresh_chat_text(api: ModuleType, text):
-    text = api._strip_workspace_prefix(str(text or ''), include_legacy=True)
-    text = api.re.sub(r"\s+", " ", text).strip().lower()
+def _normalize_fresh_chat_text(text):
+    text = _strip_workspace_prefix(str(text or ''), include_legacy=True)
+    text = re.sub(r"\s+", " ", text).strip().lower()
     return text.strip(" \t\r\n.!?。！？,，~～")
 
 
-def is_casual_fresh_chat_message(api: ModuleType, msg_text):
+def _is_casual_fresh_chat_message(msg_text):
     """Return True for short opener messages that should not resume old tasks."""
-    text = api._normalize_fresh_chat_text(msg_text)
+    text = _normalize_fresh_chat_text(msg_text)
     if not text or len(text) > 24:
         return False
     continuation_terms = (
@@ -63,12 +73,12 @@ def is_casual_fresh_chat_message(api: ModuleType, msg_text):
     }
 
 
-def has_task_resume_compaction_marker(api: ModuleType, messages):
+def _has_task_resume_compaction_marker(messages):
     """Detect compacted model context that tells the agent to resume an old task."""
     for msg in messages or []:
         if not isinstance(msg, dict):
             continue
-        text = api._message_text(msg.get('content', '')).lower()
+        text = _message_text(msg.get('content', '')).lower()
         if not text:
             continue
         if "context compaction" not in text and "context compression" not in text:
@@ -84,27 +94,27 @@ def has_task_resume_compaction_marker(api: ModuleType, messages):
     return False
 
 
-def new_turn_context_from_messages(api: ModuleType, messages, msg_text):
+def _new_turn_context_from_messages(messages, msg_text):
     """Return provider-facing history for a new user turn from a message list."""
-    history = api._drop_checkpointed_current_user_from_context(messages, msg_text)
-    if api._is_casual_fresh_chat_message(msg_text) and api._has_task_resume_compaction_marker(
+    history = _drop_checkpointed_current_user_from_context(messages, msg_text)
+    if _is_casual_fresh_chat_message(msg_text) and _has_task_resume_compaction_marker(
         history
     ):
         return []
     return history
 
 
-def context_messages_for_new_turn(api: ModuleType, session, msg_text):
+def _context_messages_for_new_turn(session, msg_text):
     """Return provider-facing history for a new user turn.
 
     Compacted agent sessions can carry a hidden "resume the active task" summary
     in context_messages. If the user starts a fresh casual greeting in that old
     session, do not feed that stale active-task summary back to the model.
     """
-    return api._new_turn_context_from_messages(api._session_context_messages(session), msg_text)
+    return _new_turn_context_from_messages(_session_context_messages(session), msg_text)
 
 
-def stream_writeback_is_current(api: ModuleType, session, stream_id):
+def _stream_writeback_is_current(session, stream_id):
     """Return True only while a worker still owns the session writeback.
 
     cancel_stream() intentionally clears ``active_stream_id`` early so the UI can
@@ -114,7 +124,7 @@ def stream_writeback_is_current(api: ModuleType, session, stream_id):
     return bool(stream_id) and getattr(session, 'active_stream_id', None) == stream_id
 
 
-def stream_writeback_can_supersede_recovery_marker(api: ModuleType, session, msg_text):
+def _stream_writeback_can_supersede_recovery_marker(session, msg_text):
     """Allow a finishing worker to replace its own stale-repair marker.
 
     The stale-pending repair path can occasionally run while the original worker
@@ -161,7 +171,7 @@ def stream_writeback_can_supersede_recovery_marker(api: ModuleType, session, msg
     return False
 
 
-def advance_truncation_watermark_after_commit(api: ModuleType, session) -> None:
+def _advance_truncation_watermark_after_commit(session) -> None:
     """Advance a positive truncation watermark once a new user turn is committed
     to ``session.messages`` (#3831).
 
@@ -183,4 +193,4 @@ def advance_truncation_watermark_after_commit(api: ModuleType, session) -> None:
             if isinstance(ts, (int, float)) and ts > 0:
                 session.truncation_watermark = float(ts)
                 return
-    session.truncation_watermark = api.time.time()
+    session.truncation_watermark = time.time()

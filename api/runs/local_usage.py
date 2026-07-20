@@ -7,9 +7,20 @@ the terminal result projector.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
-from types import ModuleType
 from typing import Any
+
+from api.model_context import (
+    _context_length_lookup_inputs_for_model,
+    _should_accept_session_context_length_refresh,
+)
+from api.streaming.tool_events import (
+    _live_usage_session_snapshot,
+    _tool_result_snippet,
+    live_usage_prompt_estimate_after_tool_delta,
+)
+from api.usage import prompt_cache_hit_percent
 
 
 class LocalUsageTracker:
@@ -17,13 +28,11 @@ class LocalUsageTracker:
 
     def __init__(
         self,
-        api: ModuleType,
         *,
         session_id: str,
         session_getter: Callable[[], Any],
         agent_getter: Callable[[], Any],
     ) -> None:
-        self._api = api
         self._session_id = session_id
         self._session_getter = session_getter
         self._agent_getter = agent_getter
@@ -35,7 +44,7 @@ class LocalUsageTracker:
         self._session_cache = [None]
 
     def _session(self):
-        return self._api._live_usage_session_snapshot(
+        return _live_usage_session_snapshot(
             self._session_id,
             self._session_getter(),
             self._session_cache,
@@ -67,7 +76,7 @@ class LocalUsageTracker:
         if not messages:
             return self._prompt_estimate_tokens
         self._seed_prompt_estimate()
-        usage = self._api.live_usage_prompt_estimate_after_tool_delta(
+        usage = live_usage_prompt_estimate_after_tool_delta(
             base_prompt_tokens=self._prompt_exact_tokens,
             exact_prompt_tokens=self._prompt_exact_tokens,
             messages=messages,
@@ -92,7 +101,7 @@ class LocalUsageTracker:
                             "type": "function",
                             "function": {
                                 "name": str(name or ""),
-                                "arguments": self._api.json.dumps(
+                                "arguments": json.dumps(
                                     args if isinstance(args, dict) else {},
                                     ensure_ascii=False,
                                     sort_keys=True,
@@ -114,7 +123,7 @@ class LocalUsageTracker:
                     "role": "tool",
                     "name": str(name or ""),
                     "tool_call_id": tool_call_id,
-                    "content": self._api._tool_result_snippet(function_result),
+                    "content": _tool_result_snippet(function_result),
                 }
             ]
         )
@@ -134,8 +143,8 @@ class LocalUsageTracker:
             base_url = str(getattr(agent, "base_url", "") or "").strip()
             api_key = getattr(agent, "api_key", "") or ""
             if model:
-                lookup_inputs = self._api._context_length_lookup_inputs_for_model
-                accept_refresh = self._api._should_accept_session_context_length_refresh
+                lookup_inputs = _context_length_lookup_inputs_for_model
+                accept_refresh = _should_accept_session_context_length_refresh
                 from agent.model_metadata import get_model_context_length
 
                 try:
@@ -176,7 +185,7 @@ class LocalUsageTracker:
                     resolved = real_length
         except TypeError:
             try:
-                accept_refresh = self._api._should_accept_session_context_length_refresh
+                accept_refresh = _should_accept_session_context_length_refresh
                 from agent.model_metadata import get_model_context_length
 
                 model = str(getattr(agent, "model", "") or "").strip()
@@ -268,7 +277,7 @@ class LocalUsageTracker:
                 usage["post_compression_context_tokens_estimate"] = estimate
 
         real_prompt_tokens = int(usage.get("last_prompt_tokens") or 0)
-        usage["cache_hit_percent"] = self._api.prompt_cache_hit_percent(
+        usage["cache_hit_percent"] = prompt_cache_hit_percent(
             usage.get("cache_read_tokens") or 0,
             usage.get("input_tokens") or 0,
         )

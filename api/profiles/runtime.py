@@ -270,7 +270,7 @@ def profile_env_for_background_worker(
 
         try:
             from api.config import thread_env_scope
-            from api.streaming import _ENV_LOCK
+            from api.streaming.diagnostics import _ENV_LOCK
 
             profile_home_path = Path(api.get_hermes_home_for_profile(profile))
             runtime_env = api.get_profile_runtime_env(profile_home_path)

@@ -1668,6 +1668,16 @@ def _clear_thread_env():
     _thread_ctx.env = {}
 
 
+def set_thread_env(env: dict[str, str]) -> None:
+    """Install a normalized thread-local environment through the config owner."""
+    _set_thread_env(**dict(env))
+
+
+def clear_thread_env() -> None:
+    """Clear the current thread-local environment through the config owner."""
+    _clear_thread_env()
+
+
 def is_process_env_fallback_blocked() -> bool:
     """Return whether the current config scope rejects process-env fallback."""
     return bool(getattr(_thread_ctx, "block_process_env_fallback", False))

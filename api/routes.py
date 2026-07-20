@@ -584,19 +584,9 @@ _install_routes_part(globals(), _skills_routes_part)
 del _skills_routes_part
 
 
-# ── SSE app-level heartbeat (#1623) ────────────────────────────────────────
-#
-# Kernel TCP keepalive (server.py setsockopt block) declares a peer dead at
-# KEEPIDLE (10s) + KEEPINTVL (5s) * KEEPCNT (3) = 25s in the worst case. The
-# app-level SSE heartbeat must fire well below that window so flaky-network
-# probes never get the chance to kill an idle stream during long LLM thinking
-# phases. 5s gives the kernel ~5x headroom: probe at 10s, heartbeat byte at
-# every 5s of idle keeps the socket warm.
-#
-# Cost: ~12 bytes per heartbeat * 12 extra heartbeats/min = ~150B/min idle.
-# Trivial; many production SSE deployments run 5-15s heartbeats specifically
-# to handle proxies and mobile NAT.
-_SSE_HEARTBEAT_INTERVAL_SECONDS = 5
+from api.streaming.transport import (
+    SSE_HEARTBEAT_INTERVAL_SECONDS as _SSE_HEARTBEAT_INTERVAL_SECONDS,
+)
 _SESSION_SSE_SENT_EVENT_ID_LIMIT = 4096
 
 

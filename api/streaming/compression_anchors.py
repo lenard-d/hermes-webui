@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import re
-from types import ModuleType
+
+from api.compression_anchor import is_context_compression_marker
+
+from .context_replay import _message_identity
+from .thinking_content import _message_text
+from api.workspace_context import _looks_like_current_user_turn, _strip_workspace_prefix
 
 
-def is_context_compression_marker(api: ModuleType, msg):
-    return api.is_context_compression_marker(msg)
+def _is_context_compression_marker(msg):
+    return is_context_compression_marker(msg)
 
 
-def compact_summary_text(api: ModuleType, raw_text: str | None) -> str | None:
+def _compact_summary_text(raw_text: str | None) -> str | None:
     """Normalize a text blob used in compression summary cards."""
     if not isinstance(raw_text, str):
         return None
@@ -20,14 +25,14 @@ def compact_summary_text(api: ModuleType, raw_text: str | None) -> str | None:
     return re.sub(r"\s+", " ", txt).strip()
 
 
-def compression_anchor_message_key(api: ModuleType, message):
+def _compression_anchor_message_key(message):
     if not isinstance(message, dict):
         return None
     role = str(message.get('role') or '')
     if not role or role == 'tool':
         return None
     content = message.get('content', '')
-    text = api._message_text(content)
+    text = _message_text(content)
     if len(text) > 160:
         text = text[:160]
     ts = message.get('_ts') or message.get('timestamp')
@@ -38,19 +43,19 @@ def compression_anchor_message_key(api: ModuleType, message):
     return {'role': role, 'ts': ts, 'text': text, 'attachments': attach_count}
 
 
-def compression_summary_from_messages(api: ModuleType, messages):
+def _compression_summary_from_messages(messages):
     for m in reversed(messages or []):
         if not isinstance(m, dict):
             continue
-        if not api._is_context_compression_marker(m):
+        if not _is_context_compression_marker(m):
             continue
-        text = api._message_text(m.get('content'))
+        text = _message_text(m.get('content'))
         if text:
             return text
     return None
 
 
-def find_current_user_turn(api: ModuleType, messages, msg_text):
+def _find_current_user_turn(messages, msg_text):
     needle = " ".join(str(msg_text or '').split())
     last_strong_match = None  # _looks_like_current_user_turn (high confidence)
     last_weak_match = None    # needle substring match (lower confidence)
@@ -59,12 +64,12 @@ def find_current_user_turn(api: ModuleType, messages, msg_text):
         if not isinstance(msg, dict) or msg.get('role') != 'user':
             continue
         fallback = idx
-        if api._looks_like_current_user_turn(msg, msg_text):
+        if _looks_like_current_user_turn(msg, msg_text):
             last_strong_match = idx
             continue
         text = " ".join(
-            api._strip_workspace_prefix(
-                api._message_text(msg.get('content', '')),
+            _strip_workspace_prefix(
+                _message_text(msg.get('content', '')),
                 include_legacy=True,
             ).split()
         )
@@ -90,12 +95,12 @@ def find_current_user_turn(api: ModuleType, messages, msg_text):
     return fallback
 
 
-def drop_checkpointed_current_user_from_context(api: ModuleType, messages, msg_text):
+def _drop_checkpointed_current_user_from_context(messages, msg_text):
     """Return model history without an eager-checkpointed current user turn."""
     history = list(messages or [])
     if not history:
         return history
-    current_user_key = api._message_identity({'role': 'user', 'content': msg_text})
-    if current_user_key and api._message_identity(history[-1]) == current_user_key:
+    current_user_key = _message_identity({'role': 'user', 'content': msg_text})
+    if current_user_key and _message_identity(history[-1]) == current_user_key:
         return history[:-1]
     return history

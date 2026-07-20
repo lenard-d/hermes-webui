@@ -826,7 +826,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
         return _handle_chat_sync(handler, body)
 
     if parsed.path == "/api/chat/steer":
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
 
         return _handle_chat_steer(handler, body)
 

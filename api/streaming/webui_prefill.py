@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 import re
+import shlex
+import subprocess
 from pathlib import Path
-from types import ModuleType
 from typing import Optional
+
+from api.config import get_config
+
+
+logger = logging.getLogger(__name__)
 
 
 SECRET_SHAPED_RE = re.compile(
@@ -16,14 +25,18 @@ SECRET_SHAPED_RE = re.compile(
 PREFILL_SCRIPT_OUTPUT_LIMIT = 262_144
 PREFILL_CONTEXT_DEFAULT_MAX_CHARS = 12_000
 
+_SECRET_SHAPED_RE = SECRET_SHAPED_RE
+_PREFILL_SCRIPT_OUTPUT_LIMIT = PREFILL_SCRIPT_OUTPUT_LIMIT
+_PREFILL_CONTEXT_DEFAULT_MAX_CHARS = PREFILL_CONTEXT_DEFAULT_MAX_CHARS
 
-def redact_prefill_status_text(api: ModuleType, text: str) -> str:
+
+def _redact_prefill_status_text(text: str) -> str:
     """Return a short, non-secret diagnostic string for prefill status."""
-    clean = api._SECRET_SHAPED_RE.sub("[REDACTED]", str(text or ""))
+    clean = _SECRET_SHAPED_RE.sub("[REDACTED]", str(text or ""))
     return " ".join(clean.split())[:240]
 
 
-def valid_prefill_messages(api: ModuleType, value) -> list[dict]:
+def _valid_prefill_messages(value) -> list[dict]:
     """Normalize a prefill payload to role/content messages."""
     if not isinstance(value, list):
         return []
@@ -39,29 +52,29 @@ def valid_prefill_messages(api: ModuleType, value) -> list[dict]:
     return messages
 
 
-def resolve_prefill_path(api: ModuleType, raw: str) -> Path:
-    path = api.Path(str(raw)).expanduser()
+def _resolve_prefill_path(raw: str) -> Path:
+    path = Path(str(raw)).expanduser()
     if not path.is_absolute():
         try:
             from api.config import get_config_path as _get_config_path
             path = _get_config_path().parent / path
         except Exception:
-            path = api.Path.cwd() / path
+            path = Path.cwd() / path
     return path
 
 
-def prefill_context_max_chars(api: ModuleType, config_data: dict) -> int:
-    raw = api.os.getenv("HERMES_WEBUI_PREFILL_CONTEXT_MAX_CHARS", "") or str(
+def _prefill_context_max_chars(config_data: dict) -> int:
+    raw = os.getenv("HERMES_WEBUI_PREFILL_CONTEXT_MAX_CHARS", "") or str(
         config_data.get("webui_prefill_context_max_chars") or ""
     )
     try:
-        value = int(raw or api._PREFILL_CONTEXT_DEFAULT_MAX_CHARS)
+        value = int(raw or _PREFILL_CONTEXT_DEFAULT_MAX_CHARS)
     except Exception:
-        value = api._PREFILL_CONTEXT_DEFAULT_MAX_CHARS
-    return max(0, min(value, api._PREFILL_SCRIPT_OUTPUT_LIMIT))
+        value = _PREFILL_CONTEXT_DEFAULT_MAX_CHARS
+    return max(0, min(value, _PREFILL_SCRIPT_OUTPUT_LIMIT))
 
 
-def prefill_context_char_count(api: ModuleType, messages: list[dict]) -> int:
+def _prefill_context_char_count(messages: list[dict]) -> int:
     return sum(
         len(str(message.get("content") or ""))
         for message in messages
@@ -69,8 +82,7 @@ def prefill_context_char_count(api: ModuleType, messages: list[dict]) -> int:
     )
 
 
-def budget_compacted_prefill_context(
-    api: ModuleType,
+def _budget_compacted_prefill_context(
     context: dict,
     *,
     max_chars: int,
@@ -99,26 +111,26 @@ def budget_compacted_prefill_context(
     }
 
 
-def apply_prefill_context_budget(api: ModuleType, context: dict, config_data: dict) -> dict:
+def _apply_prefill_context_budget(context: dict, config_data: dict) -> dict:
     if context.get("status") != "loaded":
         return context
-    max_chars = api._prefill_context_max_chars(config_data)
+    max_chars = _prefill_context_max_chars(config_data)
     if max_chars <= 0:
         return context
     messages = context.get("messages") or []
-    char_count = api._prefill_context_char_count(
+    char_count = _prefill_context_char_count(
         messages if isinstance(messages, list) else []
     )
     if char_count <= max_chars:
         return context
 
-    file_raw = api.os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or str(
+    file_raw = os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or str(
         config_data.get("prefill_messages_file") or ""
     )
     if context.get("source") == "script" and file_raw:
-        fallback = api._load_prefill_messages_file(file_raw, source="file_budget_fallback")
+        fallback = _load_prefill_messages_file(file_raw, source="file_budget_fallback")
         fallback_messages = fallback.get("messages") if isinstance(fallback, dict) else []
-        fallback_chars = api._prefill_context_char_count(
+        fallback_chars = _prefill_context_char_count(
             fallback_messages if isinstance(fallback_messages, list) else []
         )
         if fallback.get("status") == "loaded" and fallback_chars <= max_chars:
@@ -130,14 +142,14 @@ def apply_prefill_context_budget(api: ModuleType, context: dict, config_data: di
             fallback["max_chars"] = max_chars
             return fallback
 
-    return api._budget_compacted_prefill_context(
+    return _budget_compacted_prefill_context(
         context,
         max_chars=max_chars,
         char_count=char_count,
     )
 
 
-def prefill_not_configured(api: ModuleType) -> dict:
+def _prefill_not_configured() -> dict:
     return {
         "status": "not_configured",
         "source": "none",
@@ -147,14 +159,13 @@ def prefill_not_configured(api: ModuleType) -> dict:
     }
 
 
-def load_prefill_messages_file(
-    api: ModuleType,
+def _load_prefill_messages_file(
     file_raw: str,
     *,
     source: str = "file",
     status: str = "loaded",
 ) -> dict:
-    path = api._resolve_prefill_path(file_raw)
+    path = _resolve_prefill_path(file_raw)
     label = path.name or "prefill file"
     if not path.exists():
         return {
@@ -166,8 +177,8 @@ def load_prefill_messages_file(
             "error": "prefill file not found",
         }
     try:
-        messages = api._valid_prefill_messages(
-            api.json.loads(path.read_text(encoding="utf-8"))
+        messages = _valid_prefill_messages(
+            json.loads(path.read_text(encoding="utf-8"))
         )
         return {
             "status": status,
@@ -183,12 +194,12 @@ def load_prefill_messages_file(
             "label": label,
             "messages": [],
             "message_count": 0,
-            "error": api._redact_prefill_status_text(str(exc)),
+            "error": _redact_prefill_status_text(str(exc)),
         }
 
 
-def prefill_script_timeout(api: ModuleType, config_data: dict) -> float:
-    raw = api.os.getenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT_TIMEOUT", "") or str(
+def _prefill_script_timeout(config_data: dict) -> float:
+    raw = os.getenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT_TIMEOUT", "") or str(
         config_data.get("webui_prefill_messages_script_timeout") or ""
     )
     try:
@@ -197,43 +208,43 @@ def prefill_script_timeout(api: ModuleType, config_data: dict) -> float:
         return 5.0
 
 
-def prefill_script_command(api: ModuleType, raw) -> list[str]:
+def _prefill_script_command(raw) -> list[str]:
     if isinstance(raw, (list, tuple)):
         return [str(part) for part in raw if str(part)]
-    parts = api.shlex.split(str(raw or ""))
+    parts = shlex.split(str(raw or ""))
     if not parts:
         return []
     # A single script path mirrors prefill_messages_file path resolution.  More
     # complex commands keep their argv untouched so admins can pass arguments.
     if len(parts) == 1:
-        parts[0] = str(api._resolve_prefill_path(parts[0]))
+        parts[0] = str(_resolve_prefill_path(parts[0]))
     return parts
 
 
-def messages_from_prefill_script_output(api: ModuleType, text: str) -> list[dict]:
+def _messages_from_prefill_script_output(text: str) -> list[dict]:
     stripped = str(text or "").strip()
     if not stripped:
         return []
     try:
-        payload = api.json.loads(stripped)
+        payload = json.loads(stripped)
     except Exception:
         payload = None
     if isinstance(payload, dict):
         payload = payload.get("messages")
-    messages = api._valid_prefill_messages(payload)
+    messages = _valid_prefill_messages(payload)
     if messages:
         return messages
     return [{"role": "user", "content": stripped}]
 
 
-def load_prefill_messages_script(api: ModuleType, config_data: dict) -> dict:
-    script_raw = api.os.getenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT", "") or config_data.get(
+def _load_prefill_messages_script(config_data: dict) -> dict:
+    script_raw = os.getenv("HERMES_WEBUI_PREFILL_MESSAGES_SCRIPT", "") or config_data.get(
         "webui_prefill_messages_script"
     )
     if not script_raw:
-        return api._prefill_not_configured()
-    command = api._prefill_script_command(script_raw)
-    label = api.Path(command[0]).name if command else "prefill script"
+        return _prefill_not_configured()
+    command = _prefill_script_command(script_raw)
+    label = Path(command[0]).name if command else "prefill script"
     if not command:
         return {
             "status": "error",
@@ -244,15 +255,15 @@ def load_prefill_messages_script(api: ModuleType, config_data: dict) -> dict:
             "error": "prefill script is empty",
         }
     try:
-        proc = api.subprocess.run(
+        proc = subprocess.run(
             command,
             text=True,
-            stdout=api.subprocess.PIPE,
-            stderr=api.subprocess.PIPE,
-            timeout=api._prefill_script_timeout(config_data),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=_prefill_script_timeout(config_data),
             check=False,
         )
-    except api.subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:
         return {
             "status": "error",
             "source": "script",
@@ -268,10 +279,10 @@ def load_prefill_messages_script(api: ModuleType, config_data: dict) -> dict:
             "label": label,
             "messages": [],
             "message_count": 0,
-            "error": api._redact_prefill_status_text(str(exc)),
+            "error": _redact_prefill_status_text(str(exc)),
         }
     if proc.returncode != 0:
-        err = api._redact_prefill_status_text(
+        err = _redact_prefill_status_text(
             proc.stderr or proc.stdout or f"prefill script exited {proc.returncode}"
         )
         return {
@@ -282,16 +293,16 @@ def load_prefill_messages_script(api: ModuleType, config_data: dict) -> dict:
             "message_count": 0,
             "error": err,
         }
-    if len(proc.stdout.encode("utf-8")) > api._PREFILL_SCRIPT_OUTPUT_LIMIT:
+    if len(proc.stdout.encode("utf-8")) > _PREFILL_SCRIPT_OUTPUT_LIMIT:
         return {
             "status": "error",
             "source": "script",
             "label": label,
             "messages": [],
             "message_count": 0,
-            "error": f"prefill script output exceeded {api._PREFILL_SCRIPT_OUTPUT_LIMIT} bytes",
+            "error": f"prefill script output exceeded {_PREFILL_SCRIPT_OUTPUT_LIMIT} bytes",
         }
-    messages = api._messages_from_prefill_script_output(proc.stdout)
+    messages = _messages_from_prefill_script_output(proc.stdout)
     return {
         "status": "loaded",
         "source": "script",
@@ -301,8 +312,7 @@ def load_prefill_messages_script(api: ModuleType, config_data: dict) -> dict:
     }
 
 
-def load_webui_prefill_context(
-    api: ModuleType,
+def _load_webui_prefill_context(
     config_data: Optional[dict] = None,
 ) -> dict:
     """Load configured WebUI session prefill messages.
@@ -312,27 +322,27 @@ def load_webui_prefill_context(
     Obsidian, Notion, llm-wiki, or another local notes source into ephemeral
     turn context without baking any one note provider into the WebUI.
     """
-    cfg = config_data if isinstance(config_data, dict) else api.get_config()
-    script_context = api._load_prefill_messages_script(cfg)
-    file_raw = api.os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or str(
+    cfg = config_data if isinstance(config_data, dict) else get_config()
+    script_context = _load_prefill_messages_script(cfg)
+    file_raw = os.getenv("HERMES_PREFILL_MESSAGES_FILE", "") or str(
         cfg.get("prefill_messages_file") or ""
     )
     if script_context.get("status") == "not_configured":
         if file_raw:
-            return api._apply_prefill_context_budget(
-                api._load_prefill_messages_file(file_raw),
+            return _apply_prefill_context_budget(
+                _load_prefill_messages_file(file_raw),
                 cfg,
             )
-        return api._prefill_not_configured()
+        return _prefill_not_configured()
     if script_context.get("status") == "error" and file_raw:
-        file_context = api._load_prefill_messages_file(file_raw, source="file_fallback")
+        file_context = _load_prefill_messages_file(file_raw, source="file_fallback")
         if file_context.get("status") == "loaded":
             file_context["script_error"] = script_context.get("error", "")
-            return api._apply_prefill_context_budget(file_context, cfg)
-    return api._apply_prefill_context_budget(script_context, cfg)
+            return _apply_prefill_context_budget(file_context, cfg)
+    return _apply_prefill_context_budget(script_context, cfg)
 
 
-def public_prefill_context_status(api: ModuleType, prefill_context: dict) -> dict:
+def _public_prefill_context_status(prefill_context: dict) -> dict:
     """Strip message bodies before sending context status to the browser."""
     return {
         "status": prefill_context.get("status", "not_configured"),
@@ -348,8 +358,7 @@ def public_prefill_context_status(api: ModuleType, prefill_context: dict) -> dic
     }
 
 
-def webui_delivery_context_prompt(
-    api: ModuleType,
+def _webui_delivery_context_prompt(
     config_data: Optional[dict] = None,
 ) -> str:
     """Return platform/delivery context for the ephemeral system prompt.
@@ -366,7 +375,7 @@ def webui_delivery_context_prompt(
     refactor this area, keep that surface call in place — the two helpers
     together produce the full session context block.
     """
-    cfg = config_data if isinstance(config_data, dict) else api.get_config()
+    cfg = config_data if isinstance(config_data, dict) else get_config()
     lines: list[str] = []
 
     display_hermes_home = None
@@ -381,7 +390,7 @@ def webui_delivery_context_prompt(
         if get_hermes_home is not None:
             state_path = get_hermes_home() / "gateway_state.json"
             if state_path.exists():
-                raw_state = api.json.loads(state_path.read_text(encoding="utf-8"))
+                raw_state = json.loads(state_path.read_text(encoding="utf-8"))
                 platforms = raw_state.get("platforms") if isinstance(raw_state, dict) else {}
                 if isinstance(platforms, dict):
                     for name in sorted(platforms):
@@ -429,8 +438,7 @@ def webui_delivery_context_prompt(
     return "\n".join(lines)
 
 
-def prefill_messages_with_webui_context(
-    api: ModuleType,
+def _prefill_messages_with_webui_context(
     prefill_context: dict,
     config_data: Optional[dict] = None,
 ) -> list[dict]:
@@ -445,8 +453,7 @@ def prefill_messages_with_webui_context(
     return list(prefill_context.get("messages") or [])
 
 
-def normalize_prefill_messages_before_user_turn(
-    api: ModuleType,
+def _normalize_prefill_messages_before_user_turn(
     prefill_messages: list[dict],
 ) -> list[dict]:
     """Ensure WebUI prefill does not end with user role before an appended turn.
@@ -471,5 +478,5 @@ def normalize_prefill_messages_before_user_turn(
         sanitized.pop()
         n_dropped += 1
     if n_dropped:
-        api.logger.debug("Dropped %d trailing user message(s) from prefill", n_dropped)
+        logger.debug("Dropped %d trailing user message(s) from prefill", n_dropped)
     return sanitized

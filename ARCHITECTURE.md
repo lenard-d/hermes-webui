@@ -33,9 +33,9 @@ and `static/boot.js` keeps the dataset synchronized with the runtime panel state
 
 The design philosophy is deliberately minimal. There is no build step, no bundler, no
 frontend framework. The Python server is split into a routing shell (`server.py`) and
-business logic modules (`api/`). Large public backend modules remain compatibility
-facades while cohesive, importable implementations live in semantic packages and
-owner modules. The frontend is vanilla JavaScript and CSS loaded directly from
+business logic modules (`api/`). Public backend entrypoints remain compatibility
+interfaces where needed, while cohesive implementations live in semantic packages
+or owner modules. The frontend is vanilla JavaScript and CSS loaded directly from
 `static/` in an explicit browser order; most feature files are still classic
 scripts, while bounded ownership seams can use native ES modules without adding
 a build step. This makes the code easy to modify from a terminal or by an agent.
@@ -100,9 +100,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
                            compression, and response route owners
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
-      streaming.py         SSE orchestration and compatibility facade for extracted stream domains
-      streaming_parts/     Importable payload, replay, compression, Gateway routing metadata,
-                           attachment, terminal, live-control, and local-run domains
+      streaming/           Public streaming interface plus semantic transport, replay,
+                           payload, attachment, compression, terminal, and title owners
+      runs/                Local/Gateway run orchestration, admission, publication,
+                           journaling, and explicit Local helper owners
+      model_context.py     Shared context-window lookup and refresh policy
+      workspace_context.py Shared workspace display/prefix and runtime-path policy
       updates/             Self-update package with a small public interface
         __init__.py        Stable `api.updates` exports and cached status orchestration
         repository.py      Git/source discovery and hardened repository operations
@@ -343,9 +346,11 @@ larger migration remains incremental:
   `api.models` preserves only a stateless compatibility import, while the
   durable owner lives in `api.sessions`.
 - `api.updates`, `api.workspace`, and `api.workspace_git` use explicit package
-  owners and stateless compatibility interfaces. `api.routes` and
-  `api.streaming` remain temporary compatibility surfaces while their HTTP and
-  transport owners are migrated incrementally.
+  owners and stateless compatibility interfaces. `api.streaming` is a real
+  package: `__init__.py` preserves the public interface, semantic modules import
+  their actual owners, and Local/Gateway orchestration remains authoritative in
+  `api.runs.local` and `api.runs.gateway`. No runtime binder, module alias, or
+  source concatenation layer connects those owners.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.
@@ -631,7 +636,7 @@ compatibility globals are therefore part of the contract, while family namespace
 such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
 the semantic owners. A domain stays intact when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
-`config/model_catalog.py`, `streaming_parts/local_run.py`, and
+`config/model_catalog.py`, `runs/local.py`, and
 `ui_parts/017-message-renderer.js` are deliberately larger than the line-count
 heuristic because their state and cleanup lifecycles do not expose a narrower
 safe Interface.
@@ -872,8 +877,10 @@ Step-by-step trace of what happens when you type a message and press Send:
 server.py imports from api/ modules (config, helpers, models, workspace, upload, streaming).
 The api/ modules in turn import Hermes internals:
 
-    api/streaming.py imports:
-      run_agent.AIAgent              Main agent class. Wraps LLM + tool execution.
+    api/streaming/agent_loader.py imports:
+      api.runs.agent_runtime         Guarded Hermes agent runtime interface.
+    api/runs/{local,gateway}.py imports:
+      api.streaming.*                Shared semantic streaming owners.
     api/config/__init__.py imports:
       yaml                           Config loading.
     server.py imports:
@@ -992,9 +999,11 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         workspace/            Identity, path safety, anchored access, navigation, and Git owners
         workspace_git.py      Stateless high-level Git compatibility interface
         upload.py             Multipart parser and file upload handler
-        streaming.py          SSE orchestration and streaming compatibility facade
-        streaming_parts/      Payload, replay, compression, Gateway routing metadata,
-                              attachment, terminal, live-control, and local-run domains
+        streaming/            Public interface plus semantic transport, replay, payload,
+                              attachment, compression, terminal, and title owners
+        runs/                 Local/Gateway orchestration, admission, publication, and journaling
+        model_context.py      Shared model context-window policy
+        workspace_context.py  Shared workspace runtime/display policy
       static/
         index.html            HTML document (served from disk)
         style.css             Base CSS
@@ -1012,10 +1021,11 @@ Route extraction to `api/routes.py` completed in Sprint 11. `server.py` remains 
 thin shell relative to the rest of the app: Handler class with headers,
 structured logging, dispatch to routes, TLS wrapping, and `main()`. The later
 semantic splits keep the established `api.config`, `api.models`, `api.routes`, and
-`api.streaming` import surfaces while moving bounded responsibilities into
-ordinary owner modules. Compatibility entrypoints still contain orchestration
-and selected shared-state seams, so further extraction should follow domain
-boundaries rather than a line-count target.
+`api.streaming` import surfaces. Streaming is now a real package whose
+`__init__.py` exposes the compatibility interface while implementations import
+their semantic owners directly. Run lifecycle orchestration stays in
+`api.runs`; further extraction should follow typed state and phase boundaries
+rather than a line-count target.
 
 ### Phase B: Thread-Safe Request Context (Priority: Critical, Effort: Medium)
 

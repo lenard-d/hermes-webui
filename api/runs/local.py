@@ -8,17 +8,196 @@ settlement from this lifecycle would separate state decisions from their owner.
 
 from __future__ import annotations
 
-from types import ModuleType
+import contextlib
+import logging
+import os
+import re
+import threading
+import time
+import traceback
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from api.compression_anchor import visible_messages_for_anchor
+from api.compression_recovery import stamp_compression_exhausted_recovery
+from api.config import (
+    LOCK,
+    PENDING_GOAL_CONTINUATION,
+    SESSIONS,
+    clear_thread_env,
+    _get_session_agent_lock,
+    _main_model_request_overrides,
+    alias_session_agent_lock,
+    attach_runtime_agent,
+    model_with_provider_context,
+    resolve_model_provider,
+    update_active_run,
+    warm_models_catalog_provenance_if_cold,
+)
+from api.helpers import redact_session_data
+from api.metering import meter
+from api.model_context import (
+    _context_length_lookup_inputs_for_model,
+    _should_accept_session_context_length_refresh,
+)
+from api.sessions.cache import _evict_sessions_over_cap, get_session
+from api.sessions.external import get_state_db_session_messages
+from api.sessions.process_wakeup import (
+    clear_process_wakeup_pause,
+    record_process_wakeup_provider_unavailable_pause,
+)
+from api.sessions.projects import title_from
+from api.sessions.reconciliation import reconciled_state_db_messages_for_session
+from api.streaming.agent_cache import (
+    _attempt_credential_self_heal,
+    _build_session_db_for_stream,
+    _cached_agent_matches_session,
+    _cached_agent_session_identity,
+    _close_cached_agent_entry_at_session_boundary,
+    _last_resort_sync_from_core,
+    _replace_session_db_in_kwargs,
+)
+from api.streaming.agent_loader import _clarify_timeout_seconds, _get_ai_agent
+from api.streaming.attachments import _attachment_name, _build_native_multimodal_message
+from api.streaming.compression_anchors import (
+    _compact_summary_text,
+    _compression_anchor_message_key,
+    _compression_summary_from_messages,
+    _is_context_compression_marker,
+)
+from api.streaming.compression_snapshot import _preserve_pre_compression_snapshot
+from api.streaming.context_replay import _dedupe_replayed_context_messages
+from api.streaming.diagnostics import (
+    _STREAMING_CRON_PROFILE_HOME,
+    _log_stream_writeback_timings,
+    _stream_writeback_stage,
+)
+from api.streaming.gateway_routing_metadata import _extract_gateway_routing_metadata
+from api.streaming.message_sanitization import (
+    _assign_stable_message_ids,
+    _deduplicate_context_messages,
+    _sanitize_messages_for_api,
+)
+from api.streaming.payloads import (
+    _cancel_event_payload,
+    _session_payload_with_full_messages,
+)
+from api.streaming.post_compression_context import (
+    _estimate_post_compression_context_tokens,
+    _prune_context_tool_results_after_compression,
+    _restore_display_reasoning_metadata,
+    _restore_reasoning_metadata,
+)
+from api.streaming.process_notifications import (
+    _accept_pending_async_delegations,
+    _drain_webui_process_notifications,
+)
+from api.streaming.prompts import _webui_ephemeral_system_prompt
+from api.streaming.provider_errors import _classify_provider_error, _provider_error_payload
+from api.streaming.runtime_resolution import (
+    _apply_profile_home_context_to_streaming_model,
+    _persistent_state_changes,
+    _persistent_state_snapshot,
+    _resolve_custom_provider_runtime_overrides,
+    _runtime_preferred_base_url,
+)
+from api.streaming.terminal_outcomes import (
+    _agent_result_tool_limit_reached,
+    _aiagent_import_error_detail,
+    _cleanup_ephemeral_cancelled_turn,
+    _drop_synthetic_max_iteration_summary_requests,
+    _finalize_cancelled_turn,
+    _mark_latest_assistant_tool_limit_status,
+    _maybe_inject_max_iteration_summary_fallback,
+)
+from api.streaming.thinking_content import (
+    _looks_invalid_generated_title,
+    _split_thinking_from_content,
+    _strip_xml_tool_calls,
+)
+from api.streaming.title_generation import (
+    _first_exchange_snippets,
+    _is_provisional_title,
+    _maybe_schedule_title_refresh,
+    _run_background_title_update,
+)
+from api.streaming.tool_events import _extract_tool_calls_from_messages
+from api.streaming.transcript import (
+    _agent_result_terminal_failure,
+    _assistant_reply_added_after_current_turn,
+    _has_new_assistant_reply,
+    _materialize_pending_user_turn_before_error,
+    _merge_display_messages_after_agent_result,
+    _merged_transcript_lacks_final_assistant_answer,
+    _session_lacks_final_assistant_answer,
+    _snapshot_and_append_partial_on_error,
+    _stamp_missing_message_timestamps,
+)
+from api.streaming.turn_context import (
+    _advance_truncation_watermark_after_commit,
+    _new_turn_context_from_messages,
+    _save_streaming_checkpoint,
+    _stream_writeback_can_supersede_recovery_marker,
+    _stream_writeback_is_current,
+)
+from api.streaming.turn_identity import _reset_turn_session_identity, _set_turn_session_identity
+from api.streaming.webui_prefill import (
+    _load_webui_prefill_context,
+    _normalize_prefill_messages_before_user_turn,
+    _prefill_messages_with_webui_context,
+    _public_prefill_context_status,
+)
+from api.turn_journal import append_turn_journal_event_for_stream
+from api.usage import prompt_cache_hit_percent
+from api.workspace_context import _workspace_context_prefix
 
 from .local_agent_cache import acquire_local_agent
 from .local_agent_config import build_local_agent_configuration
 from .local_environment import LocalRunEnvironment
 from .local_events import LocalEventTranslator
 from .local_usage import LocalUsageTracker
+from .execution import TurnExecution
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LocalRunDependencies:
+    """Narrow seams that the public package may replace for an embedded run."""
+
+    get_session: Callable
+    get_ai_agent: Callable
+    resolve_model_provider: Callable
+    get_session_agent_lock: Callable
+    build_session_db_for_stream: Callable
+    attempt_credential_self_heal: Callable
+    load_webui_prefill_context: Callable
+    prefill_messages_with_webui_context: Callable
+    normalize_prefill_messages_before_user_turn: Callable
+    classify_provider_error: Callable
+    session_payload_with_full_messages: Callable
+    maybe_schedule_title_refresh: Callable
+
+
+_DEFAULT_DEPENDENCIES = LocalRunDependencies(
+    get_session=get_session,
+    get_ai_agent=_get_ai_agent,
+    resolve_model_provider=resolve_model_provider,
+    get_session_agent_lock=_get_session_agent_lock,
+    build_session_db_for_stream=_build_session_db_for_stream,
+    attempt_credential_self_heal=_attempt_credential_self_heal,
+    load_webui_prefill_context=_load_webui_prefill_context,
+    prefill_messages_with_webui_context=_prefill_messages_with_webui_context,
+    normalize_prefill_messages_before_user_turn=_normalize_prefill_messages_before_user_turn,
+    classify_provider_error=_classify_provider_error,
+    session_payload_with_full_messages=_session_payload_with_full_messages,
+    maybe_schedule_title_refresh=_maybe_schedule_title_refresh,
+)
 
 
 def run_agent_streaming(
-    api: ModuleType,
     session_id,
     msg_text,
     model,
@@ -30,6 +209,7 @@ def run_agent_streaming(
     model_provider=None,
     goal_related=False,
     moa_config=None,
+    dependencies: LocalRunDependencies | None = None,
 ):
     """Run agent in background thread, writing SSE events to STREAMS[stream_id].
 
@@ -37,137 +217,19 @@ def run_agent_streaming(
     a streaming answer without persisting to the parent session.
     """
 
-    # Bind every collaborator from the canonical compatibility facade once at
-    # run entry. Tests and callers may monkeypatch api.streaming; resolving here
-    # preserves those seams without importing the facade into this module or
-    # creating a second owner for mutable runtime state.
-    LOCK = api.LOCK
-    PENDING_GOAL_CONTINUATION = api.PENDING_GOAL_CONTINUATION
-    Path = api.Path
-    SESSIONS = api.SESSIONS
-    TurnExecution = api.TurnExecution
-    _ENV_LOCK = api._ENV_LOCK
-    _STREAMING_CRON_PROFILE_HOME = api._STREAMING_CRON_PROFILE_HOME
-    _TOOL_ARG_CONTENT_CAP = api._TOOL_ARG_CONTENT_CAP
-    _TOOL_ARG_CONTENT_KEYS = api._TOOL_ARG_CONTENT_KEYS
-    _accept_pending_async_delegations = api._accept_pending_async_delegations
-    _adopt_session_db_for_cached_agent = api._adopt_session_db_for_cached_agent
-    _advance_truncation_watermark_after_commit = api._advance_truncation_watermark_after_commit
-    _agent_cache_api_key_sig = api._agent_cache_api_key_sig
-    _agent_result_terminal_failure = api._agent_result_terminal_failure
-    _agent_result_tool_limit_reached = api._agent_result_tool_limit_reached
-    _aiagent_import_error_detail = api._aiagent_import_error_detail
-    _apply_profile_home_context_to_streaming_model = api._apply_profile_home_context_to_streaming_model
-    _assign_stable_message_ids = api._assign_stable_message_ids
-    _assistant_reply_added_after_current_turn = api._assistant_reply_added_after_current_turn
-    _attachment_name = api._attachment_name
-    _attempt_credential_self_heal = api._attempt_credential_self_heal
-    _build_agent_thread_env = api._build_agent_thread_env
-    _build_native_multimodal_message = api._build_native_multimodal_message
-    _build_session_db_for_stream = api._build_session_db_for_stream
-    _cached_agent_matches_session = api._cached_agent_matches_session
-    _cached_agent_session_identity = api._cached_agent_session_identity
-    _cancel_event_payload = api._cancel_event_payload
-    _clarify_timeout_seconds = api._clarify_timeout_seconds
-    _classify_provider_error = api._classify_provider_error
-    _cleanup_ephemeral_cancelled_turn = api._cleanup_ephemeral_cancelled_turn
-    _clear_thread_env = api._clear_thread_env
-    _close_cached_agent_entry_at_session_boundary = api._close_cached_agent_entry_at_session_boundary
-    _close_evicted_agent_at_session_boundary = api._close_evicted_agent_at_session_boundary
-    _compact_summary_text = api._compact_summary_text
-    _compact_for_echo_compare = api._compact_for_echo_compare
-    _compression_anchor_message_key = api._compression_anchor_message_key
-    _compression_summary_from_messages = api._compression_summary_from_messages
-    _dedupe_replayed_context_messages = api._dedupe_replayed_context_messages
-    _deduplicate_context_messages = api._deduplicate_context_messages
-    _drain_webui_process_notifications = api._drain_webui_process_notifications
-    _drop_synthetic_max_iteration_summary_requests = api._drop_synthetic_max_iteration_summary_requests
-    _estimate_post_compression_context_tokens = api._estimate_post_compression_context_tokens
-    _evict_sessions_over_cap = api._evict_sessions_over_cap
-    _extract_gateway_routing_metadata = api._extract_gateway_routing_metadata
-    _extract_tool_calls_from_messages = api._extract_tool_calls_from_messages
-    _finalize_cancelled_turn = api._finalize_cancelled_turn
-    _first_exchange_snippets = api._first_exchange_snippets
-    _get_ai_agent = api._get_ai_agent
-    _get_session_agent_lock = api._get_session_agent_lock
-    _has_new_assistant_reply = api._has_new_assistant_reply
-    _install_streaming_cronjob_profile_wrapper = api._install_streaming_cronjob_profile_wrapper
-    _is_agent_compression_start_status = api._is_agent_compression_start_status
-    _is_context_compression_marker = api._is_context_compression_marker
-    _is_fallback_lifecycle_message = api._is_fallback_lifecycle_message
-    _is_provisional_title = api._is_provisional_title
-    _last_resort_sync_from_core = api._last_resort_sync_from_core
-    _load_webui_prefill_context = api._load_webui_prefill_context
-    _live_usage_session_snapshot = api._live_usage_session_snapshot
-    _log_stream_writeback_timings = api._log_stream_writeback_timings
-    _looks_invalid_generated_title = api._looks_invalid_generated_title
-    _main_model_request_overrides = api._main_model_request_overrides
-    _mark_latest_assistant_tool_limit_status = api._mark_latest_assistant_tool_limit_status
-    _materialize_pending_user_turn_before_error = api._materialize_pending_user_turn_before_error
-    _maybe_inject_max_iteration_summary_fallback = api._maybe_inject_max_iteration_summary_fallback
-    _maybe_schedule_title_refresh = api._maybe_schedule_title_refresh
-    _merge_display_messages_after_agent_result = api._merge_display_messages_after_agent_result
-    _merged_transcript_lacks_final_assistant_answer = api._merged_transcript_lacks_final_assistant_answer
-    _new_turn_context_from_messages = api._new_turn_context_from_messages
-    _normalize_prefill_messages_before_user_turn = api._normalize_prefill_messages_before_user_turn
-    _persistent_state_changes = api._persistent_state_changes
-    _persistent_state_snapshot = api._persistent_state_snapshot
-    _prefill_messages_with_webui_context = api._prefill_messages_with_webui_context
-    _preserve_pre_compression_snapshot = api._preserve_pre_compression_snapshot
-    _prewarm_skill_tool_modules = api._prewarm_skill_tool_modules
-    _provider_error_payload = api._provider_error_payload
-    _prune_context_tool_results_after_compression = api._prune_context_tool_results_after_compression
-    _public_prefill_context_status = api._public_prefill_context_status
-    _refresh_cached_agent_runtime = api._refresh_cached_agent_runtime
-    _replace_session_db_in_kwargs = api._replace_session_db_in_kwargs
-    _reset_turn_session_identity = api._reset_turn_session_identity
-    _resolve_custom_provider_runtime_overrides = api._resolve_custom_provider_runtime_overrides
-    _restore_display_reasoning_metadata = api._restore_display_reasoning_metadata
-    _restore_reasoning_metadata = api._restore_reasoning_metadata
-    _run_background_title_update = api._run_background_title_update
-    _runtime_preferred_base_url = api._runtime_preferred_base_url
-    _sanitize_messages_for_api = api._sanitize_messages_for_api
-    _save_streaming_checkpoint = api._save_streaming_checkpoint
-    _session_lacks_final_assistant_answer = api._session_lacks_final_assistant_answer
-    _session_payload_with_full_messages = api._session_payload_with_full_messages
-    _set_thread_env = api._set_thread_env
-    _set_turn_session_identity = api._set_turn_session_identity
-    _snapshot_and_append_partial_on_error = api._snapshot_and_append_partial_on_error
-    _split_thinking_from_content = api._split_thinking_from_content
-    _stamp_missing_message_timestamps = api._stamp_missing_message_timestamps
-    _stream_writeback_can_supersede_recovery_marker = api._stream_writeback_can_supersede_recovery_marker
-    _stream_writeback_is_current = api._stream_writeback_is_current
-    _stream_writeback_stage = api._stream_writeback_stage
-    _strip_compact_echo_suffix = api._strip_compact_echo_suffix
-    _strip_xml_tool_calls = api._strip_xml_tool_calls
-    _tool_result_snippet = api._tool_result_snippet
-    _webui_ephemeral_system_prompt = api._webui_ephemeral_system_prompt
-    _workspace_context_prefix = api._workspace_context_prefix
-    alias_session_agent_lock = api.alias_session_agent_lock
-    append_turn_journal_event_for_stream = api.append_turn_journal_event_for_stream
-    attach_runtime_agent = api.attach_runtime_agent
-    clear_process_wakeup_pause = api.clear_process_wakeup_pause
-    contextlib = api.contextlib
-    get_session = api.get_session
-    get_state_db_session_messages = api.get_state_db_session_messages
-    logger = api.logger
-    meter = api.meter
-    model_with_provider_context = api.model_with_provider_context
-    os = api.os
-    prompt_cache_hit_percent = api.prompt_cache_hit_percent
-    re = api.re
-    reconciled_state_db_messages_for_session = api.reconciled_state_db_messages_for_session
-    record_process_wakeup_provider_unavailable_pause = api.record_process_wakeup_provider_unavailable_pause
-    redact_session_data = api.redact_session_data
-    resolve_model_provider = api.resolve_model_provider
-    stamp_compression_exhausted_recovery = api.stamp_compression_exhausted_recovery
-    threading = api.threading
-    time = api.time
-    title_from = api.title_from
-    traceback = api.traceback
-    update_active_run = api.update_active_run
-    visible_messages_for_anchor = api.visible_messages_for_anchor
-    warm_models_catalog_provenance_if_cold = api.warm_models_catalog_provenance_if_cold
+    dependencies = dependencies or _DEFAULT_DEPENDENCIES
+    get_session = dependencies.get_session
+    _get_ai_agent = dependencies.get_ai_agent
+    resolve_model_provider = dependencies.resolve_model_provider
+    _get_session_agent_lock = dependencies.get_session_agent_lock
+    _build_session_db_for_stream = dependencies.build_session_db_for_stream
+    _attempt_credential_self_heal = dependencies.attempt_credential_self_heal
+    _load_webui_prefill_context = dependencies.load_webui_prefill_context
+    _prefill_messages_with_webui_context = dependencies.prefill_messages_with_webui_context
+    _normalize_prefill_messages_before_user_turn = dependencies.normalize_prefill_messages_before_user_turn
+    _classify_provider_error = dependencies.classify_provider_error
+    _session_payload_with_full_messages = dependencies.session_payload_with_full_messages
+    _maybe_schedule_title_refresh = dependencies.maybe_schedule_title_refresh
     _turn_route_model = model
     _turn_route_provider = model_provider
     execution = TurnExecution.start(
@@ -188,7 +250,7 @@ def run_agent_streaming(
     event_sink = execution.event_sink
     s = None
     _rt = {}
-    run_environment = LocalRunEnvironment(api)
+    run_environment = LocalRunEnvironment()
 
     # MCP discovery moved to AFTER the per-profile HERMES_HOME mutation below
     # (was here at v0.51.30) — the previous placement always read the default
@@ -197,7 +259,6 @@ def run_agent_streaming(
 
     agent = None
     usage_tracker = LocalUsageTracker(
-        api,
         session_id=session_id,
         session_getter=lambda: s,
         agent_getter=lambda: agent,
@@ -245,7 +306,6 @@ def run_agent_streaming(
         event_sink.publish(event, data)
 
     event_translator = LocalEventTranslator(
-        api,
         session_id=session_id,
         stream_id=stream_id,
         publish=put,
@@ -629,7 +689,6 @@ def run_agent_streaming(
                 print(f"[webui] WARNING: failed to read per-session toolsets for {session_id}: {_ts_err}", flush=True)
 
             agent_configuration = build_local_agent_configuration(
-                api,
                 agent_class=_AIAgent,
                 config=_cfg,
                 model=resolved_model,
@@ -655,7 +714,6 @@ def run_agent_streaming(
             _reasoning_config = agent_configuration.reasoning
 
             cached_agent = acquire_local_agent(
-                api,
                 agent_class=_AIAgent,
                 session_id=session_id,
                 ephemeral=ephemeral,
@@ -1768,8 +1826,8 @@ def run_agent_streaming(
                     # clobber a larger cached window).
                     _skip_cc_cl = False
                     try:
-                        _cli_cc = api._context_length_lookup_inputs_for_model
-                        _accept_cc = api._should_accept_session_context_length_refresh
+                        _cli_cc = _context_length_lookup_inputs_for_model
+                        _accept_cc = _should_accept_session_context_length_refresh
                         from agent.model_metadata import get_model_context_length as _g_cc
                         _sess_model_cc = str(getattr(agent, 'model', resolved_model or '') or '').strip()
                         if _sess_model_cc and _cc_cl > 0:
@@ -1825,7 +1883,7 @@ def run_agent_streaming(
                     try:
                         from agent.model_metadata import get_model_context_length
                         _context_length_lookup_inputs_for_model = (
-                            api._context_length_lookup_inputs_for_model
+                            _context_length_lookup_inputs_for_model
                         )
                         _cfg_base_url = getattr(agent, 'base_url', '') or resolved_base_url or ''
                         _ctx_lookup = _context_length_lookup_inputs_for_model(
@@ -2143,8 +2201,8 @@ def run_agent_streaming(
                 # window differs, honoring the #4248 acceptance gate (never let a
                 # low-confidence 256k fallback clobber a larger cached window).
                 try:
-                    _cli_sse = api._context_length_lookup_inputs_for_model
-                    _accept_sse = api._should_accept_session_context_length_refresh
+                    _cli_sse = _context_length_lookup_inputs_for_model
+                    _accept_sse = _should_accept_session_context_length_refresh
                     from agent.model_metadata import get_model_context_length as _g_sse
                     _sess_model_sse = str(getattr(agent, 'model', resolved_model or '') or '').strip()
                     if _sess_model_sse and _cc_cl_sse > 0:
@@ -2189,7 +2247,7 @@ def run_agent_streaming(
                 try:
                     from agent.model_metadata import get_model_context_length as _get_cl
                     _context_length_lookup_inputs_for_model = (
-                        api._context_length_lookup_inputs_for_model
+                        _context_length_lookup_inputs_for_model
                     )
                     _ctx_lookup = _context_length_lookup_inputs_for_model(
                         getattr(agent, 'model', resolved_model or '') or '',
@@ -2734,7 +2792,7 @@ def run_agent_streaming(
                 and getattr(s, 'pending_user_message', None)):
             update_active_run(stream_id, phase="finalizing")
             _last_resort_sync_from_core(s, stream_id, _agent_lock)
-        _clear_thread_env()  # TD1: always clear thread-local context
+        clear_thread_env()  # TD1: always clear thread-local context
         if _streaming_cron_profile_home_token is not None:
             _STREAMING_CRON_PROFILE_HOME.reset(_streaming_cron_profile_home_token)
         # xsession wakeup misroute root fix (Option 1): restore the per-turn

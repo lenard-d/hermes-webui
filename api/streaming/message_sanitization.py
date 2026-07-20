@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import copy
 import re
-from types import ModuleType
+
+from .attachments import _resolve_image_input_mode
+from .compression_anchors import _is_context_compression_marker
+from .context_replay import _message_identity
+from .thinking_content import _message_text
 
 
 OOB_USER_MESSAGE_BLOCK_RE = re.compile(
@@ -12,8 +16,19 @@ OOB_USER_MESSAGE_BLOCK_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+_OOB_USER_MESSAGE_BLOCK_RE = OOB_USER_MESSAGE_BLOCK_RE
+_API_SAFE_MSG_KEYS = {
+    "role",
+    "content",
+    "tool_calls",
+    "tool_call_id",
+    "name",
+    "refusal",
+    "reasoning_content",
+}
 
-def strip_native_image_parts_from_content(api: ModuleType, content):
+
+def _strip_native_image_parts_from_content(content):
     """Return provider-safe content with native image parts removed.
 
     Text-only provider endpoints (for example DeepSeek/OpenAI-compatible text
@@ -38,19 +53,19 @@ def strip_native_image_parts_from_content(api: ModuleType, content):
     return clean_parts
 
 
-def strip_oob_blocks(api: ModuleType, content):
+def _strip_oob_blocks(content):
     """Remove consumed [OUT-OF-BAND USER MESSAGE ...] blocks from content.
 
     These markers are internal control data that should never reach the model.
     They can appear as plain strings or inside list-based content parts.
     """
     if isinstance(content, str):
-        return api._OOB_USER_MESSAGE_BLOCK_RE.sub('', content)
+        return _OOB_USER_MESSAGE_BLOCK_RE.sub('', content)
     if isinstance(content, list):
-        return [api._strip_oob_blocks(part) for part in content]
+        return [_strip_oob_blocks(part) for part in content]
     if isinstance(content, dict):
         return {
-            key: api._strip_oob_blocks(value)
+            key: _strip_oob_blocks(value)
             if isinstance(value, (str, list, dict))
             else copy.deepcopy(value)
             for key, value in content.items()
@@ -58,7 +73,7 @@ def strip_oob_blocks(api: ModuleType, content):
     return content
 
 
-def content_has_reasoning_only_parts(api: ModuleType, content) -> bool:
+def _content_has_reasoning_only_parts(content) -> bool:
     if not isinstance(content, list) or not content:
         return False
     saw_reasoning = False
@@ -78,7 +93,7 @@ def content_has_reasoning_only_parts(api: ModuleType, content) -> bool:
     return saw_reasoning
 
 
-def is_reasoning_only_assistant_message(api: ModuleType, msg) -> bool:
+def _is_reasoning_only_assistant_message(msg) -> bool:
     """Return True for display-only assistant Thinking entries.
 
     These entries keep partial Thinking cards visible after reload/cancel, but
@@ -90,14 +105,14 @@ def is_reasoning_only_assistant_message(api: ModuleType, msg) -> bool:
     if msg.get('tool_calls'):
         return False
     content = msg.get('content', '')
-    if api._message_text(content).strip():
+    if _message_text(content).strip():
         return False
     if str(msg.get('reasoning') or msg.get('reasoning_content') or '').strip():
         return True
-    return api._content_has_reasoning_only_parts(content)
+    return _content_has_reasoning_only_parts(content)
 
 
-def is_local_reasoning_replay_base_url(api: ModuleType, base_url: str | None) -> bool:
+def _is_local_reasoning_replay_base_url(base_url: str | None) -> bool:
     """Return True when a custom provider base URL confidently points at localhost."""
     if not base_url:
         return False
@@ -116,8 +131,7 @@ def is_local_reasoning_replay_base_url(api: ModuleType, base_url: str | None) ->
     return host in {'localhost', '127.0.0.1', '::1', 'localhost.localdomain'}
 
 
-def should_strip_reasoning_content(
-    api: ModuleType,
+def _should_strip_reasoning_content(
     cfg: dict | None,
     *,
     mode: str | None = None,
@@ -211,7 +225,7 @@ def should_strip_reasoning_content(
             return True
 
         if provider_id == "custom" or provider_id.startswith("custom:"):
-            return api._is_local_reasoning_replay_base_url(base_url)
+            return _is_local_reasoning_replay_base_url(base_url)
 
         # Unknown/cloud providers preserve by default.
         return False
@@ -220,8 +234,7 @@ def should_strip_reasoning_content(
     return False
 
 
-def sanitize_messages_for_api(
-    api: ModuleType,
+def _sanitize_messages_for_api(
     messages,
     *,
     cfg: dict = None,
@@ -247,7 +260,7 @@ def sanitize_messages_for_api(
     remaining replay gap where an older native image in the saved transcript kept
     causing 400s on every later text-only turn (#2297).
     """
-    strip_native_images = cfg is not None and api._resolve_image_input_mode(cfg) == "text"
+    strip_native_images = cfg is not None and _resolve_image_input_mode(cfg) == "text"
     # First pass: collect all tool_call_ids declared by assistant messages.
     # Handles both OpenAI ('id') and Anthropic ('call_id') field names.
     valid_tool_call_ids: set = set()
@@ -268,7 +281,7 @@ def sanitize_messages_for_api(
             continue
         # Skip display-only Thinking entries. They are visible transcript
         # metadata, not provider-facing assistant turns.
-        if api._is_reasoning_only_assistant_message(msg):
+        if _is_reasoning_only_assistant_message(msg):
             continue
         # Skip persisted error markers — never send them to the LLM as prior context.
         if msg.get('_error'):
@@ -293,7 +306,7 @@ def sanitize_messages_for_api(
             if not tid or tid not in valid_tool_call_ids:
                 # Orphaned tool result — skip to avoid 400 from strict providers.
                 continue
-        sanitized = {k: v for k, v in msg.items() if k in api._API_SAFE_MSG_KEYS}
+        sanitized = {k: v for k, v in msg.items() if k in _API_SAFE_MSG_KEYS}
         # Drop empty tool_calls — strict providers (DeepSeek, newer OpenAI)
         # reject tool_calls: [] with HTTP 400 even when no orphaned calls exist.
         if 'tool_calls' in sanitized and not sanitized['tool_calls']:
@@ -303,7 +316,7 @@ def sanitize_messages_for_api(
         # explicitly requests strip mode or auto mode identifies a local/generic
         # effective backend.
         if msg.get('role') == 'assistant' and 'reasoning_content' in sanitized:
-            if api._should_strip_reasoning_content(
+            if _should_strip_reasoning_content(
                 cfg,
                 effective_model=effective_model,
                 effective_provider=effective_provider,
@@ -313,9 +326,9 @@ def sanitize_messages_for_api(
         if is_recovered:
             sanitized['_recovered'] = True  # temporary marker — stripped before return
         if 'content' in sanitized:
-            sanitized['content'] = api._strip_oob_blocks(sanitized['content'])
+            sanitized['content'] = _strip_oob_blocks(sanitized['content'])
         if strip_native_images and 'content' in sanitized:
-            sanitized['content'] = api._strip_native_image_parts_from_content(sanitized.get('content'))
+            sanitized['content'] = _strip_native_image_parts_from_content(sanitized.get('content'))
         if sanitized.get('role'):
             clean.append(sanitized)
 
@@ -377,7 +390,7 @@ def sanitize_messages_for_api(
     return final
 
 
-def api_safe_message_positions(api: ModuleType, messages):
+def _api_safe_message_positions(messages):
     """Return [(original_index, sanitized_message)] for API-safe messages."""
     valid_tool_call_ids: set = set()
     for msg in messages:
@@ -394,7 +407,7 @@ def api_safe_message_positions(api: ModuleType, messages):
     for idx, msg in enumerate(messages):
         if not isinstance(msg, dict):
             continue
-        if api._is_reasoning_only_assistant_message(msg):
+        if _is_reasoning_only_assistant_message(msg):
             continue
         if msg.get('_error'):
             continue
@@ -408,13 +421,13 @@ def api_safe_message_positions(api: ModuleType, messages):
             tid = msg.get('tool_call_id') or ''
             if not tid or tid not in valid_tool_call_ids:
                 continue
-        sanitized = {k: v for k, v in msg.items() if k in api._API_SAFE_MSG_KEYS}
+        sanitized = {k: v for k, v in msg.items() if k in _API_SAFE_MSG_KEYS}
         if 'tool_calls' in sanitized and not sanitized['tool_calls']:
             del sanitized['tool_calls']
         if is_recovered:
             sanitized['_recovered'] = True  # temporary marker — stripped before return
         if 'content' in sanitized:
-            sanitized['content'] = api._strip_oob_blocks(sanitized['content'])
+            sanitized['content'] = _strip_oob_blocks(sanitized['content'])
         if sanitized.get('role'):
             out.append((idx, sanitized))
 
@@ -462,7 +475,7 @@ def api_safe_message_positions(api: ModuleType, messages):
     return final_out
 
 
-def deduplicate_context_messages(api: ModuleType, messages):
+def _deduplicate_context_messages(messages):
     """Remove duplicate messages from context by identity, keeping first occurrence.
 
     Prevents the agent from seeing the same message twice in conversation_history
@@ -476,10 +489,10 @@ def deduplicate_context_messages(api: ModuleType, messages):
     seen = set()
     deduped = []
     for msg in messages:
-        if api._is_context_compression_marker(msg):
+        if _is_context_compression_marker(msg):
             marker_key = (
                 '__context_compression_marker__',
-                " ".join(api._message_text(msg.get('content', '')).split())[:500],
+                " ".join(_message_text(msg.get('content', '')).split())[:500],
             )
             if marker_key in seen:
                 continue
@@ -489,10 +502,12 @@ def deduplicate_context_messages(api: ModuleType, messages):
                 msg['role'] = 'assistant'
             deduped.append(msg)
             continue
-        if api._is_compressed_context_tool_result_summary_message(msg) and not msg.get('tool_call_id'):
+        from .post_compression_context import _is_compressed_context_tool_result_summary_message
+
+        if _is_compressed_context_tool_result_summary_message(msg) and not msg.get('tool_call_id'):
             deduped.append(msg)
             continue
-        key = api._message_identity(msg)
+        key = _message_identity(msg)
         if key is not None and key in seen:
             continue
         if key is not None:
@@ -501,7 +516,7 @@ def deduplicate_context_messages(api: ModuleType, messages):
     return deduped
 
 
-def assign_stable_message_ids(api: ModuleType, result_messages, *existing_arrays):
+def _assign_stable_message_ids(result_messages, *existing_arrays):
     """Mint a stable, session-unique integer ``id`` on model-result rows lacking one.
 
     Both ``messages`` (display transcript) and ``context_messages`` (model-facing

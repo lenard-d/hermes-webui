@@ -2,10 +2,35 @@
 
 from __future__ import annotations
 
-from types import ModuleType
+from api.helpers import _redact_text
+
+from .terminal_copy import _cancelled_turn_hint
 
 
-def provider_error_probe_text(api: ModuleType, value) -> tuple[str, int | None]:
+def _is_quota_error_text(err_text: str) -> bool:
+    """Return True when provider text looks like quota/usage exhaustion."""
+    value = str(err_text or "").lower()
+    return (
+        "insufficient credit" in value
+        or "credit balance" in value
+        or "credits exhausted" in value
+        or "more credits" in value
+        or "can only afford" in value
+        or "fewer max_tokens" in value
+        or "quota_exceeded" in value
+        or "quota exceeded" in value
+        or "exceeded your current quota" in value
+        or "plan limit reached" in value
+        or "usage_limit_exceeded" in value
+        or "usage limit exceeded" in value
+        or "reached the limit of messages" in value
+        or "used up your usage" in value
+        or ("plan" in value and "limit" in value and "reached" in value)
+    )
+
+
+
+def _provider_error_probe_text(value) -> tuple[str, int | None]:
     """Flatten structured provider-error payloads into searchable text."""
     _texts: list[str] = []
     _status_code: int | None = None
@@ -46,15 +71,15 @@ def provider_error_probe_text(api: ModuleType, value) -> tuple[str, int | None]:
     return ' '.join(t for t in _texts if t).strip(), _status_code
 
 
-def classify_provider_error(api: ModuleType, err_str: str, exc=None, *, silent_failure: bool = False) -> dict:
+def _classify_provider_error(err_str: str, exc=None, *, silent_failure: bool = False) -> dict:
     """Classify provider/agent failure text for WebUI apperror UX.
 
     Keep this string-based until hermes-agent exposes stable structured
     provider error classes for Codex OAuth plan limits.
     """
-    _probe_text, _probe_status_code = api._provider_error_probe_text(err_str)
+    _probe_text, _probe_status_code = _provider_error_probe_text(err_str)
     if exc is not None:
-        _exc_probe_text, _exc_status_code = api._provider_error_probe_text(exc)
+        _exc_probe_text, _exc_status_code = _provider_error_probe_text(exc)
         if _exc_probe_text:
             _probe_text = f"{_probe_text} {_exc_probe_text}".strip()
         if _probe_status_code is None:
@@ -89,7 +114,7 @@ def classify_provider_error(api: ModuleType, err_str: str, exc=None, *, silent_f
         return {
             'label': 'Task cancelled',
             'type': 'cancelled',
-            'hint': api._cancelled_turn_hint(),
+            'hint': _cancelled_turn_hint(),
         }
     if _is_interrupted:
         return {
@@ -97,12 +122,12 @@ def classify_provider_error(api: ModuleType, err_str: str, exc=None, *, silent_f
             'type': 'interrupted',
             'hint': 'The run stopped before a provider response completed. If you did not cancel it, try again.',
         }
-    _is_quota = api._is_quota_error_text(err_str)
+    _is_quota = _is_quota_error_text(err_str)
     # A credential-POOL exhaustion ("All 0 credential(s) exhausted for <provider>")
     # is a distinct shape from account/plan quota: it means the profile's
     # credential pool has no usable keys for that provider (a config problem),
     # not that a funded account ran out of credits. It is NOT matched by
-    # api._is_quota_error_text ('credential(s) exhausted' != 'credits exhausted'), so
+    # _is_quota_error_text ('credential(s) exhausted' != 'credits exhausted'), so
     # without this it fell through to the generic error label/hint. Classify it
     # explicitly so the user gets a pool-specific, actionable hint. (#3929)
     _is_credential_pool_empty = (
@@ -190,10 +215,10 @@ def classify_provider_error(api: ModuleType, err_str: str, exc=None, *, silent_f
     return {'label': 'Error', 'type': 'error', 'hint': ''}
 
 
-def provider_error_payload(api: ModuleType, message: str, err_type: str, hint: str = '') -> dict:
+def _provider_error_payload(message: str, err_type: str, hint: str = '') -> dict:
     """Build a bounded, redacted apperror payload with provider details."""
     _message = str(message or '')
-    _safe_message = api._redact_text(_message).strip() if _message else ''
+    _safe_message = _redact_text(_message).strip() if _message else ''
     payload: dict = {'message': _safe_message or _message, 'type': err_type}
     if hint:
         payload['hint'] = hint

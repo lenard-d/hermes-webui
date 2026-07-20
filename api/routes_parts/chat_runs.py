@@ -1332,7 +1332,7 @@ def _handle_chat_sync(handler, body):
         )[:2]
         s.model = model
         s.model_provider = model_provider
-    from api.streaming import _ENV_LOCK
+    from api.streaming.diagnostics import _ENV_LOCK
 
     with _ENV_LOCK:
         old_cwd = os.environ.get("TERMINAL_CWD")
@@ -1392,17 +1392,19 @@ def _handle_chat_sync(handler, body):
                 enabled_toolsets=_resolve_cli_toolsets(),
                 session_id=s.session_id,
             )
-            from api.streaming import (
-                _WEBUI_PROGRESS_PROMPT,
+            from api.streaming.context_replay import _dedupe_replayed_context_messages
+            from api.streaming.message_sanitization import (
                 _assign_stable_message_ids,
-                _dedupe_replayed_context_messages,
-                _merge_display_messages_after_agent_result,
+                _sanitize_messages_for_api,
+            )
+            from api.streaming.post_compression_context import (
                 _restore_display_reasoning_metadata,
                 _restore_reasoning_metadata,
-                _sanitize_messages_for_api,
-                _context_messages_for_new_turn,
-                _workspace_context_prefix,
             )
+            from api.streaming.prompts import _WEBUI_PROGRESS_PROMPT
+            from api.streaming.transcript import _merge_display_messages_after_agent_result
+            from api.streaming.turn_context import _context_messages_for_new_turn
+            from api.workspace_context import _workspace_context_prefix
             workspace_ctx = _workspace_context_prefix(str(s.workspace))
             workspace_system_msg = (
                 f"Active workspace at session start: {s.workspace}\n"

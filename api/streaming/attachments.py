@@ -5,16 +5,27 @@ from __future__ import annotations
 import base64
 import mimetypes
 from pathlib import Path
-from types import ModuleType
 
 
-def attachment_name(api: ModuleType, att) -> str:
+_NATIVE_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+_IMAGE_MAGIC: dict[bytes | None, frozenset[str]] = {
+    b"\x89PNG\r\n\x1a\n": frozenset({"image/png"}),
+    b"\xff\xd8\xff": frozenset({"image/jpeg"}),
+    b"GIF87a": frozenset({"image/gif"}),
+    b"GIF89a": frozenset({"image/gif"}),
+    b"RIFF": frozenset({"image/webp"}),
+    b"BM": frozenset({"image/bmp"}),
+    None: frozenset({"image/svg+xml"}),
+}
+
+
+def _attachment_name(att) -> str:
     if isinstance(att, dict):
         return str(att.get('name') or att.get('filename') or att.get('path') or '').strip()
     return str(att or '').strip()
 
 
-def is_valid_image(api: ModuleType, path: Path, mime: str) -> bool:
+def _is_valid_image(path: Path, mime: str) -> bool:
     """Check that the file's first bytes match the expected image MIME type.
 
     Uses simple magic-number detection (no external dependency). SVG is
@@ -30,13 +41,13 @@ def is_valid_image(api: ModuleType, path: Path, mime: str) -> bool:
             head = fh.read(16)
     except OSError:
         return False
-    for magic, mimes in api._IMAGE_MAGIC.items():
+    for magic, mimes in _IMAGE_MAGIC.items():
         if magic is not None and head.startswith(magic) and mime_base in mimes:
             return True
     return False
 
 
-def explicit_text_signal(api: ModuleType, cfg: dict) -> bool:
+def _explicit_text_signal(cfg: dict) -> bool:
     """True when the user has explicitly opted into the text (vision_analyze)
     image pipeline.
 
@@ -71,7 +82,7 @@ def explicit_text_signal(api: ModuleType, cfg: dict) -> bool:
     return provider not in ("", "auto") or bool(model_name) or bool(base_url)
 
 
-def resolve_image_input_mode(api: ModuleType, cfg: dict) -> str:
+def _resolve_image_input_mode(cfg: dict) -> str:
     """Return ``"native"`` or ``"text"`` for current-turn image uploads.
 
     Delegates the routing decision to ``agent/image_routing.py:
@@ -113,7 +124,7 @@ def resolve_image_input_mode(api: ModuleType, cfg: dict) -> str:
 
         # Canonical returned "text". Honour it only when it reflects a genuine
         # signal; otherwise apply the WebUI unknown-model native carve-out.
-        if api._explicit_text_signal(cfg):
+        if _explicit_text_signal(cfg):
             return "text"
         if _lookup_supports_vision(provider, model, cfg) is False:
             # Model is KNOWN to be text-only — respect the canonical verdict.
@@ -126,12 +137,12 @@ def resolve_image_input_mode(api: ModuleType, cfg: dict) -> str:
         # behaviour: explicit text signal wins, otherwise native.
         pass
 
-    if api._explicit_text_signal(cfg):
+    if _explicit_text_signal(cfg):
         return "text"
     return "native"
 
 
-def build_native_multimodal_message(api: ModuleType, workspace_ctx: str, msg_text: str, attachments, workspace: str, *, cfg: dict = None):
+def _build_native_multimodal_message(workspace_ctx: str, msg_text: str, attachments, workspace: str, *, cfg: dict = None):
     """Build native multimodal content parts for current-turn image uploads.
 
     WebUI uploads files into the active workspace. For image files, pass the
@@ -147,7 +158,7 @@ def build_native_multimodal_message(api: ModuleType, workspace_ctx: str, msg_tex
         return workspace_ctx + msg_text
 
     # ── Check image_input_mode before embedding anything ──
-    if cfg is not None and api._resolve_image_input_mode(cfg) == "text":
+    if cfg is not None and _resolve_image_input_mode(cfg) == "text":
         return workspace_ctx + msg_text
 
     parts = [{'type': 'text', 'text': workspace_ctx + msg_text}]
@@ -184,10 +195,10 @@ def build_native_multimodal_message(api: ModuleType, workspace_ctx: str, msg_tex
             if not path.is_file():
                 continue
             size = path.stat().st_size
-            if size <= 0 or size > api._NATIVE_IMAGE_MAX_BYTES:
+            if size <= 0 or size > _NATIVE_IMAGE_MAX_BYTES:
                 continue
             mime = str(att.get('mime') or '').strip() or (mimetypes.guess_type(path.name)[0] or '')
-            if not mime.startswith('image/') or not api._is_valid_image(path, mime):
+            if not mime.startswith('image/') or not _is_valid_image(path, mime):
                 continue
             data = base64.b64encode(path.read_bytes()).decode('ascii')
         except Exception:

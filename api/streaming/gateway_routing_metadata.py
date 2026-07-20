@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import ModuleType
 
 
 _GATEWAY_ROUTING_TOP_LEVEL_KEYS = {
@@ -35,7 +34,7 @@ _GATEWAY_ROUTING_ATTEMPT_KEYS = {
 }
 
 
-def clean_gateway_routing_scalar(value):
+def _clean_gateway_routing_scalar(value):
     if value is None:
         return None
     if isinstance(value, (str, int, float, bool)):
@@ -46,21 +45,20 @@ def clean_gateway_routing_scalar(value):
     return None
 
 
-def find_gateway_metadata_payload(api: ModuleType, payload):
+def _find_gateway_metadata_payload(payload):
     if not isinstance(payload, dict):
         return None
     if any(key in payload for key in _GATEWAY_ROUTING_TOP_LEVEL_KEYS) or isinstance(payload.get("routing"), list):
         return payload
     for key in _GATEWAY_ROUTING_CONTAINER_KEYS:
         nested = payload.get(key)
-        found = api._find_gateway_metadata_payload(nested)
+        found = _find_gateway_metadata_payload(nested)
         if found:
             return found
     return None
 
 
-def normalize_gateway_routing_metadata(
-    api: ModuleType,
+def _normalize_gateway_routing_metadata(
     payload,
     requested_model=None,
     requested_provider=None,
@@ -71,22 +69,22 @@ def normalize_gateway_routing_metadata(
     but WebUI must only persist display-safe scalars and a bounded routing list.
     Secrets or provider-specific request objects are deliberately ignored.
     """
-    src = api._find_gateway_metadata_payload(payload)
+    src = _find_gateway_metadata_payload(payload)
     if not src:
         return None
 
     normalized = {}
     for key in _GATEWAY_ROUTING_TOP_LEVEL_KEYS:
-        value = api._clean_gateway_routing_scalar(src.get(key))
+        value = _clean_gateway_routing_scalar(src.get(key))
         if value is not None:
             normalized[key] = value
 
     if "requested_model" not in normalized:
-        fallback_model = api._clean_gateway_routing_scalar(requested_model)
+        fallback_model = _clean_gateway_routing_scalar(requested_model)
         if fallback_model is not None:
             normalized["requested_model"] = fallback_model
     if "requested_provider" not in normalized:
-        fallback_provider = api._clean_gateway_routing_scalar(requested_provider)
+        fallback_provider = _clean_gateway_routing_scalar(requested_provider)
         if fallback_provider is not None:
             normalized["requested_provider"] = fallback_provider
 
@@ -98,7 +96,7 @@ def normalize_gateway_routing_metadata(
                 continue
             clean_attempt = {}
             for key in _GATEWAY_ROUTING_ATTEMPT_KEYS:
-                value = api._clean_gateway_routing_scalar(attempt.get(key))
+                value = _clean_gateway_routing_scalar(attempt.get(key))
                 if value is not None:
                     clean_attempt[key] = value
             if clean_attempt:
@@ -134,8 +132,7 @@ def normalize_gateway_routing_metadata(
     return normalized
 
 
-def extract_gateway_routing_metadata(
-    api: ModuleType,
+def _extract_gateway_routing_metadata(
     agent,
     result,
     requested_model=None,
@@ -163,7 +160,7 @@ def extract_gateway_routing_metadata(
         if agent is not None:
             candidates.append(getattr(agent, attr, None))
     for candidate in candidates:
-        normalized = api._normalize_gateway_routing_metadata(
+        normalized = _normalize_gateway_routing_metadata(
             candidate,
             requested_model=requested_model,
             requested_provider=requested_provider,

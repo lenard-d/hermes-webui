@@ -5,6 +5,10 @@
 
 from __future__ import annotations
 
+from api.streaming.transport import (
+    SSE_HEARTBEAT_INTERVAL_SECONDS as _SSE_HEARTBEAT_INTERVAL_SECONDS,
+)
+
 
 def _sse_with_id(handler, event, data, event_id=None):
     if event_id:
