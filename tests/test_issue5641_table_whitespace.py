@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,7 @@ def driver_path(tmp_path_factory):
 def _render(driver_paths, markdown: str) -> str:
     driver, source = driver_paths
     result = _HELPERS.subprocess.run(
-        [NODE, driver, source],
+        [NODE, driver, json.dumps([source])],
         input=markdown,
         capture_output=True,
         text=True,
