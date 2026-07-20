@@ -264,12 +264,12 @@ def test_metadata_only_summary_reads_explicit_profile_state_db(two_profile_messa
     profile kwarg or stops forwarding it to get_state_db_session_messages(), it
     falls back to the active profile (hiyuki) and reports the wrong count.
     """
-    from api.routes import _metadata_only_message_summary
+    from api.sessions import session_detail_projection
 
     sid = two_profile_message_homes["sid"]
 
-    maiko_summary = _metadata_only_message_summary(sid, profile="maiko")
-    hiyuki_summary = _metadata_only_message_summary(sid)
+    maiko_summary = session_detail_projection.metadata_summary(sid, profile="maiko")
+    hiyuki_summary = session_detail_projection.metadata_summary(sid)
 
     assert maiko_summary["message_count"] == 3
     assert hiyuki_summary["message_count"] == 1
@@ -277,13 +277,15 @@ def test_metadata_only_summary_reads_explicit_profile_state_db(two_profile_messa
 
 def test_metadata_only_summary_honors_profile_from_background_thread(two_profile_message_homes):
     """Explicit profile= must work even when TLS active-profile context is absent."""
-    from api.routes import _metadata_only_message_summary
+    from api.sessions import session_detail_projection
 
     sid = two_profile_message_homes["sid"]
     result = {}
 
     def run():
-        result["summary"] = _metadata_only_message_summary(sid, profile="maiko")
+        result["summary"] = session_detail_projection.metadata_summary(
+            sid, profile="maiko"
+        )
 
     worker = threading.Thread(target=run)
     worker.start()
@@ -307,6 +309,7 @@ def test_api_session_metadata_only_passes_session_profile_to_summary(
 
     import api.sessions.store as models_mod
     import api.routes as routes_mod
+    from api.sessions import foreign_session_access
 
     sid = two_profile_message_homes["sid"]
     session = models_mod.Session(
@@ -322,7 +325,7 @@ def test_api_session_metadata_only_passes_session_profile_to_summary(
         updated_at=1001.0,
     )
     session.save(touch_updated_at=False)
-    monkeypatch.setattr(routes_mod, "_lookup_cli_session_metadata", lambda _sid: {})
+    monkeypatch.setattr(foreign_session_access, "metadata", lambda _sid: {})
     monkeypatch.setattr(routes_mod, "_get_active_profile_name", lambda: "maiko")
 
     class Handler:

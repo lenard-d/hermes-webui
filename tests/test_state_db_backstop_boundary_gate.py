@@ -18,7 +18,7 @@ end-to-end is brittle across its many dependencies).
 """
 from __future__ import annotations
 
-from api.routes import _STATE_DB_DISPLAY_ROW_BACKSTOP, _state_db_backstop_limit_for_display
+from api.sessions import session_detail_projection
 
 
 class _StubSession:
@@ -31,27 +31,29 @@ class _StubSession:
 def test_backstop_applied_when_no_boundary_prefix():
     """An uncompressed, initial-tail session (no truncation_watermark /
     truncation_boundary, no msg_before) gets the defensive row backstop."""
-    assert _state_db_backstop_limit_for_display(_StubSession(), msg_before=None) == _STATE_DB_DISPLAY_ROW_BACKSTOP
+    assert session_detail_projection.state_db_backstop(
+        _StubSession(), msg_before=None
+    ) == session_detail_projection.state_db_display_row_backstop
 
 
 def test_backstop_skipped_when_truncation_boundary_set():
     """Regression: a compressed session (truncation_boundary set) needs its
     preserved-prefix rows for the merge, so the backstop must NOT cap the read."""
     stub = _StubSession(truncation_boundary="some-boundary-marker")
-    assert _state_db_backstop_limit_for_display(stub, msg_before=None) is None
+    assert session_detail_projection.state_db_backstop(stub, msg_before=None) is None
 
 
 def test_backstop_skipped_when_truncation_watermark_set():
     """Same gate for truncation_watermark — the merge needs the prefix rows."""
     stub = _StubSession(truncation_watermark=12345)
-    assert _state_db_backstop_limit_for_display(stub, msg_before=None) is None
+    assert session_detail_projection.state_db_backstop(stub, msg_before=None) is None
 
 
 def test_backstop_skipped_when_msg_before_paging():
     """Older-page (msg_before) requests need to reach the boundary rows, so the
     backstop must not cap them either."""
     stub = _StubSession()
-    assert _state_db_backstop_limit_for_display(stub, msg_before=500) is None
+    assert session_detail_projection.state_db_backstop(stub, msg_before=500) is None
 
 
 def test_backstop_boundary_check_handles_empty_string_as_unset_or_set():
@@ -59,10 +61,10 @@ def test_backstop_boundary_check_handles_empty_string_as_unset_or_set():
     existing since_timestamp helper's `in (None, "")` check). A real marker
     (non-empty) triggers the skip."""
     # Empty string = treated as unset → backstop applies.
-    assert _state_db_backstop_limit_for_display(
+    assert session_detail_projection.state_db_backstop(
         _StubSession(truncation_boundary=""), msg_before=None
-    ) == _STATE_DB_DISPLAY_ROW_BACKSTOP
+    ) == session_detail_projection.state_db_display_row_backstop
     # Non-empty string = boundary present → backstop skipped.
-    assert _state_db_backstop_limit_for_display(
+    assert session_detail_projection.state_db_backstop(
         _StubSession(truncation_watermark="wm"), msg_before=None
     ) is None

@@ -12,7 +12,6 @@ import api.routes as routes
 from api.runs import admission as turn_admission
 
 REPO = Path(__file__).resolve().parents[1]
-ROUTES_SRC = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 SESSIONS_SRC = family_source("sessions")
 SW_SRC = (REPO / "static" / "sw.js").read_text(encoding="utf-8")
 
@@ -21,9 +20,15 @@ SW_SRC = (REPO / "static" / "sw.js").read_text(encoding="utf-8")
 def _isolate_session_cache():
     with config.LOCK:
         config.SESSIONS.clear()
+    config.STREAMS.clear()
+    config.ACTIVE_RUNS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
     yield
     with config.LOCK:
         config.SESSIONS.clear()
+    config.STREAMS.clear()
+    config.ACTIVE_RUNS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
 
 
 class _FakeSession:
@@ -54,12 +59,57 @@ def test_stale_stream_cleanup_does_not_refresh_sidebar_timestamp():
     assert session.saved_touch_updated_at == [False]
 
 
-def test_session_load_clears_stale_stream_before_response():
-    route_pos = ROUTES_SRC.index('if parsed.path == "/api/session":')
-    load_pos = ROUTES_SRC.index("s = get_session(", route_pos)
-    cleanup_pos = ROUTES_SRC.index("_clear_stale_stream_state(s)", load_pos)
-    response_pos = ROUTES_SRC.index('"active_stream_id": getattr(s, "active_stream_id", None)', cleanup_pos)
-    assert load_pos < cleanup_pos < response_pos
+def test_session_load_clears_stale_stream_before_response(monkeypatch):
+    class RouteSession(_FakeSession):
+        profile = None
+        session_source = "webui"
+        source_tag = "webui"
+        is_cli_session = False
+        context_length = 1
+        threshold_tokens = 0
+        last_prompt_tokens = 0
+        tool_calls = []
+        anchor_activity_scenes = {}
+        truncation_watermark = None
+        truncation_boundary = None
+        parent_session_id = None
+
+        def compact(self, **_kwargs):
+            return {
+                "session_id": self.session_id,
+                "active_stream_id": self.active_stream_id,
+            }
+
+    config.STREAMS.clear()
+    config.ACTIVE_RUNS.clear()
+    config.SESSION_AGENT_LOCKS.clear()
+    session = RouteSession()
+
+    monkeypatch.setattr(routes, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(
+        routes,
+        "get_state_db_session_messages",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(routes, "find_run_summary", lambda _stream_id: None)
+    monkeypatch.setattr(routes, "redact_session_data", lambda payload: payload)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: payload,
+    )
+
+    payload = routes.handle_get(
+        SimpleNamespace(headers={}),
+        SimpleNamespace(
+            path="/api/session",
+            query=f"session_id={session.session_id}&resolve_model=0",
+        ),
+    )
+
+    assert session.active_stream_id is None
+    assert session.saved_stream_ids == [None]
+    assert payload["session"]["active_stream_id"] is None
 
 
 def test_chat_start_clears_stale_pending_state_not_only_active_id():

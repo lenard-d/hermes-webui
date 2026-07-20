@@ -222,7 +222,6 @@ def test_clear_detaches_compression_snapshot_parent(monkeypatch, tmp_path):
     """
     _seed_session_dir(monkeypatch, tmp_path)
     from api.sessions.store import Session
-    import api.routes as routes
 
     parent = Session(
         session_id="issue5532parent",

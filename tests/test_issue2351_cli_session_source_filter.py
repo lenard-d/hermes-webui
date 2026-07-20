@@ -1,6 +1,7 @@
 """Regression coverage for issue #2351 CLI session list separation."""
 from pathlib import Path
 
+from api.sessions import session_sidebar_projection
 from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,9 +38,7 @@ def test_session_source_tabs_have_dedicated_sidebar_styles():
 
 
 def test_webui_state_db_mirror_does_not_become_cli_sidebar_row():
-    from api.routes import _merge_cli_sidebar_metadata
-
-    merged = _merge_cli_sidebar_metadata(
+    merged = session_sidebar_projection.merge_external_metadata(
         {"session_id": "webui-tip", "title": "Long WebUI session", "source_tag": "webui"},
         {
             "session_id": "webui-tip",
@@ -56,9 +55,7 @@ def test_webui_state_db_mirror_does_not_become_cli_sidebar_row():
 
 
 def test_real_cli_state_db_mirror_stays_cli_sidebar_row():
-    from api.routes import _merge_cli_sidebar_metadata
-
-    merged = _merge_cli_sidebar_metadata(
+    merged = session_sidebar_projection.merge_external_metadata(
         {"session_id": "cli-tip", "title": "CLI session", "source_tag": "cli"},
         {
             "session_id": "cli-tip",
@@ -73,9 +70,7 @@ def test_real_cli_state_db_mirror_stays_cli_sidebar_row():
 
 
 def test_stale_webui_sidebar_cli_flag_is_cleared_before_frontend_response():
-    from api.routes import _normalize_sidebar_source_flags
-
-    normalized = _normalize_sidebar_source_flags(
+    normalized = session_sidebar_projection.normalize_source_flags(
         {
             "session_id": "webui-tip",
             "title": "Long WebUI session",
@@ -94,8 +89,6 @@ def test_stale_webui_sidebar_cli_flag_is_cleared_before_frontend_response():
 
 def test_webui_source_overrides_stale_cli_flag_even_with_default_title():
     from api.agent_sessions import is_cli_session_row
-    from api.routes import _normalize_sidebar_source_flags
-
     stale_webui = {
         "session_id": "webui-default-title",
         "title": "CLI Session",
@@ -107,12 +100,10 @@ def test_webui_source_overrides_stale_cli_flag_even_with_default_title():
     }
 
     assert is_cli_session_row(stale_webui) is False
-    assert _normalize_sidebar_source_flags(stale_webui)["is_cli_session"] is False
+    assert session_sidebar_projection.normalize_source_flags(stale_webui)["is_cli_session"] is False
 
 
 def test_webui_state_db_source_overrides_stale_cli_detail_payload():
-    from api.routes import _reconcile_session_detail_source_flags
-
     detail_payload = {
         "session_id": "webui-tip",
         "title": "Long WebUI session",
@@ -133,7 +124,9 @@ def test_webui_state_db_source_overrides_stale_cli_detail_payload():
         "message_count": 26,
     }
 
-    reconciled = _reconcile_session_detail_source_flags(detail_payload, state_db_row)
+    reconciled = session_sidebar_projection.reconcile_detail_source_flags(
+        detail_payload, state_db_row
+    )
 
     assert reconciled["is_cli_session"] is False
     assert reconciled["read_only"] is False
@@ -145,8 +138,6 @@ def test_webui_state_db_source_overrides_stale_cli_detail_payload():
 
 
 def test_real_cli_source_survives_detail_source_reconcile():
-    from api.routes import _reconcile_session_detail_source_flags
-
     detail_payload = {
         "session_id": "cli-tip",
         "source_tag": "cli",
@@ -164,7 +155,9 @@ def test_real_cli_source_survives_detail_source_reconcile():
         "source_label": "CLI",
     }
 
-    reconciled = _reconcile_session_detail_source_flags(detail_payload, state_db_row)
+    reconciled = session_sidebar_projection.reconcile_detail_source_flags(
+        detail_payload, state_db_row
+    )
 
     assert reconciled["is_cli_session"] is True
     assert reconciled["read_only"] is True
@@ -172,9 +165,7 @@ def test_real_cli_source_survives_detail_source_reconcile():
 
 
 def test_real_cli_sidebar_cli_flag_is_preserved_before_frontend_response():
-    from api.routes import _normalize_sidebar_source_flags
-
-    normalized = _normalize_sidebar_source_flags(
+    normalized = session_sidebar_projection.normalize_source_flags(
         {
             "session_id": "cli-tip",
             "title": "CLI session",
@@ -197,8 +188,6 @@ def test_tui_state_db_rows_are_cli_sidebar_rows():
     and CLI views.
     """
     from api.agent_sessions import is_cli_session_row, normalize_agent_session_source
-    from api.routes import _normalize_sidebar_source_flags
-
     normalized_source = normalize_agent_session_source("tui")
     assert normalized_source["session_source"] == "cli"
     assert normalized_source["source_label"] == "TUI"
@@ -214,7 +203,7 @@ def test_tui_state_db_rows_are_cli_sidebar_rows():
     }
 
     assert is_cli_session_row(tui_row) is True
-    assert _normalize_sidebar_source_flags(tui_row)["is_cli_session"] is True
+    assert session_sidebar_projection.normalize_source_flags(tui_row)["is_cli_session"] is True
 
 
 def test_tui_continuation_projection_uses_latest_tip_title():

@@ -41,7 +41,7 @@ def test_project_assigned_cron_rows_are_returned_but_default_hidden():
 
 
 def test_agent_side_cron_rows_keep_project_chip_visibility():
-    from api.routes import _dedupe_cli_sidebar_sessions_for_api
+    from api.sessions import session_sidebar_projection
 
     represented_webui_ids = {"webui-1"}
     cli_rows = [
@@ -83,7 +83,9 @@ def test_agent_side_cron_rows_keep_project_chip_visibility():
         },
     ]
 
-    rows = _dedupe_cli_sidebar_sessions_for_api(cli_rows, represented_webui_ids)
+    rows = session_sidebar_projection.dedupe_external_rows(
+        cli_rows, represented_webui_ids
+    )
 
     by_id = {row["session_id"]: row for row in rows}
     assert set(by_id) == {"cli-normal", "cron-agent-project"}

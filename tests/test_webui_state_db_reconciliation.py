@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from api.sessions import session_detail_projection
+from api.sessions import session_detail_projection, session_message_window
 
 pytestmark = pytest.mark.requires_agent_modules
 
@@ -146,6 +146,7 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path, raising=False)
     monkeypatch.setattr(models, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     monkeypatch.setattr(session_state_db, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
+    monkeypatch.setattr(session_sidebar, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     monkeypatch.setattr(routes, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -544,7 +545,7 @@ def test_msg_limit_session_load_reads_only_recent_state_db_tail(monkeypatch, tmp
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = session_detail_projection.message_window(
+    expected_window, expected_offset = session_message_window.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -602,7 +603,7 @@ def test_msg_limit_session_load_falls_back_with_null_state_db_timestamp(monkeypa
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = session_detail_projection.message_window(
+    expected_window, expected_offset = session_message_window.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -733,7 +734,7 @@ def test_limited_state_db_prefix_exact_match_runs_key_comparison(monkeypatch, tm
         detail_projection, "_session_message_visible_key", counted_visible_key
     )
 
-    floor, returned_sidecar = detail_projection._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = detail_projection.limited_state_db_floor(
         session,
         30,
     )
@@ -779,7 +780,7 @@ def test_limited_state_db_prefix_equal_count_different_content_falls_back(monkey
         counted_key_reader,
     )
 
-    floor, returned_sidecar = detail_projection._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = detail_projection.limited_state_db_floor(
         session,
         30,
     )
@@ -838,7 +839,7 @@ def test_limited_state_db_prefix_equal_empty_assistant_different_tool_calls_fall
         counted_key_reader,
     )
 
-    floor, returned_sidecar = detail_projection._state_db_since_timestamp_for_limited_display(
+    floor, returned_sidecar = detail_projection.limited_state_db_floor(
         session,
         30,
     )
@@ -906,7 +907,7 @@ def test_msg_limit_session_load_bails_when_older_state_db_row_changes_offsets(mo
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = session_detail_projection.message_window(
+    expected_window, expected_offset = session_message_window.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -959,7 +960,7 @@ def test_msg_limit_session_load_bails_when_older_state_db_user_changes_offsets(m
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = session_detail_projection.message_window(
+    expected_window, expected_offset = session_message_window.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -1012,7 +1013,7 @@ def test_msg_limit_session_load_bails_when_prefloor_key_counts_mask_offset_chang
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = session_detail_projection.message_window(
+    expected_window, expected_offset = session_message_window.message_window(
         full_all_messages,
         msg_limit=30,
     )
@@ -1075,7 +1076,7 @@ def test_msg_limit_session_load_bails_when_prefloor_tool_calls_mask_offset_chang
         session,
         full_state_messages,
     )
-    expected_window, expected_offset = session_detail_projection.message_window(
+    expected_window, expected_offset = session_message_window.message_window(
         full_all_messages,
         msg_limit=30,
     )

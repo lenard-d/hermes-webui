@@ -12,7 +12,6 @@ Tests are ordered TDD-style:
 from tests.frontend_asset_contract import family_source
 
 import json
-import os
 import pathlib
 import subprocess
 import sqlite3
@@ -1715,7 +1714,6 @@ def test_session_load_exposes_multihop_continuation_for_repeated_compression(cle
 
 def test_messaging_projection_hides_stale_gateway_internal_segments(monkeypatch):
     """Active Gateway identity should hide old reset rows and internal child segments."""
-    from api import routes
     from api.sessions import sidebar_projection
 
     monkeypatch.setattr(
@@ -1790,7 +1788,6 @@ def test_messaging_projection_hides_stale_gateway_internal_segments(monkeypatch)
 
 def test_messaging_projection_keeps_distinct_active_gateway_conversations(monkeypatch):
     """Telegram DM and group chats must not collapse just because source matches."""
-    from api import routes
     from api.sessions import sidebar_projection
 
     monkeypatch.setattr(
@@ -2183,7 +2180,7 @@ def test_gateway_session_messages_readable():
 
         post('/api/settings', {'show_cli_sessions': True})
 
-        data, status = get(f'/api/session?session_id=gw_read_001')
+        data, status = get('/api/session?session_id=gw_read_001')
         assert status == 200
         msgs = data.get('session', {}).get('messages', [])
         assert len(msgs) >= 2, f"Expected at least 2 messages, got {len(msgs)}"
@@ -2678,7 +2675,6 @@ def test_probe_payload_when_watcher_thread_alive():
     t.start()
     w._thread = t
     # Thread may finish fast — loop-start a live daemon thread for reliability
-    import time as _time
     done = threading.Event()
     live = threading.Thread(target=done.wait, daemon=True)
     live.start()

@@ -239,13 +239,27 @@ def test_share_create_uses_messaging_display_transcript_when_sidecar_has_no_mess
 @pytest.fixture
 def isolated_share_route_session_store(tmp_path, monkeypatch):
     """Keep direct route race tests out of the shared HTTP server state."""
+    from api import config, routes
+    import api.sessions.cache as session_cache
+    import api.sessions.pending_recovery as pending_recovery
+    import api.sessions.records as session_records
     from api.sessions import store as models
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "sessions-index.json")
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
+    index_file = tmp_path / "sessions-index.json"
+    sessions = OrderedDict()
+    for module in (
+        config,
+        routes,
+        models,
+        session_cache,
+        pending_recovery,
+        session_records,
+    ):
+        monkeypatch.setattr(module, "SESSION_DIR", session_dir, raising=False)
+        monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_file, raising=False)
+        monkeypatch.setattr(module, "SESSIONS", sessions, raising=False)
     return session_dir
 
 
@@ -448,7 +462,7 @@ def test_share_mutation_does_not_resurrect_session_deleted_after_resolution(
     captured = {}
 
     def resolve_then_delete(_sid, _handler):
-        (isolated_share_route_session_store / f"{sid}.json").unlink()
+        stale_snapshot.path.unlink()
         with models.LOCK:
             models.SESSIONS.pop(sid, None)
         return stale_snapshot, stale_snapshot, {}

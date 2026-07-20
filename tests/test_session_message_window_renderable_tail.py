@@ -1,4 +1,4 @@
-from api.routes import _message_window_for_display
+from api.sessions import session_message_window
 
 
 def test_initial_msg_limit_skips_trailing_tool_only_rows():
@@ -10,7 +10,7 @@ def test_initial_msg_limit_skips_trailing_tool_only_rows():
         for idx in range(40)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=5)
+    window, offset = session_message_window.message_window(messages, msg_limit=5)
 
     assert [m["role"] for m in window] == ["user", "assistant"]
     assert offset == 0
@@ -32,7 +32,7 @@ def test_initial_msg_limit_skips_trailing_empty_partial_activity_rows():
         for idx in range(40)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=5)
+    window, offset = session_message_window.message_window(messages, msg_limit=5)
 
     assert [m["content"] for m in window] == ["today question", "today answer"]
     assert offset == 0
@@ -44,7 +44,7 @@ def test_msg_limit_keeps_raw_tail_when_it_has_renderable_rows():
         for idx in range(10)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=4)
+    window, offset = session_message_window.message_window(messages, msg_limit=4)
 
     assert [m["content"] for m in window] == ["u6", "a7", "u8", "a9"]
     assert offset == 6
@@ -61,7 +61,9 @@ def test_msg_before_anchors_page_before_trailing_tool_rows():
         {"role": "assistant", "content": "newer visible"},
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=3, msg_before=14)
+    window, offset = session_message_window.message_window(
+        messages, msg_limit=3, msg_before=14
+    )
 
     assert [m["role"] for m in window] == ["user", "assistant"]
     assert [m["content"] for m in window] == ["older", "visible before tools"]
@@ -74,7 +76,7 @@ def test_all_tool_session_keeps_tail_fallback():
         for idx in range(6)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=3)
+    window, offset = session_message_window.message_window(messages, msg_limit=3)
 
     assert [m["content"] for m in window] == ["tool 3", "tool 4", "tool 5"]
     assert offset == 3
@@ -95,7 +97,9 @@ def test_cold_load_flag_expands_window_to_fill_renderable_rows():
         for idx in range(10, 14)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=5, expand_renderable=True)
+    window, offset = session_message_window.message_window(
+        messages, msg_limit=5, expand_renderable=True
+    )
 
     # Expanded back to index 5 so the window holds 5 renderable rows (a5..a9).
     assert offset == 5
@@ -113,7 +117,9 @@ def test_cumulative_load_earlier_counts_visible_rows_without_expand_flag():
     ]
 
     # Same input as the cold-load test, but no expand flag (cumulative path).
-    window, offset = _message_window_for_display(messages, msg_limit=5, expand_renderable=False)
+    window, offset = session_message_window.message_window(
+        messages, msg_limit=5, expand_renderable=False
+    )
 
     assert offset == 5
     assert [m["content"] for m in window] == ["a5", "u6", "a7", "u8", "a9"]
@@ -133,7 +139,9 @@ def test_cold_load_expands_but_caps_at_total_renderable():
         for idx in range(8)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=5, expand_renderable=True)
+    window, offset = session_message_window.message_window(
+        messages, msg_limit=5, expand_renderable=True
+    )
 
     # Only 1 renderable row in the whole session → expand back to index 0.
     assert offset == 0
@@ -158,7 +166,7 @@ def test_initial_msg_limit_keeps_matching_trailing_tool_result_row():
         {"role": "tool", "tool_call_id": "call_1", "content": "the result output"},
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=30)
+    window, offset = session_message_window.message_window(messages, msg_limit=30)
 
     assert [m["role"] for m in window] == ["user", "assistant", "tool"]
     assert any(
@@ -180,7 +188,7 @@ def test_initial_msg_limit_skips_orphan_trailing_tool_rows_without_match():
         for idx in range(40)
     ]
 
-    window, offset = _message_window_for_display(messages, msg_limit=5)
+    window, offset = session_message_window.message_window(messages, msg_limit=5)
 
     assert [m["role"] for m in window] == ["user", "assistant"]
     assert offset == 0

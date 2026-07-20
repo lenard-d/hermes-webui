@@ -1,47 +1,83 @@
 from __future__ import annotations
 
-import ast
-from pathlib import Path
+import json
+from urllib.parse import urlparse
 
+import api.routes as routes
+from api.sessions import foreign_session_access
+from api.sessions.store import Session
 
-ROUTES_PY = Path(__file__).parent.parent / "api" / "routes.py"
-
-
-def _attach_todo_state_calls() -> list[ast.Call]:
-    tree = ast.parse(ROUTES_PY.read_text(encoding="utf-8"))
-    calls: list[ast.Call] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Name) and func.id == "attach_todo_state":
-            calls.append(node)
-    return calls
-
-
-def test_routes_imports_attach_todo_state():
-    tree = ast.parse(ROUTES_PY.read_text(encoding="utf-8"))
-
-    assert any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "api.todo_state"
-        and any(alias.name == "attach_todo_state" for alias in node.names)
-        for node in ast.walk(tree)
+def test_session_route_attaches_todo_state_for_webui_and_foreign_sessions(
+    monkeypatch, tmp_path
+):
+    todo_message = {
+        "role": "tool",
+        "content": json.dumps(
+            {
+                "todos": [
+                    {"id": "todo-1", "content": "verify route", "status": "pending"}
+                ],
+                "summary": {
+                    "total": 1,
+                    "pending": 1,
+                    "in_progress": 0,
+                    "completed": 0,
+                    "cancelled": 0,
+                },
+            }
+        ),
+        "timestamp": 123,
+    }
+    webui_session = Session(
+        session_id="todo-webui",
+        workspace=tmp_path,
+        messages=[todo_message],
+        context_length=1,
+        session_source="webui",
+    )
+    foreign_session = Session(
+        session_id="todo-foreign",
+        workspace=tmp_path,
+        messages=[todo_message],
+        context_length=1,
+        source_tag="cli",
+        session_source="cli",
+        is_cli_session=True,
     )
 
+    monkeypatch.setattr(routes, "_clear_stale_stream_state", lambda _session: False)
+    monkeypatch.setattr(routes, "get_state_db_session_messages", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(routes, "redact_session_data", lambda payload: payload)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: payload,
+    )
 
-def test_routes_attach_todo_state_from_webui_and_cli_session_paths():
-    calls = _attach_todo_state_calls()
+    monkeypatch.setattr(routes, "get_session", lambda *_args, **_kwargs: webui_session)
+    webui_payload = routes.handle_get(
+        object(),
+        urlparse("/api/session?session_id=todo-webui&resolve_model=0"),
+    )
 
-    assert len(calls) >= 2
-    arg_names = []
-    for call in calls[:2]:
-        assert len(call.args) == 2
-        assert not call.keywords
-        assert isinstance(call.args[0], ast.Name)
-        assert isinstance(call.args[1], ast.Name)
-        assert call.args[0].id != call.args[1].id
-        arg_names.append((call.args[0].id, call.args[1].id))
+    def missing_webui_session(*_args, **_kwargs):
+        raise KeyError("foreign session")
 
-    assert ("raw", "_all_msgs") in arg_names
-    assert ("sess", "msgs") in arg_names
+    monkeypatch.setattr(routes, "get_session", missing_webui_session)
+    monkeypatch.setattr(
+        foreign_session_access,
+        "metadata",
+        lambda _sid: {"source_tag": "cli", "session_source": "cli"},
+    )
+    monkeypatch.setattr(
+        foreign_session_access,
+        "claim",
+        lambda _sid, _metadata: (foreign_session, None),
+    )
+    foreign_payload = routes.handle_get(
+        object(),
+        urlparse("/api/session?session_id=todo-foreign&resolve_model=0"),
+    )
+
+    assert webui_payload["session"]["todo_state"]["todos"][0]["id"] == "todo-1"
+    assert foreign_payload["session"]["todo_state"]["todos"][0]["id"] == "todo-1"

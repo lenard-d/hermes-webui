@@ -97,8 +97,12 @@ def test_delete_worktree_session_reports_retained_worktree_without_cleanup(tmp_p
     session_dir = _isolate_session_store(tmp_path, monkeypatch)
     session, worktree = _worktree_session(tmp_path, "wtdelete1")
     captured = _capture_post(monkeypatch, {"session_id": session.session_id})
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda sid: {})
-    monkeypatch.setattr(routes, "_is_messaging_session_id", lambda sid: False)
+    monkeypatch.setattr(foreign_session_access, "metadata", lambda sid: {})
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "is_messaging_session",
+        lambda sid: False,
+    )
     monkeypatch.setattr(session_cleanup, "delete_cli_session", lambda sid: True)
     assert (session_dir / f"{session.session_id}.json").exists()
 
@@ -126,8 +130,12 @@ def test_delete_session_records_tombstone_when_state_db_delete_fails(tmp_path, m
     (session_dir / f"{sid}.json.bak").write_text("backup", encoding="utf-8")
     assert (session_dir / f"{sid}.json").exists()
     captured = _capture_post(monkeypatch, {"session_id": sid})
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda value: {})
-    monkeypatch.setattr(routes, "_is_messaging_session_id", lambda value: False)
+    monkeypatch.setattr(foreign_session_access, "metadata", lambda value: {})
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "is_messaging_session",
+        lambda value: False,
+    )
 
     def fail_delete(value):
         raise RuntimeError("state.db locked")
@@ -173,9 +181,9 @@ def test_delete_messaging_session_reopens_read_only_without_deleted_webui_tombst
         "session_source": "messaging",
     }
     monkeypatch.setattr(
-        foreign_session_access,
-        "metadata",
-        lambda value: cli_meta,
+        session_materialization,
+        "get_cli_sessions",
+        lambda *, all_profiles=False: [cli_meta],
     )
     monkeypatch.setattr(
         session_sidebar_projection,
@@ -220,8 +228,12 @@ def test_delete_active_session_fails_closed_with_conflict(tmp_path, monkeypatch)
         )
         or True,
     )
-    monkeypatch.setattr(routes, "_lookup_cli_session_metadata", lambda value: {})
-    monkeypatch.setattr(routes, "_is_messaging_session_id", lambda value: False)
+    monkeypatch.setattr(foreign_session_access, "metadata", lambda value: {})
+    monkeypatch.setattr(
+        session_sidebar_projection,
+        "is_messaging_session",
+        lambda value: False,
+    )
     monkeypatch.setattr(
         routes,
         "delete_session_state",

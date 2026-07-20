@@ -11,6 +11,7 @@ ROUTES = "\n".join(
         "api/http/routes/session_creation_mutations.py",
         "api/http/routes/session_mutations.py",
         "api/http/routes/session_organization_mutations.py",
+        "api/http/routes/workspace_queries.py",
     )
 )
 CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")
@@ -26,7 +27,7 @@ def test_session_events_endpoint_and_bus_are_defined():
     assert "_SESSION_EVENTS_SUBSCRIBERS" in SESSION_EVENTS
     assert "def publish_session_list_changed" in SESSION_EVENTS
     assert "def _handle_session_events_stream" in ROUTES
-    assert "parsed.path == '/api/sessions/events'" in ROUTES
+    assert 'parsed.path == "/api/sessions/events"' in ROUTES
     assert "Content-Type', 'text/event-stream; charset=utf-8'" in ROUTES
 
 
@@ -47,7 +48,7 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
         if reason == "session_import_cli":
             assert f'publish_session_list_changed(\n        "{reason}",' in ROUTES, reason
         elif reason == "session_title_regenerate":
-            assert '_persist_generated_session_title(s, next_title, event_reason="session_title_regenerate")' in ROUTES
+            assert 'event_reason="session_title_regenerate"' in ROUTES
         elif reason == "session_import":
             assert f'publish_session_list_changed("{reason}")' in ROUTES, reason
         else:
@@ -59,9 +60,10 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
     assert 'publish_session_list_changed(\n                "session_new",' in TURN_ADMISSION
     assert 'publish_session_list_changed(\n                "session_duplicate",' in ROUTES
     assert 'publish_session_list_changed(\n            "session_rename",' in ROUTES
-    assert '_persist_generated_session_title(s, next_title, event_reason="session_title_regenerate")' in ROUTES
+    assert 'event_reason="session_title_regenerate"' in ROUTES
     assert "session_id=sid" in ROUTES
-    assert 'event_profile = getattr(get_session(sid, metadata_only=True), "profile", None)' in ROUTES
+    assert "event_profile = getattr(" in ROUTES
+    assert "get_session(sid, metadata_only=True)" in ROUTES
     assert "Failed to resolve profile for deleted session" in ROUTES
     assert '_publish_session_list_changed("session_delete", profile=event_profile)' in ROUTES
     assert 'publish_session_list_changed(\n                "session_branch",' in ROUTES

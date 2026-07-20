@@ -163,13 +163,13 @@ def _is_orphaned_cli_sidecar(row, cli_by_id, exists_fn):
     """Replicates the routes.py merge-loop predicate so the decision logic is
     covered without standing up the full HTTP sidebar endpoint."""
     from api.agent_sessions import is_cli_session_row
-    from api.routes import _session_source_is_webui
+    from api.sessions import session_sidebar_projection
 
     sid = row.get("session_id")
     return bool(
         sid
         and is_cli_session_row(row)
-        and not _session_source_is_webui(row)
+        and not session_sidebar_projection.source_is_webui(row)
         and sid not in cli_by_id
         and not exists_fn(sid)
     )

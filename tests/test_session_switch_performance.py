@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import api.sessions.pending_recovery as pending_recovery
 import api.sessions.store as models
 
 
@@ -7,8 +10,8 @@ def test_compression_continuation_fallback_reads_only_file_head(monkeypatch, tmp
     index_file = tmp_path / "_index.json"
     index_file.write_text("[]", encoding="utf-8")
 
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(pending_recovery, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(pending_recovery, "SESSION_INDEX_FILE", index_file)
     models.SESSIONS.clear()
 
     parent_sid = "parent"
@@ -19,9 +22,9 @@ def test_compression_continuation_fallback_reads_only_file_head(monkeypatch, tmp
     read_text_calls = []
     read_bytes_calls = []
 
-    original_path_open = models.Path.open
-    original_path_read_text = models.Path.read_text
-    original_path_read_bytes = models.Path.read_bytes
+    original_path_open = Path.open
+    original_path_read_text = Path.read_text
+    original_path_read_bytes = Path.read_bytes
 
     class _TrackingHandle:
         def __init__(self, path, inner):
@@ -53,13 +56,13 @@ def test_compression_continuation_fallback_reads_only_file_head(monkeypatch, tmp
         read_bytes_calls.append(str(self))
         return original_path_read_bytes(self, *args, **kwargs)
 
-    monkeypatch.setattr(models.Path, "open", tracking_open)
-    monkeypatch.setattr(models.Path, "read_text", tracking_read_text)
-    monkeypatch.setattr(models.Path, "read_bytes", tracking_read_bytes)
+    monkeypatch.setattr(Path, "open", tracking_open)
+    monkeypatch.setattr(Path, "read_text", tracking_read_text)
+    monkeypatch.setattr(Path, "read_bytes", tracking_read_bytes)
 
     session = models.Session(session_id=parent_sid)
 
-    assert models._has_compression_continuation(session) is False
+    assert pending_recovery._has_compression_continuation(session) is False
 
     # The index is read whole (now via read_bytes — json.loads decodes UTF-8 in
     # one pass); the candidate sidecar is NOT slurped, only its head is read
@@ -81,8 +84,8 @@ def test_compression_continuation_prefix_match_stays_true(monkeypatch, tmp_path)
     index_file = tmp_path / "_index.json"
     index_file.write_text("[]", encoding="utf-8")
 
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(pending_recovery, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(pending_recovery, "SESSION_INDEX_FILE", index_file)
     models.SESSIONS.clear()
 
     parent_sid = "parent"
@@ -91,7 +94,7 @@ def test_compression_continuation_prefix_match_stays_true(monkeypatch, tmp_path)
 
     session = models.Session(session_id=parent_sid)
 
-    assert models._has_compression_continuation(session) is True
+    assert pending_recovery._has_compression_continuation(session) is True
 
 
 def test_compression_continuation_multibyte_summary_before_marker(monkeypatch, tmp_path):
@@ -105,8 +108,8 @@ def test_compression_continuation_multibyte_summary_before_marker(monkeypatch, t
     index_file = tmp_path / "_index.json"
     index_file.write_text("[]", encoding="utf-8")
 
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(pending_recovery, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(pending_recovery, "SESSION_INDEX_FILE", index_file)
     models.SESSIONS.clear()
 
     parent_sid = "parent"
@@ -127,4 +130,4 @@ def test_compression_continuation_multibyte_summary_before_marker(monkeypatch, t
     assert text.index(needle) < 4096, "test setup: needle must be within 4096 chars"
 
     session = models.Session(session_id=parent_sid)
-    assert models._has_compression_continuation(session) is True
+    assert pending_recovery._has_compression_continuation(session) is True

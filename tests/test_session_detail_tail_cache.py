@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 import api.sessions.store as models
 import api.routes as routes
-from api.sessions import detail_projection
+from api.sessions import foreign_session_access, session_detail_cache
 
 
 def _session(sid, messages):
@@ -47,11 +47,11 @@ def _invoke_twice(tmp_path, monkeypatch):
     config.write_text("model: {}\n", encoding="utf-8")
     state_db = tmp_path / "state.db"
 
-    monkeypatch.setattr(detail_projection, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(detail_projection, "SETTINGS_FILE", settings)
-    monkeypatch.setattr(detail_projection, "_active_state_db_path", lambda: state_db)
-    monkeypatch.setattr(detail_projection, "_active_profile_config_path", lambda: config)
-    detail_projection._clear_session_detail_tail_cache()
+    monkeypatch.setattr(session_detail_cache, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_detail_cache, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(session_detail_cache, "_active_state_db_path", lambda: state_db)
+    monkeypatch.setattr(session_detail_cache, "_active_profile_config_path", lambda: config)
+    session_detail_cache.clear()
 
     full = _session(
         sid,
@@ -81,7 +81,7 @@ def _invoke_twice(tmp_path, monkeypatch):
         patch.object(routes, "get_session", side_effect=fake_get_session),
         patch.object(routes, "_session_visible_to_active_profile", return_value=True),
         patch.object(routes, "_clear_stale_stream_state", return_value=False),
-        patch.object(routes, "_lookup_cli_session_metadata", return_value={}),
+        patch.object(foreign_session_access, "metadata", return_value={}),
         patch.object(routes, "get_state_db_session_messages", return_value=[]),
         patch.object(routes, "redact_session_data", side_effect=lambda raw: raw),
         patch.object(routes, "_active_stream_ids", return_value=set()),
@@ -131,7 +131,7 @@ def test_sidecar_change_invalidates_cached_initial_tail(tmp_path, monkeypatch):
     with patch.object(routes, "get_session", side_effect=fake_get_session), \
          patch.object(routes, "_session_visible_to_active_profile", return_value=True), \
          patch.object(routes, "_clear_stale_stream_state", return_value=False), \
-         patch.object(routes, "_lookup_cli_session_metadata", return_value={}), \
+         patch.object(foreign_session_access, "metadata", return_value={}), \
          patch.object(routes, "get_state_db_session_messages", return_value=[]), \
          patch.object(routes, "redact_session_data", side_effect=lambda raw: raw), \
          patch.object(routes, "_active_stream_ids", return_value=set()), \
@@ -145,8 +145,8 @@ def test_sidecar_change_invalidates_cached_initial_tail(tmp_path, monkeypatch):
 def test_active_and_lineage_sessions_never_use_detail_tail_cache():
     active = _session("active_cache_001", [])
     active.active_stream_id = "stream-1"
-    assert detail_projection._session_detail_tail_cache_eligible(active) is False
+    assert session_detail_cache.eligible(active) is False
 
     child = _session("lineage_cache_001", [])
     child.parent_session_id = "parent_001"
-    assert detail_projection._session_detail_tail_cache_eligible(child) is False
+    assert session_detail_cache.eligible(child) is False
