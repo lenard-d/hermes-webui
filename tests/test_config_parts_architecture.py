@@ -55,6 +55,20 @@ def test_config_reexports_config_domain_implementations():
     assert config.resolve_default_workspace is path_env.resolve_default_workspace
     assert config._resolve_provider_alias is provider_discovery._resolve_provider_alias
     assert config._configured_model_ids is provider_discovery._configured_model_ids
+    provider_catalog_exports = (
+        "_seed_provider_models_from_core",
+        "_is_ambient_gh_cli_entry",
+        "_format_ollama_label",
+        "_format_nous_label",
+        "_build_nous_featured_set",
+        "_strip_picker_provider_hint",
+        "_model_matches_picker_selection",
+        "_split_picker_overflow_models",
+        "_apply_provider_prefix",
+        "_deduplicate_model_ids",
+    )
+    for name in provider_catalog_exports:
+        assert getattr(config, name) is getattr(provider_discovery, name)
     assert config._parse_provider_qualified_model_id is (
         provider_routing._parse_provider_qualified_model_id
     )
@@ -166,6 +180,31 @@ def test_provider_discovery_resolves_patched_alias_table_at_call_time(monkeypatc
     )
 
     assert config._canonicalise_provider_id("ALIAS") == "canonical"
+
+
+def test_provider_catalog_selection_resolves_patched_matcher_at_call_time(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        config,
+        "_model_matches_picker_selection",
+        lambda model_id, _selected, _provider=None: model_id == "keep-selected",
+    )
+
+    visible, overflow = config._split_picker_overflow_models(
+        [
+            {"id": "first", "label": "First"},
+            {"id": "keep-selected", "label": "Selected"},
+            {"id": "third", "label": "Third"},
+        ],
+        selected_model_id="patched-selection",
+        provider_id="patched-provider",
+        threshold=1,
+        target=1,
+    )
+
+    assert [model["id"] for model in visible] == ["keep-selected"]
+    assert [model["id"] for model in overflow] == ["first", "third"]
 
 
 def test_settings_persistence_resolves_patched_raw_reader_at_call_time(monkeypatch):
