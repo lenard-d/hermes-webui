@@ -236,3 +236,49 @@ def test_display_reasoning_restore_observes_facade_merge_patch(monkeypatch):
         [{"role": "assistant", "content": "before"}],
         [{"role": "assistant", "content": "after"}],
     ) is restored
+
+
+def test_replay_prefix_check_observes_facade_identity_patch(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_message_identity",
+        lambda message: seen.append(message) or message["identity"],
+    )
+
+    assert streaming._messages_have_prefix(
+        [{"identity": "first"}, {"identity": "second"}],
+        [{"identity": "first"}],
+    )
+    assert seen == [{"identity": "first"}, {"identity": "first"}]
+
+
+def test_active_context_replay_observes_facade_dedupe_patch(monkeypatch):
+    sentinel = [{"role": "assistant", "content": "patched"}]
+    calls = []
+    monkeypatch.setattr(
+        streaming,
+        "_dedupe_replayed_context_messages",
+        lambda previous, result, text=None: calls.append((previous, result, text)) or sentinel,
+    )
+    previous = [{"role": "user", "content": "before"}]
+    result = previous + [{"role": "assistant", "content": "after"}]
+
+    assert streaming._dedupe_replayed_active_context(previous, result, "prompt") is sentinel
+    assert calls == [(previous, result, "prompt")]
+
+
+def test_context_replay_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._session_context_messages,
+        streaming._message_identity,
+        streaming._messages_have_prefix,
+        streaming._message_replay_key,
+        streaming._strip_replayed_prefix,
+        streaming._looks_like_replayed_session_arc_summary,
+        streaming._strip_replayed_context_items,
+        streaming._dedupe_replayed_context_messages,
+        streaming._dedupe_replayed_active_context,
+    )
+
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
