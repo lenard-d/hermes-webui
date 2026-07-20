@@ -8204,21 +8204,6 @@ STREAM_LAST_EVENT_ID: dict = {}  # stream_id -> latest journal event_id for `id:
 PENDING_GOAL_CONTINUATION: set = set()  # session_ids awaiting a goal continuation turn (#1932)
 
 
-def register_stream_owner(stream_id: str, session_id: str) -> None:
-    """Record the session that owns a stream before worker startup."""
-    RUNTIME_STATE.register_owner(stream_id, session_id)
-
-
-def stream_owner_session_id(stream_id: str) -> str | None:
-    """Return the synchronously-recorded owner session for a stream, if any."""
-    return RUNTIME_STATE.owner_session_id(stream_id)
-
-
-def unregister_stream_owner(stream_id: str) -> None:
-    """Forget the pre-worker stream owner once the stream has torn down."""
-    RUNTIME_STATE.unregister_owner(stream_id)
-
-
 # ── Gateway capability cache ─────────────────────────────────────────────────
 # Probes /v1/capabilities once per base_url/api-key pair and caches the result
 # for 60 s so guarded-turn routing decisions do not add latency on every chat
@@ -8371,23 +8356,6 @@ LAST_RUN_FINISHED_AT: float | None = None
 SERVER_START_TIME = time.time()
 
 
-def register_active_run(stream_id: str, **metadata) -> None:
-    """Mark a WebUI agent worker as alive until its outer finally exits."""
-    RUNTIME_STATE.register_worker(stream_id, **metadata)
-
-
-def update_active_run(stream_id: str, **metadata) -> None:
-    """Update active-run metadata without creating a new run implicitly."""
-    RUNTIME_STATE.update_worker(stream_id, **metadata)
-
-
-def unregister_active_run(stream_id: str) -> None:
-    """Remove a worker from the active-run registry and record idle start."""
-    global LAST_RUN_FINISHED_AT
-    RUNTIME_STATE.unregister_worker(stream_id)
-    LAST_RUN_FINISHED_AT = RUNTIME_STATE.last_run_finished_at
-
-
 RUNTIME_STATE = ProcessRuntimeState(
     streams=STREAMS,
     stream_owners=STREAM_SESSION_OWNERS,
@@ -8405,158 +8373,43 @@ RUNTIME_STATE = ProcessRuntimeState(
 )
 
 
-def register_runtime_stream(
-    stream_id: str,
-    session_id: str,
-    channel,
-    *,
-    goal_related: bool = False,
-) -> None:
-    """Publish a stream, authorization owner, and optional goal state together."""
-    RUNTIME_STATE.register_stream(
-        stream_id,
-        session_id,
-        channel,
-        goal_related=goal_related,
-    )
+# Keep the long-standing ``api.config`` import and monkeypatch surface while the
+# implementations live in a cohesive leaf module.  The resolver is late-bound
+# so patched facade state remains authoritative for every adapter call.
+from api.config_parts import runtime_registry as _runtime_registry
 
+_runtime_registry.bind_config_api(lambda: sys.modules[__name__])
 
-def blocking_runtime_stream(
-    session_id: str,
-    *,
-    active_stream_id: str | None = None,
-    pending_user_message: str | None = None,
-    pending_started_at: float | None = None,
-    pending_grace_seconds: float = 30.0,
-    worker_unwind_seconds: float = 180.0,
-) -> str | None:
-    """Return the process-local run that currently blocks session admission."""
-    return RUNTIME_STATE.blocking_stream_for_session(
-        session_id,
-        active_stream_id=active_stream_id,
-        pending_user_message=pending_user_message,
-        pending_started_at=pending_started_at,
-        pending_grace_seconds=pending_grace_seconds,
-        worker_unwind_seconds=worker_unwind_seconds,
-    )
-
-
-def runtime_stream_alive(stream_id: str) -> bool:
-    return RUNTIME_STATE.has_stream(stream_id)
-
-
-def runtime_worker_alive(stream_id: str) -> bool:
-    return RUNTIME_STATE.has_worker(stream_id)
-
-
-def runtime_transport(stream_id: str):
-    return RUNTIME_STATE.transport(stream_id)
-
-
-def runtime_transport_items():
-    return RUNTIME_STATE.transport_items()
-
-
-def runtime_transport_count(*, timeout: float | None = None) -> int | None:
-    return RUNTIME_STATE.transport_count(timeout=timeout)
-
-
-def runtime_worker_items():
-    return RUNTIME_STATE.worker_items()
-
-
-def runtime_last_run_finished_at() -> float | None:
-    return RUNTIME_STATE.last_run_finished_at
-
-
-def runtime_active_run_ids():
-    return RUNTIME_STATE.active_run_ids()
-
-
-def runtime_run_session_id(stream_id: str) -> str | None:
-    return RUNTIME_STATE.run_session_id(stream_id)
-
-
-def runtime_last_event_id(stream_id: str) -> str | None:
-    return RUNTIME_STATE.last_event_id(stream_id)
-
-
-def note_runtime_last_event_id(stream_id: str, event_id: str) -> None:
-    RUNTIME_STATE.note_last_event_id(stream_id, event_id)
-
-
-def initialize_runtime_execution(stream_id: str, cancel_event) -> bool:
-    """Initialize recoverable producer buffers for an admitted live run."""
-    return RUNTIME_STATE.initialize_execution(stream_id, cancel_event)
-
-
-def append_runtime_partial_text(stream_id: str, text) -> bool:
-    return RUNTIME_STATE.append_partial_text(stream_id, text)
-
-
-def replace_runtime_partial_text(stream_id: str, text) -> bool:
-    return RUNTIME_STATE.replace_partial_text(stream_id, text)
-
-
-def append_runtime_reasoning_text(stream_id: str, text) -> bool:
-    return RUNTIME_STATE.append_reasoning_text(stream_id, text)
-
-
-def replace_runtime_reasoning_text(stream_id: str, text) -> bool:
-    return RUNTIME_STATE.replace_reasoning_text(stream_id, text)
-
-
-def start_runtime_tool_call(
-    stream_id: str,
-    *,
-    name,
-    args,
-    tool_call_id=None,
-) -> bool:
-    return RUNTIME_STATE.start_tool_call(
-        stream_id,
-        name=name,
-        args=args,
-        tool_call_id=tool_call_id,
-    )
-
-
-def finish_runtime_tool_call(
-    stream_id: str,
-    *,
-    name=None,
-    tool_call_id=None,
-    **metadata,
-) -> bool:
-    return RUNTIME_STATE.finish_tool_call(
-        stream_id,
-        name=name,
-        tool_call_id=tool_call_id,
-        **metadata,
-    )
-
-
-def attach_runtime_agent(stream_id: str, agent) -> bool:
-    """Expose an agent for cancellation only while its run remains live."""
-    return RUNTIME_STATE.attach_agent(stream_id, agent)
-
-
-def runtime_progress_snapshot(stream_id: str):
-    """Return an immutable copy of terminally relevant live progress."""
-    return RUNTIME_STATE.progress_snapshot(stream_id)
-
-
-def begin_runtime_cancel(stream_id: str):
-    """Claim cancellation and snapshot the process-local run state."""
-    return RUNTIME_STATE.begin_cancel(stream_id)
-
-
-def finish_runtime_run(stream_id: str) -> bool:
-    """Release every process-local value owned by a completed run."""
-    global LAST_RUN_FINISHED_AT
-    removed = RUNTIME_STATE.finish_run(stream_id)
-    LAST_RUN_FINISHED_AT = RUNTIME_STATE.last_run_finished_at
-    return removed
+register_stream_owner = _runtime_registry.register_stream_owner
+stream_owner_session_id = _runtime_registry.stream_owner_session_id
+unregister_stream_owner = _runtime_registry.unregister_stream_owner
+register_active_run = _runtime_registry.register_active_run
+update_active_run = _runtime_registry.update_active_run
+unregister_active_run = _runtime_registry.unregister_active_run
+register_runtime_stream = _runtime_registry.register_runtime_stream
+blocking_runtime_stream = _runtime_registry.blocking_runtime_stream
+runtime_stream_alive = _runtime_registry.runtime_stream_alive
+runtime_worker_alive = _runtime_registry.runtime_worker_alive
+runtime_transport = _runtime_registry.runtime_transport
+runtime_transport_items = _runtime_registry.runtime_transport_items
+runtime_transport_count = _runtime_registry.runtime_transport_count
+runtime_worker_items = _runtime_registry.runtime_worker_items
+runtime_last_run_finished_at = _runtime_registry.runtime_last_run_finished_at
+runtime_active_run_ids = _runtime_registry.runtime_active_run_ids
+runtime_run_session_id = _runtime_registry.runtime_run_session_id
+runtime_last_event_id = _runtime_registry.runtime_last_event_id
+note_runtime_last_event_id = _runtime_registry.note_runtime_last_event_id
+initialize_runtime_execution = _runtime_registry.initialize_runtime_execution
+append_runtime_partial_text = _runtime_registry.append_runtime_partial_text
+replace_runtime_partial_text = _runtime_registry.replace_runtime_partial_text
+append_runtime_reasoning_text = _runtime_registry.append_runtime_reasoning_text
+replace_runtime_reasoning_text = _runtime_registry.replace_runtime_reasoning_text
+start_runtime_tool_call = _runtime_registry.start_runtime_tool_call
+finish_runtime_tool_call = _runtime_registry.finish_runtime_tool_call
+attach_runtime_agent = _runtime_registry.attach_runtime_agent
+runtime_progress_snapshot = _runtime_registry.runtime_progress_snapshot
+begin_runtime_cancel = _runtime_registry.begin_runtime_cancel
+finish_runtime_run = _runtime_registry.finish_runtime_run
 
 # Agent cache: reuse AIAgent across messages in the same WebUI session so that
 # _user_turn_count survives between turns.  This mirrors the gateway's

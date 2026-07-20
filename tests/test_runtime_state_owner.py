@@ -7,6 +7,7 @@ import threading
 import pytest
 
 import api.config as config
+from api.config_parts import runtime_registry
 from api.runtime_state import ProcessRuntimeState, RunProgressSnapshot
 
 
@@ -77,6 +78,38 @@ def test_register_runtime_stream_publishes_channel_owner_and_goal_state():
     assert config.STREAMS["stream-1"] is channel
     assert config.stream_owner_session_id("stream-1") == "session-1"
     assert config.STREAM_GOAL_RELATED["stream-1"] is True
+
+
+def test_config_reexports_runtime_registry_implementation():
+    assert config.register_runtime_stream is runtime_registry.register_runtime_stream
+    assert config.blocking_runtime_stream is runtime_registry.blocking_runtime_stream
+    assert config.finish_runtime_run is runtime_registry.finish_runtime_run
+
+
+def test_runtime_registry_resolves_patched_config_state_at_call_time(monkeypatch):
+    state, stores = _runtime_state(clock=lambda: 123.0)
+    monkeypatch.setattr(config, "RUNTIME_STATE", state)
+
+    config.register_runtime_stream(
+        "patched-stream",
+        "patched-session",
+        "patched-channel",
+        goal_related=True,
+    )
+    config.register_active_run(
+        "patched-stream",
+        session_id="patched-session",
+        phase="running",
+    )
+
+    assert stores["streams"] == {"patched-stream": "patched-channel"}
+    assert stores["stream_owners"] == {"patched-stream": "patched-session"}
+    assert stores["goal_related"] == {"patched-stream": True}
+    assert config.runtime_worker_alive("patched-stream") is True
+
+    assert config.finish_runtime_run("patched-stream") is True
+    assert config.LAST_RUN_FINISHED_AT == 123.0
+    assert all("patched-stream" not in values for values in stores.values())
 
 
 def test_blocking_stream_for_session_covers_transport_worker_and_registration_gap():
