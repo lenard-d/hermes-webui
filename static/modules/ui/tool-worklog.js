@@ -3,7 +3,8 @@ import { _clearLiveActivityUserIntent, _renderLiveAnchorActivitySceneForStream, 
 import { _activityElapsedLabel, _activityLastObservedAge, _activityProcessedElapsedLabel, _activitySettledProcessedLabel, _formatActiveElapsedTimer, _formatTurnDuration, _transparentEventTimestampSeconds } from './composer-controls.js';
 import { appendThinking, removeThinking } from './content-postprocessing.js';
 import { _moveLiveRunStatusToTurnEnd } from './live-activity.js';
-import { _assistantTurnBlocks, _createAssistantTurn, _decorateTransparentEventRow, _setTransparentCardOpen, _setTransparentDetailMode, _syncTransparentEventControls, _transparentToolStatus, _worklogDetailsExpandedDefault, isCompactWorklogMode, isFinalAnswerOnlyMode, isSimplifiedToolCalling, isTransparentStream } from './presentation.js';
+import { _decorateTransparentEventRow, _setTransparentCardOpen, _setTransparentDetailMode, _syncTransparentEventControls, _transparentToolStatus, _worklogDetailsExpandedDefault, isCompactWorklogMode, isFinalAnswerOnlyMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
+import { _assistantTurnBlocks, _createAssistantTurn } from './assistant-turn-presentation.js';
 import { $, S, esc } from './state.js';
 import { _activityKeyForLiveTurn, _dedupeLiveProcessedWorklogAnchors, _toolDisclosureIdentity, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
 

@@ -1,5 +1,7 @@
 import * as activityAndScroll from './activity-and-scroll.js';
+import * as activityPresentation from './activity-presentation.js';
 import * as anchorScenes from './anchor-scenes.js';
+import * as assistantTurnPresentation from './assistant-turn-presentation.js';
 import * as composer from './composer.js';
 import * as composerControls from './composer-controls.js';
 import * as contentPostprocessing from './content-postprocessing.js';
@@ -17,6 +19,7 @@ import * as renderSupport from './render-support.js';
 import * as state from './state.js';
 import * as toolWorklog from './tool-worklog.js';
 import * as transparentWorklog from './transparent-worklog.js';
+import * as topbarPresentation from './topbar-presentation.js';
 import * as workspaceAndUploads from './workspace-and-uploads.js';
 import { publishCompatibilityDomain } from '../compatibility.js';
 
@@ -29,11 +32,14 @@ const modules = Object.assign(Object.create(null), {
   modelSelection,
   composerControls,
   activityAndScroll,
+  assistantTurnPresentation,
+  activityPresentation,
   composer,
   dialogsAndReconnect,
   healthAndUpdates,
   presentation,
   transparentWorklog,
+  topbarPresentation,
   anchorScenes,
   liveActivity,
   renderSupport,

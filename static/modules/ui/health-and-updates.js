@@ -1,7 +1,8 @@
 import { setStatus, showToast } from './composer.js';
 import { INFLIGHT_KEY, clearInflight, dismissReconnect, showConfirmDialog, showReconnectBanner } from './dialogs-and-reconnect.js';
 import { _isContextCompactionMessage } from './live-activity.js';
-import { msgContent, syncTopbar } from './presentation.js';
+import { msgContent } from './assistant-turn-presentation.js';
+import { syncTopbar } from './topbar-presentation.js';
 import { _renderMessagesWithScrollSnapshot } from './render-support.js';
 import { $, S } from './state.js';
 

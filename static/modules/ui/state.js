@@ -2,7 +2,8 @@ import { showToast } from './composer.js';
 import { refreshSession } from './health-and-updates.js';
 import { _compressionMessageAnchorKey, _isContextCompactionMessage, _isPreservedCompressionTaskListMessage } from './live-activity.js';
 import { _clearRenderCache, _clearUserRowIntrinsicHeightCache, _currentMessageRenderWindowSize, _scheduleMessageVirtualizedRender } from './navigation.js';
-import { _assistantMessageHasVisibleContent, _isRecoveryControlMessage, _messageHasReasoningPayload, msgContent, syncTopbar } from './presentation.js';
+import { _assistantMessageHasVisibleContent, _isRecoveryControlMessage, _messageHasReasoningPayload, msgContent } from './assistant-turn-presentation.js';
+import { syncTopbar } from './topbar-presentation.js';
 import { renderMessages } from './renderer.js';
 
 // `todos` is the single source of truth for the Todos panel.  Any update

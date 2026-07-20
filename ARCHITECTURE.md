@@ -683,6 +683,20 @@ Rendering:
     syncTopbar()          Updates topbar title, meta, model chip, workspace chip
     renderTray()          Updates attach tray showing pending files
 
+The native UI ESM graph keeps independently changing presentation domains behind
+explicit owners: `topbar-presentation.js` projects session/model/workspace state
+into the top bar, `assistant-turn-presentation.js` interprets assistant messages
+and creates turn shells, and `activity-presentation.js` owns activity display
+modes plus Worklog/Transparent Stream disclosure DOM state. `presentation.js`
+is only the stable re-export seam for callers outside that graph.
+
+`renderer.js` deliberately remains larger because its single `renderMessages()`
+transaction owns the ordered transcript rebuild: cache and virtualization
+selection, live-node preservation, anchor/fallback rendering, disclosure and
+scroll restoration, then cache publication and cleanup. Those phases do not
+have independent lifecycle ownership; extracting them would either split the
+transaction or expose shallow pass-through interfaces.
+
 The HTML LRU is bounded to eight entries, 2 MiB per entry, and 8 MiB total
 (estimated as UTF-16 browser heap). Cache hits refresh insertion/LRU order.
 

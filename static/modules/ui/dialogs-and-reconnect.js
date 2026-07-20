@@ -2,7 +2,8 @@ import { _startActivityElapsedTimer } from './activity-and-scroll.js';
 import { normalizeLiveActivityGroupPlacement } from './anchor-scenes.js';
 import { showToast } from './composer.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
-import { _assistantTurnBlocks, _rehydrateTransparentStreamDom } from './presentation.js';
+import { _rehydrateTransparentStreamDom } from './activity-presentation.js';
+import { _assistantTurnBlocks } from './assistant-turn-presentation.js';
 import { $, INFLIGHT, S, esc } from './state.js';
 import { _dedupeLiveProcessedWorklogAnchors } from './transparent-worklog.js';
 

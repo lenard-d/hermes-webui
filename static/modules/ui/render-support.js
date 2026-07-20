@@ -3,7 +3,8 @@ import { _deferClearProgrammaticScroll, _firstValidTimestampSeconds, _lastMessag
 import { _stripAttachedFilesMarkerForDisplay } from './composer.js';
 import { _captureMessageScrollSnapshot, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _desktopAnchorRealignDelta, _restoreMessageScrollSnapshot, _restorePinnedMessageScrollSnapshot, _sessionHtmlCache, _sessionHtmlCacheSid, _toolArgsSnapshot } from './live-activity.js';
 import { _isTouchLikeMessageViewport, _messageViewportIntersectsRenderedRow, _remountMessageViewportAnchor, _restoreMessageViewportAnchor } from './navigation.js';
-import { _assistantAnchorSceneFinalAnswerText, _stripLeadingAssistantThinkingMarkup, isTransparentStream } from './presentation.js';
+import { isTransparentStream } from './activity-presentation.js';
+import { _assistantAnchorSceneFinalAnswerText, _stripLeadingAssistantThinkingMarkup } from './assistant-turn-presentation.js';
 import { renderMessages } from './renderer.js';
 import { $, S, _messageVirtualWindowKey, _stripWorkspaceDisplayPrefix } from './state.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';

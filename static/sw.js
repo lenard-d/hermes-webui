@@ -63,7 +63,9 @@ const SHELL_ASSETS = [
   // Native-module dependencies use static relative imports and therefore load
   // without the entrypoint's version query. The shell remains network-first.
   './static/modules/ui/activity-and-scroll.js',
+  './static/modules/ui/activity-presentation.js',
   './static/modules/ui/anchor-scenes.js',
+  './static/modules/ui/assistant-turn-presentation.js',
   './static/modules/ui/composer.js',
   './static/modules/ui/composer-controls.js',
   './static/modules/ui/content-postprocessing.js',
@@ -80,6 +82,7 @@ const SHELL_ASSETS = [
   './static/modules/ui/render-support.js',
   './static/modules/ui/state.js',
   './static/modules/ui/tool-worklog.js',
+  './static/modules/ui/topbar-presentation.js',
   './static/modules/ui/transparent-worklog.js',
   './static/modules/ui/workspace-and-uploads.js',
   './static/modules/sessions/index.js' + VQ,

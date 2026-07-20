@@ -13,6 +13,9 @@ REQUIRED_MODULES = {
     "model-selection.js",
     "composer.js",
     "composer-controls.js",
+    "topbar-presentation.js",
+    "assistant-turn-presentation.js",
+    "activity-presentation.js",
     "presentation.js",
     "render-support.js",
     "renderer.js",
@@ -74,6 +77,9 @@ def test_cohesive_ui_owners_remain_reviewable():
 def test_primary_ui_interfaces_have_one_authoritative_owner():
     sources = {path.name: path.read_text(encoding="utf-8") for path in ui_module_paths()}
     expected = {
+        "syncTopbar": "topbar-presentation.js",
+        "_assistantMessageHasVisibleContent": "assistant-turn-presentation.js",
+        "_decorateTransparentEventRow": "activity-presentation.js",
         "renderModelDropdown": "model-selection.js",
         "renderMd": "composer.js",
         "renderMessages": "renderer.js",

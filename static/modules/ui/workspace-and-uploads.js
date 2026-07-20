@@ -1,7 +1,7 @@
 import { setStatus, showToast, updateSendBtn } from './composer.js';
 import { showConfirmDialog, showPromptDialog } from './dialogs-and-reconnect.js';
 import { _ARCHIVE_EXTS, _IMAGE_EXTS, _SVG_EXTS, _mediaKindForName } from './media-and-quota.js';
-import { syncTopbar } from './presentation.js';
+import { syncTopbar } from './topbar-presentation.js';
 import { renderMessages } from './renderer.js';
 import { $, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, S, _redirectIfUnauth, esc } from './state.js';
 
