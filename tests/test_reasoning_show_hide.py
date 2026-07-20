@@ -18,6 +18,8 @@ REPO = pathlib.Path(__file__).parent.parent
 
 
 def read(rel):
+    if rel == "static/commands.js":
+        return family_source("commands")
     return (REPO / rel).read_text(encoding='utf-8')
 
 
@@ -66,14 +68,14 @@ class TestBootJsShowThinking:
     """window._showThinking must be set in both the settings and fallback paths."""
 
     def test_settings_path_initialises_show_thinking(self):
-        src = read('static/boot.js')
+        src = family_source("boot")
         # Must read from the settings object, defaulting true when absent
         assert 'window._showThinking=s.show_thinking!==false' in src, (
             "boot.js must initialise _showThinking from settings (default true)"
         )
 
     def test_fallback_path_initialises_show_thinking_true(self):
-        src = read('static/boot.js')
+        src = family_source("boot")
         assert 'window._showThinking=true' in src, (
             "boot.js fallback path must default _showThinking to true"
         )
@@ -423,16 +425,17 @@ class TestStreamingReasoningWiring:
     on the next session)."""
 
     def test_streaming_reads_reasoning_effort_from_config(self):
-        src = read('api/streaming.py')
-        assert 'parse_reasoning_effort' in src, (
+        facade_src = read('api/streaming.py')
+        run_src = read('api/streaming_parts/local_run.py')
+        assert 'parse_reasoning_effort' in facade_src, (
             "api/streaming.py must import parse_reasoning_effort to translate "
             "config.yaml agent.reasoning_effort into AIAgent reasoning_config"
         )
-        assert 'coerce_reasoning_effort_for_model' in src, (
+        assert 'coerce_reasoning_effort_for_model' in facade_src, (
             "api/streaming.py must clamp/drop unsupported model-specific effort "
             "levels before sending reasoning_config to the provider"
         )
-        assert "reasoning_config" in src and "'reasoning_config' in _agent_params" in src, (
+        assert "reasoning_config" in run_src and "'reasoning_config' in _agent_params" in run_src, (
             "api/streaming.py must guard the reasoning_config kwarg with "
             "inspect.signature so older hermes-agent builds don't TypeError"
         )

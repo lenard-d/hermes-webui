@@ -2,10 +2,12 @@
 
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (REPO_ROOT / "static/index.html").read_text(encoding="utf-8")
-WORKSPACE_JS = (REPO_ROOT / "static/workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 
 
 def _function_block(src: str, name: str) -> str:

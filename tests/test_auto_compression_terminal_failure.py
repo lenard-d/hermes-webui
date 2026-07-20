@@ -177,7 +177,7 @@ def test_compression_exhausted_result_is_terminal_failure_even_after_streamed_te
 
 
 def test_terminal_failure_gates_shape_check_to_no_streamed_text():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     start = src.find("_is_agent_result_terminal = _agent_result_terminal_failure(result)")
     assert start != -1, "terminal failure result assignment not found"
     end = src.find("if _terminal_failure:", start)
@@ -442,7 +442,7 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
 
 
 def test_exception_apperror_payload_includes_session_id_before_enqueue():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     start = src.find("_error_payload = _provider_error_payload(err_str, _exc_type, _exc_hint)")
     assert start != -1, "exception apperror payload path not found"
     end = src.find("put('apperror', _error_payload)", start)

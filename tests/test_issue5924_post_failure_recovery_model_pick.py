@@ -29,7 +29,7 @@ import api.routes as routes
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
-COMMANDS_JS = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -255,4 +255,3 @@ def test_recovery_reguards_active_session_after_each_await():
     assert edit.count("S.session.session_id !== initialSid") >= 2, (
         "submitEdit must re-guard initialSid after the truncate await (>=2 guards total)"
     )
-

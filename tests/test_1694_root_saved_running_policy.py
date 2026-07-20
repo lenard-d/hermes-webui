@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Regression tests for #1694 root boot policy around saved running sessions.
 
 The active pane is only a projection. A root `/` tab restored from
@@ -14,7 +15,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).parent.parent
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def _boot_saved_session_block() -> str:

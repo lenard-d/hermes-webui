@@ -13,7 +13,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
-CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+    encoding="utf-8"
+)
 UI_JS = family_source("ui")
 
 NODE = shutil.which("node")

@@ -9,7 +9,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-BOOT_JS = ROOT / "static" / "boot.js"
+BOOT_JS = ROOT / "static" / "boot_parts" / "008-bootstrap-coordinator.js"
 NODE = shutil.which("node")
 BOOT_MARKER_KEY = "hermes-webui-active-profile-bootstrap-401"
 

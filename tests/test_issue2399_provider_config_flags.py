@@ -14,6 +14,16 @@ def _provider_ids(payload: dict) -> set[str]:
     return {str(group.get("provider_id") or "") for group in payload.get("groups", [])}
 
 
+def _pin_config_source(monkeypatch) -> None:
+    config_path = config._get_config_path()
+    monkeypatch.setattr(config, "_cfg_path", config_path)
+    try:
+        config_mtime = pathlib.Path(config_path).stat().st_mtime
+    except OSError:
+        config_mtime = 0.0
+    monkeypatch.setattr(config, "_cfg_mtime", config_mtime)
+
+
 def test_providers_only_configured_flag_does_not_create_picker_group(monkeypatch):
     """providers.only_configured is a filter flag, not a provider id (#2399)."""
     _reset_models_cache()
@@ -30,6 +40,7 @@ def test_providers_only_configured_flag_does_not_create_picker_group(monkeypatch
         raising=False,
     )
     monkeypatch.setattr(config, "_cfg_has_in_memory_overrides", lambda: True)
+    _pin_config_source(monkeypatch)
     monkeypatch.setattr(
         config,
         "_get_auth_store_path",
@@ -63,6 +74,7 @@ def test_unknown_scalar_provider_config_flags_are_ignored(monkeypatch):
         raising=False,
     )
     monkeypatch.setattr(config, "_cfg_has_in_memory_overrides", lambda: True)
+    _pin_config_source(monkeypatch)
     monkeypatch.setattr(
         config,
         "_get_auth_store_path",

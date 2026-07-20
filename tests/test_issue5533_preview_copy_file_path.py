@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-WORKSPACE_JS = (ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 UI_JS = family_source("ui")
 STYLE = family_source("style")
 

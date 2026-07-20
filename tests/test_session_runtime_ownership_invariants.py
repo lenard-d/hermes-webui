@@ -45,7 +45,7 @@ def _event_handler(src: str, event_name: str) -> str:
 
 class TestSessionOwnedRuntimeInvariants:
     def test_sidebar_cancel_uses_row_stream_id_not_active_pane_stream(self):
-        boot = read("static/boot.js")
+        boot = family_source("boot")
         body = _function_body(boot, "cancelSessionStream")
         assert "session&&session.active_stream_id" in body, (
             "Sidebar row cancellation must target the row-owned active_stream_id, "

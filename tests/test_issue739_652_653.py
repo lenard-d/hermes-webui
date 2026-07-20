@@ -12,10 +12,12 @@ import pathlib
 
 from api.streaming import _sanitize_messages_for_api
 
-STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
+STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'local_run.py'
+STREAMING_FACADE = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
 TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'title_generation.py'
 
 streaming_src = STREAMING.read_text(encoding='utf-8')
+streaming_facade_src = STREAMING_FACADE.read_text(encoding='utf-8')
 title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')
 messages_js_src = family_source("messages")
 
@@ -27,7 +29,7 @@ class TestQuotaDetection:
 
     def test_quota_patterns_present_in_silent_failure_path(self):
         """The silent-failure path checks for credit/quota strings."""
-        block = streaming_src
+        block = streaming_facade_src
         assert 'insufficient credit' in block
         assert 'credit balance' in block
         assert 'credits exhausted' in block
@@ -71,13 +73,22 @@ class TestErrorPersistence:
 
     def test_silent_failure_calls_save_before_return(self):
         """save() must be called after appending the error message."""
-        # Find the silent failure block area and verify save precedes return
-        pattern = re.compile(
-            r"s\.messages\.append\(.*?'_error': True.*?\).*?s\.save\(\).*?return",
-            re.DOTALL
+        # Find the silent-failure block and verify the persisted message is the
+        # same _error-marked object that was just constructed.
+        block_start = streaming_src.index("_error_message = {")
+        block_end = streaming_src.index(
+            "return  # apperror already closes the stream on the client side",
+            block_start,
         )
-        assert pattern.search(streaming_src), \
-            "save() must be called after appending the error message in the silent-failure path"
+        block = streaming_src[block_start:block_end]
+        error_marker_pos = block.index("'_error': True")
+        append_pos = block.index("s.messages.append(_error_message)")
+        save_pos = block.index("s.save()", append_pos)
+
+        assert error_marker_pos < append_pos < save_pos, (
+            "save() must be called after appending the error message in the "
+            "silent-failure path"
+        )
 
     def test_exception_path_appends_error_message(self):
         """Exception path also persists the error to the session."""

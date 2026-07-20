@@ -92,23 +92,30 @@ class TestEndpointDistinction:
 
     def test_rfc_cites_current_global_endpoint_source(self):
         """The RFC's source anchors for the existing global stream must be
-        ACCURATE against current api/routes.py, verified by SYMBOL not by line
-        number. The RFC cites the route string and handler function by name;
-        this test confirms (a) each symbol still exists in api/routes.py and
-        (b) the RFC names that symbol. It deliberately does NOT check line
-        numbers: a routes.py line-shift must never break this test or the RFC
+        ACCURATE against the route facade and stream owner, verified by SYMBOL
+        not by line number. The RFC cites the route string and handler function
+        by name; this test confirms (a) each symbol still exists in its owner
+        and (b) the RFC names that symbol. It deliberately does NOT check line
+        numbers: a source line-shift must never break this test or the RFC
         (#5513 gate finding, chronic brittle failure #5542)."""
         text = _rfc()
         routes_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+        stream_src = (
+            REPO / "api" / "routes_parts" / "stream_transport.py"
+        ).read_text(encoding="utf-8")
 
-        # (RFC-cited symbol, existence probe in api/routes.py source)
+        # (RFC-cited symbol, existence probe, authoritative source owner)
         checks = [
-            ("/api/sessions/events", "/api/sessions/events"),
-            ("_handle_session_events_stream", "def _handle_session_events_stream"),
+            ("/api/sessions/events", "/api/sessions/events", routes_src),
+            (
+                "_handle_session_events_stream",
+                "def _handle_session_events_stream",
+                stream_src,
+            ),
         ]
-        for rfc_symbol, source_probe in checks:
-            assert source_probe in routes_src, (
-                f"api/routes.py must still define/route {source_probe!r}; the RFC "
+        for rfc_symbol, source_probe, owner_src in checks:
+            assert source_probe in owner_src, (
+                f"The route owner must still define/route {source_probe!r}; the RFC "
                 f"cites {rfc_symbol!r} as a stable source anchor"
             )
             assert rfc_symbol in text, (
@@ -118,14 +125,16 @@ class TestEndpointDistinction:
 
     def test_rfc_run_journal_anchors_land_on_real_source(self):
         """Every named-symbol anchor the RFC cites in the run-journal inventory
-        must be a REAL symbol in api/routes.py and be NAMED in the RFC prose.
-        This is verified by symbol, never by line number, so a routes.py
+        must be a REAL symbol in stream_transport.py and be NAMED in the RFC
+        prose. This is verified by symbol, never by line number, so a source
         line-shift can't silently break it or the RFC (#5513 gate finding 2,
         chronic brittle failure #5542)."""
         text = _rfc()
-        routes_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+        stream_src = (
+            REPO / "api" / "routes_parts" / "stream_transport.py"
+        ).read_text(encoding="utf-8")
 
-        # (RFC-cited symbol name, existence probe in api/routes.py source)
+        # (RFC-cited symbol name, existence probe in its source owner)
         checks = [
             ("_parse_run_journal_event_id", "def _parse_run_journal_event_id"),
             ("_parse_run_journal_after_seq", "def _parse_run_journal_after_seq"),
@@ -134,8 +143,8 @@ class TestEndpointDistinction:
             ("_sse_with_id", "_sse_with_id"),
         ]
         for rfc_symbol, source_probe in checks:
-            assert source_probe in routes_src, (
-                f"api/routes.py must still define {source_probe!r}; the RFC cites "
+            assert source_probe in stream_src, (
+                f"stream_transport.py must still define {source_probe!r}; the RFC cites "
                 f"{rfc_symbol!r} as a stable source anchor"
             )
             assert rfc_symbol in text, (

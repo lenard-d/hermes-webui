@@ -846,9 +846,11 @@ def test_backend_emitter_stamps_event_id_on_every_bg_task_complete():
     """Per the #2242 Q4 reply: every bg_task_complete emit carries an
     event_id; the consumer's ring-buffer dedupe is keyed on it. Source-grep
     the payload builder to confirm event_id is stamped."""
-    src = (REPO_ROOT / "api" / "background_process.py").read_text()
+    src = (
+        REPO_ROOT / "api" / "background_process_parts" / "completion_events.py"
+    ).read_text()
     # Locate the canonical payload builder and confirm event_id is in the dict.
-    fn_ix = src.index("def _build_payload")
+    fn_ix = src.index("def build_payload")
     fn_src = src[fn_ix:fn_ix + 4000]
     assert '"event_id"' in fn_src or "'event_id'" in fn_src, (
         "payload builder must stamp event_id on every bg_task_complete payload"

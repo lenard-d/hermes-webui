@@ -9,6 +9,12 @@ import api.config as config
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+ANCHOR_SCENE_SRC = (ROOT / "api" / "routes_parts" / "anchor_scene.py").read_text(
+    encoding="utf-8"
+)
+STREAM_TRANSPORT_SRC = (
+    ROOT / "api" / "routes_parts" / "stream_transport.py"
+).read_text(encoding="utf-8")
 
 
 def test_stream_status_exposes_replay_summary():
@@ -22,8 +28,8 @@ def test_stream_status_exposes_replay_summary():
 
 
 def test_dead_stream_sse_replays_journal_before_404_fallback():
-    handler_pos = ROUTES_SRC.index("def _handle_sse_stream")
-    block = ROUTES_SRC[handler_pos : handler_pos + 1800]
+    handler_pos = STREAM_TRANSPORT_SRC.index("def _handle_sse_stream")
+    block = STREAM_TRANSPORT_SRC[handler_pos : handler_pos + 1800]
 
     assert "find_run_summary(stream_id)" in block
     assert "stream not found" in block
@@ -247,8 +253,8 @@ def test_live_sse_uses_each_queue_items_own_event_id():
 
 
 def test_replay_emits_event_ids_and_stale_restart_diagnostic():
-    replay_pos = ROUTES_SRC.index("def _replay_run_journal")
-    block = ROUTES_SRC[replay_pos : replay_pos + 1200]
+    replay_pos = STREAM_TRANSPORT_SRC.index("def _replay_run_journal")
+    block = STREAM_TRANSPORT_SRC[replay_pos : replay_pos + 1200]
 
     assert "read_run_events" in block
     assert "_sse_with_id" in block
@@ -260,7 +266,7 @@ def test_session_payload_exposes_runtime_journal_for_stale_streams():
     assert '"runtime_journal"' in ROUTES_SRC
     assert '"runtime_journal_snapshot"' in ROUTES_SRC
     assert "_run_journal_live_snapshot(original_stream_id, handler=handler)" in ROUTES_SRC
-    assert 'terminal_state = "lost-worker-bookkeeping"' in ROUTES_SRC
+    assert 'terminal_state = "lost-worker-bookkeeping"' in ANCHOR_SCENE_SRC
     assert "active=journal_active" in ROUTES_SRC
     assert "journal_active = bool(original_stream_id in active_stream_ids)" in ROUTES_SRC
 

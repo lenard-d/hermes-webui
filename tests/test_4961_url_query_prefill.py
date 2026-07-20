@@ -10,10 +10,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
 REPRO_PATH = REPO_ROOT / "tests" / "fixtures" / "webui-PR-TARGET-5884-REPRO.md"
 SESSIONS_JS = family_source("sessions")
-BOOT_JS = BOOT_JS_PATH.read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

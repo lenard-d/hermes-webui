@@ -61,7 +61,7 @@ class TestStreamingAuthErrorDetection:
 
     def test_is_auth_error_flag_defined(self):
         """auth error variable must exist in the error handler (exception path and silent-failure path)."""
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         # Variable renamed to _exc_is_auth in exception path, _is_auth in silent-failure path
         assert "_exc_is_auth" in src or "_is_auth" in src, (
             "auth error flag not found in streaming.py"
@@ -69,7 +69,7 @@ class TestStreamingAuthErrorDetection:
 
     def test_auth_error_detects_401(self):
         """'401' must be part of the auth error detection logic."""
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         # Find the is_auth_error block
         # Variable renamed to _exc_is_auth in exception path, _is_auth in silent-failure path
         idx = src.find("_exc_is_auth")
@@ -81,7 +81,7 @@ class TestStreamingAuthErrorDetection:
 
     def test_auth_error_detects_unauthorized(self):
         """'unauthorized' must be part of the auth error detection logic."""
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         # Variable renamed to _exc_is_auth in exception path
         idx = src.find("_exc_is_auth")
         block = src[idx:idx + 500]
@@ -102,7 +102,7 @@ class TestStreamingAuthErrorDetection:
 
     def test_auth_error_does_not_catch_rate_limit(self):
         """Rate limit errors must not be reclassified as auth_mismatch."""
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         # Variables renamed: _exc_is_rate_limit / _exc_is_auth in exception path
         # Quota check comes first (before rate limit), then rate limit, then auth
         rl_idx = src.find("_exc_is_rate_limit")
@@ -284,7 +284,7 @@ class TestBootModelSelectChange:
 
     def test_onchange_calls_check_function(self):
         """modelSelect.onchange must invoke _checkProviderMismatch."""
-        src = _read("static/boot.js")
+        src = family_source("boot")
         assert "_checkProviderMismatch" in src, (
             "boot.js modelSelect.onchange must call _checkProviderMismatch "
             "to warn users about provider/model mismatches"
@@ -302,7 +302,7 @@ class TestBootModelSelectChange:
 
     def test_onchange_shows_toast_on_mismatch(self):
         """The warning must be shown via showToast, not alert()."""
-        src = _read("static/boot.js")
+        src = family_source("boot")
         # Both _checkProviderMismatch call and showToast must be near each other
         idx = src.find("_checkProviderMismatch")
         assert idx != -1, "_checkProviderMismatch not found in boot.js"
@@ -1506,7 +1506,7 @@ class TestModelSwitchToast:
 
     def test_toast_in_model_select_onchange(self):
         """modelSelect.onchange must show a scope toast after selecting a model."""
-        src = _read("static/boot.js")
+        src = family_source("boot")
         # Find the onchange block
         idx = src.find("modelSelect').onchange")
         assert idx != -1, "modelSelect.onchange not found in boot.js"
@@ -1519,7 +1519,7 @@ class TestModelSwitchToast:
 
     def test_toast_is_not_gated_on_messages_length(self):
         """Toast must fire for every model selection, not only sessions with messages."""
-        src = _read("static/boot.js")
+        src = family_source("boot")
         idx = src.find("model_scope_toast")
         assert idx != -1
         surrounding = src[max(0, idx - 220):idx + 80]
@@ -1529,7 +1529,7 @@ class TestModelSwitchToast:
 
     def test_toast_uses_show_toast_not_alert(self):
         """Toast must use showToast(), not alert()."""
-        src = _read("static/boot.js")
+        src = family_source("boot")
         idx = src.find("model_scope_toast")
         assert idx != -1
         surrounding = src[max(0, idx - 50):idx + 100]
@@ -1538,7 +1538,7 @@ class TestModelSwitchToast:
 
     def test_toast_has_typeof_showtoast_guard(self):
         """Toast call must guard typeof showToast to be safe during boot."""
-        src = _read("static/boot.js")
+        src = family_source("boot")
         idx = src.find("model_scope_toast")
         assert idx != -1
         surrounding = src[max(0, idx - 100):idx + 50]
@@ -1568,7 +1568,7 @@ class TestFrontendModelProviderState:
     """Frontend model persistence should store provider separately."""
 
     def test_boot_session_update_sends_model_provider(self):
-        src = _read("static/boot.js")
+        src = family_source("boot")
         assert "_modelStateForSelect" in src
         assert "model_provider:modelState.model_provider||null" in src
 

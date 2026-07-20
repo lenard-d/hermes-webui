@@ -21,7 +21,7 @@ import pathlib
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
-STREAMING = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
 MESSAGES = family_source("messages")
 
 

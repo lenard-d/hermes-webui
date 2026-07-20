@@ -6,7 +6,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _script(path):
-    family = {"static/sessions.js": "sessions", "static/messages.js": "messages"}.get(path)
+    family = {
+        "static/sessions.js": "sessions",
+        "static/commands.js": "commands",
+        "static/messages.js": "messages",
+        "static/boot.js": "boot",
+    }.get(path)
     if family:
         return family_source(family)
     return (ROOT / path).read_text()

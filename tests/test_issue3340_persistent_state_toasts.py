@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
-STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING_PY = (ROOT / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
@@ -51,8 +51,9 @@ def test_persistent_state_toasts_use_existing_user_visible_labels():
 
 
 def test_backend_emits_state_saved_sse_from_file_snapshots():
-    assert "def _persistent_state_snapshot" in STREAMING_PY
-    assert "def _persistent_state_changes" in STREAMING_PY
+    facade_py = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+    assert "def _persistent_state_snapshot" in facade_py
+    assert "def _persistent_state_changes" in facade_py
     assert '_persistent_state_before = _persistent_state_snapshot(_profile_home)' in STREAMING_PY
     assert 'put("state_saved", {' in STREAMING_PY
     assert '"kind": "memory"' in STREAMING_PY

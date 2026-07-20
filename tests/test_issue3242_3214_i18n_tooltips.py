@@ -4,7 +4,7 @@ from pathlib import Path
 from tests.i18n_split_loader import source_shaped_i18n
 
 ROOT = Path(__file__).resolve().parents[1]
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 I18N_JS = source_shaped_i18n()
 SESSIONS_JS = family_source("sessions")
 

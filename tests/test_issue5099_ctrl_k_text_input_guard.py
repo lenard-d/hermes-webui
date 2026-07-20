@@ -4,9 +4,9 @@ Emacs-adjacent users expect Ctrl+K to kill to end-of-line while the composer
 or other editable fields are focused. Cmd/Ctrl+K should still create a new chat
 when focus is outside text inputs, matching the existing Ctrl+B guard pattern.
 """
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-BOOT_JS = (Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def _ctrl_k_branch_window() -> str:

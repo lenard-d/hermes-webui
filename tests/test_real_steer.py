@@ -288,7 +288,7 @@ class TestFrontendWiring:
 
     @classmethod
     def setup_class(cls):
-        cls.cmds = (Path(__file__).parent.parent / "static" / "commands.js").read_text(encoding="utf-8")
+        cls.cmds = family_source("commands")
         cls.msgs = family_source("messages")
         cls.i18n = family_source("i18n")
 
@@ -302,13 +302,13 @@ class TestFrontendWiring:
     def test_try_steer_calls_endpoint(self):
         idx = self.cmds.find("async function _trySteer(")
         assert idx >= 0
-        body = _source_between(self.cmds, "async function _trySteer(", "\nasync function cmdTitle")
+        body = _source_between(self.cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         assert "/api/chat/steer" in body, "_trySteer must POST to /api/chat/steer"
         assert "method:'POST'" in body or 'method:"POST"' in body
 
     def test_try_steer_handles_fallback_without_cancelling(self):
         idx = self.cmds.find("async function _trySteer(")
-        body = _source_between(self.cmds, "async function _trySteer(", "\nasync function cmdTitle")
+        body = _source_between(self.cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         # Must check result.accepted and keep generic failures from cancelling.
         assert "result&&result.accepted" in body or "result.accepted" in body
         assert "result&&result.fallback==='gateway_steer_queued'" in body
@@ -333,7 +333,7 @@ class TestFrontendWiring:
         )
         idx = cmds.find("async function _trySteer(")
         assert idx >= 0
-        body = _source_between(cmds, "async function _trySteer(", "\nasync function cmdTitle")
+        body = _source_between(cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         assert "const ownerSid=(typeof S!=='undefined'&&S.session&&S.session.session_id)||null;" in body
         assert "const pendingFilesSnapshot=typeof S!=='undefined'&&Array.isArray(S.pendingFiles)?[...S.pendingFiles]:[];" in body
         assert "steerText=await _steerTextWithPendingFiles(originalMsg,ownerSid,pendingFilesSnapshot)" in body
@@ -348,7 +348,7 @@ class TestFrontendWiring:
         cmds = self.cmds
         idx = cmds.find("async function _trySteer(")
         assert idx >= 0
-        body = _source_between(cmds, "async function _trySteer(", "\nasync function cmdTitle")
+        body = _source_between(cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         await_idx = body.find("steerText=await _steerTextWithPendingFiles")
         assert await_idx >= 0
         after_upload = body[await_idx:]
@@ -363,9 +363,9 @@ class TestFrontendWiring:
         steer_helpers = _source_between(
             self.cmds,
             "function _steerOwnerIsCurrent",
-            "\nasync function cmdTitle",
+            "\nglobalThis.HermesCommands.parts.runControls",
         )
-        try_body = _source_between(self.cmds, "async function _trySteer(", "\nasync function cmdTitle")
+        try_body = _source_between(self.cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         assert "function _steerSetComposerStatusForOwner" in steer_helpers
         assert "_steerSetComposerStatusForOwner(ownerSid,t('uploading')||'Uploading…')" in steer_helpers
         assert "_steerSetComposerStatusForOwner(ownerSid,'')" in steer_helpers
@@ -389,7 +389,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _steerUploadedAttachmentPaths",
-            "\nasync function cmdTitle",
+            "\nglobalThis.HermesCommands.parts.runControls",
         )
         script = textwrap.dedent(
             f"""
@@ -438,7 +438,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _steerUploadedAttachmentPaths",
-            "\nasync function cmdTitle",
+            "\nglobalThis.HermesCommands.parts.runControls",
         )
         script = textwrap.dedent(
             f"""
@@ -486,7 +486,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _steerUploadedAttachmentPaths",
-            "\nasync function cmdTitle",
+            "\nglobalThis.HermesCommands.parts.runControls",
         )
         script = textwrap.dedent(
             f"""
@@ -551,7 +551,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _showSteerRecovery",
-            "\nasync function cmdTitle",
+            "\nglobalThis.HermesCommands.parts.runControls",
         )
         script = textwrap.dedent(
             f"""
@@ -987,7 +987,7 @@ class TestLeftoverDelivery:
 
     def test_leftover_drain_call_in_streaming(self):
         """Verify the streaming.py source contains the drain call before put('done', ...)."""
-        src = (Path(__file__).parent.parent / "api" / "streaming.py").read_text(encoding="utf-8")
+        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
         assert "_drain_pending_steer" in src, (
             "_run_agent_streaming must call agent._drain_pending_steer() to deliver leftovers"
         )
@@ -998,7 +998,7 @@ class TestLeftoverDelivery:
     def test_leftover_drain_runs_before_done_event(self):
         """The drain must happen BEFORE put('done', ...) so frontend gets both events
         on the same turn."""
-        src = (Path(__file__).parent.parent / "api" / "streaming.py").read_text(encoding="utf-8")
+        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
         # Find the drain invocation and the next put('done', ...) AFTER it
         drain_idx = src.find("_drain_pending_steer()")
         assert drain_idx >= 0

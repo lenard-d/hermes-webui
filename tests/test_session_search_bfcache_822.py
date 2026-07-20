@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Tests for #822 — session list empty after browser reload / version update.
 
 Root cause (from Opus analysis): Chrome's bfcache restores a prior search query
@@ -41,7 +42,7 @@ class TestBootClearsSessionSearch:
     an empty filter and shows all sessions."""
 
     def test_boot_clears_session_search_value_before_first_render(self):
-        src = read('static/boot.js')
+        src = family_source("boot")
         # Must find a line that sets sessionSearch.value = '' at boot
         assert re.search(
             r"getElementById\(['\"]sessionSearch['\"]\)\s*;\s*if\s*\([^)]+\)\s*[^=]+\.value\s*=\s*['\"]{2}"
@@ -56,7 +57,7 @@ class TestBootClearsSessionSearch:
     def test_boot_clear_is_before_first_render_call(self):
         """The clear must precede the first renderSessionList call path so the
         initial render shows an unfiltered list."""
-        src = read('static/boot.js')
+        src = family_source("boot")
         clear_pos = None
         m = re.search(r"getElementById\(['\"]sessionSearch['\"]\)", src)
         if m:
@@ -76,7 +77,7 @@ class TestPageShowBfcacheHandler:
     with `event.persisted` check is the only reliable way to clear on bfcache."""
 
     def test_pageshow_listener_registered(self):
-        src = read('static/boot.js')
+        src = family_source("boot")
         assert re.search(
             r"addEventListener\(\s*['\"]pageshow['\"]",
             src,
@@ -90,7 +91,7 @@ class TestPageShowBfcacheHandler:
         it false and are already handled by the boot IIFE. Guarding prevents
         clearing the search on every page show (which would wipe an in-progress
         user filter if any other pageshow triggers happen)."""
-        src = read('static/boot.js')
+        src = family_source("boot")
         m = re.search(
             r"addEventListener\(\s*['\"]pageshow['\"].*?\}\s*\)",
             src,
@@ -104,7 +105,7 @@ class TestPageShowBfcacheHandler:
         )
 
     def test_pageshow_handler_clears_session_search(self):
-        src = read('static/boot.js')
+        src = family_source("boot")
         m = re.search(
             r"addEventListener\(\s*['\"]pageshow['\"].*?\}\s*\)",
             src,
@@ -123,7 +124,7 @@ class TestPageShowBfcacheHandler:
         """After clearing on bfcache restore, the cached DOM still shows the
         filtered view. Re-rendering from cache with the now-empty filter
         repopulates the list."""
-        src = read('static/boot.js')
+        src = family_source("boot")
         m = re.search(
             r"addEventListener\(\s*['\"]pageshow['\"].*?\}\s*\)",
             src,

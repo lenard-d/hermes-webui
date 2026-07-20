@@ -19,10 +19,10 @@ ROOT = Path(__file__).parent.parent
 CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )
-COMMANDS_JS = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
 UI_JS = family_source("ui")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
@@ -109,7 +109,7 @@ class TestSlashCommandHandlers:
         # The shared helper must contain the non-cancelling fallback path.
         helper_idx = COMMANDS_JS.find("async function _trySteer(")
         assert helper_idx >= 0, "_trySteer helper must exist"
-        helper_body = _source_between(COMMANDS_JS, "async function _trySteer(", "\nasync function cmdTitle")
+        helper_body = _source_between(COMMANDS_JS, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         assert "cancelStream" not in helper_body
         gateway_fallback_idx = helper_body.find("result&&result.fallback==='gateway_steer_queued'")
         gateway_queue_idx = helper_body.find("queueSessionMessage", gateway_fallback_idx)
@@ -148,7 +148,7 @@ class TestSlashCommandHandlers:
         # accepted steer, and (post-#5459-gate) removes ONLY the delivered files
         # by identity so files staged during the upload await are preserved. The
         # fallback path restores the draft and keeps staged files available.
-        try_body = _source_between(COMMANDS_JS, "async function _trySteer(", "\nasync function cmdTitle")
+        try_body = _source_between(COMMANDS_JS, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         accepted_idx = try_body.find("if(result&&result.accepted)")
         failure_idx = try_body.find("// Do not fall back to interrupt")
         # Identity-based removal of the delivered snapshot on accepted steer.
@@ -335,7 +335,7 @@ class TestSendBusyBranchDispatch:
         assert "_trySteer captures the owner session/files before awaiting uploads" in branch
         assert "_trySteer clears staged files only after /api/chat/steer accepts" in branch
         assert "_clearComposerDraft(S.session.session_id,text" not in branch
-        try_body = _source_between(COMMANDS_JS, "async function _trySteer(", "\nasync function cmdTitle")
+        try_body = _source_between(COMMANDS_JS, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
         accepted_idx = try_body.find("if(result&&result.accepted)")
         failure_idx = try_body.find("// Do not fall back to interrupt")
         clear_idx = try_body.find("S.pendingFiles=_remaining", accepted_idx)
@@ -366,7 +366,7 @@ class TestSendBusyBranchDispatch:
         instead of re-uploading the same File objects; (2) accepted steer removes
         ONLY the delivered files by identity, preserving files staged during the
         upload/API await."""
-        try_body = _source_between(COMMANDS_JS, "async function _steerTextWithPendingFiles(", "\nasync function cmdTitle")
+        try_body = _source_between(COMMANDS_JS, "async function _steerTextWithPendingFiles(", "\nglobalThis.HermesCommands.parts.runControls")
         # (1) upload cache keyed by session + file signature, reused on retry,
         # invalidated on delivery.
         assert "_steerUploadCache" in try_body

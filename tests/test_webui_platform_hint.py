@@ -23,7 +23,7 @@ def _count_platform_kwargs(source: str, platform: str) -> int:
 
 def test_streaming_uses_webui_platform():
     """api/streaming.py must pass platform='webui' when constructing AIAgent."""
-    streaming_py = _load_source("api/streaming.py")
+    streaming_py = _load_source("api/streaming_parts/local_run.py")
     webui_count = _count_platform_kwargs(streaming_py, "webui")
     cli_count = _count_platform_kwargs(streaming_py, "cli")
     assert cli_count == 0, (

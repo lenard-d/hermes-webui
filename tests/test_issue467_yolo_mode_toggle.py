@@ -29,7 +29,7 @@ def _read_static_file(name: str) -> str:
 
 @pytest.fixture(scope="module")
 def commands_js():
-    return _read_static_file("commands.js")
+    return family_source("commands")
 
 
 @pytest.fixture(scope="module")

@@ -69,7 +69,7 @@ def test_deferred_model_resolution_refreshes_context_metadata():
 
 
 def test_boot_does_not_block_session_restore_on_model_catalog():
-    src = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
 
     assert "if(s.default_model){" in src
     assert "window._defaultModel=s.default_model;" in src
@@ -88,7 +88,7 @@ def test_boot_primes_model_catalog_without_awaiting_it():
     live catalog hydrates so the chip never shows a stale static default
     (see comment in static/boot.js next to the saved-session restore).
     """
-    src = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
 
     ensure_pos = src.index("window._ensureModelDropdownReady=_startModelDropdown;")
     prime_pos = src.index("Promise.resolve(_startBootModelDropdown()).catch(()=>{});", ensure_pos)
@@ -107,7 +107,7 @@ def test_boot_primes_model_catalog_without_awaiting_it():
 
 
 def test_failed_boot_model_catalog_prime_is_retryable():
-    src = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     start = src.index("const _hydrateModelDropdown=")
     end = src.index("const _startBootModelDropdown=()=>", start)
     block = src[start:end]
@@ -117,7 +117,7 @@ def test_failed_boot_model_catalog_prime_is_retryable():
 
 
 def test_boot_primes_visible_default_model_without_catalog_fetch():
-    src = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     default_block_start = src.index("if(s.default_model){")
     default_block = src[default_block_start:src.index("window._sessionJumpButtonsEnabled", default_block_start)]
 
@@ -141,7 +141,7 @@ def test_settings_exposes_default_model_provider_for_lazy_boot_catalog():
 
 
 def test_boot_renders_session_list_before_workspace_and_onboarding_settle():
-    src = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     workspace_start = src.index("const _workspaceListReady=loadWorkspaceList();")
     onboarding_start = src.index("const _onboardingReady=_bootSettings.onboarding_completed?Promise.resolve(false):loadOnboardingWizard();")
     render_pos = src.index("await renderSessionList();", onboarding_start)

@@ -269,8 +269,7 @@ class TestStructuredCodeSettingsWiring:
         assert 'id="settingsStructuredCodeAutoLines"' in content
 
     def test_boot_initializes_runtime_globals(self):
-        with open("static/boot.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("boot")
         assert "window._structuredCodeDefaultView" in content
         assert "window._structuredCodeAutoTreeLines" in content
 

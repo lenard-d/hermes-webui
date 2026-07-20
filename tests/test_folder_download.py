@@ -8,11 +8,12 @@ from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
+MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 UI_JS = ROOT / "static" / "ui.js"
 
 
 def test_folder_download_handler_defined():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     assert "def _handle_folder_download(handler, parsed):" in src
     assert "/api/folder/download?session_id=" in src  # in handler docstring
     assert 'Content-Type", "application/zip"' in src
@@ -26,7 +27,7 @@ def test_folder_download_dispatch_registered():
 
 
 def test_folder_download_uses_safe_resolve():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     handler_idx = src.index("def _handle_folder_download")
     end_idx = src.index("\n\ndef ", handler_idx + 1)
     body = src[handler_idx:end_idx]
@@ -35,7 +36,7 @@ def test_folder_download_uses_safe_resolve():
 
 
 def test_folder_download_skips_escaping_symlinks():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     collect_idx = src.index("def _folder_download_collect")
     end_idx = src.index("\n\ndef ", collect_idx + 1)
     body = src[collect_idx:end_idx]
@@ -45,14 +46,14 @@ def test_folder_download_skips_escaping_symlinks():
 
 
 def test_folder_download_respects_max_files_env():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     assert 'HERMES_WEBUI_FOLDER_ZIP_MAX_FILES' in src
     assert '"too many files"' in src
     assert 'status=413' in src
 
 
 def test_folder_download_respects_max_bytes_env():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     assert 'HERMES_WEBUI_FOLDER_ZIP_MAX_MB' in src
     assert '"folder too large"' in src
     assert 'limit_bytes' in src
@@ -60,7 +61,7 @@ def test_folder_download_respects_max_bytes_env():
 
 def test_folder_download_preflights_before_streaming():
     """Pre-flight collect must run BEFORE send_response so 413 can return JSON."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     handler_idx = src.index("def _handle_folder_download")
     end_idx = src.index("\n\n# ", handler_idx) if "\n\n# " in src[handler_idx:] else len(src)
     body = src[handler_idx:end_idx]
@@ -71,13 +72,13 @@ def test_folder_download_preflights_before_streaming():
 
 
 def test_folder_download_rejects_files():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     assert "path must be a directory" in src
     assert "/api/file/raw" in src  # error message guides user
 
 
 def test_folder_download_streams_not_buffers():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     assert "zipfile.ZipFile(handler.wfile" in src
     assert "allowZip64=True" in src
     handler_idx = src.index("def _handle_folder_download")

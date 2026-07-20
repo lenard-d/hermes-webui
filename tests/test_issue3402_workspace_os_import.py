@@ -11,7 +11,7 @@ def _src(name: str) -> str:
         return f.read()
 
 
-WORKSPACE_JS = _src("workspace.js")
+WORKSPACE_JS = family_source("workspace")
 UI_JS = family_source("ui")
 
 

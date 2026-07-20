@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 CSS = family_source("style")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
 

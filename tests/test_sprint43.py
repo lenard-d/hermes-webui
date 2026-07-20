@@ -19,12 +19,17 @@ import unittest
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 GATEWAY_WATCHER_PY = (REPO_ROOT / "api" / "gateway_watcher.py").read_text(encoding="utf-8")
-CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+    encoding="utf-8"
+)
 BOOTSTRAP_PY = (REPO_ROOT / "bootstrap.py").read_text(encoding="utf-8")
 SERVER_PY = (REPO_ROOT / "server.py").read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 AUTH_PY = (REPO_ROOT / "api" / "auth.py").read_text(encoding="utf-8")
 PROFILES_PY = (REPO_ROOT / "api" / "profiles.py").read_text(encoding="utf-8")
+PROFILES_RUNTIME_PY = (REPO_ROOT / "api" / "profiles_parts" / "runtime_scope.py").read_text(
+    encoding="utf-8"
+)
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 WORKSPACE_PY = (REPO_ROOT / "api" / "workspace.py").read_text(encoding="utf-8")
 STATE_SYNC_PY = (REPO_ROOT / "api" / "state_sync.py").read_text(encoding="utf-8")
@@ -114,7 +119,7 @@ class TestBareExceptLogging(unittest.TestCase):
 
     MODULES_REQUIRING_LOGGER = [
         ("api/auth.py", AUTH_PY),
-        ("api/config.py", CONFIG_PY),
+        ("api/config_parts/model_catalog.py", CONFIG_PY),
         ("api/gateway_watcher.py", GATEWAY_WATCHER_PY),
         ("api/profiles.py", PROFILES_PY),
         ("api/streaming.py", STREAMING_PY),
@@ -143,17 +148,17 @@ class TestBareExceptLogging(unittest.TestCase):
         )
 
     def test_profiles_reload_dotenv_logs_on_error(self):
-        """profiles.py _reload_dotenv except must log + reset _loaded_profile_env_keys."""
+        """The profile runtime owner must log and reset failed dotenv loads."""
         # Both the reset and the debug log should be present in the except block
         self.assertIn(
             "_loaded_profile_env_keys = set()",
-            PROFILES_PY,
-            "profiles.py: _reload_dotenv except must reset _loaded_profile_env_keys",
+            PROFILES_RUNTIME_PY,
+            "runtime_scope.py: _reload_dotenv except must reset loaded profile keys",
         )
         self.assertIn(
             "Failed to reload dotenv",
-            PROFILES_PY,
-            "profiles.py: _reload_dotenv except must log a warning",
+            PROFILES_RUNTIME_PY,
+            "runtime_scope.py: _reload_dotenv except must log a warning",
         )
 
 

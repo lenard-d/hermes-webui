@@ -34,7 +34,7 @@ class TestIssue1432NewChatGuardInFlight:
     """
 
     def test_btnNewChat_handler_checks_in_flight_state(self):
-        src = _read('boot.js')
+        src = family_source("boot")
         helper = _current_session_is_reusable_empty_chat_body(src)
 
         # The empty-session guard must check all three in-flight signals.
@@ -58,7 +58,7 @@ class TestIssue1432NewChatGuardInFlight:
             "btnNewChat handler must use the shared empty-session guard"
 
     def test_cmdK_handler_checks_in_flight_state(self):
-        src = _read('boot.js')
+        src = family_source("boot")
         helper = _current_session_is_reusable_empty_chat_body(src)
 
         assert 'message_count' in helper, \

@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Regression tests for PWA support (manifest + service worker).
 
 Covers:
@@ -17,7 +18,6 @@ ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "static" / "manifest.json"
 SW = ROOT / "static" / "sw.js"
 PWA_STARTUP = ROOT / "static" / "pwa-startup.js"
-BOOT = ROOT / "static" / "boot.js"
 INDEX = ROOT / "static" / "index.html"
 ROUTES = ROOT / "api" / "routes.py"
 AUTH = ROOT / "api" / "auth.py"
@@ -342,7 +342,7 @@ class TestIndexHtmlIntegration:
         assert "promptInstall" in src
 
     def test_pwa_new_chat_shortcut_is_handled_at_boot(self):
-        src = BOOT.read_text(encoding="utf-8")
+        src = family_source("boot")
         assert "pwaLaunchAction" in src
         assert "launchAction()" in src
         assert "pwaLaunchAction==='new-chat'" in src

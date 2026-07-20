@@ -25,7 +25,7 @@ CONFIG_PY = (
     REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 ).read_text(encoding="utf-8")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 SESSIONS_JS = family_source("sessions")
 STYLE_CSS = family_source("style")

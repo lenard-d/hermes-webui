@@ -11,7 +11,7 @@ from tests.frontend_asset_contract import family_source
 from api.model_catalog import FALLBACK_MODELS, PROVIDER_MODELS
 
 REPO = pathlib.Path(__file__).parent.parent
-STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING_PY = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
 CONFIG_PY    = (REPO / "api" / "config.py").read_text(encoding="utf-8")
 ROUTES_PY    = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 LIVE_MODELS_PY = (REPO / "api" / "routes_parts" / "live_models.py").read_text(encoding="utf-8")

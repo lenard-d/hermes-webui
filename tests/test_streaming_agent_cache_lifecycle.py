@@ -90,7 +90,11 @@ def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(mo
 
 
 def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
-    src = open("api/streaming.py", encoding="utf-8").read()
+    sources = [
+        open("api/streaming.py", encoding="utf-8").read(),
+        open("api/streaming_parts/local_run.py", encoding="utf-8").read(),
+        open("api/streaming_parts/live_controls.py", encoding="utf-8").read(),
+    ]
 
     expected_markers = [
         "_identity_mismatch_entry = SESSION_AGENT_CACHE.pop(session_id, None)",
@@ -100,19 +104,24 @@ def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
         "_evicted_entry = SESSION_AGENT_CACHE.pop(session_id, None)",
     ]
     for marker in expected_markers:
-        assert marker in src
+        assert any(marker in source for source in sources)
 
     close_markers = [
         "_close_cached_agent_entry_at_session_boundary(session_id, _identity_mismatch_entry)",
         "_close_cached_agent_entry_at_session_boundary(session_id, _stale_runtime_entry)",
         "_close_cached_agent_entry_at_session_boundary(old_sid, _skipped_agent_migration_entry)",
-        "_close_cached_agent_entry_at_session_boundary(sid, evicted_cached_entry)",
+        "close_cached_agent_entry(sid, evicted_cached_entry)",
         "_close_cached_agent_entry_at_session_boundary(session_id, _evicted_entry)",
     ]
-    lines = src.splitlines()
     for marker in close_markers:
+        source = next(source for source in sources if marker in source)
+        lines = source.splitlines()
         close_idx = next(i for i, line in enumerate(lines) if marker in line)
-        lock_idx = max(i for i, line in enumerate(lines[:close_idx]) if "with SESSION_AGENT_CACHE_LOCK:" in line)
+        lock_idx = max(
+            i
+            for i, line in enumerate(lines[:close_idx])
+            if "SESSION_AGENT_CACHE_LOCK:" in line
+        )
         lock_indent = len(lines[lock_idx]) - len(lines[lock_idx].lstrip())
         between = lines[lock_idx + 1:close_idx]
         assert any(

@@ -119,7 +119,7 @@ def test_static_literal_i18n_keys_exist_in_english_locale():
 
 def test_critical_boot_storage_access_is_guarded():
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    boot = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    boot = family_source("boot")
     i18n = family_source("i18n")
     theme_script = re.search(r"<script>\(function\(\)\{[\s\S]*?hermes-theme[\s\S]*?\}\)\(\)</script>", index)
     font_script = re.search(r"<script>\(function\(\)\{[\s\S]*?hermes-font-size[\s\S]*?\}\)\(\)</script>", index)
@@ -162,7 +162,7 @@ def test_service_worker_precaches_same_origin_vendor_shell_assets():
 
 
 def test_cancel_session_stream_closes_local_eventsource_on_failure_path():
-    boot = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    boot = family_source("boot")
     helper = boot[boot.index("async function cancelSessionStream"):boot.index("async function _savedSessionShouldStaySidebarOnly")]
 
     assert "closeLiveStream(sid,streamId" in helper or "closeLiveStream(sid, streamId" in helper

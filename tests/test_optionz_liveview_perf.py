@@ -225,7 +225,14 @@ def test_sse_write_timeout_drops_slow_subscriber():
 # ---------------------------------------------------------------------------
 
 def test_all_sse_endpoints_set_write_deadline():
-    src = (REPO_ROOT / "api" / "routes.py").read_text()
+    src = "\n".join(
+        path.read_text()
+        for path in (
+            REPO_ROOT / "api" / "routes.py",
+            REPO_ROOT / "api" / "routes_parts" / "stream_transport.py",
+            REPO_ROOT / "api" / "routes_parts" / "terminal.py",
+        )
+    )
     assert "_sse_set_write_deadline" in src
     # Every long-lived SSE handler must arm the deadline. Call sites: chat-stream,
     # terminal, gateway, approval, clarify, session-list, and the session-events
@@ -240,9 +247,9 @@ def test_session_events_stream_arms_write_deadline():
     like every other long-lived SSE endpoint — otherwise a slow/backgrounded tab
     can pin its handler thread for up to the 30s connection timeout instead of
     the tunable deadline."""
-    src = (REPO_ROOT / "api" / "routes.py").read_text()
+    src = (REPO_ROOT / "api" / "routes_parts" / "stream_transport.py").read_text()
     start = src.index("def _handle_session_events_stream(")
-    end = src.index("\ndef ", start)
+    end = src.index("\n\n__routes_exports__", start)
     body = src[start:end]
     assert "_sse_set_write_deadline(handler)" in body, (
         "_handle_session_events_stream must call _sse_set_write_deadline"
@@ -271,7 +278,7 @@ def test_sse_write_deadline_env_override(monkeypatch):
 
 
 def test_start_session_turn_emits_server_turn_started():
-    src = (REPO_ROOT / "api" / "routes.py").read_text()
+    src = (REPO_ROOT / "api" / "routes_parts" / "chat_runs.py").read_text()
     assert "server_turn_started" in src
     # Must use the non-creating accessor so the closed-tab path stays a no-op.
     assert "get_session_channel" in src
@@ -535,8 +542,10 @@ def test_emit_to_session_streams_skip_unknown_owner_documented_in_source():
     """Source-grep: the Copilot #3 resolution must be the skip-unknown-owner
     form (`if owner_sid != session_id: continue`), not the old
     broadcast-on-unknown fallback (`if owner_sid and owner_sid != ...`)."""
-    src = (REPO_ROOT / "api" / "background_process.py").read_text()
-    fn_ix = src.index("def _emit_to_session_streams")
+    src = (
+        REPO_ROOT / "api" / "background_process_parts" / "completion_events.py"
+    ).read_text()
+    fn_ix = src.index("def emit_to_session_streams")
     fn_src = src[fn_ix:fn_ix + 2600]
     assert "if owner_sid != session_id:" in fn_src
     assert "if owner_sid and owner_sid != session_id:" not in fn_src
@@ -775,4 +784,3 @@ def test_loadsession_idle_cleanup_does_not_clobber_concurrent_live_stream():
     assert reread_ix != -1 and branch_ix != -1 and reread_ix < branch_ix, (
         "race-guard re-read must precede the attach/idle branch"
     )
-

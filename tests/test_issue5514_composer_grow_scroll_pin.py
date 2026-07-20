@@ -40,7 +40,7 @@ import pytest
 ROOT = Path(__file__).parents[1]
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 # ---------------------------------------------------------------------------

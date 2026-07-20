@@ -26,6 +26,12 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
 ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+STREAM_TRANSPORT_SRC = (
+    REPO_ROOT / "api" / "routes_parts" / "stream_transport.py"
+).read_text(encoding="utf-8")
+LOCAL_RUN_SRC = (
+    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+).read_text(encoding="utf-8")
 # Approval SSE state and helpers live in route_approvals after the #1907
 # extraction; combine both files so structural assertions below still pass.
 _ROUTE_APPROVALS = REPO_ROOT / "api" / "route_approvals.py"
@@ -107,12 +113,13 @@ class TestSSEStaticAnalysis:
 
     def test_streaming_notify_callback_mirrors_pending_before_sse_push(self):
         """Gateway notify callback must repopulate polling state before relying on SSE."""
-        stream_start = ROUTES_SRC.find("def _handle_sse_stream(")
+        stream_start = STREAM_TRANSPORT_SRC.find("def _handle_sse_stream(")
         assert stream_start != -1, "_handle_sse_stream must exist"
-        streaming_src = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
-        cb_start = streaming_src.find("def _approval_notify_cb(approval_data):")
-        cb_end = streaming_src.find("_reg_notify(session_id, _approval_notify_cb)", cb_start)
-        cb_body = streaming_src[cb_start:cb_end]
+        cb_start = LOCAL_RUN_SRC.find("def _approval_notify_cb(approval_data):")
+        cb_end = LOCAL_RUN_SRC.find(
+            "_reg_notify(session_id, _approval_notify_cb)", cb_start
+        )
+        cb_body = LOCAL_RUN_SRC[cb_start:cb_end]
         assert "_submit_pending_for_polling(session_id, approval_data)" in cb_body, \
             "_approval_notify_cb must mirror approval data into polling state before SSE"
         assert "put('approval', approval_data)" in cb_body, \

@@ -5,7 +5,7 @@ import re
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 

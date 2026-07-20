@@ -8,7 +8,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 INDEX = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 CSS = family_source("style")
 
 

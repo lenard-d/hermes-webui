@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 I18N_JS = family_source("i18n")
 SESSIONS_JS = family_source("sessions")

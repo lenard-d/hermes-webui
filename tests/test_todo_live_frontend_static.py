@@ -113,7 +113,7 @@ def test_workspace_todos_refresh_gate_requires_enabled_visible_todos_tab(tmp_pat
     script = r'''
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
 const start = src.indexOf('function _workspaceTodosTabIsActive()');
 const end = src.indexOf("if(typeof document !== 'undefined')", start);
 if (start < 0 || end < 0) throw new Error('workspace todos gate block not found');
@@ -148,7 +148,7 @@ assert(run({panelHidden:true}) === 0, 'hidden workspace Todos panel must not ref
     script_path = tmp_path / "workspace_todos_gate_test.js"
     script_path.write_text(script, encoding="utf-8")
     result = subprocess.run(
-        ["node", str(script_path), str(REPO_ROOT / "static" / "workspace.js")],
+        ["node", str(script_path), json.dumps([str(path) for path in family_asset_paths("workspace")])],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

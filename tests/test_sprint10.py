@@ -120,7 +120,7 @@ def test_send_button_in_html(cleanup_test_sessions):
     assert 'id="btnCancel"' not in src        # deprecated composer cancel button removed
 
 def test_cancel_function_in_boot_js(cleanup_test_sessions):
-    src, _ = get_text("/static/boot.js")
+    src = family_source("boot")
     assert "async function cancelStream(" in src
     assert "api/chat/cancel" in src
 

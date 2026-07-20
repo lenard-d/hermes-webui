@@ -10,7 +10,12 @@ entries are appended when they do not duplicate an earlier route.
 """
 from pathlib import Path
 
-STREAMING_PY = Path(__file__).resolve().parent.parent / "api" / "streaming.py"
+STREAMING_PY = (
+    Path(__file__).resolve().parent.parent
+    / "api"
+    / "streaming_parts"
+    / "local_run.py"
+)
 
 
 def _extract_fallback_block():

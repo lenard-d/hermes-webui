@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 # Optional Office parsers — importorskip so a lean install (parsers absent)
 # skips this file cleanly rather than aborting collection suite-wide.
 pytest.importorskip("docx")
@@ -23,7 +25,7 @@ import api.routes as routes
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_JS = (ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 NODE = shutil.which("node")
 
 

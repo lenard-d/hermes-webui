@@ -10,8 +10,9 @@ fall through to a direct send() call, matching CLI behaviour:
 """
 import re
 import pathlib
+from tests.frontend_asset_contract import family_source
 
-COMMANDS_JS = (pathlib.Path(__file__).parent.parent / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -23,8 +23,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = ROOT / "api" / "routes.py"
 WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
+MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 
 
 FILE_HANDLERS = [
@@ -54,13 +54,13 @@ def _handler_body(sources: tuple[str, ...], name: str) -> str:
         m = re.search(r"\n(?:def |class |__routes_exports__)", src[start + 1 :])
         end = (start + 1 + m.start()) if m else len(src)
         return src[start:end]
-    raise AssertionError(f"{name} not found in route facade or workspace file part")
+    raise AssertionError(f"{name} not found in its file-manager route owner")
 
 
 def test_routes_file_handlers_use_fallback():
     sources = (
-        ROUTES_PY.read_text(encoding="utf-8"),
         WORKSPACE_FILES_PY.read_text(encoding="utf-8"),
+        MEDIA_FILES_PY.read_text(encoding="utf-8"),
     )
     assert any("get_session_for_file_ops" in src for src in sources), (
         "fallback helper must be imported"

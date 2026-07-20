@@ -16,13 +16,13 @@ The fix:
 These tests guard the handler shape against regression by static-analyzing
 `static/boot.js`. They follow the same pattern as `test_issue1095_pasted_images.py`.
 """
-import os
 import re
+
+from tests.frontend_asset_contract import family_source
 
 
 def _read_boot_js() -> str:
-    with open(os.path.join('static', 'boot.js')) as f:
-        return f.read()
+    return family_source("boot")
 
 
 def _paste_handler_body() -> str:

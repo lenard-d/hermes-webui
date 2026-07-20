@@ -4,7 +4,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BOOT_JS = ROOT / "static" / "boot.js"
 UI_JS = ROOT / "static" / "ui.js"
 
 
@@ -25,7 +24,7 @@ def _extract_function(src: str, signature: str) -> str:
 
 def test_apply_bot_name_does_not_overwrite_active_session_document_title():
     """Session titles belong to syncTopbar() while a chat session is active."""
-    src = BOOT_JS.read_text()
+    src = family_source("boot")
     body = _extract_function(src, "function applyBotName(){")
 
     assert "if(!S.session) document.title=name;" in body

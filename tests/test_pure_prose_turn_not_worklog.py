@@ -31,6 +31,9 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
+STREAM_ANCHOR_SCENE_JS = (
+    ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"
+).read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -62,7 +65,7 @@ def test_gates_call_worklog_worthy_predicate():
     # guarded by a worklog-worthiness predicate, not just `activity_rows.length`.
     # (Counting only the helper DEFINITION is the orphan-definition trap — assert
     # the CALL SITES too.)
-    attach_fn = _function_body(MESSAGES_JS, "_attachProjectedAnchorSceneToLastAssistant")
+    attach_fn = _function_body(STREAM_ANCHOR_SCENE_JS, "_attachProjectedSceneToLastAssistant")
     assert "_anchorSceneHasWorklogWorthyRows(scene)" in attach_fn, (
         "generation gate must require a worklog-worthy scene before attaching"
     )
@@ -75,7 +78,7 @@ def test_gates_call_worklog_worthy_predicate():
         "transparent render gate must reject an all-prose persisted scene"
     )
     # The predicate definitions exist on both sides.
-    assert "function _anchorSceneHasWorklogWorthyRows" in MESSAGES_JS
+    assert "function _anchorSceneHasWorklogWorthyRows" in STREAM_ANCHOR_SCENE_JS
     assert "function _anchorSceneSceneHasWorklogWorthyRows" in UI_JS
 
 

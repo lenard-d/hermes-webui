@@ -6,8 +6,9 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
-ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+ROUTES_PY = (
+    REPO / "api" / "routes_parts" / "session_models.py"
+).read_text(encoding="utf-8")
 
 
 def _install_fake_context_resolver(monkeypatch):
@@ -182,13 +183,16 @@ def test_global_context_length_remains_default_model_only(monkeypatch):
 
 
 def test_streaming_fallbacks_use_shared_provider_context_helper():
-    assert STREAMING_PY.count("_context_length_lookup_inputs_for_model(") >= 2
-    assert "_cfg_base_url = getattr(agent, 'base_url', '') or resolved_base_url or ''" in STREAMING_PY
-    assert "base_url=_cfg_base_url" in STREAMING_PY
-    assert "config_context_length=_cfg_ctx_len" in STREAMING_PY
-    assert "provider=_cfg_provider" in STREAMING_PY
-    assert "custom_providers=_cfg_custom_providers" in STREAMING_PY
-    assert "_cfg_base_url" in STREAMING_PY
+    local_run_py = (
+        REPO / "api" / "streaming_parts" / "local_run.py"
+    ).read_text(encoding="utf-8")
+    assert local_run_py.count("_context_length_lookup_inputs_for_model(") >= 2
+    assert "_cfg_base_url = getattr(agent, 'base_url', '') or resolved_base_url or ''" in local_run_py
+    assert "base_url=_cfg_base_url" in local_run_py
+    assert "config_context_length=_cfg_ctx_len" in local_run_py
+    assert "provider=_cfg_provider" in local_run_py
+    assert "custom_providers=_cfg_custom_providers" in local_run_py
+    assert "_cfg_base_url" in local_run_py
 
 
 def test_route_helper_keeps_all_context_length_sources_aligned():

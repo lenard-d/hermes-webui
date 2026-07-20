@@ -9,10 +9,16 @@ from types import SimpleNamespace
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+CHAT_RUNS_PY = (
+    REPO_ROOT / "api" / "routes_parts" / "chat_runs.py"
+).read_text(encoding="utf-8")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+LOCAL_RUN_PY = (
+    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+).read_text(encoding="utf-8")
 
 
 def test_goal_command_payload_matches_gateway_controls(monkeypatch):
@@ -455,9 +461,9 @@ def test_goal_endpoint_adapter_error_payload_still_controls_http_status(monkeypa
 def test_routes_register_goal_endpoint_and_kickoff_stream():
     assert 'if parsed.path == "/api/goal"' in ROUTES_PY
     assert "return _handle_goal_command(handler, body)" in ROUTES_PY
-    assert "goal_command_payload" in ROUTES_PY
-    assert "kickoff_prompt" in ROUTES_PY
-    assert "_start_chat_stream_for_session" in ROUTES_PY
+    assert "goal_command_payload" in CHAT_RUNS_PY
+    assert "kickoff_prompt" in CHAT_RUNS_PY
+    assert "_start_chat_stream_for_session" in CHAT_RUNS_PY
 
 
 def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_path):
@@ -537,26 +543,26 @@ def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_pat
 
 
 def test_streaming_post_turn_goal_hook_surfaces_and_continues():
-    assert "evaluate_goal_after_turn" in STREAMING_PY
-    assert "put('goal'" in STREAMING_PY
-    assert "decision.get('should_continue')" in STREAMING_PY
-    assert "continuation_prompt" in STREAMING_PY
-    assert "put('goal_continue'" in STREAMING_PY
-    goal_idx = STREAMING_PY.find("evaluate_goal_after_turn")
-    done_idx = STREAMING_PY.find("put('done'", goal_idx)
+    assert "evaluate_goal_after_turn" in LOCAL_RUN_PY
+    assert "put('goal'" in LOCAL_RUN_PY
+    assert "decision.get('should_continue')" in LOCAL_RUN_PY
+    assert "continuation_prompt" in LOCAL_RUN_PY
+    assert "put('goal_continue'" in LOCAL_RUN_PY
+    goal_idx = LOCAL_RUN_PY.find("evaluate_goal_after_turn")
+    done_idx = LOCAL_RUN_PY.find("put('done'", goal_idx)
     assert goal_idx != -1 and done_idx != -1
     assert goal_idx < done_idx, "goal status should be emitted before the terminal done payload"
 
 
 def test_streaming_goal_hook_emits_evaluating_state_before_judge():
-    evaluating_idx = STREAMING_PY.find("'state': 'evaluating'")
-    judge_idx = STREAMING_PY.find("_goal_decision = evaluate_goal_after_turn")
-    done_idx = STREAMING_PY.find("put('done'", judge_idx)
+    evaluating_idx = LOCAL_RUN_PY.find("'state': 'evaluating'")
+    judge_idx = LOCAL_RUN_PY.find("_goal_decision = evaluate_goal_after_turn")
+    done_idx = LOCAL_RUN_PY.find("put('done'", judge_idx)
     assert evaluating_idx != -1, "goal hook should emit an evaluating state before judge round-trip"
     assert judge_idx != -1 and done_idx != -1
     assert evaluating_idx < judge_idx < done_idx
-    assert "Evaluating goal progress…" in STREAMING_PY
-    assert "'state': 'continuing' if decision.get('should_continue') else 'idle'" in STREAMING_PY
+    assert "Evaluating goal progress…" in LOCAL_RUN_PY
+    assert "'state': 'continuing' if decision.get('should_continue') else 'idle'" in LOCAL_RUN_PY
 
 
 def test_frontend_has_goal_slash_command_and_status_event_handler():

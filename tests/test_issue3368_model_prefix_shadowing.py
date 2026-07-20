@@ -39,7 +39,6 @@ def _family_path_arg(family: str) -> str:
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
-COMMANDS_JS_PATH = REPO_ROOT / "static" / "commands.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -47,7 +46,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 @pytest.fixture(scope="module")
 def commands_src() -> str:
-    return COMMANDS_JS_PATH.read_text(encoding="utf-8")
+    return family_source("commands")
 
 
 # ── driver for _findModelInDropdown (ui.js) ─────────────────────────────────
@@ -84,7 +83,7 @@ process.stdout.write(JSON.stringify(got));
 
 _BEST_DRIVER = r"""
 const fs = require('fs');
-const cmds = fs.readFileSync(process.argv[2], 'utf8');
+const cmds = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(src, name){
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
   const start = src.search(re);
@@ -128,7 +127,7 @@ def best_driver(tmp_path_factory):
 
 _CATALOG_DRIVER = r"""
 const fs = require('fs');
-const cmds = fs.readFileSync(process.argv[2], 'utf8');
+const cmds = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 function extractFunc(src, name){
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
   const start = src.search(re);
@@ -172,7 +171,7 @@ def catalog_driver(tmp_path_factory):
 
 def _resolve(driver, query, groups, sel_options):
     r = subprocess.run(
-        [NODE, driver, str(COMMANDS_JS_PATH),
+        [NODE, driver, _family_path_arg("commands"),
          json.dumps({"query": query, "groups": groups, "selOptions": sel_options})],
         capture_output=True, text=True, timeout=30,
     )
@@ -194,7 +193,7 @@ def _find(driver, model_id, options, preferred=None):
 
 def _best(driver, query, options):
     r = subprocess.run(
-        [NODE, driver, str(COMMANDS_JS_PATH), json.dumps({"query": query, "options": options})],
+        [NODE, driver, _family_path_arg("commands"), json.dumps({"query": query, "options": options})],
         capture_output=True, text=True, timeout=30,
     )
     if r.returncode != 0:

@@ -283,7 +283,7 @@ def test_safe_tags_includes_span():
 
 # ── Stash ordering: fence must protect code spans from math extraction ─────────
 
-WORKSPACE_JS = (REPO / 'static' / 'workspace.js').read_text(encoding='utf-8')
+WORKSPACE_JS = family_source("workspace")
 
 
 def test_fence_stash_before_math_stash():

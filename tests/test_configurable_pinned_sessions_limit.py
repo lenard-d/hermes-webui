@@ -15,7 +15,7 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
 )
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 SESSIONS_JS = family_source("sessions")
 def post(path, body=None):
     data = json.dumps(body or {}).encode()

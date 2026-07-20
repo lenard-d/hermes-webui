@@ -26,11 +26,13 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMANDS_JS = ROOT / "static" / "commands.js"
+COMMANDS_JS = family_source("commands")
 NODE = shutil.which("node")
 
 
 def _read(path: str) -> str:
+    if path == "static/commands.js":
+        return family_source("commands")
     return Path(path).read_text(encoding="utf-8")
 
 
@@ -87,7 +89,7 @@ def _run_node(script: str) -> str:
 
 
 def _commands_harness(body: str) -> str:
-    source = COMMANDS_JS.read_text(encoding="utf-8")
+    source = COMMANDS_JS
     session_source = family_source("sessions")
     cmd_branch = _extract_async_function(source, "cmdBranch")
     fork_from = _extract_async_function(source, "forkFromMessage")
@@ -198,6 +200,7 @@ def test_branch_endpoint_consults_foreign_session_guard_on_missing_sidecar():
     provenance logic — not a stale inline copy.
     """
     src = _read('api/routes.py')
+    helper_src = _read('api/routes_parts/session_projection.py')
     branch_match = re.search(
         r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
         src, re.DOTALL
@@ -211,7 +214,7 @@ def test_branch_endpoint_consults_foreign_session_guard_on_missing_sidecar():
     # read-only cron-like sources to the branch builder without saving them.
     helper_match = re.search(
         r'def _load_branch_source_or_refuse\(.*?\)(.*?)(?=\ndef )',
-        src, re.DOTALL
+        helper_src, re.DOTALL
     )
     assert helper_match, "Could not find _load_branch_source_or_refuse helper"
     helper = helper_match.group(1)
@@ -241,10 +244,10 @@ def test_branch_helper_gates_persisted_read_only_sources_too():
     only allow a canonical-cron read-only source, mark it read-only-for-branch, and
     403 every other read-only source.
     """
-    src = _read('api/routes.py')
+    helper_src = _read('api/routes_parts/session_projection.py')
     helper_match = re.search(
         r'def _load_branch_source_or_refuse\(.*?\)(.*?)(?=\ndef )',
-        src, re.DOTALL
+        helper_src, re.DOTALL
     )
     assert helper_match, "Could not find _load_branch_source_or_refuse helper"
     helper = helper_match.group(1)

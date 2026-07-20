@@ -274,7 +274,9 @@ def test_get_available_models_has_prefer_cache_param():
 
 
 def test_start_session_turn_uses_cached_catalog():
-    src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
+        encoding="utf-8"
+    )
     # The wakeup entrypoint must resolve with the cache-only flag.
     i = src.find("def start_session_turn(")
     assert i != -1

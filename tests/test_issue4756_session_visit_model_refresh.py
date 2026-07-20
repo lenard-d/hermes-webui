@@ -693,7 +693,7 @@ def test_load_session_invalidates_picker_catalog_without_fetching_models():
 
 def test_session_visit_model_refresh_runs_when_picker_opens():
     ui = family_source("ui")
-    boot = _read_static("boot.js")
+    boot = family_source("boot")
     toggle_body = _extract_function_body(ui, "async function toggleModelDropdown(")
 
     assert "window._ensureModelDropdownReady({freshness:'session_visit'})" in toggle_body
@@ -711,7 +711,7 @@ def test_picker_freshness_is_queued_behind_incompatible_model_load():
 
         pytest.skip("node not available")
 
-    boot = _read_static("boot.js")
+    boot = family_source("boot")
     definitions_start = boot.index(
         "const _trackModelDropdownReady=(promise,freshness=null)=>"
     )
@@ -764,7 +764,7 @@ const _hydrateModelDropdown=(opts={{}})=>{{
 
 
 def test_boot_model_dropdown_clears_cached_ready_on_401():
-    body = _extract_function_body(_read_static("boot.js"), "const _redirectBootModelDropdownIfUnauth=(res)=>")
+    body = _extract_function_body(family_source("boot"), "const _redirectBootModelDropdownIfUnauth=(res)=>")
 
     status_idx = body.index("if(!res||res.status!==401) return false;")
     clear_idx = body.index("window._modelDropdownReady=null;")

@@ -55,10 +55,12 @@ def _with_config(cfg_dict: dict):
     """Replace ``config.cfg`` with *cfg_dict* and return a restore callable."""
     old_cfg = dict(config.cfg)
     old_mtime = config._cfg_mtime
+    old_path = config._cfg_path
     config.cfg.clear()
     config.cfg.update(cfg_dict)
+    config._cfg_path = config._get_config_path()
     try:
-        config._cfg_mtime = config.Path(config._get_config_path()).stat().st_mtime
+        config._cfg_mtime = config.Path(config._cfg_path).stat().st_mtime
     except Exception:
         config._cfg_mtime = 0.0
 
@@ -66,6 +68,7 @@ def _with_config(cfg_dict: dict):
         config.cfg.clear()
         config.cfg.update(old_cfg)
         config._cfg_mtime = old_mtime
+        config._cfg_path = old_path
         config.invalidate_models_cache()
 
     return restore

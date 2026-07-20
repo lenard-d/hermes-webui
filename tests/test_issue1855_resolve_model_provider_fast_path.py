@@ -253,7 +253,7 @@ class TestFastPathSourceShape:
 
     def test_fast_path_branch_present_in_source(self):
         """The fast-path early-return must be in _resolve_compatible_session_model_state."""
-        src = _read("api/routes.py")
+        src = _read("api/routes_parts/session_models.py")
         idx = src.find("def _resolve_compatible_session_model_state(")
         assert idx != -1
         # Limit search to the function body (~150 lines is enough for the
@@ -267,7 +267,7 @@ class TestFastPathSourceShape:
 
     def test_fast_path_runs_before_get_available_models_call(self):
         """The fast-path return must come BEFORE the catalog lookup."""
-        src = _read("api/routes.py")
+        src = _read("api/routes_parts/session_models.py")
         idx = src.find("def _resolve_compatible_session_model_state(")
         # Helper grew (profile_config, custom repair); 6k window no longer reaches
         # the slow-path catalog call — use a bounded slice through the next def.
@@ -285,7 +285,7 @@ class TestFastPathSourceShape:
 
     def test_issue_1855_referenced_in_fast_path_docstring(self):
         """The fast-path docstring must reference #1855 for future readers."""
-        src = _read("api/routes.py")
+        src = _read("api/routes_parts/session_models.py")
         idx = src.find("def _resolve_compatible_session_model_state(")
         body = src[idx:idx + 6000]
         # Stop at the next def to bound the search to this function's body.
@@ -329,7 +329,7 @@ class TestChatStartHandlerStillStagesResolveModelProvider:
     """
 
     def test_chat_start_emits_resolve_model_provider_stage(self):
-        src = _read("api/routes.py")
+        src = _read("api/routes_parts/chat_runs.py")
         # /api/chat/start handler — locate by the resolve_model_provider diag.stage call.
         assert 'diag.stage("resolve_model_provider")' in src, (
             "/api/chat/start handler must emit a 'resolve_model_provider' "

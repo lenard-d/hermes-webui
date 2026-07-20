@@ -13,6 +13,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ANCHORS_JS = REPO / "static" / "assistant_turn_anchors.js"
+ANCHOR_JS_PATHS = (
+    REPO / "static" / "assistant_turn_anchors_parts" / "model.js",
+    REPO / "static" / "assistant_turn_anchors_parts" / "activity_scene.js",
+    ANCHORS_JS,
+)
 INDEX_HTML = REPO / "static" / "index.html"
 MESSAGES_JS = REPO / "static" / "messages.js"
 UI_JS = REPO / "static" / "ui.js"
@@ -32,12 +37,17 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _anchor_source() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in ANCHOR_JS_PATHS)
+
+
 def _anchor_api_snapshot() -> dict:
     assert NODE, "node is required for assistant_turn_anchors.js helper tests"
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -88,14 +98,19 @@ console.log(JSON.stringify(out));
 
 def test_phase0_scaffold_is_loaded_before_current_rendering_modules():
     html = _read(INDEX_HTML)
+    model_pos = html.index('static/assistant_turn_anchors_parts/model.js?v=__WEBUI_VERSION__')
+    scene_pos = html.index('static/assistant_turn_anchors_parts/activity_scene.js?v=__WEBUI_VERSION__')
     anchor_pos = html.index('static/assistant_turn_anchors.js?v=__WEBUI_VERSION__')
     ui_pos = html.index('static/ui.js?v=__WEBUI_VERSION__')
     sessions_pos = html.index('static/sessions.js?v=__WEBUI_VERSION__')
     messages_pos = html.index('static/messages.js?v=__WEBUI_VERSION__')
 
-    assert anchor_pos < ui_pos < sessions_pos < messages_pos
+    assert model_pos < scene_pos < anchor_pos < ui_pos < sessions_pos < messages_pos
     ui_src = _read(UI_JS)
-    assert "'./static/assistant_turn_anchors.js' + VQ" in _read(SW_JS)
+    sw_src = _read(SW_JS)
+    assert "'./static/assistant_turn_anchors_parts/model.js' + VQ" in sw_src
+    assert "'./static/assistant_turn_anchors_parts/activity_scene.js' + VQ" in sw_src
+    assert "'./static/assistant_turn_anchors.js' + VQ" in sw_src
     assert "projectAssistantTurnAnchorSettledMessageFinalAnswer" in ui_src
     assert "createAssistantTurnAnchorRegistry" not in ui_src
     assert "applyAssistantTurnAnchorSourceEvent" not in ui_src
@@ -107,6 +122,38 @@ def test_phase0_scaffold_is_loaded_before_current_rendering_modules():
     assert "applyAssistantTurnAnchorSourceEvent" in messages_src
     assert "projectAssistantTurnAnchorActivityScene" in messages_src
 
+
+
+def test_anchor_facade_fails_closed_without_parts_and_cleans_assembly_state():
+    assert NODE, "node is required for assistant turn anchor module tests"
+    script = f"""
+const fs = require('fs');
+const vm = require('vm');
+const paths = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const facade = fs.readFileSync(paths[paths.length - 1], 'utf8');
+const missing = {{window:{{}}}};
+vm.createContext(missing);
+let missingError = '';
+try {{ vm.runInContext(facade, missing, {{filename:'assistant_turn_anchors.js'}}); }}
+catch (err) {{ missingError = String(err && err.message || err); }}
+const sandbox = {{window:{{}}}};
+vm.createContext(sandbox);
+for (const path of paths) {{
+  vm.runInContext(fs.readFileSync(path, 'utf8'), sandbox, {{filename:path}});
+}}
+console.log(JSON.stringify({{
+  missingError,
+  apiFrozen:Object.isFrozen(sandbox.window.HermesAssistantTurnAnchors),
+  partsPresent:Object.prototype.hasOwnProperty.call(sandbox.window, 'HermesAssistantTurnAnchorParts'),
+}}));
+"""
+    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "missingError": "assistant turn anchor parts must load before the facade",
+        "apiFrozen": True,
+        "partsPresent": False,
+    }
 
 def test_phase0_inventory_names_current_state_layers_in_authority_order():
     data = _anchor_api_snapshot()
@@ -178,7 +225,7 @@ def test_phase0_dedupe_prefers_event_envelope_not_visible_text_or_timestamps():
     assert data["emptySeqKey"] == ""
     assert data["emptyKey"] == ""
 
-    helper_src = _read(ANCHORS_JS).split("function assistantTurnAnchorEventDedupeKey", 1)[1]
+    helper_src = _anchor_source().split("function assistantTurnAnchorEventDedupeKey", 1)[1]
     helper_src = helper_src.split("function classifyAssistantTurnAnchorSourceEvent", 1)[0]
     assert "event_id" in helper_src
     assert "run_id" in helper_src

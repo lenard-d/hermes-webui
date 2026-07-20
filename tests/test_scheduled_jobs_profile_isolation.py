@@ -537,7 +537,12 @@ def test_streaming_profile_home_mutation_avoids_long_lived_cron_cache_patch():
     """
     from pathlib import Path
 
-    src = (Path(__file__).resolve().parent.parent / "api" / "streaming.py").read_text(encoding="utf-8")
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "api"
+        / "streaming_parts"
+        / "local_run.py"
+    ).read_text(encoding="utf-8")
     assert "_install_streaming_cronjob_profile_wrapper()" in src
     assert "_STREAMING_CRON_PROFILE_HOME.set(_profile_home)" in src
     assert "_STREAMING_CRON_PROFILE_HOME.reset(_streaming_cron_profile_home_token)" in src

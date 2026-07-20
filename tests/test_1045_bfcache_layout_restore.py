@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """
 Tests for issue #1045 — bfcache layout broken on tab restore.
 
@@ -17,7 +18,7 @@ ROOT = Path(__file__).parent.parent
 
 
 def _boot_js() -> str:
-    return (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    return family_source("boot")
 
 
 def _pageshow_handler(src: str) -> str:

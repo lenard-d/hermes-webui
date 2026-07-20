@@ -10,7 +10,9 @@ import textwrap
 REPO = pathlib.Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+MEDIA_FILES_PY = (REPO / "api" / "routes_parts" / "media_files.py").read_text(
+    encoding="utf-8"
+)
 
 
 def _extract_function(src: str, name: str) -> str:
@@ -97,8 +99,8 @@ def test_workspace_html_iframe_allows_links_to_escape_sandbox():
 
 
 def test_file_raw_inline_html_preview_injects_base_target_blank():
-    raw_handler = ROUTES_PY[ROUTES_PY.index("def _handle_file_raw") :]
+    raw_handler = MEDIA_FILES_PY[MEDIA_FILES_PY.index("def _handle_file_raw") :]
 
-    assert '<base target="_blank">' in ROUTES_PY
+    assert '<base target="_blank">' in MEDIA_FILES_PY
     assert "_serve_inline_html_preview" in raw_handler
     assert "html_inline_ok" in raw_handler

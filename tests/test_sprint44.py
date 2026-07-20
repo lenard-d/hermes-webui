@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """
 Sprint 44 Tests: Workspace panel close button (PR #413).
 
@@ -15,7 +16,7 @@ import unittest
 
 REPO = pathlib.Path(__file__).parent.parent
 HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 class TestSingleCloseButton(unittest.TestCase):

@@ -6,9 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import api.routes as routes
+from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parents[1]
-COMMANDS_JS = (REPO / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
 

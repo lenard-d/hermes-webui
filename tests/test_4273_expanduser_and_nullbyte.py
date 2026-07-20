@@ -40,7 +40,12 @@ def test_root_remains_unblocked_for_root_deployments():
     # Guard the deliberate #510/#521 decision: /root must stay registrable
     # (Hermes-as-root deployments). This pins that our null-byte work did not
     # accidentally re-block it.
-    src = (Path(__file__).resolve().parent.parent / "api" / "workspace.py").read_text(encoding="utf-8")
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "api"
+        / "workspace_parts"
+        / "path_safety.py"
+    ).read_text(encoding="utf-8")
     assert "'/root'" not in src and "PurePosixPath('/root')" not in src, (
         "/root must not be blocked — breaks Hermes-as-root deployments (#510/#521)"
     )

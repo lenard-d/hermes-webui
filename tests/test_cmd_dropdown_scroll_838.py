@@ -10,6 +10,8 @@ _SRC = os.path.join(os.path.dirname(__file__), "..")
 
 
 def _read(name):
+    if name == "static/commands.js":
+        return family_source("commands")
     return open(os.path.join(_SRC, name), encoding="utf-8").read()
 
 

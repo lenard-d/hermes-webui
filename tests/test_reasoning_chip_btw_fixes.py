@@ -27,7 +27,7 @@ import re
 REPO = pathlib.Path(__file__).resolve().parent.parent
 INDEX = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
-COMMANDS_JS = (REPO / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
 STYLE_CSS = family_source("style")
 

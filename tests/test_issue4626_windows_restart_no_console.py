@@ -20,20 +20,20 @@ from __future__ import annotations
 import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-UPDATES_PY = (REPO / "api" / "updates.py").read_text(encoding="utf-8")
+UPDATE_TRANSACTION_PY = (REPO / "api" / "update_transaction.py").read_text(encoding="utf-8")
 BOOTSTRAP_PY = (REPO / "bootstrap.py").read_text(encoding="utf-8")
 
 
 class TestWindowsRestartConsoleSuppression:
     def test_updates_restart_adds_create_no_window(self):
-        assert "CREATE_NO_WINDOW" in UPDATES_PY, (
+        assert "CREATE_NO_WINDOW" in UPDATE_TRANSACTION_PY, (
             "_schedule_restart must add CREATE_NO_WINDOW to the Windows restart "
             "Popen creationflags so python.exe does not flash an empty console (#4626)"
         )
 
     def test_updates_restart_prefers_pythonw(self):
         # python.exe -> pythonw.exe substitution (windowless subsystem).
-        assert "w.exe" in UPDATES_PY and "python.exe" in UPDATES_PY, (
+        assert "w.exe" in UPDATE_TRANSACTION_PY and "python.exe" in UPDATE_TRANSACTION_PY, (
             "_schedule_restart should prefer pythonw.exe over python.exe on Windows (#4626)"
         )
 
@@ -81,6 +81,6 @@ class TestWindowsRestartConsoleSuppression:
         assert 'sys.platform == "win32"' in BOOTSTRAP_PY or "sys.platform == 'win32'" in BOOTSTRAP_PY, (
             "bootstrap.py restart change must stay inside the win32 branch"
         )
-        assert "sys.platform == 'win32'" in UPDATES_PY or 'sys.platform == "win32"' in UPDATES_PY, (
-            "api/updates.py restart change must stay inside the win32 branch"
+        assert "sys.platform == 'win32'" in UPDATE_TRANSACTION_PY or 'sys.platform == "win32"' in UPDATE_TRANSACTION_PY, (
+            "api/update_transaction.py restart change must stay inside the win32 branch"
         )

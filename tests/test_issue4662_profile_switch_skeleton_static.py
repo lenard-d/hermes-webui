@@ -18,7 +18,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 PANELS = family_source("panels")
 SESSIONS = family_source("sessions")
-WORKSPACE = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE = family_source("workspace")
 CSS = family_source("style")
 
 
@@ -375,4 +375,3 @@ class TestSwitchRaceGuards:
             "loadDir must re-check the tree generation after BOTH awaited /api/list points "
             "(root render + expanded-dirs prefetch) and discard stale renders"
         )
-

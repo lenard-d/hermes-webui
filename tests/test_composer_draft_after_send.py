@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS = family_source("sessions")
 MESSAGES_JS = family_source("messages")
-COMMANDS_JS = ROOT.joinpath("static", "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 
 
 def _block(source: str, start_marker: str, end_marker: str) -> str:
@@ -57,7 +57,11 @@ def test_busy_send_paths_clear_persisted_composer_draft():
     assert "_clearComposerAfterQueuedSelectionSend(S.session&&S.session.session_id);" in busy_body
     assert busy_body.count("_clearComposerAfterQueuedSelectionSend(S.session&&S.session.session_id);") >= 2
     assert "_clearComposerDraft(S.session.session_id,text" not in busy_body
-    try_steer_body = _block(COMMANDS_JS, "async function _trySteer(", "\nasync function cmdTitle")
+    try_steer_body = _block(
+        COMMANDS_JS,
+        "async function _trySteer(",
+        "\nglobalThis.HermesCommands.parts.runControls",
+    )
     assert "_clearComposerDraft(ownerSid,_steerRestoreText(originalMsg,explicitSteer),pendingFilesSnapshot)" in try_steer_body, (
         "delivered steer must clear the captured owner draft with the submitted payload signature"
     )

@@ -479,7 +479,12 @@ def test_session_context_lookup_keeps_base_url_when_custom_helper_is_missing(mon
 # deep inside _run_agent_streaming, so we pin them at the source-structure level
 # (the live-snapshot path already had behavioral coverage; these guard the two
 # sibling paths from silently regressing back to the stale value).
-_STREAMING_SRC = (_Path(__file__).resolve().parent.parent / "api" / "streaming.py").read_text(encoding="utf-8")
+_STREAMING_SRC = (
+    _Path(__file__).resolve().parent.parent
+    / "api"
+    / "streaming_parts"
+    / "local_run.py"
+).read_text(encoding="utf-8")
 
 
 def test_persistence_fallback_also_runs_when_skip_cc_cl():

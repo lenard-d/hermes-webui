@@ -79,7 +79,7 @@ def test_legacy_activity_feed_setting_migrates_on_load_and_save(monkeypatch, tmp
 
 
 def test_boot_initializes_window_flag():
-    src = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     assert "worklog_details_expanded_default" in src, \
         "boot.js must initialize window._worklogDetailsExpandedByDefault from settings"
     assert "s.activity_feed_expanded_default" in src, \

@@ -22,7 +22,7 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
     encoding="utf-8"
 )
 PANELS_JS = family_source("panels")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
 STYLE_CSS = family_source("style")

@@ -17,6 +17,8 @@ REPO = pathlib.Path(__file__).parent.parent
 
 
 def read(rel):
+    if rel == "static/commands.js":
+        return family_source("commands")
     return (REPO / rel).read_text(encoding="utf-8")
 
 
@@ -25,7 +27,7 @@ def read(rel):
 class TestRootWorkspaceUnblocked:
 
     def test_root_not_in_blocked_system_roots(self):
-        src = read("api/workspace.py")
+        src = read("api/workspace_parts/path_safety.py")
         assert "Path('/root')" not in src, (
             "/root must not be in _BLOCKED_SYSTEM_ROOTS — "
             "breaks deployments where Hermes runs as root"
@@ -39,12 +41,12 @@ class TestRootWorkspaceUnblocked:
         literal and resolved-canonical Path forms.  Assert the source still
         names ``/etc`` and ``/proc`` as blocked roots.
         """
-        src = read("api/workspace.py")
+        src = read("api/workspace_parts/path_safety.py")
         assert "'/etc'" in src or 'Path("/etc")' in src or "Path('/etc')" in src
         assert "'/proc'" in src or 'Path("/proc")' in src or "Path('/proc')" in src
 
     def test_split_guard_present(self):
-        src = read("api/streaming.py")
+        src = read("api/streaming_parts/local_run.py")
         assert "'\\n\\n[Attached files:' in msg_text" in src, (
             "base_text split must guard against missing '[Attached files:' "
             "to avoid empty-string on plain messages"
@@ -56,20 +58,20 @@ class TestRootWorkspaceUnblocked:
 class TestCustomProvidersVisibility:
 
     def test_has_custom_providers_variable_present(self):
-        src = read("api/config.py")
+        src = read("api/config_parts/model_catalog.py")
         assert "_has_custom_providers" in src, (
             "_has_custom_providers variable must exist in get_available_models()"
         )
 
     def test_discard_custom_conditional_on_no_custom_providers(self):
-        src = read("api/config.py")
+        src = read("api/config_parts/model_catalog.py")
         assert "not _has_custom_providers" in src, (
             "detected_providers.discard('custom') must be gated on "
             "'not _has_custom_providers'"
         )
 
     def test_custom_providers_isinstance_check(self):
-        src = read("api/config.py")
+        src = read("api/config_parts/model_catalog.py")
         assert "isinstance(_custom_providers_cfg, list)" in src, (
             "_has_custom_providers must check isinstance(..., list)"
         )
@@ -128,25 +130,25 @@ class TestCronSkillCacheInvalidation:
 class TestSystemTheme:
 
     def test_apply_theme_helper_in_boot_js(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "function _applyTheme(" in src, (
             "_applyTheme helper function must be defined in boot.js"
         )
 
     def test_apply_theme_resolves_system(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "normalized.theme==='system'" in src or "=== 'system'" in src, (
             "_applyTheme must branch on 'system' to resolve via matchMedia"
         )
 
     def test_apply_theme_uses_matchmedia(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "prefers-color-scheme" in src, (
             "_applyTheme must use matchMedia('(prefers-color-scheme:dark)')"
         )
 
     def test_load_settings_calls_apply_theme(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "_applyTheme(appearance.theme)" in src, (
             "loadSettings must call _applyTheme() instead of direct data-theme assignment"
         )
@@ -203,7 +205,7 @@ class TestSystemTheme:
         )
 
     def test_system_theme_apply_path_uses_apply_theme(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "_applyTheme(appearance.theme)" in src, (
             "System theme still must be activated through _applyTheme() in boot/theme application"
         )
@@ -230,7 +232,7 @@ class TestSystemTheme:
         )
 
     def test_theme_listener_cleanup_uses_stable_handler(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "_systemThemeMq&&_onSystemThemeChange" in src, (
             "_applyTheme must track the active OS-theme listener so it can be removed cleanly"
         )
@@ -239,7 +241,7 @@ class TestSystemTheme:
         )
 
     def test_boot_reconcile_treats_light_dark_as_explicit_theme_choices(self):
-        src = read("static/boot.js")
+        src = family_source("boot")
         assert "['system','light','dark'].includes(lsTheme)" in src, (
             "boot appearance reconciliation must preserve explicit light/dark/system "
             "localStorage selections when a prior autosave failed"

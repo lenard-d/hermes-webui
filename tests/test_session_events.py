@@ -2,10 +2,21 @@ import queue
 from pathlib import Path
 
 
-ROUTES = Path("api/routes.py").read_text(encoding="utf-8")
+ROUTES = "\n".join(
+    Path(path).read_text(encoding="utf-8")
+    for path in (
+        "api/routes.py",
+        "api/routes_parts/session_projection.py",
+        "api/routes_parts/chat_runs.py",
+        "api/routes_parts/stream_transport.py",
+    )
+)
 CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")
 SESSION_EVENTS = Path("api/session_events.py").read_text(encoding="utf-8")
-PROFILES = Path("api/profiles.py").read_text(encoding="utf-8")
+PROFILES = "\n".join(
+    Path(path).read_text(encoding="utf-8")
+    for path in ("api/profiles.py", "api/profiles_parts/cron_scope.py")
+)
 TURN_ADMISSION = Path("api/turn_admission.py").read_text(encoding="utf-8")
 
 
@@ -58,7 +69,7 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
     assert 'session_id=getattr(' in ROUTES
     assert 'publish_session_list_changed("chat_start")' not in ROUTES
     assert '_publish_session_list_changed("cron_complete",' in CRON_ROUTES
-    assert 'publish_session_list_changed("cron_complete",' in PROFILES
+    assert 'publish_session_list_changed("cron_complete"' in PROFILES
 
 
 def test_session_event_queue_same_profile_is_bounded_and_latest_wins():

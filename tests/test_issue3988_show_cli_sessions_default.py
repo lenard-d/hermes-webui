@@ -143,7 +143,7 @@ def test_established_install_persists_grandfather_through_save(settings_file):
 #    (string-pins; guard against the #4006 !!-coerce default-mismatch class)
 
 def test_boot_hydration_defaults_true_when_setting_absent():
-    src = _read("static/boot.js")
+    src = family_source("boot")
     assert "window._showCliSessions=s.show_cli_sessions!==false" in src, (
         "boot.js must default _showCliSessions True when the saved value is absent"
     )
@@ -158,7 +158,7 @@ def test_boot_settings_load_failure_fallback_defaults_true():
     True, mirroring the config default — otherwise a transient settings-read
     error silently hides CLI sessions (the #4006 catch-block-fallback class the
     autoScrollFollow fix pinned)."""
-    src = _read("static/boot.js")
+    src = family_source("boot")
     assert "window._showCliSessions=false" not in src, (
         "the settings-load-failure fallback must not hardcode _showCliSessions "
         "false — it should mirror the True default"

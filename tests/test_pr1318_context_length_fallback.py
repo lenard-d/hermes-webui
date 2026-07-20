@@ -20,7 +20,12 @@ Tests:
 import re
 from pathlib import Path
 
-STREAMING = Path(__file__).resolve().parent.parent / "api" / "streaming.py"
+STREAMING = (
+    Path(__file__).resolve().parent.parent
+    / "api"
+    / "streaming_parts"
+    / "local_run.py"
+)
 
 
 def _persistence_block():

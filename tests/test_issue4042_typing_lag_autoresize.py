@@ -5,7 +5,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def test_composer_autoresize_is_single_flight_per_frame():

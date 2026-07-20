@@ -1,9 +1,9 @@
 """Regression tests for #5759 composer focus shortcut."""
 
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-BOOT_JS = (Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 CHORD = "(e.metaKey||e.ctrlKey)&&!e.altKey&&e.key==='/'"
 CTRL_K = "(e.metaKey||e.ctrlKey)&&e.key==='k'"
 

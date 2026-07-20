@@ -1098,7 +1098,9 @@ class TestCheckpointOrdering:
         _run_agent_streaming: checkpoint stop appears before
         _last_resort_sync_from_core."""
         import inspect
-        source = inspect.getsource(streaming._run_agent_streaming)
+        from api.streaming_parts import local_run
+
+        source = inspect.getsource(local_run.run_agent_streaming)
 
         # Find the finally block
         finally_idx = source.rfind("finally:")

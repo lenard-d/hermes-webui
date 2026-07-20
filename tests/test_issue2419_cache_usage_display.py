@@ -36,7 +36,7 @@ def test_session_compact_exposes_prompt_cache_counters():
 
 
 def test_streaming_usage_payload_includes_prompt_cache_counters():
-    src = (ROOT / "api" / "streaming.py").read_text()
+    src = (ROOT / "api" / "streaming_parts" / "local_run.py").read_text()
 
     assert "session_cache_read_tokens" in src
     assert "session_cache_write_tokens" in src

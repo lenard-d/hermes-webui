@@ -57,6 +57,9 @@ def test_no_sse_handler_uses_30s_or_higher_timeout():
     must reference the named constant, not a hard-coded number."""
     sources = [
         (REPO / "api" / "routes.py").read_text(encoding="utf-8"),
+        (REPO / "api" / "routes_parts" / "stream_transport.py").read_text(
+            encoding="utf-8"
+        ),
         (REPO / "api" / "routes_parts" / "terminal.py").read_text(encoding="utf-8"),
     ]
 
@@ -75,7 +78,9 @@ def test_no_sse_handler_uses_30s_or_higher_timeout():
 
 def test_each_named_sse_handler_uses_constant():
     """Each known SSE handler queue-poll site must reference the constant."""
-    route_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    route_src = (REPO / "api" / "routes_parts" / "stream_transport.py").read_text(
+        encoding="utf-8"
+    )
     terminal_src = (REPO / "api" / "routes_parts" / "terminal.py").read_text(
         encoding="utf-8"
     )

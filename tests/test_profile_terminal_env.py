@@ -48,7 +48,7 @@ def test_profile_runtime_env_includes_terminal_config_and_dotenv(tmp_path):
 
 
 def test_streaming_applies_profile_runtime_env_to_agent_run():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
     assert "get_profile_runtime_env" in src
     assert "_profile_runtime_env" in src
@@ -84,7 +84,7 @@ def test_filter_runtime_env_for_gateway_parity_blocks_shell_identity_vars():
 
 
 def test_profile_background_worker_uses_gateway_parity_runtime_env_filter():
-    src = Path("api/profiles.py").read_text(encoding="utf-8")
+    src = Path("api/profiles_parts/runtime_scope.py").read_text(encoding="utf-8")
 
     assert "filter_runtime_env_for_gateway_parity" in src
     assert "safe_runtime_env" in src
@@ -93,16 +93,17 @@ def test_profile_background_worker_uses_gateway_parity_runtime_env_filter():
 
 
 def test_streaming_thread_env_allows_profile_terminal_cwd_override():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    run_src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
-    assert "def _build_agent_thread_env" in src
-    assert "_thread_env = _build_agent_thread_env(" in src
-    assert "_set_thread_env(**_thread_env)" in src
-    assert "_set_thread_env(\n            **_profile_runtime_env,\n            TERMINAL_CWD" not in src
+    assert "def _build_agent_thread_env" in facade_src
+    assert "_thread_env = _build_agent_thread_env(" in run_src
+    assert "_set_thread_env(**_thread_env)" in run_src
+    assert "_set_thread_env(\n            **_profile_runtime_env,\n            TERMINAL_CWD" not in run_src
 
     match = re.search(
         r"(def _build_agent_thread_env\(.*?\n)(?=\ndef |\nclass )",
-        src,
+        facade_src,
         re.DOTALL,
     )
     assert match, "_build_agent_thread_env not found in api/streaming.py"

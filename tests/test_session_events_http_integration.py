@@ -188,7 +188,7 @@ def test_session_events_handler_uses_disconnect_safe_errors_tuple():
     """
     from pathlib import Path
 
-    routes = Path("api/routes.py").read_text(encoding="utf-8")
+    routes = Path("api/routes_parts/stream_transport.py").read_text(encoding="utf-8")
     handler_start = routes.find("def _handle_session_events_stream")
     assert handler_start >= 0, "_handle_session_events_stream not found"
     handler_end = routes.find("\ndef ", handler_start + 1)

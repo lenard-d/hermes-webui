@@ -30,7 +30,7 @@ from tests.frontend_asset_contract import family_source
 import pathlib
 
 REPO = pathlib.Path(__file__).parent.parent
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
 

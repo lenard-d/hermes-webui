@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Tests for #4761, configurable voice-mode silence timeout and continuous recognition.
 
 The voice-mode loop used to hardcode:
@@ -15,7 +16,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def _boot_src() -> str:
-    return (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    return family_source("boot")
 
 
 class TestVoiceModeSilenceMsConfig:

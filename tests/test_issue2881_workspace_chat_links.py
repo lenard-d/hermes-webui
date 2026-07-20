@@ -95,9 +95,10 @@ def test_workspace_link_click_delegate_opens_workspace_preview():
     assert 'a[href^="#workspace="]' in UI_JS
     assert "decodeURIComponent" in UI_JS
     assert "openArtifactPath(rel)" in UI_JS
-    assert "async function openArtifactPath(path)" in (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
-    assert "/api/list?session_id=" in (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
-    assert "file_open_failed" in (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    workspace = family_source("workspace")
+    assert "async function openArtifactPath(path)" in workspace
+    assert "/api/list?session_id=" in workspace
+    assert "file_open_failed" in workspace
 
 
 def test_streaming_markdown_rewrites_workspace_links_before_sanitizing():

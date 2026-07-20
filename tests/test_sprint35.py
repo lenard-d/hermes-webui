@@ -20,6 +20,8 @@ REPO = pathlib.Path(__file__).parent.parent
 
 
 def read(path):
+    if path == "static/workspace.js":
+        return family_source("workspace")
     return (REPO / path).read_text(encoding="utf-8")
 
 
@@ -27,7 +29,7 @@ def read(path):
 
 def test_panel_max_raised_to_1200():
     """PANEL_MAX must be 1200 (raised from 500) for wider right panel."""
-    src = read("static/boot.js")
+    src = family_source("boot")
     assert "PANEL_MAX=1200" in src or "PANEL_MAX = 1200" in src, (
         "PANEL_MAX was not raised to 1200 — right panel cannot be widened on ultrawide screens"
     )
@@ -35,7 +37,7 @@ def test_panel_max_raised_to_1200():
 
 def test_panel_max_is_not_500():
     """Old PANEL_MAX=500 must no longer be present."""
-    src = read("static/boot.js")
+    src = family_source("boot")
     assert "PANEL_MAX=500" not in src and "PANEL_MAX = 500" not in src, (
         "Old PANEL_MAX=500 still present — right panel width not updated"
     )
@@ -116,7 +118,7 @@ def test_breadcrumb_segments_use_correct_classes():
 
 def test_clear_preview_calls_render_breadcrumb():
     """clearPreview() in boot.js must call renderBreadcrumb() to restore dir view."""
-    src = read("static/boot.js")
+    src = family_source("boot")
     # Find clearPreview and check renderBreadcrumb is called nearby
     idx = src.find("function clearPreview")
     assert idx != -1, "clearPreview not found in boot.js"

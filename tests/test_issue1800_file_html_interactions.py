@@ -10,10 +10,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 UI_JS = family_source("ui")
 STYLE_CSS = family_source("style")
-ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+MEDIA_FILES_PY = (REPO / "api" / "routes_parts" / "media_files.py").read_text(
+    encoding="utf-8"
+)
 
 
 def _slice_after(source: str, needle: str, chars: int = 900) -> str:
@@ -85,7 +87,7 @@ def test_media_html_inline_keeps_csp_sandbox():
     # the CSP block to ~12100 chars past the def. (Originally widened 4000→5000
     # for PR #2044's MEDIA_ALLOWED_ROOTS parsing.) The assertion is structural,
     # not positional — generous headroom avoids re-breaking on small future edits.
-    body = _slice_after(ROUTES_PY, "def _handle_media", 16000)
+    body = _slice_after(MEDIA_FILES_PY, "def _handle_media", 16000)
     assert 'html_inline_ok = inline_preview and mime == "text/html"' in body
     assert 'csp = "sandbox allow-scripts" if html_inline_ok else None' in body
     assert "csp=csp" in body
@@ -94,7 +96,7 @@ def test_media_html_inline_keeps_csp_sandbox():
 
 def test_sandboxed_file_responses_do_not_send_x_frame_options():
     """X-Frame-Options: DENY would block the sandbox iframe preview."""
-    body = _function_body(ROUTES_PY, "_serve_file_bytes")
+    body = _function_body(MEDIA_FILES_PY, "_serve_file_bytes")
     csp_branch = body[body.find("if csp:") : body.find("else:", body.find("if csp:"))]
     assert "Content-Security-Policy" in csp_branch
     assert 'send_header("X-Frame-Options"' not in csp_branch

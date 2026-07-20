@@ -36,6 +36,21 @@ import threading
 import types
 
 
+def test_deferred_wakeup_owner_and_background_facade_share_interface():
+    from api import background_process as bp
+    from api.background_process_parts import deferred_wakeups as owner
+
+    assert bp.record_deferred_wakeup.__wrapped__ is owner.record_deferred_wakeup
+    assert bp.claim_deferred_wakeups.__wrapped__ is owner.claim_deferred_wakeups
+    assert (
+        bp.drain_deferred_wakeups_for_session.__wrapped__ is owner.drain_for_session
+    )
+    assert bp._session_has_active_turn.__wrapped__ is owner.session_has_active_turn
+    assert (
+        bp._start_server_side_wakeup_turn.__wrapped__ is owner.start_server_side_turn
+    )
+
+
 # --------------------------------------------------------------------------
 # Fakes / fixtures (mirrors test_process_complete_ab_coexistence +
 # test_session_channel_option_x patterns)

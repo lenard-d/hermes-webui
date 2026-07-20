@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SETTINGS_PY = (
     ROOT / "api" / "config_parts" / "settings_persistence.py"
 ).read_text(encoding="utf-8")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 
 SPEECH_DEFAULTS = {

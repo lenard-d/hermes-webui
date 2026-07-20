@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Tests for #1100 — Prism.js SRI integrity check no longer blocks theme CSS."""
 import re
 
@@ -59,8 +60,7 @@ def test_prism_js_still_has_integrity():
 
 def test_boot_js_set_resolved_theme_no_integrity():
     """_setResolvedTheme in boot.js must not re-apply integrity on theme switch."""
-    with open("static/boot.js") as f:
-        src = f.read()
+    src = family_source("boot")
     # _setResolvedTheme function must exist
     assert "_setResolvedTheme" in src, "_setResolvedTheme function must exist"
     # Must NOT assign link.integrity with a hash value

@@ -26,6 +26,8 @@ The v0.50.255 batch (#1390 + #1405) had four Opus advisor findings:
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -171,7 +173,7 @@ def test_voice_mode_speakresponse_guards_against_session_switch():
     new session's last assistant message instead of the one they sent to.
     Fix: capture session_id at thinking-time, bail in _speakResponse if it
     doesn't match the current S.session.session_id."""
-    src = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
 
     # Session-id capture state exists.
     assert "let _voiceModeThinkingSid=" in src, (

@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
 ICONS_JS = (REPO_ROOT / "static" / "icons.js").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
-WS_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+WS_JS = family_source("workspace")
 
 
 def _render_block() -> str:

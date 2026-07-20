@@ -5,10 +5,11 @@ from pathlib import Path
 
 
 STREAMING_PY = Path(__file__).parent.parent / "api" / "streaming.py"
+LOCAL_RUN_PY = Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py"
 
 
 def _emit_todo_state_calls() -> list[ast.Call]:
-    tree = ast.parse(STREAMING_PY.read_text(encoding="utf-8"))
+    tree = ast.parse(LOCAL_RUN_PY.read_text(encoding="utf-8"))
     calls: list[ast.Call] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "emit_todo_state":
@@ -37,7 +38,7 @@ def test_streaming_emits_todo_state_on_both_tool_callback_shapes():
 
 
 def test_streaming_prefers_full_tool_result_when_available():
-    src = STREAMING_PY.read_text(encoding="utf-8")
+    src = LOCAL_RUN_PY.read_text(encoding="utf-8")
 
     assert "cb_kwargs.get('result')" in src
     assert "else preview" in src

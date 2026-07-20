@@ -125,25 +125,25 @@ class TestFontSizeJsFunctions:
     """JS must expose _pickFontSize, _applyFontSize, and _syncFontSizePicker."""
 
     def test_pick_font_size_function_exists(self):
-        boot = _read("static/boot.js")
+        boot = family_source("boot")
         assert "function _pickFontSize(" in boot, (
             "boot.js must define _pickFontSize()"
         )
 
     def test_apply_font_size_function_exists(self):
-        boot = _read("static/boot.js")
+        boot = family_source("boot")
         assert "function _applyFontSize(" in boot, (
             "boot.js must define _applyFontSize()"
         )
 
     def test_sync_font_size_picker_function_exists(self):
-        boot = _read("static/boot.js")
+        boot = family_source("boot")
         assert "function _syncFontSizePicker(" in boot, (
             "boot.js must define _syncFontSizePicker()"
         )
 
     def test_pick_font_size_persists_to_localstorage(self):
-        boot = _read("static/boot.js")
+        boot = family_source("boot")
         idx = boot.find("function _pickFontSize(")
         block = boot[idx:idx+400]
         assert "localStorage.setItem('hermes-font-size'" in block, (
@@ -151,7 +151,7 @@ class TestFontSizeJsFunctions:
         )
 
     def test_apply_font_size_sets_data_attribute(self):
-        boot = _read("static/boot.js")
+        boot = family_source("boot")
         idx = boot.find("function _applyFontSize(")
         block = boot[idx:idx+300]
         assert "dataset.fontSize" in block, (

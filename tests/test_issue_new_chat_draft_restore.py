@@ -9,7 +9,7 @@ from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).parents[1]
 SESSIONS_JS = family_source("sessions")
-BOOT_JS = ROOT.joinpath("static", "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def _btn_new_chat_handler() -> str:

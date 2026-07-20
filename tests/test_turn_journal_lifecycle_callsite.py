@@ -3,7 +3,7 @@ from pathlib import Path
 
 def test_turn_execution_owns_worker_started_before_worker_body_runs():
     execution_src = Path("api/turn_execution.py").read_text(encoding="utf-8")
-    streaming_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    streaming_src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     gateway_src = Path("api/gateway_chat.py").read_text(encoding="utf-8")
 
     assert '"event": "worker_started"' in execution_src
@@ -12,7 +12,7 @@ def test_turn_execution_owns_worker_started_before_worker_body_runs():
 
 
 def test_streaming_appends_assistant_started_before_final_save():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     block_idx = src.index("if not ephemeral and s.messages:")
     assistant_idx = src.index('"event": "assistant_started"', block_idx)
     save_idx = src.index("s.save()", assistant_idx)
@@ -21,7 +21,7 @@ def test_streaming_appends_assistant_started_before_final_save():
 
 
 def test_streaming_assistant_started_uses_latest_assistant_message():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     block_idx = src.index("if not ephemeral and s.messages:")
     assistant_idx = src.index('"event": "assistant_started"', block_idx)
     block = src[block_idx:assistant_idx]
@@ -31,7 +31,7 @@ def test_streaming_assistant_started_uses_latest_assistant_message():
 
 
 def test_streaming_appends_completed_after_final_save():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     assistant_idx = src.index('"event": "assistant_started"')
     save_idx = src.index("s.save()", assistant_idx)
     completed_idx = src.index('"event": "completed"', save_idx)
@@ -40,7 +40,7 @@ def test_streaming_appends_completed_after_final_save():
 
 
 def test_streaming_appends_interrupted_on_provider_error_path():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     err_idx = src.index("err_str = str(e)")
     interrupted_idx = src.index('"event": "interrupted"', err_idx)
     apperror_idx = src.index("put('apperror'", interrupted_idx)

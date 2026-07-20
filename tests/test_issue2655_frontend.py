@@ -2,7 +2,7 @@ from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
-WORKSPACE_JS = Path("static/workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 SESSIONS_JS = family_source("sessions")
 MESSAGES_JS = family_source("messages")
 INDEX_HTML = Path("static/index.html").read_text(encoding="utf-8")

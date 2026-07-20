@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Regression coverage for BFCache restore of an in-flight session (#1466).
 
 A browser `pageshow` restore from BFCache does not re-run the boot IIFE. After
@@ -8,7 +9,7 @@ currently viewed session instead of only refreshing layout chrome/sidebar cache.
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def _pageshow_handler() -> str:

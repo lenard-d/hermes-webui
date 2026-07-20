@@ -10,7 +10,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 SESSIONS_JS = family_source("sessions")
 def _function_body(src: str, name: str, window: int = 1800) -> str:
     idx = src.find(f"function {name}(")

@@ -12,7 +12,7 @@ import re
 
 REPO = pathlib.Path(__file__).parent.parent
 CSS = family_source("style")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def _media_blocks(kind):

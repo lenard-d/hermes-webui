@@ -18,7 +18,7 @@ def _function_block(src: str, name: str) -> str:
 
 
 def test_tool_start_callback_emits_existing_tool_sse_event_with_tool_id():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     block = _function_block(src, "on_tool_start")
 
     assert "put('tool'" in block, (
@@ -38,7 +38,7 @@ def test_tool_start_callback_emits_existing_tool_sse_event_with_tool_id():
 
 
 def test_tool_complete_callback_emits_existing_tool_complete_sse_event_with_tool_id():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     block = _function_block(src, "on_tool_complete")
 
     assert "put('tool_complete'" in block, (
@@ -55,7 +55,7 @@ def test_tool_complete_callback_emits_existing_tool_complete_sse_event_with_tool
 
 
 def test_legacy_progress_events_are_suppressed_when_structured_callbacks_are_wired():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     block = _function_block(src, "on_tool")
 
     assert "event_type in (None, 'tool.started') and 'tool_start_callback' in _agent_params" in block

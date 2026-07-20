@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Regression tests for the <meta name="theme-color"> bridge.
 
 Covers:
@@ -21,7 +22,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX = ROOT / "static" / "index.html"
-BOOT = ROOT / "static" / "boot.js"
 STYLE = ROOT / "static" / "style.css"
 
 
@@ -63,7 +63,7 @@ class TestIndexHtmlMetaTags:
 
 class TestBootJsThemeColorSync:
     def test_sync_helper_defined(self):
-        src = BOOT.read_text(encoding="utf-8")
+        src = family_source("boot")
         assert "function _syncThemeColorMeta()" in src
 
     def test_sync_helper_reads_computed_sidebar_var(self):
@@ -72,7 +72,7 @@ class TestBootJsThemeColorSync:
         Mobile/PWA browser chrome should match the app titlebar/sidebar chrome,
         not the scrollable message background.
         """
-        src = BOOT.read_text(encoding="utf-8")
+        src = family_source("boot")
         assert "getComputedStyle(document.documentElement).getPropertyValue('--sidebar')" in src
 
     def test_sync_helper_updates_all_theme_color_tags(self):
@@ -81,7 +81,7 @@ class TestBootJsThemeColorSync:
         stale media variants remain light while the app is dark, the title bar goes beige.
         Civilization trembles, but mostly the window looks wrong.
         """
-        src = BOOT.read_text(encoding="utf-8")
+        src = family_source("boot")
         assert "getElementById('hermes-theme-color')" in src
         assert "querySelectorAll('meta[name=\"theme-color\"]')" in src
         assert "setAttribute('content',bg)" in src
@@ -95,7 +95,7 @@ class TestBootJsThemeColorSync:
         Both paths must update the meta tag — otherwise the Mac chrome would lag
         the page on those paths.
         """
-        src = BOOT.read_text(encoding="utf-8")
+        src = family_source("boot")
         # Path 1 — the early return must call the sync first.
         assert "if(!link){ _syncThemeColorMeta(); return; }" in src
         # Path 2 — the trailing call must follow the link-href update.
@@ -108,7 +108,7 @@ class TestBootJsThemeColorSync:
         """Switching skin (Default → Sienna → Sisyphus, etc.) recomputes --bg and
         must update the meta tag so the Mac chrome flips with the page.
         """
-        src = BOOT.read_text(encoding="utf-8")
+        src = family_source("boot")
         # The end of _applySkin must re-run resolved-theme application. That
         # path now accounts for extension skin light/dark schemes and still
         # calls _syncThemeColorMeta() through _setResolvedTheme().

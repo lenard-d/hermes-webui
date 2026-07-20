@@ -46,7 +46,7 @@ class TestCancelStreamCleanup:
 
     def _get_cancel_block(self):
         """Extract the cancelStream function body from boot.js."""
-        src = read("static/boot.js")
+        src = family_source("boot")
         # Signature-tolerant: cancelStream now takes a `reason` param (#5345), so
         # match the declaration regardless of its parameter list.
         m = re.search(r"async function cancelStream\s*\(", src)
@@ -124,7 +124,7 @@ class TestCancelStreamErrorPath:
         After fix: catch swallows the error; cleanup runs in the outer scope.
         The status is cleared by setStatus('') unconditionally.
         """
-        src = read("static/boot.js")
+        src = family_source("boot")
         # Signature-tolerant match (cancelStream now takes a `reason` param, #5345).
         m = re.search(r"async function cancelStream\s*\(", src)
         assert m is not None, "cancelStream not found in boot.js"

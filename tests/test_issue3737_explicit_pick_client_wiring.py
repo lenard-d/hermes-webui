@@ -23,7 +23,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 MESSAGES_JS = family_source("messages")
 
 

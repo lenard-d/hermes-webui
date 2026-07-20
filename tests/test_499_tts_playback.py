@@ -202,7 +202,7 @@ class TestTtsBoot:
     """TTS enabled state is applied on page load."""
 
     def test_apply_tts_on_boot(self):
-        src = _read('boot.js')
+        src = family_source("boot")
         assert '_applyTtsEnabled' in src, \
             "_applyTtsEnabled not called in boot.js"
 

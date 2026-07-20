@@ -17,7 +17,7 @@ from pathlib import Path
 from tests._pytest_port import BASE
 
 
-BOOT_JS = (Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 INDEX_HTML = (Path(__file__).parent.parent / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")

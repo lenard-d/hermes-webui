@@ -1,8 +1,8 @@
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-BOOT_JS = Path("static/boot.js").read_text(encoding="utf-8")
-WORKSPACE_JS = Path("static/workspace.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
+WORKSPACE_JS = family_source("workspace")
 
 
 def _function_block(src: str, name: str) -> str:

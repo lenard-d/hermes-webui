@@ -52,7 +52,7 @@ def test_import_cli_handler_queues_default_titles_after_persisting_import():
 
 def test_import_cli_queue_helper_is_guarded_and_runs_in_background():
     helper_idx = ROUTES_PY.index("def _queue_generated_title_for_imported_session")
-    next_helper_idx = ROUTES_PY.index("def _gateway_sse_probe_payload", helper_idx)
+    next_helper_idx = ROUTES_PY.index("def _on_session_list_changed", helper_idx)
     block = ROUTES_PY[helper_idx:next_helper_idx]
     assert "cli_meta.get(\"read_only\")" in block
     assert "not _looks_like_default_cli_title(cli_meta)" in block

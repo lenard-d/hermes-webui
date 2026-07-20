@@ -1,13 +1,14 @@
 """Tests for inline HTML preview in workspace panel (issue #779)."""
 import pytest
+from tests.frontend_asset_contract import family_source
 
 
 def _get_routes_content():
-    return open("api/routes.py", encoding="utf-8").read()
+    return open("api/routes_parts/media_files.py", encoding="utf-8").read()
 
 
 def _get_workspace_js():
-    return open("static/workspace.js", encoding="utf-8").read()
+    return family_source("workspace")
 
 
 def _get_index_html():

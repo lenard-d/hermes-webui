@@ -377,10 +377,19 @@ def test_providers_and_models_routes_wrap_in_profile_env():
     )
     assert 'with profile_env_for_active_request("/api/models/live"' in routes_src
     assert "profile_env_for_active_request_readonly" in routes_src
-    config_src = Path(config.__file__).resolve().read_text(encoding="utf-8")
-    assert "profile_env_for_active_request as _prof_env_request" in config_src
-    assert "profile_scope_for_detached_worker" in config_src
-    assert "_get_models_cache_path" in config_src
+    catalog_src = (
+        Path(config.__file__).resolve().parent
+        / "config_parts"
+        / "model_catalog.py"
+    ).read_text(encoding="utf-8")
+    assert "profile_env_for_active_request as _prof_env_request" in catalog_src
+    assert "profile_scope_for_detached_worker" in catalog_src
+    cache_src = (
+        Path(config.__file__).resolve().parent
+        / "config_parts"
+        / "models_cache.py"
+    ).read_text(encoding="utf-8")
+    assert "_get_models_cache_path" in cache_src
 
 
 def test_models_sync_rebuild_uses_legacy_mirrored_env(monkeypatch, tmp_path):
@@ -912,4 +921,3 @@ def test_expand_env_vars_does_not_leak_process_env_under_block_scope(monkeypatch
             config._thread_ctx.env = {}
         else:
             config._thread_ctx.env = prev_env
-

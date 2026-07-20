@@ -34,7 +34,9 @@ def _family_path_arg(family: str) -> str:
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
-CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+    encoding="utf-8"
+)
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

@@ -7,9 +7,9 @@ language-* class onto the parent <pre>, so previewing a .css file then a .txt
 file rendered the plain text with CSS grammar. These tests pin both the feature
 and the fix.
 """
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-WORKSPACE_JS = (Path(__file__).resolve().parent.parent / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 
 
 def _open_file_body() -> str:

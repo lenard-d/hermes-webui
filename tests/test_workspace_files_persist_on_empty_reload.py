@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """
 Regression test for #workspace-files: workspace file tree must stay
 visible across REPEATED blank-page reloads (not just the first one).
@@ -23,7 +24,7 @@ import pathlib
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def test_ephemeral_guard_does_not_remove_session_localstorage_key():

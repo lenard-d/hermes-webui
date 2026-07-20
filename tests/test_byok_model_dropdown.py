@@ -101,16 +101,14 @@ class TestActiveProviderNormalization:
         assert ap in ("gemini", ""), f"active_provider should be 'gemini', got {ap!r}"
 
     def test_normalization_code_present(self):
-        """Source-level check: config.py must call _PROVIDER_ALIASES for active_provider."""
-        src = read("api/config.py")
-        # Must alias-normalize active_provider before the group-builder runs
-        assert "_PROVIDER_ALIASES" in src, (
-            "api/config.py must import _PROVIDER_ALIASES to normalize active_provider"
+        """The catalog must resolve active_provider before building groups."""
+        src = read("api/config_parts/model_catalog.py")
+        assert "_resolve_configured_provider_id(" in src, (
+            "the catalog must normalize active_provider through the shared resolver"
         )
-        # The normalization must happen before the group builder loop
-        alias_pos = src.index("_PROVIDER_ALIASES")
+        resolver_pos = src.index("_resolve_configured_provider_id(")
         group_builder_pos = src.index("for pid in sorted(detected_providers)")
-        assert alias_pos < group_builder_pos, (
+        assert resolver_pos < group_builder_pos, (
             "active_provider normalization must occur before the group-builder loop"
         )
 
@@ -558,12 +556,12 @@ class TestKnownProvidersUnaffected:
     """Normalization must not break providers whose names are already canonical."""
 
     def test_openrouter_unaffected(self):
-        src = read("api/config.py")
+        src = read("api/config_parts/model_catalog.py")
         # _PROVIDER_ALIASES lookup: 'openrouter' -> 'openrouter' (no change)
         assert "openrouter" in src, "openrouter must still exist in config"
 
     def test_anthropic_unaffected(self):
-        src = read("api/config.py")
+        src = read("api/config_parts/model_catalog.py")
         assert "anthropic" in src
 
     def test_custom_unaffected(self):

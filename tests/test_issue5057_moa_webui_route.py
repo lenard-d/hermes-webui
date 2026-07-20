@@ -112,7 +112,12 @@ def test_no_subprocess_in_moa_code_paths():
 def test_moa_config_is_per_turn_not_persisted():
     """moa_config stays per-turn, but the server re-resolves it instead of
     trusting a client-echoed dict."""
-    streaming_path = Path(__file__).resolve().parent.parent / "api" / "streaming.py"
+    streaming_path = (
+        Path(__file__).resolve().parent.parent
+        / "api"
+        / "streaming_parts"
+        / "local_run.py"
+    )
     source = streaming_path.read_text(encoding="utf-8")
     # moa_config is threaded into the live agent turn as a per-turn kwarg. It is
     # added CONDITIONALLY (only when not None) so a normal send never trips a
@@ -122,7 +127,12 @@ def test_moa_config_is_per_turn_not_persisted():
         re.search(r"run_conversation\([\s\S]*?moa_config=moa_config", source)
         or re.search(r'if moa_config is not None:[\s\S]*?\["moa_config"\]\s*=\s*moa_config', source)
     ), "run_conversation must receive moa_config as a per-turn kwarg (directly or conditionally)"
-    routes_path = Path(__file__).resolve().parent.parent / "api" / "routes.py"
+    routes_path = (
+        Path(__file__).resolve().parent.parent
+        / "api"
+        / "routes_parts"
+        / "chat_runs.py"
+    )
     routes_source = routes_path.read_text(encoding="utf-8")
     assert re.search(r"if body\.get\(\"moa_config\"\):[\s\S]*?moa_config = resolve_moa_config\(\)", routes_source), \
         "chat-start must re-resolve MoA config server-side instead of trusting the browser payload"

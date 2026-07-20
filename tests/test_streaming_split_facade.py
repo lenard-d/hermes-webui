@@ -6,6 +6,7 @@ import sys
 from api import streaming
 from api.streaming_parts import gateway_routing_metadata
 from api.streaming_parts import live_controls
+from api.streaming_parts import local_run
 from api.streaming_parts import payloads
 from api.streaming_parts import runtime_resolution
 from api.streaming_parts.bindings import streaming_api
@@ -791,6 +792,63 @@ def test_live_controls_module_imports_without_streaming_facade():
             sys.executable,
             "-c",
             "import sys; import api.streaming_parts.live_controls; "
+            "assert 'api.streaming' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_local_run_facade_delegates_through_canonical_module(monkeypatch):
+    calls = []
+
+    def fake_run(api, *args, **kwargs):
+        calls.append((api, args, kwargs))
+        return "finished"
+
+    monkeypatch.setattr(local_run, "run_agent_streaming", fake_run)
+
+    assert streaming._run_agent_streaming(
+        "session-1",
+        "hello",
+        "model-1",
+        "/workspace",
+        "stream-1",
+        [{"path": "image.png"}],
+        ephemeral=True,
+        model_provider="provider-1",
+        goal_related=True,
+        moa_config={"enabled": True},
+    ) == "finished"
+    assert calls == [(
+        streaming,
+        (
+            "session-1",
+            "hello",
+            "model-1",
+            "/workspace",
+            "stream-1",
+            [{"path": "image.png"}],
+        ),
+        {
+            "ephemeral": True,
+            "model_provider": "provider-1",
+            "goal_related": True,
+            "moa_config": {"enabled": True},
+        },
+    )]
+    assert streaming._run_agent_streaming.__module__ == "api.streaming"
+
+
+def test_local_run_module_imports_without_streaming_facade():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import api.streaming_parts.local_run; "
             "assert 'api.streaming' not in sys.modules",
         ],
         check=False,

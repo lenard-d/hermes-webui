@@ -19,7 +19,7 @@ PANELS_JS = family_source("panels")
 UI_JS = family_source("ui")
 PANELS_PATH = ROOT / "static" / "panels.js"
 UI_PATH = ROOT / "static" / "ui.js"
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")

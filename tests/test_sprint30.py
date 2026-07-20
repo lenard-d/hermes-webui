@@ -339,17 +339,17 @@ class TestClarifyMessagesJS:
 class TestApprovalKeyboardShortcut:
 
     def test_enter_shortcut_present_in_boot_js(self):
-        src = read(REPO / "static/boot.js")
+        src = family_source("boot")
         assert "respondApproval('once')" in src or 'respondApproval("once")' in src, \
             "Enter shortcut calling respondApproval('once') missing from boot.js"
 
     def test_enter_shortcut_checks_card_visible(self):
-        src = read(REPO / "static/boot.js")
+        src = family_source("boot")
         assert "approvalCard" in src and "visible" in src, \
             "Enter shortcut should check if approval card is visible"
 
     def test_enter_shortcut_guards_input_elements(self):
-        src = read(REPO / "static/boot.js")
+        src = family_source("boot")
         assert "TEXTAREA" in src and "INPUT" in src, \
             "Enter shortcut should not fire when focus is on TEXTAREA or INPUT"
 
@@ -359,32 +359,32 @@ class TestApprovalKeyboardShortcut:
 class TestStreamingApprovalScoping:
 
     def test_unreg_notify_initialised_to_none(self):
-        src = read(REPO / "api/streaming.py")
+        src = read(REPO / "api/streaming_parts/local_run.py")
         assert "_unreg_notify = None" in src, \
             "_unreg_notify must be initialised to None before the try block"
 
     def test_finally_checks_unreg_notify_not_none(self):
-        src = read(REPO / "api/streaming.py")
+        src = read(REPO / "api/streaming_parts/local_run.py")
         assert "_unreg_notify is not None" in src, \
             "finally block must check '_unreg_notify is not None' before calling it"
 
     def test_approval_registered_flag_present(self):
-        src = read(REPO / "api/streaming.py")
+        src = read(REPO / "api/streaming_parts/local_run.py")
         assert "_approval_registered = False" in src, \
             "_approval_registered flag must be initialised to False"
 
     def test_clarify_registered_flag_present(self):
-        src = read(REPO / "api/streaming.py")
+        src = read(REPO / "api/streaming_parts/local_run.py")
         assert "_clarify_registered = False" in src, \
             "_clarify_registered flag must be initialised to False"
 
     def test_clarify_unreg_notify_initialised_to_none(self):
-        src = read(REPO / "api/streaming.py")
+        src = read(REPO / "api/streaming_parts/local_run.py")
         assert "_unreg_clarify_notify = None" in src, \
             "_unreg_clarify_notify must be initialised to None before the try block"
 
     def test_finally_checks_clarify_unreg_notify_not_none(self):
-        src = read(REPO / "api/streaming.py")
+        src = read(REPO / "api/streaming_parts/local_run.py")
         assert "_unreg_clarify_notify is not None" in src, \
             "finally block must check '_unreg_clarify_notify is not None' before calling it"
 

@@ -5,6 +5,8 @@ import re
 
 
 def _src(name: str) -> str:
+    if name == "workspace.js":
+        return family_source("workspace")
     with open(f"static/{name}") as f:
         return f.read()
 

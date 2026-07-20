@@ -10,7 +10,7 @@ import pathlib
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 UI_JS = family_source("ui")
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")

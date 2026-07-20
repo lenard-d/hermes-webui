@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -11,7 +13,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BOOT_JS = ROOT / "static" / "boot.js"
+BOOT_JS = family_source("boot")
 NODE = shutil.which("node")
 
 node_test = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -82,8 +84,8 @@ def _run_node(script: str) -> dict:
 
 
 def _helper_driver(panel_mode: str, default_workspace: str | None, *, reject: bool = False) -> dict:
-    helper_dep = _extract_async_function(BOOT_JS.read_text(encoding="utf-8"), "_prefillHasDraftText")
-    helper = _extract_async_function(BOOT_JS.read_text(encoding="utf-8"), "_maybeBindFreshDefaultWorkspaceSession")
+    helper_dep = _extract_async_function(BOOT_JS, "_prefillHasDraftText")
+    helper = _extract_async_function(BOOT_JS, "_maybeBindFreshDefaultWorkspaceSession")
     default_workspace_repr = json.dumps(default_workspace)
     script = textwrap.dedent(
         f"""
@@ -147,7 +149,7 @@ def test_blank_boot_bind_failure_falls_back_cleanly():
 
 
 def test_no_saved_session_branch_restores_panel_pref_before_bind_attempt():
-    src = BOOT_JS.read_text(encoding="utf-8")
+    src = BOOT_JS
     marker = "// no saved session - show empty state, wait for user to hit +"
     marker_idx = src.find(marker)
     assert marker_idx >= 0, "no-saved-session path not found"
@@ -165,7 +167,7 @@ def test_no_saved_session_branch_restores_panel_pref_before_bind_attempt():
 
 
 def test_ephemeral_blank_session_branch_restores_panel_pref_before_bind_attempt():
-    src = BOOT_JS.read_text(encoding="utf-8")
+    src = BOOT_JS
     marker = "if(S.session && (S.session.message_count||0) === 0 && !_restoredInFlight && !_restoredHasDraft){"
     marker_idx = src.find(marker)
     assert marker_idx >= 0, "ephemeral blank-session path not found"

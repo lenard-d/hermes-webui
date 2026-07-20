@@ -26,6 +26,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
+SESSION_PROJECTION_PY = ROOT / "api" / "routes_parts" / "session_projection.py"
 SESSIONS_JS = ROOT / "static" / "sessions.js"
 
 
@@ -142,14 +143,15 @@ def isolated_state_db(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_subagent_child_helpers_defined_in_routes():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+def test_subagent_child_helpers_defined_in_session_projection():
+    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
     assert "def _is_subagent_child_session_id(" in src, (
-        "routes.py must define _is_subagent_child_session_id to distinguish "
+        "session_projection.py must define _is_subagent_child_session_id to distinguish "
         "delegated subagent children from deleted WebUI sessions (#5307)"
     )
     assert "def _state_db_session_source(" in src, (
-        "routes.py must define _state_db_session_source (cheap state.db source lookup)"
+        "session_projection.py must define _state_db_session_source "
+        "(cheap state.db source lookup)"
     )
 
 
@@ -157,7 +159,7 @@ def test_was_webui_gate_excludes_subagent_children():
     """The was_webui 404 gate must be guarded by
     ``not _is_subagent_child_session_id(sid)`` so subagent children fall
     through to state.db transcript recovery instead of 404ing."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
     start = src.index("def _claim_or_synthesize_cli_session(")
     m = re.search(r"\n(?:def |class )", src[start + 1:])
     block = src[start:(start + 1 + m.start()) if m else len(src)]

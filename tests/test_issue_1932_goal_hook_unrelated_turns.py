@@ -39,7 +39,12 @@ def test_streaming_source_code_gates_on_stream_goal_related():
     """The streaming code must check STREAM_GOAL_RELATED[stream_id] before
     calling evaluate_goal_after_turn, so unrelated turns skip the hook."""
     from pathlib import Path
-    streaming_py = (Path(__file__).resolve().parents[1] / "api" / "streaming.py").read_text()
+    streaming_py = (
+        Path(__file__).resolve().parents[1]
+        / "api"
+        / "streaming_parts"
+        / "local_run.py"
+    ).read_text()
 
     # Must import STREAM_GOAL_RELATED
     assert "STREAM_GOAL_RELATED" in streaming_py, (
@@ -63,7 +68,12 @@ def test_streaming_sets_pending_goal_continuation_on_goal_continue():
     """When goal_continue is emitted, streaming.py must set
     PENDING_GOAL_CONTINUATION so the next /chat/start marks the stream."""
     from pathlib import Path
-    streaming_py = (Path(__file__).resolve().parents[1] / "api" / "streaming.py").read_text()
+    streaming_py = (
+        Path(__file__).resolve().parents[1]
+        / "api"
+        / "streaming_parts"
+        / "local_run.py"
+    ).read_text()
 
     assert "PENDING_GOAL_CONTINUATION" in streaming_py, (
         "streaming.py must reference PENDING_GOAL_CONTINUATION"

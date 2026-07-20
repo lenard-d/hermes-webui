@@ -50,7 +50,7 @@ class TestBootJsProfileDefaultWorkspace:
     """boot.js must read default_workspace from /api/settings into S._profileDefaultWorkspace."""
 
     def test_boot_reads_default_workspace_from_settings(self):
-        src = read('static/boot.js')
+        src = family_source("boot")
         assert '_profileDefaultWorkspace' in src, (
             "boot.js must set S._profileDefaultWorkspace from the /api/settings "
             "default_workspace field so it is available before any session is created"
@@ -59,7 +59,7 @@ class TestBootJsProfileDefaultWorkspace:
     def test_boot_sets_profile_default_workspace_in_settings_block(self):
         """The settings block (lines ~758-800 in boot.js) must set
         S._profileDefaultWorkspace from the /api/settings response."""
-        src = read('static/boot.js')
+        src = family_source("boot")
         # Find the settings fetch and the _profileDefaultWorkspace ASSIGNMENT
         # (the if(s.default_workspace) line, not usages elsewhere in the file)
         settings_idx = src.find("await api('/api/settings')")
@@ -74,7 +74,7 @@ class TestBootJsProfileDefaultWorkspace:
 
     def test_boot_sets_profile_default_workspace_from_profile_active(self):
         """Profile active bootstrap must override settings with p.default_workspace (#5169)."""
-        src = read('static/boot.js')
+        src = family_source("boot")
         active_idx = src.find("api('/api/profile/active'")
         assert active_idx != -1, "/api/profile/active fetch not found in boot.js"
         block = src[active_idx:active_idx + 1200]
@@ -244,7 +244,7 @@ class TestNewChatOnWorkspaceSwitchOptIn:
         )
 
     def test_boot_and_panels_wire_the_flag(self):
-        boot = read('static/boot.js')
+        boot = family_source("boot")
         panels = family_source("panels")
         assert 'window._newChatOnWorkspaceSwitch=!!s.new_chat_on_workspace_switch' in boot, (
             "boot.js must set window._newChatOnWorkspaceSwitch from the loaded settings"

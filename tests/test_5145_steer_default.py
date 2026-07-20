@@ -9,7 +9,7 @@ ROOT = Path(__file__).parent.parent
 CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")

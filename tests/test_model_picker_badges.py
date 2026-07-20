@@ -4,28 +4,41 @@ from tests.frontend_asset_contract import family_source
 from api import config
 
 
-def _models_with_cfg(model_cfg=None, fallback_providers=None, custom_providers=None, active_provider=None):
-    old_cfg = config.cfg
+def _models_with_cfg(
+    model_cfg=None, fallback_providers=None, custom_providers=None, active_provider=None
+):
+    old_cfg = dict(config.cfg)
     old_mtime = config._cfg_mtime
+    old_path = config._cfg_path
     old_cache = config._available_models_cache
     old_cache_ts = config._available_models_cache_ts
     try:
         config._available_models_cache = None
         config._available_models_cache_ts = 0.0
-        config._cfg_mtime = 0.0
-        config.cfg = {
-            "model": model_cfg or {"provider": "openai-codex", "default": "gpt-5.4"},
-            "fallback_providers": fallback_providers or [],
-            "providers": {},
-        }
+        config.cfg.clear()
+        config.cfg.update(
+            {
+                "model": model_cfg
+                or {"provider": "openai-codex", "default": "gpt-5.4"},
+                "fallback_providers": fallback_providers or [],
+                "providers": {},
+            }
+        )
         if custom_providers is not None:
             config.cfg["custom_providers"] = custom_providers
         if active_provider:
             config.cfg["model"]["provider"] = active_provider
+        config._cfg_path = config._get_config_path()
+        try:
+            config._cfg_mtime = Path(config._cfg_path).stat().st_mtime
+        except OSError:
+            config._cfg_mtime = 0.0
         return config.get_available_models()
     finally:
-        config.cfg = old_cfg
+        config.cfg.clear()
+        config.cfg.update(old_cfg)
         config._cfg_mtime = old_mtime
+        config._cfg_path = old_path
         config._available_models_cache = old_cache
         config._available_models_cache_ts = old_cache_ts
 
@@ -53,35 +66,23 @@ def test_available_models_exposes_primary_and_fallback_badges():
 
 
 def test_duplicate_slash_id_primary_badge_sticks_to_matching_provider_only():
-    import textwrap
-
-    root = Path(__file__).resolve().parent.parent
-    src = (root / "api" / "config.py").read_text(encoding="utf-8")
-    start = src.index("def _build_configured_model_badges() -> dict[str, dict[str, str]]:")
-    end = src.index("            return badges", start) + len("            return badges")
-    fn_src = textwrap.dedent(src[start:end])
-
-    scope = {
-        "active_provider": "custom:beta",
-        "default_model": "google/gemma-4-27b",
-        "cfg": {"fallback_providers": []},
-        "groups": [
-            {"provider": "Alpha", "provider_id": "custom:alpha", "models": [{"id": "google/gemma-4-27b"}]},
-            {"provider": "Beta", "provider_id": "custom:beta", "models": [{"id": "@custom:beta:google/gemma-4-27b"}]},
+    badges = config._configured_model_badges_from_static_catalog(
+        [
+            {
+                "provider": "Alpha",
+                "provider_id": "custom:alpha",
+                "models": [{"id": "google/gemma-4-27b"}],
+            },
+            {
+                "provider": "Beta",
+                "provider_id": "custom:beta",
+                "models": [{"id": "@custom:beta:google/gemma-4-27b"}],
+            },
         ],
-        "_resolve_provider_alias": lambda provider: provider,
-    }
-    exec(
-        "def _norm_model_id(model_id):\n"
-        "    s=str(model_id or '').strip().lower()\n"
-        "    if s.startswith('@') and ':' in s: s=s.split(':',1)[1]\n"
-        "    if '/' in s: s=s.split('/',1)[1]\n"
-        "    return s.replace('-', '.')\n",
-        scope,
+        active_provider="custom:beta",
+        default_model="google/gemma-4-27b",
     )
-    exec(fn_src, scope)
 
-    badges = scope["_build_configured_model_badges"]()
     assert badges.get("@custom:beta:google/gemma-4-27b", {}).get("role") == "primary"
     assert "google/gemma-4-27b" not in badges, (
         "When duplicate slash-qualified IDs are deduplicated across providers, "
@@ -90,17 +91,18 @@ def test_duplicate_slash_id_primary_badge_sticks_to_matching_provider_only():
 
 
 def test_ui_badge_lookup_prefers_row_provider_for_duplicate_model_ids():
-    root = Path(__file__).resolve().parent.parent
     js = family_source("ui")
 
     assert "function _getConfiguredModelBadge(modelId,badgeMap,providerId){" in js
     assert "child.dataset&&child.dataset.provider?child.dataset.provider:''" in js
-    assert "const providerMatch=matches.find(badge=>String(badge&&badge.provider||'').toLowerCase()===provider);" in js
+    assert (
+        "const providerMatch=matches.find(badge=>String(badge&&badge.provider||'').toLowerCase()===provider);"
+        in js
+    )
 
 
 def test_configured_model_group_label_has_i18n_key():
     """The Configured model group must not render the raw i18n key."""
-    root = Path(__file__).resolve().parent.parent
     i18n = family_source("i18n")
 
     locale_count = i18n.count("_lang:")
@@ -111,10 +113,13 @@ def test_configured_model_group_label_has_i18n_key():
     )
 
 
-def test_get_available_models_cache_preserves_configured_model_badges(tmp_path, monkeypatch):
+def test_get_available_models_cache_preserves_configured_model_badges(
+    tmp_path, monkeypatch
+):
     cache_path = tmp_path / "models_cache.json"
-    old_cfg = config.cfg
+    old_cfg = dict(config.cfg)
     old_mtime = config._cfg_mtime
+    old_path = config._cfg_path
     old_cache = config._available_models_cache
     old_cache_ts = config._available_models_cache_ts
     old_cache_path = config._models_cache_path
@@ -122,15 +127,27 @@ def test_get_available_models_cache_preserves_configured_model_badges(tmp_path, 
         monkeypatch.setattr(config, "_models_cache_path", cache_path)
         config._available_models_cache = None
         config._available_models_cache_ts = 0.0
-        config._cfg_mtime = 0.0
-        config.cfg = {
-            "model": {"provider": "openai-codex", "default": "gpt-5.4"},
-            "fallback_providers": [{"provider": "copilot", "model": "gpt-4.1"}],
-            "providers": {},
-        }
+        config.cfg.clear()
+        config.cfg.update(
+            {
+                "model": {"provider": "openai-codex", "default": "gpt-5.4"},
+                "fallback_providers": [{"provider": "copilot", "model": "gpt-4.1"}],
+                "providers": {},
+            }
+        )
+        config._cfg_path = config._get_config_path()
+        try:
+            config._cfg_mtime = Path(config._cfg_path).stat().st_mtime
+        except OSError:
+            config._cfg_mtime = 0.0
 
         cold = config.get_available_models()
-        assert cold.get("configured_model_badges", {}).get("@copilot:gpt-4.1", {}).get("label") == "Fallback 1"
+        assert (
+            cold.get("configured_model_badges", {})
+            .get("@copilot:gpt-4.1", {})
+            .get("label")
+            == "Fallback 1"
+        )
 
         config._available_models_cache = None
         config._available_models_cache_ts = 0.0
@@ -140,14 +157,18 @@ def test_get_available_models_cache_preserves_configured_model_badges(tmp_path, 
             "O cache persistido de /api/models não pode descartar configured_model_badges, "
             "senão o deploy/servidor reiniciado perde as TAGS do dropdown mesmo com o código novo."
         )
-        assert warm["configured_model_badges"].get("@copilot:gpt-4.1", {}).get("label") == "Fallback 1"
+        assert (
+            warm["configured_model_badges"].get("@copilot:gpt-4.1", {}).get("label")
+            == "Fallback 1"
+        )
     finally:
-        config.cfg = old_cfg
+        config.cfg.clear()
+        config.cfg.update(old_cfg)
         config._cfg_mtime = old_mtime
+        config._cfg_path = old_path
         config._available_models_cache = old_cache
         config._available_models_cache_ts = old_cache_ts
         monkeypatch.setattr(config, "_models_cache_path", old_cache_path)
-
 
 
 def test_ui_renders_model_badges_from_api_payload():
@@ -176,7 +197,10 @@ def test_ui_renders_model_badges_from_api_payload():
         "A UI deve calcular uma prioridade estável (primary -> fallback 1 -> fallback N) "
         "para renderizar os modelos configurados no topo do dropdown."
     )
-    assert "Object.entries(_badgeMap)" in js and "_normalizeConfiguredModelKey(existing.value)" in js, (
+    assert (
+        "Object.entries(_badgeMap)" in js
+        and "_normalizeConfiguredModelKey(existing.value)" in js
+    ), (
         "renderModelDropdown() deve sintetizar entradas para modelos configurados ausentes "
         "do catálogo atual, senão fallbacks locais/Ollama desaparecem da seção Configured."
     )

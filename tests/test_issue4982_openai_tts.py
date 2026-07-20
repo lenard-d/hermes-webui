@@ -541,6 +541,6 @@ def test_play_openai_tts_exists_in_ui_js():
 
 
 def test_boot_js_handles_openai_engine():
-    src = (STATIC_DIR / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     assert 'if(engine==="openai")' in src
     assert "body: JSON.stringify({text: clean, engine: 'openai'})" in src

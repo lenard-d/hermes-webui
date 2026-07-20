@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Tests for #3924 — CJK text before / should not block slash autocomplete.
 
 The autocomplete trigger previously gated on text.startsWith('/') which
@@ -14,6 +15,8 @@ _SRC = os.path.join(os.path.dirname(__file__), "..")
 
 
 def _read(name):
+    if name == "static/commands.js":
+        return family_source("commands")
     return open(os.path.join(_SRC, name), encoding="utf-8").read()
 
 
@@ -102,14 +105,14 @@ class TestBootJsSlashTrigger:
     """boot.js input handler must use _activeSlashCommandOffset."""
 
     def test_boot_uses_helper(self):
-        js = _read("static/boot.js")
+        js = family_source("boot")
         assert "_activeSlashCommandOffset" in js, (
             "boot.js must use _activeSlashCommandOffset for the slash "
             "autocomplete trigger (#3924)"
         )
 
     def test_boot_falls_back_to_path_autocomplete(self):
-        js = _read("static/boot.js")
+        js = family_source("boot")
         # The path autocomplete else-if must still be present
         assert "getComposerPathAutocompleteMatches" in js, (
             "boot.js must preserve path autocomplete fallback"

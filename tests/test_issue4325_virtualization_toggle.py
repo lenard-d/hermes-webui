@@ -20,7 +20,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
-BOOT = REPO_ROOT / "static" / "boot.js"
 CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 
 
@@ -45,7 +44,7 @@ def test_settings_preferences_expose_virtualize_toggle_experimental():
 
 
 def test_boot_applies_saved_virtualize_preference_default_off():
-    js = BOOT.read_text(encoding="utf-8")
+    js = family_source("boot")
     # #4343 default-off semantics: ===true (only an explicit true enables it).
     assert "window._virtualizeTranscript=s.virtualize_transcript===true" in js
     # Settings-load-failed fallback also defaults OFF.

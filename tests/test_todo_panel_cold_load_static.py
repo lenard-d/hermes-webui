@@ -42,7 +42,7 @@ def test_legacy_todos_fallback_still_uses_raw_session_messages():
 
 
 def test_workspace_todos_tab_prefers_live_sse_snapshot_before_cold_load_sidecar():
-    src = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    src = family_source("workspace")
     start = src.find("function _loadWorkspacePanelTodos()")
     end = src.find("const ARTIFACT_IGNORE_RE", start)
 
@@ -62,7 +62,7 @@ def test_workspace_todos_tab_prefers_live_sse_snapshot_before_cold_load_sidecar(
 def test_todo_panels_delegate_rendering_to_shared_helpers():
     ui = family_source("ui")
     panels = family_source("panels")
-    workspace = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    workspace = family_source("workspace")
 
     assert "const TODO_STATUS_RENDERING=Object.freeze({" in ui
     assert "function renderTodoStatusIcon(status,size=14)" in ui
@@ -87,7 +87,7 @@ def test_todo_panels_delegate_rendering_to_shared_helpers():
 
 
 def test_workspace_todos_no_longer_defines_local_icon_or_empty_text_mapping():
-    src = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    src = family_source("workspace")
     start = src.find("function _loadWorkspacePanelTodos()")
     end = src.find("const ARTIFACT_IGNORE_RE", start)
 
@@ -101,7 +101,7 @@ def test_workspace_todos_no_longer_defines_local_icon_or_empty_text_mapping():
 
 
 def test_workspace_files_and_artifacts_paths_stay_outside_todo_render_change():
-    src = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    src = family_source("workspace")
     todos_start = src.find("function _loadWorkspacePanelTodos()")
     artifacts_start = src.find("const ARTIFACT_IGNORE_RE")
 

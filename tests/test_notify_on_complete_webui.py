@@ -16,7 +16,7 @@ def test_webui_drains_only_matching_background_completion_events():
 
 
 def test_webui_injects_process_notifications_without_persisting_them_as_user_text():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
     assert "_process_notifications = _drain_webui_process_notifications(" in src
     assert "pending_async_acceptances=_pending_async_acceptances" in src
@@ -27,12 +27,13 @@ def test_webui_injects_process_notifications_without_persisting_them_as_user_tex
 
 
 def test_webui_sets_gateway_session_platform_for_background_watchers():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    run_src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
-    assert "'HERMES_SESSION_PLATFORM': 'webui'" in src
-    assert "os.environ['HERMES_SESSION_PLATFORM'] = 'webui'" in src
-    assert "old_session_platform = os.environ.get('HERMES_SESSION_PLATFORM')" in src
-    assert "os.environ.pop('HERMES_SESSION_PLATFORM', None)" in src
+    assert "'HERMES_SESSION_PLATFORM': 'webui'" in facade_src
+    assert "os.environ['HERMES_SESSION_PLATFORM'] = 'webui'" in run_src
+    assert "old_session_platform = os.environ.get('HERMES_SESSION_PLATFORM')" in run_src
+    assert "os.environ.pop('HERMES_SESSION_PLATFORM', None)" in run_src
 
 
 def test_webui_age_gates_stale_background_completion_events():
@@ -52,4 +53,3 @@ def test_webui_age_gates_stale_background_completion_events():
     # their durable delivery claim. Neither path is added to skipped_events.
     assert "_mark_process_completion_consumed(process_registry, evt_sid)" in src
     assert "complete_async_delegation_delivery(evt, claim)" in src
-

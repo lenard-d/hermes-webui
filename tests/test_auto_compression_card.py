@@ -443,7 +443,7 @@ def test_auto_compression_running_sse_uses_active_session_running_card():
 
 
 def test_agent_status_callback_emits_compressing_and_warning_events():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     runtime_src = _read("api/streaming_parts/runtime_resolution.py")
     start = src.find("def _agent_status_callback")
     assert start != -1, "agent status callback bridge not found"
@@ -546,7 +546,7 @@ def test_snapshot_anchor_hydration_does_not_invent_compressing_rows():
 
 
 def test_agent_status_callback_wiring():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     assert "_agent_status_callback" in src
     assert "_agent_kwargs['status_callback'] = _agent_status_callback" in src
 
@@ -911,7 +911,7 @@ def test_auto_compression_done_sse_refreshes_context_indicator_usage():
 
 
 def test_auto_compression_done_payload_includes_live_usage_snapshot():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     start = src.find("put('compressed'")
     assert start != -1, "compressed SSE payload not found"
     end = src.find("})", start)
@@ -927,7 +927,7 @@ def test_auto_compression_done_payload_includes_live_usage_snapshot():
 
 
 def test_auto_compression_rotation_tracks_origin_and_continuation_ids_for_sse():
-    src = _read("api/streaming.py")
+    src = _read("api/streaming_parts/local_run.py")
     rotate_start = src.find("# ── Handle context compression side effects ──")
     assert rotate_start != -1, "compression side-effect block not found"
     rotate_end = src.find("# Stamp 'timestamp'", rotate_start)

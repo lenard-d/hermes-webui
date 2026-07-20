@@ -171,7 +171,7 @@ def test_stale_stream_clear_trusts_completed_run_journal_instead_of_adding_marke
 
 
 def test_success_path_checks_stream_ownership_before_persisting_result():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     guard = "if not ephemeral and not _stream_writeback_is_current(s, stream_id):"
     guard_pos = src.find(guard)
     result_merge_pos = src.find("_result_messages = result.get('messages') or _previous_context_messages")
@@ -185,7 +185,7 @@ def test_success_path_checks_stream_ownership_before_persisting_result():
 
 
 def test_self_heal_retry_success_checks_stream_ownership_before_writeback():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     start = src.index("logger.info('[webui] self-heal (except path): retrying stream")
     end = src.index("logger.info('[webui] self-heal (except path): retry succeeded')", start)
     block = src[start:end]
@@ -197,7 +197,7 @@ def test_self_heal_retry_success_checks_stream_ownership_before_writeback():
 
 
 def test_outer_exception_path_checks_stream_ownership_before_error_writeback():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     outer_error_payload = src.index("_error_payload = _provider_error_payload(err_str, _exc_type, _exc_hint)")
     start = src.index("# Persist the error so it survives page reload.", outer_error_payload)
     end = src.index("put('apperror', _error_payload)", start)

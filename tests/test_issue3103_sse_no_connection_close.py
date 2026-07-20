@@ -14,7 +14,12 @@ long-lived session/gateway event streams.
 import re
 from pathlib import Path
 
-ROUTES = (Path(__file__).resolve().parents[1] / "api" / "routes.py").read_text(encoding="utf-8")
+ROUTES = (
+    Path(__file__).resolve().parents[1]
+    / "api"
+    / "routes_parts"
+    / "stream_transport.py"
+).read_text(encoding="utf-8")
 
 
 def _handler_body(name: str) -> str:

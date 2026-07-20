@@ -12,9 +12,15 @@ import subprocess
 
 REPO = pathlib.Path(__file__).parent.parent
 UI_JS = family_source("ui")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 CSS = family_source("style")
 MESSAGES_JS = family_source("messages")
+STREAM_RENDERER_JS = (
+    REPO / "static" / "messages_parts" / "stream_renderer.js"
+).read_text(encoding="utf-8")
+STREAM_JS = (REPO / "static" / "messages_parts" / "stream.js").read_text(
+    encoding="utf-8"
+)
 
 
 def _function_body(src: str, name: str) -> str:
@@ -164,7 +170,7 @@ class TestToolCallGroupingStatic:
         )
 
     def test_simplified_tool_calling_renderer_is_forced_to_worklog_mode(self):
-        boot = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+        boot = family_source("boot")
         assert "window._simplifiedToolCalling=true" in boot, (
             "Boot should keep the Compact Worklog renderer enabled regardless of legacy saved values."
         )
@@ -644,8 +650,13 @@ class TestToolCallGroupingStatic:
         assert "data-worklog-reason-active" not in live_thinking_fn, (
             "New live reasoning text should not create active Worklog prose rows."
         )
-        reset_fn = _function_body(MESSAGES_JS, "_resetAssistantSegment")
-        assert "assistantRow=null" in reset_fn and "assistantBody=null" in reset_fn
+        reset_fn = _function_body(STREAM_RENDERER_JS, "_resetAssistantSegment")
+        assert "resetSegmentState();" in reset_fn
+        reset_owner_start = STREAM_JS.index("resetSegmentState:()=>{")
+        reset_owner_end = STREAM_JS.index("},", reset_owner_start)
+        reset_owner = STREAM_JS[reset_owner_start:reset_owner_end]
+        assert "assistantRow=null" in reset_owner and "assistantBody=null" in reset_owner
+        assert "segmentStart=assistantText.length" in reset_owner and "_freshSegment=true" in reset_owner
         assert "function closeCurrentLiveActivityGroup()" in UI_JS, (
             "Visible interim assistant progress needs a shared helper to close the current Activity burst."
         )
@@ -679,7 +690,7 @@ class TestToolCallGroupingStatic:
         )
         assert reasoning_match, "reasoning listener not found"
         reasoning_fn = reasoning_match.group(1)
-        render_live_thinking_fn = _function_body(MESSAGES_JS, "_renderLiveThinking")
+        render_live_thinking_fn = _function_body(STREAM_RENDERER_JS, "_renderLiveThinking")
 
         assert reasoning_fn.count("_liveThinkingText()") == 1, (
             "_liveThinkingText() should be computed once inside the active-session branch."

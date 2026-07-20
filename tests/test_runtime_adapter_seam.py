@@ -296,7 +296,7 @@ def test_approval_and_clarify_routes_use_adapter_only_when_flag_enabled():
 
 def test_goal_route_uses_adapter_only_when_flag_enabled():
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
     goal_idx = src.index("def _handle_goal_command")
     goal_body = src[goal_idx:src.index("def _handle_chat_start", goal_idx)]
 
@@ -408,7 +408,7 @@ def test_approval_respond_approves_from_gateway_queues_when_pending_empty() -> N
 
 def test_chat_start_route_selects_adapter_only_when_flag_enabled():
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
     # NOTE: T-2979-fix factored the adapter-selection block out of
     # _handle_chat_start into the shared `_start_run` helper (used by both
     # /api/chat/start and start_session_turn — Q-2979-A2 / Copilot
@@ -435,7 +435,7 @@ def test_chat_start_route_selects_adapter_only_when_flag_enabled():
 
 def test_runner_local_chat_start_selection_does_not_fallback_to_legacy():
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
     # See note in test_chat_start_route_selects_adapter_only_when_flag_enabled
     # — adapter selection moved into the shared `_start_run` helper.
     helper_idx = src.index("def _start_run(")
@@ -473,7 +473,7 @@ def test_chat_start_adapter_path_preserves_legacy_response_shape():
     route must not add fields that the legacy-direct response does not expose.
     """
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
     helper_idx = src.index("def _chat_start_response_from_run_start")
     helper_body = src[helper_idx:src.index("def _runtime_adapter_goal_action", helper_idx)]
 

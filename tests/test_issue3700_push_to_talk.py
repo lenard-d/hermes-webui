@@ -1,13 +1,14 @@
+from tests.frontend_asset_contract import family_source
 import re
 from pathlib import Path
 
 
 def _boot_src() -> str:
-    return Path("static/boot.js").read_text(encoding="utf-8")
+    return family_source("boot")
 
 
 def _commands_src() -> str:
-    return Path("static/commands.js").read_text(encoding="utf-8")
+    return family_source("commands")
 
 
 def test_start_mic_capture_extracted():

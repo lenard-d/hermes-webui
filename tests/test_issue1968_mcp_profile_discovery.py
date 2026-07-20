@@ -17,15 +17,17 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+LOCAL_RUN_PY = (
+    ROOT / "api" / "streaming_parts" / "local_run.py"
+).read_text(encoding="utf-8")
 
 
 def _line_of(pattern: str) -> int:
     """Return the 1-indexed line number of the first match for `pattern`."""
-    for idx, line in enumerate(STREAMING_PY.splitlines(), start=1):
+    for idx, line in enumerate(LOCAL_RUN_PY.splitlines(), start=1):
         if re.search(pattern, line):
             return idx
-    raise AssertionError(f"pattern not found in api/streaming.py: {pattern!r}")
+    raise AssertionError(f"pattern not found in api/streaming_parts/local_run.py: {pattern!r}")
 
 
 def test_discover_mcp_tools_called_after_hermes_home_mutation():
@@ -68,12 +70,12 @@ def test_discover_mcp_tools_only_called_once_in_streaming():
     later refactor reintroduces a pre-mutation call site, this test catches it.
     """
     call_lines = [
-        line for line in STREAMING_PY.splitlines()
+        line for line in LOCAL_RUN_PY.splitlines()
         if "discover_mcp_tools()" in line
         and not line.lstrip().startswith("#")
     ]
     assert len(call_lines) == 1, (
-        f"Expected exactly 1 `discover_mcp_tools()` call line in api/streaming.py "
+        f"Expected exactly 1 `discover_mcp_tools()` call line in local_run.py "
         f"(comments excluded), found {len(call_lines)}: {call_lines!r}.  A "
         "duplicate call site would re-introduce the #1968 bug if placed before "
         "the HERMES_HOME mutation."
@@ -87,7 +89,7 @@ def test_discover_mcp_tools_call_is_inside_try_except():
     Looks at the 6 lines immediately surrounding the call (which is the actual
     structural block, regardless of how chatty the preceding comment is).
     """
-    lines = STREAMING_PY.splitlines()
+    lines = LOCAL_RUN_PY.splitlines()
     call_idx = None
     for idx, line in enumerate(lines):
         if "discover_mcp_tools()" in line and not line.lstrip().startswith("#"):

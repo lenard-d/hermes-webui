@@ -39,7 +39,7 @@ def test_cached_agent_reuse_uses_adopt_helper():
     """Cached-agent reuse must go through `_adopt_session_db_for_cached_agent`
     so a still-open SessionDB is reused (subagent-safe) and only a dead handle
     is closed+replaced (still EMFILE-safe)."""
-    src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
 
     reuse_idx = src.find("Refresh per-turn callbacks")
     assert reuse_idx != -1, "cached-agent reuse block missing"
@@ -94,11 +94,12 @@ def test_lru_eviction_closes_evicted_agent_session_db():
     dropping the reference. (Eviction is a true session boundary — no live
     subagents are expected to still be writing into that agent.)
     """
+    run_src = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
     src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 
-    eviction_idx = src.find("Evicted LRU agent from cache")
+    eviction_idx = run_src.find("Evicted LRU agent from cache")
     assert eviction_idx != -1, "LRU eviction debug log missing"
-    block = src[max(0, eviction_idx - 1500) : eviction_idx + 200]
+    block = run_src[max(0, eviction_idx - 1500) : eviction_idx + 200]
 
     assert "evicted_sid, _ = SESSION_AGENT_CACHE.popitem" not in block, (
         "LRU eviction must capture the evicted entry so the agent's "

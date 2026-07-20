@@ -7,7 +7,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING_PY = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 TURN_ADMISSION_PY = (REPO / "api" / "turn_admission.py").read_text(encoding="utf-8")
 UI_JS = family_source("ui")

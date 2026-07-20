@@ -322,7 +322,8 @@ def test_lru_eviction_commits_outside_cache_lock():
     after leaving that lock; provider extraction can be slow I/O."""
     import api.streaming as streaming_mod
 
-    src = Path(streaming_mod.__file__).read_text(encoding="utf-8")
+    facade_src = Path(streaming_mod.__file__).read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
     marker = "_evicted_items = []"
     collect_start = src.index(marker)
     lock_start = src.index("with SESSION_AGENT_CACHE_LOCK:", collect_start)
@@ -339,9 +340,9 @@ def test_lru_eviction_commits_outside_cache_lock():
     assert "_sid not in _active_sids" in locked_section
     assert "SESSION_AGENT_CACHE.popitem(last=False)" not in locked_section
     assert "_close_evicted_agent_at_session_boundary" in outside_section
-    helper_start = src.index("def _close_evicted_agent_at_session_boundary")
-    helper_end = src.index("\ndef _refresh_cached_agent_runtime", helper_start)
-    helper_section = src[helper_start:helper_end]
+    helper_start = facade_src.index("def _close_evicted_agent_at_session_boundary")
+    helper_end = facade_src.index("\ndef _refresh_cached_agent_runtime", helper_start)
+    helper_section = facade_src[helper_start:helper_end]
     assert "_lifecycle_commit_session_memory" in helper_section
     assert "wait=True" in helper_section
     assert "outside the cache lock" in outside_section
@@ -396,8 +397,7 @@ def test_post_turn_lifecycle_marks_completion_without_commit():
     CLI-parity semantics, completed turns are marked dirty/uncommitted;
     actual extraction/commit happens only at session boundaries
     (new session, LRU eviction, shutdown drain)."""
-    import api.streaming as streaming_mod
-    src = Path(streaming_mod.__file__).read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
     save_pos = src.index("s.save()")
     lifecycle_marker = src.index("mark_turn_completed(s.session_id, agent=agent)", save_pos)

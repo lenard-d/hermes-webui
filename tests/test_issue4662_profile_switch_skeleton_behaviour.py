@@ -17,16 +17,11 @@ from tests.frontend_asset_contract import family_asset_paths
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 def _family_path_arg(family: str) -> str:
     return json.dumps([str(path) for path in family_asset_paths(family)])
-
-REPO_ROOT = Path(__file__).parent.parent.resolve()
-SESSIONS_JS = REPO_ROOT / "static" / "sessions.js"
-WORKSPACE_JS = REPO_ROOT / "static" / "workspace.js"
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -115,7 +110,7 @@ function extractConst(src, name) {
 }
 
 const sessSrc = JSON.parse(process.argv[2]).map(p=>fs.readFileSync(p, 'utf8')).join('');
-const wsSrc = fs.readFileSync(process.argv[3], 'utf8');
+const wsSrc = JSON.parse(process.argv[3]).map(p=>fs.readFileSync(p, 'utf8')).join('');
 
 // Module-scope state the session builder references.
 var _sessionListSkeletonActive = false;
@@ -170,7 +165,7 @@ def outcome(tmp_path_factory):
     driver = tmp_path_factory.mktemp("skel") / "driver.js"
     driver.write_text(_DRIVER_SRC, encoding="utf-8")
     res = subprocess.run(
-        [NODE, str(driver), _family_path_arg("sessions"), str(WORKSPACE_JS)],
+        [NODE, str(driver), _family_path_arg("sessions"), _family_path_arg("workspace")],
         capture_output=True, text=True, timeout=30,
     )
     if res.returncode != 0:

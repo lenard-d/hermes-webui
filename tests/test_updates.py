@@ -1,12 +1,26 @@
 """Tests for self-update diagnostics (api/updates.py)."""
+import importlib.util
 import json
 import os
+import sys
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import api.updates as updates
+
+
+def _load_isolated_updates_facade(module_name):
+    spec = importlib.util.spec_from_file_location(module_name, updates.__file__)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(module_name, None)
+    return module
 
 
 def _fake_git_for_release_fetch_failure(args, cwd, timeout=10):
@@ -122,6 +136,51 @@ def test_check_repo_reports_manual_update_for_baked_webui_version(tmp_path, monk
     )
     assert seen['url'] == 'https://api.github.com/repos/nesquena/hermes-webui/tags?per_page=100'
     assert seen['timeout'] == 3.0
+
+
+def test_published_release_check_observes_facade_tag_provider(monkeypatch):
+    """Nested release discovery keeps the historical facade patch seam."""
+    from api import update_policy
+
+    monkeypatch.setattr(updates, 'WEBUI_VERSION', 'v1.0.0')
+    monkeypatch.setattr(update_policy, '_github_release_tags', lambda: [])
+    calls = []
+
+    def facade_tags():
+        calls.append(True)
+        return [
+            {'name': 'v1.1.0', 'sha': 'latest'},
+            {'name': 'v1.0.0', 'sha': 'current'},
+        ]
+
+    monkeypatch.setattr(updates, '_github_release_tags', facade_tags)
+
+    info = updates._check_webui_published_release_update()
+
+    assert calls == [True]
+    assert info is not None
+    assert info['current_version'] == 'v1.0.0'
+    assert info['latest_version'] == 'v1.1.0'
+
+
+def test_isolated_update_facades_keep_their_own_release_seams(monkeypatch):
+    """Each exported function resolves patches on its own facade instance."""
+    first = _load_isolated_updates_facade('isolated_updates_first')
+    second = _load_isolated_updates_facade('isolated_updates_second')
+
+    monkeypatch.setattr(first, 'WEBUI_VERSION', 'v1.0.0')
+    monkeypatch.setattr(second, 'WEBUI_VERSION', 'v2.0.0')
+    monkeypatch.setattr(first, '_github_release_tags', lambda: [
+        {'name': 'v1.1.0', 'sha': 'first-latest'},
+        {'name': 'v1.0.0', 'sha': 'first-current'},
+    ])
+    monkeypatch.setattr(second, '_github_release_tags', lambda: [
+        {'name': 'v2.2.0', 'sha': 'second-latest'},
+        {'name': 'v2.0.0', 'sha': 'second-current'},
+    ])
+
+    assert first._check_webui_published_release_update()['latest_version'] == 'v1.1.0'
+    assert second._check_webui_published_release_update()['latest_version'] == 'v2.2.0'
 
 
 def test_check_repo_webui_no_git_falls_back_to_old_payload_on_tags_failure(tmp_path, monkeypatch):
@@ -1387,4 +1446,3 @@ def test_apply_update_pull_lock_no_stash_when_clean(tmp_path, monkeypatch):
     assert result.get('lock_conflict') is True
     # No stash pop on a clean pull-lock path.
     assert not any(c[0] == 'stash' for c in git_calls)
-

@@ -23,7 +23,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING_PY = (
+    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+).read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 GATEWAY_CHAT_PY = (REPO_ROOT / "api" / "gateway_chat.py").read_text(encoding="utf-8")
 

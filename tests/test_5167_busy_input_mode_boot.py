@@ -24,7 +24,7 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 MESSAGES_JS = family_source("messages")
 UI_JS = family_source("ui")

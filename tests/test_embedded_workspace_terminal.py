@@ -19,7 +19,7 @@ def _read(path: str) -> str:
 
 def test_terminal_is_opened_by_slash_command_not_permanent_composer_icon():
     html = _read("static/index.html")
-    commands_js = _read("static/commands.js")
+    commands_js = family_source("commands")
     sw = _read("static/sw.js")
     assert 'id="btnTerminalToggle"' not in html
     assert "name:'terminal'" in commands_js
@@ -154,7 +154,7 @@ def test_terminal_collapsed_state_preserves_pty_and_output_surface():
 
 
 def test_terminal_slash_command_expands_existing_collapsed_terminal():
-    commands_js = _read("static/commands.js")
+    commands_js = family_source("commands")
     terminal_js = _read("static/terminal.js")
 
     assert "await toggleComposerTerminal(true)" in commands_js
@@ -165,7 +165,7 @@ def test_terminal_slash_command_expands_existing_collapsed_terminal():
 
 
 def test_terminal_slash_command_preflights_remote_backend_before_session_create():
-    commands_js = _read("static/commands.js")
+    commands_js = family_source("commands")
 
     cmd_block = commands_js.split("async function cmdTerminal", 1)[1].split("async function cmdNew", 1)[0]
     assert "api('/api/workspaces')" in cmd_block

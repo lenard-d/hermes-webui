@@ -15,7 +15,7 @@ import textwrap
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 SESSIONS_JS = family_source("sessions")
 def _extract_block(src, signature):
     start = src.find(signature)

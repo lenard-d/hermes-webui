@@ -516,15 +516,23 @@ def test_materialize_helper_called_immediately_before_error_path_clears():
     call from one of the error sites, this assertion fires.
     """
     from pathlib import Path
-    src = Path(__file__).parent.parent.joinpath('api', 'streaming.py').read_text(encoding='utf-8')
-    lines = src.splitlines()
+    local_run_src = Path(__file__).parent.parent.joinpath(
+        'api', 'streaming_parts', 'local_run.py'
+    ).read_text(encoding='utf-8')
+    live_controls_src = Path(__file__).parent.parent.joinpath(
+        'api', 'streaming_parts', 'live_controls.py'
+    ).read_text(encoding='utf-8')
+    lines = local_run_src.splitlines()
 
     helper_name = '_materialize_pending_user_turn_before_error('
     clear_sites = [(i + 1, line) for i, line in enumerate(lines)
                    if 'pending_user_message = None' in line]
-    assert len(clear_sites) >= 4, (
-        f"Expected ≥4 sites that clear pending_user_message; found {len(clear_sites)}. "
-        f"If api/streaming.py was refactored, re-audit this test."
+    clear_count = len(clear_sites) + live_controls_src.count(
+        'pending_user_message = None'
+    )
+    assert clear_count >= 4, (
+        f"Expected ≥4 sites that clear pending_user_message; found {clear_count}. "
+        "If the streaming owners were refactored, re-audit this test."
     )
 
     sites_with_helper = []

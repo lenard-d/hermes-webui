@@ -46,7 +46,7 @@ def test_new_chat_inserts_session_model_when_static_picker_lacks_default():
 
 
 def test_boot_model_hydration_prefers_active_session_over_persisted_model():
-    boot_js = Path("static/boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     marker = "const sessionModelState=S.session&&S.session.model"
     assert marker in boot_js
     session_branch = boot_js[boot_js.index(marker) : boot_js.index("if(S.session) syncTopbar();", boot_js.index(marker))]
@@ -58,7 +58,7 @@ def test_boot_model_hydration_prefers_active_session_over_persisted_model():
 
 
 def test_hard_refresh_hydrates_saved_session_model_before_revealing_model_chip():
-    boot_js = Path("static/boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     load_marker = "await loadSession(saved, {preserveActiveInput:true});"
     assert load_marker in boot_js
     restore_end = "await checkInflightOnBoot(saved);"
@@ -71,7 +71,7 @@ def test_hard_refresh_hydrates_saved_session_model_before_revealing_model_chip()
 
 
 def test_pwa_new_chat_launch_does_not_block_first_paint_on_model_catalog():
-    boot_js = Path("static/boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     launch_marker = "if(pwaLaunchAction==='new-chat'){"
     assert launch_marker in boot_js
     launch_branch = boot_js[boot_js.index(launch_marker) : boot_js.index("const savedLocal=localStorage.getItem", boot_js.index(launch_marker))]
@@ -84,7 +84,7 @@ def test_pwa_new_chat_launch_does_not_block_first_paint_on_model_catalog():
 
 
 def test_hard_refresh_injects_missing_active_session_model_option():
-    boot_js = Path("static/boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     marker = "if(!applied&&sessionModelState&&typeof _ensureModelOptionInDropdown==='function')"
     assert marker in boot_js
     branch = boot_js[boot_js.index(marker) : boot_js.index("else if(!applied&&!sessionModelState", boot_js.index(marker))]
@@ -131,7 +131,7 @@ def test_new_session_posts_picker_model_before_server_default():
 
 
 def test_model_picker_persists_without_active_session():
-    boot_js = Path("static/boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     body = boot_js[boot_js.index("$('modelSelect').onchange=async()=>") : boot_js.index("$('msg').addEventListener", boot_js.index("$('modelSelect').onchange=async()=>"))]
     assert "_writePersistedModelState(modelState.model,modelState.model_provider)" in body
     assert "_rememberEmptyComposerModelOverride(modelState.model,modelState.model_provider)" in body
@@ -140,7 +140,7 @@ def test_model_picker_persists_without_active_session():
 
 
 def test_session_model_changes_do_not_write_empty_composer_override():
-    boot_js = Path("static/boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     body = boot_js[boot_js.index("$('modelSelect').onchange=async()=>") : boot_js.index("$('msg').addEventListener", boot_js.index("$('modelSelect').onchange=async()=>"))]
     session_branch = body[body.index("if(typeof _rememberPendingSessionModel==='function')"):]
     assert "_rememberPendingSessionModel(S.session.session_id,modelState.model,modelState.model_provider)" in body

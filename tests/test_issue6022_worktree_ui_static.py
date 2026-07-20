@@ -31,7 +31,7 @@ def test_new_session_forwards_explicit_worktree_and_omits_absent():
 
 
 def test_boot_auto_bind_sends_explicit_worktree_false():
-    src = read("static/boot.js")
+    src = family_source("boot")
     bind = src[src.index("async function _maybeBindFreshDefaultWorkspaceSession") :]
     bind = bind[: bind.index("\n}\n")]
     assert "worktree: false" in bind
@@ -76,7 +76,7 @@ def test_file_and_folder_creation_send_explicit_worktree_false():
 
 
 def test_terminal_auto_session_sends_explicit_worktree_false():
-    src = read("static/commands.js")
+    src = family_source("commands")
     assert "await newSession(false, {worktree: false});" in src
 
 
@@ -95,7 +95,7 @@ def test_no_bare_session_new_posts_remain_in_static_js():
 def test_deliberate_new_chat_paths_do_not_pin_worktree():
     # Sidebar "New Chat" and command paths must NOT pass an explicit worktree
     # value — they inherit the server-side config default by design.
-    boot = read("static/boot.js")
+    boot = family_source("boot")
     for line_no in (
         i
         for i, line in enumerate(boot.splitlines(), 1)

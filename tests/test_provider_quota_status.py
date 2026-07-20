@@ -64,6 +64,19 @@ def _restore_config(old_cfg, old_mtime):
     config._cfg_path = old_path
 
 
+def test_account_usage_facade_preserves_class_globals_and_state_identity():
+    import api.providers as providers
+    from api.provider_parts import account_usage
+
+    assert providers.get_provider_quota.__module__ == "api.providers"
+    assert providers._AccountUsageProbeWorker.__module__ == "api.providers"
+    assert providers._AccountUsageProbeWorker.fetch.__globals__ is vars(providers)
+    assert providers._account_usage_status_cache is account_usage._account_usage_status_cache
+    assert providers._account_usage_status_cache_lock is account_usage._account_usage_status_cache_lock
+    assert providers._account_usage_worker_pool is account_usage._account_usage_worker_pool
+    assert providers._account_usage_worker_pool_lock is account_usage._account_usage_worker_pool_lock
+
+
 def test_openrouter_quota_fetches_key_endpoint_and_sanitizes_response(monkeypatch, tmp_path):
     """OpenRouter's documented key endpoint should be called server-side only."""
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)

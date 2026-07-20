@@ -11,7 +11,7 @@ from api.streaming import _compression_summary_from_messages, _is_context_compre
 def test_legacy_duplicate_anchor_helpers_are_removed():
     routes_src = Path("api/routes.py").read_text(encoding="utf-8")
     manual_compression_src = Path("api/routes_parts/manual_compression.py").read_text(encoding="utf-8")
-    streaming_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    streaming_src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
     assert "def _visible_messages_for_anchor" not in routes_src
     assert "def _visible_messages_for_compression_anchor" not in streaming_src

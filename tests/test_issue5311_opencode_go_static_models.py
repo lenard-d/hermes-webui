@@ -9,7 +9,9 @@ from pathlib import Path
 from api.model_catalog import PROVIDER_MODELS
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG = (ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+    encoding="utf-8"
+)
 
 EXPECTED_OPENCODE_GO_MODEL_IDS = [
     "minimax-m3",
@@ -42,7 +44,7 @@ def test_opencode_go_skips_live_models_probe():
     # The provider-loop must special-case opencode-go to skip the old generic
     # live probe and fall through to this curated static list.
     body = CONFIG[CONFIG.index("def get_available_models"):]
-    body = body[: body.index("\ndef ", 1)]
+    body = body[: body.index("\n__config_exports__", 1)]
     assert 'elif pid == "opencode-go":' in body
     idx = body.index('elif pid == "opencode-go":')
     branch = body[idx: idx + 400]

@@ -31,8 +31,30 @@ def _run_reasoning_scene(
     assert NODE, "node is required for the #5720 browser-chain regression"
     env = os.environ.copy()
     env.setdefault(
-        "ISSUE5720_ANCHORS_JS",
-        str(ROOT / "static" / "assistant_turn_anchors.js"),
+        "ISSUE5720_ANCHOR_JS_PATHS",
+        json.dumps(
+            [
+                str(ROOT / "static" / "assistant_turn_anchors_parts" / "model.js"),
+                str(
+                    ROOT
+                    / "static"
+                    / "assistant_turn_anchors_parts"
+                    / "activity_scene.js"
+                ),
+                str(ROOT / "static" / "assistant_turn_anchors.js"),
+            ]
+        ),
+    )
+    env.setdefault(
+        "ISSUE5720_STREAM_MODULE_JS_PATHS",
+        json.dumps(
+            [
+                str(ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"),
+                str(ROOT / "static" / "messages_parts" / "stream_run_journal.js"),
+                str(ROOT / "static" / "messages_parts" / "stream_live_tools.js"),
+                str(ROOT / "static" / "messages_parts" / "stream_renderer.js"),
+            ]
+        ),
     )
     env["ISSUE5720_ACTIVITY_MODE"] = activity_mode
     if fail_first_anchor_render:
@@ -211,7 +233,11 @@ _NODE_SCENE = r"""
 const fs = require('fs');
 const uiSrc = fs.readFileSync(process.env.ISSUE5720_UI_JS, 'utf8');
 const messagesSrc = fs.readFileSync(process.env.ISSUE5720_MESSAGES_JS, 'utf8');
-const anchorsSrc = fs.readFileSync(process.env.ISSUE5720_ANCHORS_JS, 'utf8');
+const anchorsSrc = JSON.parse(process.env.ISSUE5720_ANCHOR_JS_PATHS)
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('\n');
+const streamModuleSources = JSON.parse(process.env.ISSUE5720_STREAM_MODULE_JS_PATHS)
+  .map(path => fs.readFileSync(path, 'utf8'));
 
 function extractFunc(src, name){
   const start = src.indexOf('function ' + name);
@@ -472,6 +498,7 @@ global._sanitizeThinkingDisplayText=value=>String(value||'').trim();
 global._firstValidTimestampSeconds=()=>null;
 
 eval(anchorsSrc);
+for(const source of streamModuleSources) eval(source);
 for(const name of [
   'chatActivityMode','isTransparentStream','isFinalAnswerOnlyMode','isCompactWorklogMode','isSimplifiedToolCalling',
   '_anchorSceneIsSettledSuccessfulCompression','_anchorSceneRowsForRendering',
@@ -523,6 +550,7 @@ global._resetStreamScrollFollow=()=>{};
 global._suspendSessionStreamForLiveChat=()=>{};
 global.ensureLiveWorklogShell=()=>null;
 global._extractInlineThinkingFromContent=(content,reasoning)=>({content:String(content||''),reasoning:String(reasoning||'')});
+global.api=()=>Promise.resolve({});
 
 class FakeEventSource {
   static instances=[];

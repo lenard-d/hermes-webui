@@ -21,6 +21,9 @@ from unittest import mock
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+LOCAL_RUN_PY = (
+    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+).read_text(encoding="utf-8")
 
 
 # ── Shared helpers for sprint-42 additional tests ────────────────────────────
@@ -51,8 +54,8 @@ class TestSessionDBInjection(unittest.TestCase):
         """session_db= must be passed to the AIAgent constructor call."""
         self.assertIn(
             "session_db=_session_db",
-            STREAMING_PY,
-            "session_db kwarg not passed to AIAgent (PR #356)",
+            LOCAL_RUN_PY,
+            "session_db kwarg not passed to AIAgent by local run owner (PR #356)",
         )
 
     def test_sessiondb_init_in_try_except(self):
@@ -91,8 +94,8 @@ class TestSessionDBInjection(unittest.TestCase):
 
     def test_session_db_initialized_before_agent_construction(self):
         """SessionDB initialization must appear before the AIAgent(...) constructor call."""
-        db_pos = STREAMING_PY.find("from hermes_state import SessionDB")
-        agent_pos = STREAMING_PY.find("session_db=_session_db")
+        db_pos = LOCAL_RUN_PY.find("_session_db = _build_session_db_for_stream")
+        agent_pos = LOCAL_RUN_PY.find("session_db=_session_db")
         self.assertGreater(
             agent_pos,
             db_pos,
@@ -105,13 +108,13 @@ class TestSessionDBInjection(unittest.TestCase):
         helper_pattern = "_session_db = _build_session_db_for_stream(_state_db_path)"
         self.assertIn(
             pattern,
-            STREAMING_PY,
-            "_state_db_path should be resolved from profile home in streaming.py",
+            LOCAL_RUN_PY,
+            "_state_db_path should be resolved from profile home in local_run.py",
         )
         self.assertIn(
             helper_pattern,
-            STREAMING_PY,
-            "_session_db should be initialized via _build_session_db_for_stream in streaming.py",
+            LOCAL_RUN_PY,
+            "_session_db should be initialized via _build_session_db_for_stream in local_run.py",
         )
 
 
@@ -132,8 +135,8 @@ class TestRuntimeRouteInjection(unittest.TestCase):
         ):
             self.assertIn(
                 snippet,
-                STREAMING_PY,
-                f"Missing defensive runtime route forwarding in streaming.py: {snippet}",
+                LOCAL_RUN_PY,
+                f"Missing defensive runtime route forwarding in local_run.py: {snippet}",
             )
 
     def test_runtime_route_is_forwarded_from_resolver_into_agent_init(self):
@@ -727,7 +730,7 @@ def test_cleanTitle_is_let_not_const():
 # ── Sprint 42 additional tests: thinking panel persistence (#427) ────────
 def test_streaming_persists_reasoning_in_session():
     """streaming.py must accumulate reasoning and patch assistant messages."""
-    src = (REPO / 'api' / 'streaming.py').read_text(encoding="utf-8")
+    src = LOCAL_RUN_PY
 
     # #3587: per-message reasoning segments replaced the flat _reasoning_text accumulator
     assert "_reasoning_segments" in src, \
@@ -811,13 +814,14 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
     history before saving the session, including reinserting dropped
     reasoning-only assistant segments.
     """
-    src = (REPO / 'api' / 'streaming.py').read_text(encoding="utf-8")
-    assert "def _restore_reasoning_metadata(" in src, \
+    facade_src = STREAMING_PY
+    run_src = LOCAL_RUN_PY
+    assert "def _restore_reasoning_metadata(" in facade_src, \
         "streaming.py must define a helper to restore prior reasoning metadata"
-    assert "_next_context_messages" in src and "s.context_messages" in src, \
-        "streaming.py must restore prior reasoning metadata into model context"
-    assert "s.messages = _merge_display_messages_after_agent_result(" in src, \
-        "streaming.py must merge restored result messages into the visible transcript"
+    assert "_next_context_messages" in run_src and "s.context_messages" in run_src, \
+        "local_run.py must restore prior reasoning metadata into model context"
+    assert "s.messages = _merge_display_messages_after_agent_result(" in run_src, \
+        "local_run.py must merge restored result messages into the visible transcript"
     from api.streaming import _restore_display_reasoning_metadata
 
     reasoning_only = {
@@ -842,7 +846,7 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
 
 def test_routes_restores_prior_reasoning_metadata_after_followup():
     """The non-streaming route path must preserve prior reasoning metadata too."""
-    src = (REPO / 'api' / 'routes.py').read_text(encoding="utf-8")
+    src = (REPO / 'api' / 'routes_parts' / 'chat_runs.py').read_text(encoding="utf-8")
     assert "_restore_reasoning_metadata" in src, \
         "routes.py must import reasoning metadata restoration helper"
     assert "_next_context_messages" in src and "s.context_messages" in src, \

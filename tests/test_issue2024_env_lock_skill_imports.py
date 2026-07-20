@@ -21,11 +21,16 @@ import textwrap
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 STREAMING_PY = REPO / "api" / "streaming.py"
+LOCAL_RUN_PY = REPO / "api" / "streaming_parts" / "local_run.py"
 PROFILES_PY = REPO / "api" / "profiles.py"
 
 
 def _read_streaming() -> str:
     return STREAMING_PY.read_text(encoding="utf-8")
+
+
+def _read_local_run() -> str:
+    return LOCAL_RUN_PY.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +80,7 @@ class TestNoSkillToolImportsInsideEnvLock:
     inside any ``with _ENV_LOCK:`` block."""
 
     def test_no_skill_imports_in_env_lock(self):
-        source = _read_streaming()
+        source = _read_local_run()
         bodies = _find_env_lock_with_bodies(source)
         assert bodies, "Expected at least one `with _ENV_LOCK:` block in streaming.py"
         for body in bodies:
@@ -117,7 +122,7 @@ class TestPrewarmHelperExists:
     def test_prewarm_called_before_env_lock(self):
         """_prewarm_skill_tool_modules() must be called before the first
         ``with _ENV_LOCK:`` in _run_agent_streaming."""
-        source = _read_streaming()
+        source = _read_local_run()
         lines = source.splitlines()
         prewarm_line = None
         first_env_lock_line = None
@@ -138,7 +143,7 @@ class TestSysModulesLookupInEnvLock:
     """Inside the lock, streaming must use the shared cache patch helper."""
 
     def test_shared_skill_home_patch_helper_used_in_env_lock(self):
-        source = _read_streaming()
+        source = _read_local_run()
         bodies = _find_env_lock_with_bodies(source)
         assert bodies, "Expected at least one `with _ENV_LOCK:` block"
 
@@ -202,7 +207,7 @@ class TestSysModulesLookupInEnvLock:
     def test_no_import_statement_for_skill_tools_in_lock(self):
         """Double-check: no bare ``import tools.skills_tool`` or
         ``import tools.skill_manager_tool`` inside the lock body source."""
-        source = _read_streaming()
+        source = _read_local_run()
         lines = source.splitlines()
         in_lock = False
         depth = 0

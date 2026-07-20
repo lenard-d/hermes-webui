@@ -707,10 +707,7 @@ def test_manual_compress_worker_uses_session_profile_env(monkeypatch, tmp_path, 
 
 
 def test_static_commands_js_registers_compress_alias(cleanup_test_sessions):
-    from pathlib import Path
-
-    with open(Path(__file__).resolve().parents[1] / "static" / "commands.js", encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("commands")
     assert "name:'compress'" in src
     assert "name:'compact'" in src
     assert "/api/session/compress/start" in src
@@ -722,10 +719,7 @@ def test_static_commands_js_registers_compress_alias(cleanup_test_sessions):
 
 
 def test_static_commands_js_prefers_persisted_reference_message(cleanup_test_sessions):
-    from pathlib import Path
-
-    with open(Path(__file__).resolve().parents[1] / "static" / "commands.js", encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("commands")
 
     assert "const messageRef=referenceMsg?msgContent(referenceMsg)||String(referenceMsg.content||''):'';" in src
     assert "const referenceText=messageRef || summaryRef;" in src

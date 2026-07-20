@@ -13,7 +13,9 @@ from pathlib import Path
 from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = Path(__file__).parent.parent
-CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
+    encoding="utf-8"
+)
 UI_JS = family_source("ui")
 
 
@@ -85,4 +87,3 @@ def test_ui_js_mirror_has_trailing_empty_guard():
     assert "'')||s" in snippet, (
         "ui.js slash branch should have ||s trailing-empty guard (#3360)"
     )
-

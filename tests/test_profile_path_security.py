@@ -82,6 +82,25 @@ def test_delete_fallback_observes_facade_shutil_patch(monkeypatch, tmp_path):
     assert removed == [str(profile_dir)]
 
 
+def test_reloaded_profile_facades_keep_their_own_runtime_policy(monkeypatch, tmp_path):
+    """Part implementations must resolve the facade that exported each call."""
+    import api.profiles as original
+
+    fresh = _reload_profiles_module(tmp_path / ".hermes")
+    monkeypatch.setattr(original, "_BLOCKED_RUNTIME_ENV_KEYS", {"ORIGINAL_ONLY"})
+    monkeypatch.setattr(fresh, "_BLOCKED_RUNTIME_ENV_KEYS", {"FRESH_ONLY"})
+    candidate = {"ORIGINAL_ONLY": "old", "FRESH_ONLY": "new", "SHARED": "ok"}
+
+    assert original.filter_runtime_env_for_gateway_parity(candidate) == {
+        "FRESH_ONLY": "new",
+        "SHARED": "ok",
+    }
+    assert fresh.filter_runtime_env_for_gateway_parity(candidate) == {
+        "ORIGINAL_ONLY": "old",
+        "SHARED": "ok",
+    }
+
+
 def test_switch_profile_allows_valid_profile_name():
     with tempfile.TemporaryDirectory() as td:
         temp_root = Path(td)

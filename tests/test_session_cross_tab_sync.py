@@ -7,8 +7,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 SESSIONS_JS = family_source("sessions")
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
+COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
@@ -58,7 +58,11 @@ def test_api_helper_resolves_against_document_base_not_session_path():
 
 def test_long_lived_stream_urls_resolve_against_document_base():
     for rel in ("static/messages.js", "static/boot.js", "static/terminal.js"):
-        src = family_source("messages") if rel == "static/messages.js" else (REPO_ROOT / rel).read_text(encoding="utf-8")
+        family = {
+            "static/messages.js": "messages",
+            "static/boot.js": "boot",
+        }.get(rel)
+        src = family_source(family) if family else (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "document.baseURI||location.href" in src
 
 

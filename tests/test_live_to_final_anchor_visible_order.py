@@ -12,9 +12,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
+STREAM_ANCHOR_SCENE_JS = (
+    ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"
+).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+ANCHOR_SCENE_PY = (ROOT / "api" / "routes_parts" / "anchor_scene.py").read_text(
+    encoding="utf-8"
+)
+CHAT_RUNS_PY = (ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
+    encoding="utf-8"
+)
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")
 NODE = shutil.which("node")
@@ -494,7 +503,7 @@ def test_server_started_turn_payload_carries_pending_started_at():
     assert "pending_started_at = getattr(recover_session, \"pending_started_at\", None)" in recovery
     assert '"pending_started_at": pending_started_at' in ROUTES_PY
     assert '"pending_started_at": getattr(session, "pending_started_at", None)' not in ROUTES_PY
-    assert '"pending_started_at": (resp or {}).get("pending_started_at")' in ROUTES_PY
+    assert '"pending_started_at": (resp or {}).get("pending_started_at")' in CHAT_RUNS_PY
 
 
 def test_live_processed_anchor_is_deduped_across_restore_paths():
@@ -781,8 +790,8 @@ def test_settled_scene_keeps_user_visible_lifecycle_and_control_rows():
     node = _function_body(UI_JS, "_anchorSceneNodeForRow")
 
     assert "return 'lifecycle:compression';" in rows
-    assert 'return "lifecycle:compression"' in ROUTES_PY
-    assert 'if key == "lifecycle:compression":' in ROUTES_PY
+    assert 'return "lifecycle:compression"' in ANCHOR_SCENE_PY
+    assert 'if key == "lifecycle:compression":' in ANCHOR_SCENE_PY
     assert "return out.slice().sort" not in rows
     assert "source==='compressing'||source==='compressed'" in rows
     assert "(weight(a)-weight(b))" not in rows
@@ -873,7 +882,7 @@ def test_settled_final_answer_gets_anchor_activity_above_it():
     done = _event_listener_body(MESSAGES_JS, "done")
     settled = _function_body(UI_JS, "_renderSettledAnchorSceneForMessage")
     group = _function_body(UI_JS, "_anchorSceneWorklogGroup")
-    attach = _function_body(MESSAGES_JS, "_attachProjectedAnchorSceneToLastAssistant")
+    attach = _function_body(STREAM_ANCHOR_SCENE_JS, "_attachProjectedSceneToLastAssistant")
 
     assert "_attachProjectedAnchorSceneToLastAssistant(S.messages);" in done
     assert "lastAsst._anchor_activity_scene=scene" in attach
@@ -892,9 +901,9 @@ def test_done_sets_turn_duration_before_persisting_anchor_scene():
 
 
 def test_settled_anchor_scene_is_persisted_as_ui_metadata():
-    attach = _function_body(MESSAGES_JS, "_attachProjectedAnchorSceneToLastAssistant")
-    persist = _function_body(MESSAGES_JS, "_persistSettledAnchorScene")
-    msg_ref = _function_body(MESSAGES_JS, "_anchorSceneMessageRef")
+    attach = _function_body(STREAM_ANCHOR_SCENE_JS, "_attachProjectedSceneToLastAssistant")
+    persist = _function_body(STREAM_ANCHOR_SCENE_JS, "_persistSettledAnchorScene")
+    msg_ref = _function_body(STREAM_ANCHOR_SCENE_JS, "_anchorSceneMessageRef")
 
     assert "_persistSettledAnchorScene(lastAsst, scene, lastAsstIndex);" in attach
     assert "api('/api/session/anchor-scene'" in persist
@@ -911,10 +920,10 @@ def test_settled_anchor_scene_is_persisted_as_ui_metadata():
 
 
 def test_settled_anchor_scene_persists_the_full_assistant_turn_not_only_tail():
-    attach = _function_body(MESSAGES_JS, "_attachProjectedAnchorSceneToLastAssistant")
-    complete = _function_body(MESSAGES_JS, "_completeSettledAnchorSceneForTurn")
-    rows_by_message = _function_body(MESSAGES_JS, "_anchorSceneRowsByMessageIndex")
-    reasoning_text = _function_body(MESSAGES_JS, "_anchorSceneMessageReasoningText")
+    attach = _function_body(STREAM_ANCHOR_SCENE_JS, "_attachProjectedSceneToLastAssistant")
+    complete = _function_body(STREAM_ANCHOR_SCENE_JS, "_completeSettledAnchorSceneForTurn")
+    rows_by_message = _function_body(STREAM_ANCHOR_SCENE_JS, "_anchorSceneRowsByMessageIndex")
+    reasoning_text = _function_body(STREAM_ANCHOR_SCENE_JS, "_anchorSceneMessageReasoningText")
 
     assert "const scene=_completeSettledAnchorSceneForTurn(messages,lastAsstIndex,projectedScene);" in attach
     assert "for(let idx=lastAsstIndex-1;idx>=0;idx-=1)" in complete

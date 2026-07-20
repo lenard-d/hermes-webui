@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Extension theme-registration capability (window.registerHermesSkin).
 
 Two layers:
@@ -18,7 +19,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 # ── Layer 1: structural ──────────────────────────────────────────────────────
@@ -311,7 +312,7 @@ def test_registration_and_sanitization_behavior():
         f.write(_HARNESS)
         harness_path = f.name
     proc = subprocess.run(
-        [node, harness_path, str(REPO / "static" / "boot.js")],
+        [node, harness_path, str(REPO / "static" / "boot_parts" / "007-appearance-preferences.js")],
         capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == 0, f"harness failed: {proc.stderr or proc.stdout}"
@@ -343,7 +344,7 @@ def test_extension_skin_scheme_drives_effective_dark_class():
         f.write(_SCHEME_HARNESS)
         harness_path = f.name
     proc = subprocess.run(
-        [node, harness_path, str(REPO / "static" / "boot.js")],
+        [node, harness_path, str(REPO / "static" / "boot_parts" / "007-appearance-preferences.js")],
         capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == 0, f"harness failed: {proc.stderr or proc.stdout}"

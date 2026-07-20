@@ -13,7 +13,7 @@ from api.commands import list_commands
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
 def test_api_commands_exposes_cli_only_metadata_for_webui_intercept():
     """CLI-only commands must remain visible so the frontend can explain them."""

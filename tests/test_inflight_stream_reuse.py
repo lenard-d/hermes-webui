@@ -10,6 +10,10 @@ from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO_ROOT = Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
+LIVE_TOOLS_JS = REPO_ROOT / "static" / "messages_parts" / "stream_live_tools.js"
+RUN_JOURNAL_JS = (
+    REPO_ROOT / "static" / "messages_parts" / "stream_run_journal.js"
+).read_text(encoding="utf-8")
 SESSIONS_JS = SESSIONS_SOURCE
 UI_JS = family_source("ui")
 NODE = shutil.which("node")
@@ -51,6 +55,37 @@ def _function_decl(src: str, name: str) -> str:
         i += 1
     assert depth == 0, f"{name}() body did not close"
     return src[start:i]
+
+
+def _live_tool_tracker_bootstrap(
+    inflight_js: str = "{}", *, row_seq: int = 7, segment_seq: int = 7, burst_id: int = 1
+) -> str:
+    """Load the real live-tool owner and expose its one-operation Interface."""
+    return f"""
+const fs=require('fs');
+const vm=require('vm');
+vm.runInThisContext(fs.readFileSync({json.dumps(str(LIVE_TOOLS_JS))},'utf8'),{{filename:'stream_live_tools.js'}});
+const uploaded=[];
+const activeSid='sid';
+const INFLIGHT={inflight_js};
+const S={{toolCalls:[],messages:[]}};
+let assistantRow={{getAttribute:()=>'{row_seq}'}};
+let _assistantSegmentSeq={segment_seq};
+let _currentLiveSegmentSeq={segment_seq};
+let _currentActivityBurstId={burst_id};
+const tracker=HermesMessages.createStreamLiveToolTracker({{
+  sessionId:activeSid,
+  state:S,
+  inflightStore:INFLIGHT,
+  uploaded,
+  persist(){{}},
+  getAssistantRow:()=>assistantRow,
+  getAssistantSegmentSeq:()=>_assistantSegmentSeq,
+  getCurrentLiveSegmentSeq:()=>_currentLiveSegmentSeq,
+  getCurrentActivityBurstId:()=>_currentActivityBurstId,
+}});
+const upsertLiveToolCall=tracker.upsert;
+"""
 
 
 def _load_session_flow_body() -> str:
@@ -645,39 +680,9 @@ def test_upsert_live_tool_call_preserves_start_seq_for_complete():
     placement stable even when complete arrives on a different segment.
     """
     assert NODE, "node not on PATH"
-    helper_defs = "\n".join([
-        _function_decl(MESSAGES_JS, "_stableStringify"),
-        _function_decl(MESSAGES_JS, "_hashString"),
-        _function_decl(MESSAGES_JS, "_toolCallSignature"),
-        _function_decl(MESSAGES_JS, "_liveToolTid"),
-        _function_decl(MESSAGES_JS, "_coerceLiveToolCallSignature"),
-        _function_decl(MESSAGES_JS, "_coerceLiveToolCallSeq"),
-        _function_decl(MESSAGES_JS, "_currentLiveToolAnchor"),
-        _function_decl(MESSAGES_JS, "_findPendingLiveToolCallIndex"),
-        _function_decl(MESSAGES_JS, "upsertLiveToolCall"),
-    ])
     script = (
         "const assert = require('assert');\n"
-        f"{helper_defs}\n\n"
-        "const uploaded=[];\n"
-        "let activeSid='sid';\n"
-        "const INFLIGHT={};\n"
-        "const S={\"toolCalls\":[],\"messages\":[]};\n"
-        "let assistantRow={getAttribute:()=>\"7\"};\n"
-        "let _assistantSegmentSeq=7;\n"
-        "let _currentLiveSegmentSeq=7;\n"
-        "let _currentActivityBurstId=1;\n"
-        "const assistantBody=null;\n"
-        "global.persistInflightState=()=>{};\n"
-        "global.S=S;\n"
-        "global.INFLIGHT=INFLIGHT;\n"
-        "global.activeSid=activeSid;\n"
-        "global.uploaded=uploaded;\n"
-        "global.assistantRow=assistantRow;\n"
-        "global.assistantBody=assistantBody;\n"
-        "global._assistantSegmentSeq=_assistantSegmentSeq;\n"
-        "global._currentLiveSegmentSeq=_currentLiveSegmentSeq;\n"
-        "global._currentActivityBurstId=_currentActivityBurstId;\n\n"
+        f"{_live_tool_tracker_bootstrap()}\n"
         "const start=upsertLiveToolCall({\"name\":\"read_file\",\"args\":{\"path\":\"/tmp/a\"},\"preview\":\"start\"}, 'start');\n"
         "assert(start);\n"
         "start.started_at=111;\n"
@@ -702,39 +707,15 @@ def test_upsert_live_tool_call_complete_matches_by_name_burst_without_tid():
     stable tool call id.
     """
     assert NODE, "node not on PATH"
-    helper_defs = "\n".join([
-        _function_decl(MESSAGES_JS, "_stableStringify"),
-        _function_decl(MESSAGES_JS, "_hashString"),
-        _function_decl(MESSAGES_JS, "_toolCallSignature"),
-        _function_decl(MESSAGES_JS, "_liveToolTid"),
-        _function_decl(MESSAGES_JS, "_coerceLiveToolCallSignature"),
-        _function_decl(MESSAGES_JS, "_coerceLiveToolCallSeq"),
-        _function_decl(MESSAGES_JS, "_currentLiveToolAnchor"),
-        _function_decl(MESSAGES_JS, "_findPendingLiveToolCallIndex"),
-        _function_decl(MESSAGES_JS, "upsertLiveToolCall"),
-    ])
+    inflight_js = (
+        '{"sid":{"toolCalls":[{"name":"search","activityBurstId":3,'
+        '"activitySegmentSeq":4,"_toolCallStartSeq":4,'
+        '"_liveToolCallSignature":"search|3|4|{\\"query\\":\\"x\\"}",'
+        '"done":false}],"messages":[],"uploaded":[]}}'
+    )
     script = (
         "const assert = require('assert');\n"
-        f"{helper_defs}\n\n"
-        "const uploaded=[];\n"
-        "let activeSid='sid';\n"
-        "const INFLIGHT={\"sid\":{\"toolCalls\":[{\"name\":\"search\",\"activityBurstId\":3,\"activitySegmentSeq\":4,\"_toolCallStartSeq\":4,\"_liveToolCallSignature\":\"search|3|4|{\\\"query\\\":\\\"x\\\"}\",\"done\":false}],\"messages\":[],\"uploaded\":[]}};\n"
-        "const S={\"toolCalls\":[],\"messages\":[]};\n"
-        "let _assistantSegmentSeq=9;\n"
-        "let _currentLiveSegmentSeq=9;\n"
-        "let _currentActivityBurstId=3;\n"
-        "let assistantRow={getAttribute:()=>\"7\"};\n"
-        "let assistantBody=null;\n"
-        "global.persistInflightState=()=>{};\n"
-        "global.S=S;\n"
-        "global.INFLIGHT=INFLIGHT;\n"
-        "global.activeSid=activeSid;\n"
-        "global.uploaded=uploaded;\n"
-        "global.assistantRow=assistantRow;\n"
-        "global.assistantBody=assistantBody;\n"
-        "global._assistantSegmentSeq=_assistantSegmentSeq;\n"
-        "global._currentLiveSegmentSeq=_currentLiveSegmentSeq;\n"
-        "global._currentActivityBurstId=_currentActivityBurstId;\n\n"
+        f"{_live_tool_tracker_bootstrap(inflight_js, row_seq=7, segment_seq=9, burst_id=3)}\n"
         "const complete=upsertLiveToolCall({\"name\":\"search\",\"args\":{\"query\":\"x\"}}, 'complete');\n"
         "assert(complete);\n"
         "assert.strictEqual(complete.activitySegmentSeq, 4);\n"
@@ -753,39 +734,9 @@ def test_upsert_flags_orphan_complete_but_not_normal_start_complete():
     the active segment untouched (otherwise interleaved completions fragment the
     streaming text into spurious empty segments)."""
     assert NODE, "node not on PATH"
-    helper_defs = "\n".join([
-        _function_decl(MESSAGES_JS, "_stableStringify"),
-        _function_decl(MESSAGES_JS, "_hashString"),
-        _function_decl(MESSAGES_JS, "_toolCallSignature"),
-        _function_decl(MESSAGES_JS, "_liveToolTid"),
-        _function_decl(MESSAGES_JS, "_coerceLiveToolCallSignature"),
-        _function_decl(MESSAGES_JS, "_coerceLiveToolCallSeq"),
-        _function_decl(MESSAGES_JS, "_currentLiveToolAnchor"),
-        _function_decl(MESSAGES_JS, "_findPendingLiveToolCallIndex"),
-        _function_decl(MESSAGES_JS, "upsertLiveToolCall"),
-    ])
     script = (
         "const assert = require('assert');\n"
-        f"{helper_defs}\n\n"
-        "const uploaded=[];\n"
-        "let activeSid='sid';\n"
-        "const INFLIGHT={};\n"
-        "const S={\"toolCalls\":[],\"messages\":[]};\n"
-        "let assistantRow={getAttribute:()=>\"7\"};\n"
-        "let assistantBody=null;\n"
-        "let _assistantSegmentSeq=7;\n"
-        "let _currentLiveSegmentSeq=7;\n"
-        "let _currentActivityBurstId=1;\n"
-        "global.persistInflightState=()=>{};\n"
-        "global.S=S;\n"
-        "global.INFLIGHT=INFLIGHT;\n"
-        "global.activeSid=activeSid;\n"
-        "global.uploaded=uploaded;\n"
-        "global.assistantRow=assistantRow;\n"
-        "global.assistantBody=assistantBody;\n"
-        "global._assistantSegmentSeq=_assistantSegmentSeq;\n"
-        "global._currentLiveSegmentSeq=_currentLiveSegmentSeq;\n"
-        "global._currentActivityBurstId=_currentActivityBurstId;\n\n"
+        f"{_live_tool_tracker_bootstrap()}\n"
         # Case A: normal start -> complete. The start record must NOT be flagged,
         # and the matching complete must reuse it without setting the flag.
         "const start=upsertLiveToolCall({\"name\":\"read_file\",\"args\":{\"path\":\"/tmp/a\"},\"tid\":\"T1\"}, 'start');\n"
@@ -1187,7 +1138,9 @@ assert.strictEqual(inflight.lastRunJournalEventId, 'run-a:7');
     assert "lastRunJournalEventId:state.lastRunJournalEventId||''" in compact_body
     assert "inflight.lastRunJournalEventId||''" in attach_body
     assert "INFLIGHT[activeSid]&&INFLIGHT[activeSid].lastRunJournalEventId" in attach_body
-    assert "inflight.lastRunJournalEventId=raw" in attach_body
+    cursor_body = _function_body(RUN_JOURNAL_JS, "_rememberRunJournalCursor")
+    assert "inflight.lastRunJournalEventId=raw" in cursor_body
+    assert "getInflight:()=>INFLIGHT[activeSid]" in attach_body
     assert "INFLIGHT[activeSid].streamId=streamId" in attach_body
     assert "INFLIGHT[activeSid].lastRunJournalEventId=''" in attach_body
     assert "lastRunJournalEventId:INFLIGHT[sessionId].lastRunJournalEventId||''" in close_body

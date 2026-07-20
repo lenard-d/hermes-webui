@@ -6,8 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
+MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
-WORKSPACE_PY = ROOT / "api" / "workspace.py"
+WORKSPACE_ESCAPE_PY = ROOT / "api" / "workspace_parts" / "escape_navigation.py"
 UPLOAD_PY = ROOT / "api" / "upload.py"
 
 
@@ -122,7 +123,7 @@ def test_editor_file_endpoints_use_anchored_helpers():
 
 
 def test_folder_zip_reopens_members_through_anchor():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     body = _func_body(src, "_handle_folder_download")
 
     assert "open_anchored_fd(workspace_root, fp.resolve(), want_dir=False)" in body
@@ -132,7 +133,7 @@ def test_folder_zip_reopens_members_through_anchor():
 
 
 def test_raw_and_inline_file_targets_carry_anchor_root():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     raw_target = _func_body(src, "_file_raw_target")
     raw_handler = _func_body(src, "_handle_file_raw")
 
@@ -155,7 +156,7 @@ def test_escape_raw_and_read_routes_use_authorized_helpers():
 
 
 def test_escape_raw_helper_reanchors_through_safe_resolve():
-    src = WORKSPACE_PY.read_text(encoding="utf-8")
+    src = WORKSPACE_ESCAPE_PY.read_text(encoding="utf-8")
     helper = _func_body(src, "raw_authorized_escape_target")
 
     assert "safe_resolve_ws(resolved[\"external_root\"], resolved[\"external_rel\"])" in helper

@@ -10,7 +10,7 @@ from tests.i18n_split_loader import i18n_script_paths, source_shaped_i18n
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 I18N_JS = source_shaped_i18n()
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 
 

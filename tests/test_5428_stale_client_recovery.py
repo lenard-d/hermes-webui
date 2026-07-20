@@ -15,7 +15,6 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 INDEX_HTML = ROOT / "static" / "index.html"
-BOOT_JS = ROOT / "static" / "boot.js"
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +44,7 @@ def test_index_html_has_stale_client_banner():
 
 def test_boot_js_calls_check_webui_version_skew():
     """boot.js calls checkWebUIVersionSkew(s) after the successful boot settings response."""
-    src = BOOT_JS.read_text(encoding="utf-8")
+    src = family_source("boot")
     assert "checkWebUIVersionSkew(s)" in src
 
 

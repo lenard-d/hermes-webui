@@ -9,7 +9,13 @@ clear quota error.
 from pathlib import Path
 
 
-STREAMING = Path(__file__).resolve().parents[1] / "api" / "streaming.py"
+STREAMING = (
+    Path(__file__).resolve().parents[1]
+    / "api"
+    / "streaming_parts"
+    / "local_run.py"
+)
+STREAMING_FACADE = Path(__file__).resolve().parents[1] / "api" / "streaming.py"
 
 
 def _src() -> str:
@@ -31,9 +37,10 @@ def test_streaming_agent_cache_signature_includes_max_tokens_and_fallback():
 
 def test_openrouter_more_credits_error_is_classified_as_quota():
     src = _src()
-    assert "'more credits' in _err_lower" in src
-    assert "'can only afford' in _err_lower" in src
-    assert "'fewer max_tokens' in _err_lower" in src
+    facade_src = STREAMING_FACADE.read_text(encoding="utf-8")
+    assert "'more credits' in _err_lower" in facade_src
+    assert "'can only afford' in _err_lower" in facade_src
+    assert "'fewer max_tokens' in _err_lower" in facade_src
     assert "'more credits' in _exc_lower" in src
     assert "'can only afford' in _exc_lower" in src
     assert "'fewer max_tokens' in _exc_lower" in src

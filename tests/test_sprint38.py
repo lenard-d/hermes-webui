@@ -10,6 +10,9 @@ import pathlib
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 UI_JS     = family_source("ui")
 MSG_JS    = family_source("messages")
+STREAM_RENDERER_JS = (
+    REPO_ROOT / "static" / "messages_parts" / "stream_renderer.js"
+).read_text(encoding="utf-8")
 
 
 # ── ui.js: static render path ────────────────────────────────────────────────
@@ -114,11 +117,13 @@ def test_message_reasoning_payload_detection_is_leading_only():
 
 def test_stream_display_uses_shared_inline_thinking_extractor():
     """_streamDisplay in messages.js must share inline thinking extraction semantics."""
-    fn_idx = MSG_JS.find("function _streamDisplay()")
+    fn_idx = STREAM_RENDERER_JS.find("function _streamDisplay()")
     assert fn_idx >= 0, "_streamDisplay function not found in messages.js"
-    fn_end = MSG_JS.find("\n  }", fn_idx) + 4
-    fn_body = MSG_JS[fn_idx:fn_end]
-    assert "_extractInlineThinkingFromContent(_stripXmlToolCalls(assistantText), liveReasoningText, {streaming:true}).content" in fn_body, \
+    fn_end = STREAM_RENDERER_JS.find("\n  }", fn_idx) + 4
+    fn_body = STREAM_RENDERER_JS[fn_idx:fn_end]
+    assert "const state=readState();" in fn_body, \
+        "_streamDisplay must read the renderer owner's injected stream state"
+    assert "_extractInlineThinkingFromContent(_stripXmlToolCalls(state.assistantText), state.liveReasoningText, {streaming:true}).content" in fn_body, \
         "_streamDisplay must route through the shared inline thinking extractor"
 
 

@@ -9,9 +9,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
 SESSIONS_JS = family_source("sessions")
-BOOT_JS = BOOT_JS_PATH.read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 UI_JS = family_source("ui")
 NODE = shutil.which("node")

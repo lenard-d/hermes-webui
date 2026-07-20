@@ -9,13 +9,13 @@ from api import config
 
 class _ConfigState:
     def __enter__(self):
-        self.old_cfg = config.cfg
+        self.old_cfg = dict(config.cfg)
+        self.old_path = config._cfg_path
         self.old_mtime = config._cfg_mtime
         self.old_cache = config._available_models_cache
         self.old_cache_ts = config._available_models_cache_ts
         self.old_cache_fp = config._available_models_cache_source_fingerprint
         self.old_live_budget = config._LIVE_REBUILD_BUDGET_SECONDS
-        config._cfg_mtime = 0.0
         config._available_models_cache = None
         config._available_models_cache_ts = 0.0
         config._available_models_cache_source_fingerprint = None
@@ -27,7 +27,9 @@ class _ConfigState:
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        config.cfg = self.old_cfg
+        config.cfg.clear()
+        config.cfg.update(self.old_cfg)
+        config._cfg_path = self.old_path
         config._cfg_mtime = self.old_mtime
         config._available_models_cache = self.old_cache
         config._available_models_cache_ts = self.old_cache_ts
@@ -46,12 +48,20 @@ def _configure_named_custom_provider(tmp_path, monkeypatch, *, model=None):
     }
     if model:
         entry["model"] = model
-    config.cfg = {
-        "model": {"provider": "openai-codex", "default": "gpt-5.5"},
-        "providers": {},
-        "fallback_providers": [],
-        "custom_providers": [entry],
-    }
+    config.cfg.clear()
+    config.cfg.update(
+        {
+            "model": {"provider": "openai-codex", "default": "gpt-5.5"},
+            "providers": {},
+            "fallback_providers": [],
+            "custom_providers": [entry],
+        }
+    )
+    config._cfg_path = config._get_config_path()
+    try:
+        config._cfg_mtime = config.Path(config._cfg_path).stat().st_mtime
+    except OSError:
+        config._cfg_mtime = 0.0
 
 
 def _groups_by_provider(data):
@@ -120,6 +130,7 @@ def test_named_custom_provider_models_endpoint_5xx_preserves_status(monkeypatch,
     assert error["kind"] == "http"
     assert error["code"] == 502
     assert "returned 502" in error["message"]
+
 
 def test_named_custom_provider_models_endpoint_network_error_uses_short_timeout(monkeypatch, tmp_path):
     observed_timeouts = []

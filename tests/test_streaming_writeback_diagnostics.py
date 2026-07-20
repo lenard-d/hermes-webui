@@ -72,7 +72,7 @@ def test_stream_writeback_timing_log_respects_threshold():
 
 
 def test_stream_writeback_diagnostics_cover_final_writeback_stages():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
 
     expected_stages = [
         "merge_result",

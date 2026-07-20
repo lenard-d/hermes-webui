@@ -11,7 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+STREAM_ANCHOR_SCENE_JS = (
+    ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"
+).read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
@@ -50,6 +53,20 @@ def _transparentEventCountLabelBlock(ui_js):
     start = ui_js.index("function _transparentEventCountLabel")
     end = ui_js.index("\nfunction ", start + 1)
     return ui_js[start:end]
+
+
+def _function_body(source, name):
+    start = source.index(f"function {name}")
+    brace = source.index("{", start)
+    depth = 0
+    for index in range(brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[brace + 1:index]
+    raise AssertionError(f"function {name} body did not close")
 
 
 def _family_path_arg(family: str) -> str:
@@ -264,7 +281,8 @@ def test_chat_activity_display_mode_anchor_scene_preserves_hide_all_mode():
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "assistant_turn_anchors.js"))}, 'utf8');
+const sources = {json.dumps([str(ROOT / 'static' / 'assistant_turn_anchors_parts' / 'model.js'), str(ROOT / 'static' / 'assistant_turn_anchors_parts' / 'activity_scene.js'), str(ROOT / 'static' / 'assistant_turn_anchors.js')])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -326,9 +344,7 @@ process.stdout.write(JSON.stringify({{appendResult: appendResult === undefined, 
 
 
 def test_chat_activity_display_mode_settled_hide_all_scene_persists_without_worklog():
-    start = MESSAGES_JS.index("function _attachProjectedAnchorSceneToLastAssistant(messages){")
-    end = MESSAGES_JS.index("function _upsertAnchorProcessProse", start)
-    block = MESSAGES_JS[start:end]
+    block = _function_body(STREAM_ANCHOR_SCENE_JS, "_attachProjectedSceneToLastAssistant")
     persist_index = block.index("_persistSettledAnchorScene(lastAsst, scene, lastAsstIndex);")
     return_index = block.index("return hasWorklogRows;")
 

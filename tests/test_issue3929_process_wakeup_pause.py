@@ -2559,7 +2559,9 @@ def test_process_wakeup_pause_resets_when_model_provider_lane_changes(tmp_path, 
 
 
 def test_success_path_clears_process_wakeup_pause_after_late_cancel_checks():
-    src = Path(__file__).parent.parent.joinpath("api", "streaming.py").read_text(encoding="utf-8")
+    src = Path(__file__).parent.parent.joinpath(
+        "api", "streaming_parts", "local_run.py"
+    ).read_text(encoding="utf-8")
     session_save_idx = src.index('with _stream_writeback_stage(_writeback_timings, "session_save")')
     session_save_cancel_idx = src.index("if cancel_event.is_set():", session_save_idx)
     state_sync_idx = src.index('with _stream_writeback_stage(_writeback_timings, "state_sync")')

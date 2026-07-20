@@ -713,7 +713,7 @@ class TestStartupWarning:
 class TestSSRFCheck:
     def test_ssrf_guard_code_present_in_config(self):
         """config.py must contain SSRF DNS resolution guard."""
-        src = pathlib.Path(__file__).parent.parent / "api" / "config.py"
+        src = pathlib.Path(__file__).parent.parent / "api" / "config_parts" / "model_catalog.py"
         text = src.read_text()
         assert "getaddrinfo" in text, "SSRF guard must resolve DNS with getaddrinfo"
         assert "is_private" in text, "SSRF guard must check is_private IP"
@@ -721,7 +721,7 @@ class TestSSRFCheck:
 
     def test_known_local_providers_whitelisted(self):
         """Ollama and localhost endpoints should NOT be blocked by SSRF guard."""
-        src = pathlib.Path(__file__).parent.parent / "api" / "config.py"
+        src = pathlib.Path(__file__).parent.parent / "api" / "config_parts" / "model_catalog.py"
         text = src.read_text()
         assert "ollama" in text.lower()
         assert "localhost" in text.lower()

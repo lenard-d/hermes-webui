@@ -3,7 +3,7 @@ from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")

@@ -29,7 +29,7 @@ from tests.conftest import TEST_WORKSPACE
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 UI_JS = family_source("ui")
 I18N_JS = family_source("i18n")
-WORKSPACE_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 
 
 def _media_fixture_dir() -> pathlib.Path:
@@ -182,7 +182,7 @@ class TestInlineAudioVideoEditor(unittest.TestCase):
     """Static checks for inline audio/video preview controls in chat and workspace."""
 
     CSS = family_source("style")
-    WORKSPACE_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    WORKSPACE_JS = family_source("workspace")
     INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
     def test_audio_and_video_extension_detection_exists(self):
@@ -244,7 +244,7 @@ class TestWorkspacePdfViewer(unittest.TestCase):
     """Static checks for inline PDF preview support in the workspace panel."""
 
     CSS = family_source("style")
-    WORKSPACE_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    WORKSPACE_JS = family_source("workspace")
     INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
     def test_pdf_extension_routes_to_inline_viewer(self):
@@ -282,20 +282,20 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
     def test_allowed_roots_include_tmp(self):
         """Handler must allow /tmp so screenshot paths work."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
         self.assertIn('/tmp', routes_src,
                       '/tmp must be in the allowed roots list for /api/media')
 
     def test_svg_forces_download(self):
         """.svg must not be served inline (XSS risk)."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
         # SVG should be in _DOWNLOAD_TYPES or explicitly excluded from inline
         self.assertIn("image/svg+xml", routes_src,
                       "SVG MIME type must be handled (forced download) in _handle_media")
 
     def test_inline_preview_mime_whitelist_exists(self):
         """Only the explicit safe preview whitelist should be eligible for inline display."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
         self.assertIn("_INLINE_IMAGE_TYPES", routes_src,
                       "_INLINE_IMAGE_TYPES whitelist must exist in _handle_media")
         self.assertIn("_AUDIO_VIDEO_PDF_TYPES", routes_src,
@@ -305,13 +305,13 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
     def test_media_allowed_roots_env_var_referenced(self):
         """Handler must reference MEDIA_ALLOWED_ROOTS for configurable roots."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
         self.assertIn("MEDIA_ALLOWED_ROOTS", routes_src,
                       "MEDIA_ALLOWED_ROOTS env var must be parsed in _handle_media")
 
     def test_media_allowed_roots_uses_os_pathsep(self):
         """MEDIA_ALLOWED_ROOTS must use the platform path separator."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
         start = routes_src.index("extra_roots =")
         block = routes_src[start:start + 900]
         self.assertIn(".split(_os.pathsep)", block)
@@ -596,7 +596,7 @@ class TestMediaEndpointUnit(unittest.TestCase):
             )
 
     def test_media_endpoints_advertise_byte_range_support(self):
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
         self.assertIn("Accept-Ranges", routes_src)
         self.assertIn("Content-Range", routes_src)
         self.assertIn("206", routes_src)

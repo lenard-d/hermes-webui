@@ -18,6 +18,7 @@ from pathlib import Path
 
 from api.routes import _handle_session_compress_status, handle_get
 from tests._pytest_port import BASE
+from tests.frontend_asset_contract import family_source
 
 
 # ---------------------------------------------------------------------------
@@ -98,11 +99,7 @@ def test_handle_get_returns_true_for_compress_status_no_sid():
 
 
 def _read_commands_js():
-    with open(
-        Path(__file__).resolve().parents[1] / "static" / "commands.js",
-        encoding="utf-8",
-    ) as f:
-        return f.read()
+    return family_source("commands")
 
 
 def test_frontend_resume_404_silent():

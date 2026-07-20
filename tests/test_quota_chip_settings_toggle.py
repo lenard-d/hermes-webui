@@ -10,7 +10,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
 PANELS = REPO_ROOT / "static" / "panels.js"
 UI_JS = REPO_ROOT / "static" / "ui.js"
-BOOT = REPO_ROOT / "static" / "boot.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
 SETTINGS = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 
@@ -61,7 +60,7 @@ def test_quota_chip_render_short_circuits_when_disabled():
 
 
 def test_quota_chip_boot_initializes_default_off():
-    js = BOOT.read_text(encoding="utf-8")
+    js = family_source("boot")
     # Both success path (reads from settings) and failure path (defaults block)
     # must set window._showQuotaChip
     assert "window._showQuotaChip=s.show_quota_chip===true" in js, (

@@ -1,4 +1,6 @@
 """Sprint 6 tests: Escape from editor, Phase D validation, HTML extraction, cron create, session export."""
+from tests.frontend_asset_contract import family_source
+
 import json, uuid, pathlib, urllib.parse, urllib.request, urllib.error
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 
@@ -178,6 +180,7 @@ def test_app_js_has_resize_logic():
     """Sprint 9: app.js replaced by modules. Resize logic lives in boot.js."""
     raw, _, status = get_raw("/static/boot.js")
     assert status == 200
+    raw = family_source("boot").encode()
     assert b"_initResizePanels" in raw
     assert b"hermes-sidebar-w" in raw
     assert b"hermes-panel-w" in raw

@@ -147,13 +147,13 @@ def test_run_agent_streaming_uses_session_enabled_toolsets():
     the surrounding `except Exception`, so the user's toolset chip silently
     no-op'd every time. Pin the source-level invariant so this exact regression
     can't return."""
-    src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
 
     # The bug shape that must NOT come back: dict-style access on the result.
     # Negative-pattern guard (prevents revert).
     bad_pattern = "_session_meta.get('enabled_toolsets')"
     assert bad_pattern not in src, (
-        f"streaming.py contains {bad_pattern!r} — Session.load_metadata_only() "
+        f"local_run.py contains {bad_pattern!r} — Session.load_metadata_only() "
         f"returns a Session INSTANCE, not a dict, so .get() raises AttributeError. "
         f"The bare `except Exception:` swallows the failure silently and the "
         f"per-session toolset override is non-functional. Use getattr() instead. "
@@ -162,13 +162,13 @@ def test_run_agent_streaming_uses_session_enabled_toolsets():
 
     bad_pattern2 = "_session_meta['enabled_toolsets']"
     assert bad_pattern2 not in src, (
-        f"streaming.py contains {bad_pattern2!r} — same bug shape. "
+        f"local_run.py contains {bad_pattern2!r} — same bug shape. "
         f"Session.load_metadata_only() returns an instance, not a dict."
     )
 
     # Positive pattern: getattr() must be used.
     assert "getattr(_session_meta, 'enabled_toolsets'" in src, (
-        "streaming.py must use getattr(_session_meta, 'enabled_toolsets', None) "
+        "local_run.py must use getattr(_session_meta, 'enabled_toolsets', None) "
         "since load_metadata_only returns a Session instance."
     )
 

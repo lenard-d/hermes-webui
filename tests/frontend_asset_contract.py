@@ -16,9 +16,12 @@ FRONTEND_FAMILIES = (
     "style",
     "i18n",
     "ui",
+    "workspace",
     "sessions",
+    "commands",
     "messages",
     "panels",
+    "boot",
 )
 
 _I18N_PART_NAMES = (
@@ -46,6 +49,10 @@ _MESSAGE_PART_NAMES = (
     "composer_context.js",
     "send.js",
     "stream_lifecycle.js",
+    "stream_anchor_scene.js",
+    "stream_run_journal.js",
+    "stream_live_tools.js",
+    "stream_renderer.js",
     "stream.js",
     "composer_approvals.js",
     "session_events.js",
@@ -71,8 +78,15 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
         )
     if family == "ui":
         return (STATIC_DIR / "ui.js", *_numbered_parts("ui_parts", ".js"))
+    if family == "workspace":
+        return (
+            STATIC_DIR / "workspace.js",
+            *_numbered_parts("workspace_parts", ".js"),
+        )
     if family == "sessions":
         return (*_numbered_parts("sessions_parts", ".js"), STATIC_DIR / "sessions.js")
+    if family == "commands":
+        return (*_numbered_parts("command_parts", ".js"), STATIC_DIR / "commands.js")
     if family == "messages":
         return (
             STATIC_DIR / "messages.js",
@@ -80,6 +94,8 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
         )
     if family == "panels":
         return (STATIC_DIR / "panels.js", *_numbered_parts("panels_parts", ".js"))
+    if family == "boot":
+        return (STATIC_DIR / "boot.js", *_numbered_parts("boot_parts", ".js"))
     raise ValueError(f"unknown frontend asset family: {family}")
 
 

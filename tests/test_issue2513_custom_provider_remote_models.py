@@ -48,13 +48,15 @@ def test_custom_provider_model_field_does_not_block_remote_catalog(monkeypatch, 
     monkeypatch.setattr(config, "_models_cache_path", tmp_path / "models_cache.json")
     monkeypatch.setattr(config, "_get_auth_store_path", lambda: tmp_path / "auth.json")
 
-    old_cfg = config.cfg
+    old_cfg = dict(config.cfg)
     old_mtime = config._cfg_mtime
+    old_path = config._cfg_path
     old_cache = config._available_models_cache
     old_cache_ts = config._available_models_cache_ts
     old_cache_fp = config._available_models_cache_source_fingerprint
     try:
-        config.cfg = {
+        config.cfg.clear()
+        config.cfg.update({
             "model": {"provider": "openai-codex", "default": "gpt-5.5"},
             "providers": {},
             "fallback_providers": [],
@@ -72,16 +74,22 @@ def test_custom_provider_model_field_does_not_block_remote_catalog(monkeypatch, 
                     "model": "beta/sticky",
                 },
             ],
-        }
-        config._cfg_mtime = 0.0
+        })
+        config._cfg_path = config._get_config_path()
+        try:
+            config._cfg_mtime = config.Path(config._cfg_path).stat().st_mtime
+        except OSError:
+            config._cfg_mtime = 0.0
         config._available_models_cache = None
         config._available_models_cache_ts = 0.0
         config._available_models_cache_source_fingerprint = None
 
         data = config.get_available_models()
     finally:
-        config.cfg = old_cfg
+        config.cfg.clear()
+        config.cfg.update(old_cfg)
         config._cfg_mtime = old_mtime
+        config._cfg_path = old_path
         config._available_models_cache = old_cache
         config._available_models_cache_ts = old_cache_ts
         config._available_models_cache_source_fingerprint = old_cache_fp

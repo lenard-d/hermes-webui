@@ -259,10 +259,13 @@ console.log(JSON.stringify({
 
     def test_main_extra_body_flows_to_agent_request_overrides(self):
         """Persisted main extra_body must be passed to AIAgent, not only shown in Settings."""
-        assert "_main_model_request_overrides" in STREAMING_PY
-        assert "'request_overrides' in _agent_params" in STREAMING_PY
-        assert "_agent_kwargs['request_overrides'] = _main_request_overrides" in STREAMING_PY
-        assert "_main_request_overrides or {}" in STREAMING_PY
+        local_run_py = (
+            ROOT / "api" / "streaming_parts" / "local_run.py"
+        ).read_text(encoding="utf-8")
+        assert "_main_model_request_overrides" in local_run_py
+        assert "'request_overrides' in _agent_params" in local_run_py
+        assert "_agent_kwargs['request_overrides'] = _main_request_overrides" in local_run_py
+        assert "_main_request_overrides or {}" in local_run_py
 
     def test_advanced_modal_uses_defined_theme_tokens_and_inline_button_styles(self):
         """The modal is appended outside #mainSettings, so scoped button CSS must not be required."""

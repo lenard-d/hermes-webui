@@ -5,6 +5,7 @@ import sys
 import types
 
 from api.upload import handle_upload, handle_transcribe
+from tests.frontend_asset_contract import family_source
 
 
 def _multipart_body(fields=None, files=None, boundary=b"testboundary"):
@@ -149,9 +150,7 @@ def test_raw_audio_upload_different_formats():
 # _activeCaptureMode), not whatever _rawAudioMode says now — otherwise toggling
 # Settings → Sound mid-recording orphans the wrong backend. Also: an explicit
 # Send click (_micPendingSend) must send even with text in the composer.
-import pathlib as _pathlib
-
-_BOOT_JS = (_pathlib.Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
+_BOOT_JS = family_source("boot")
 
 
 def test_stop_mic_uses_pinned_active_capture_mode_not_current_rawmode():

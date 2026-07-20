@@ -26,6 +26,8 @@ Issue reference: #3344; PR body cross-references
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -34,7 +36,7 @@ import subprocess
 import pytest
 
 REPO = pathlib.Path(__file__).parent.parent
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 # ── Source extraction ──────────────────────────────────────────────────────

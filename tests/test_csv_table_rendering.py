@@ -2,9 +2,8 @@
 from tests.frontend_asset_contract import family_source
 
 import re
-from pathlib import Path
 
-WORKSPACE_JS = Path("static/workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 
 
 def test_csv_extension_regex():
@@ -185,8 +184,7 @@ def test_csv_preview_preserves_edit_flow():
     workspace Edit affordance that .csv had when it fell through to the code
     preview. csv mode must be editable, the preview must cache raw content for
     the textarea, and a save must re-render the table (not markdown)."""
-    with open('static/workspace.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("workspace")
     # csv mode is editable
     assert "_previewCurrentMode==='csv'" in src, "csv mode should be editable / handled in workspace edit flow"
     edit_btn = src[src.find('function updateEditBtn'):src.find('function updateEditBtn') + 400]

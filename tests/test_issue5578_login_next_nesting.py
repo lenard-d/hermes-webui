@@ -110,7 +110,7 @@ class TestClientGuardsWired:
         # redirect helpers (ui.js _redirectIfUnauth, boot.js redirectToLogin)
         # also nested the login URL. All three must carry the on-login guard.
         UI_JS = family_source("ui")
-        BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+        BOOT_JS = family_source("boot")
         assert "login$/.test(_p)" in UI_JS, "ui.js _redirectIfUnauth must guard the login page"
         assert "login$/.test(_p)" in BOOT_JS, "boot.js redirectToLogin must guard the login page"
 

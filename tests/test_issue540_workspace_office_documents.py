@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from tests.frontend_asset_contract import family_source
 
 # The Office parsers are optional deps (commented-optional in requirements.txt;
 # installed by CI and requirements-dev.txt). On a lean install they are absent,
@@ -35,7 +36,7 @@ from api.office_documents import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_JS = (ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 NODE = shutil.which("node")
 
 

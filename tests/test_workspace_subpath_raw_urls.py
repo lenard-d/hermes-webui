@@ -21,6 +21,8 @@ in Node with a subpath `document.baseURI` and asserts the resolved URL keeps
 the mount prefix.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -29,12 +31,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-WORKSPACE_JS = ROOT / "static" / "workspace.js"
 NODE = shutil.which("node")
 
 
 def _workspace_js() -> str:
-    return WORKSPACE_JS.read_text(encoding="utf-8")
+    return family_source("workspace")
 
 
 def _route_helper_block() -> str:

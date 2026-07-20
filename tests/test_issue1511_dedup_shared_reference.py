@@ -194,7 +194,7 @@ def test_get_models_grouped_unconfigured_providers_get_independent_dicts(monkeyp
     # call at the assignment site, AND by running an integration check
     # of the loop pattern.
     import inspect
-    src = inspect.getsource(cfg_mod.get_models_grouped) if hasattr(cfg_mod, "get_models_grouped") else inspect.getsource(cfg_mod)
+    src = inspect.getsource(cfg_mod.get_available_models)
     assert "copy.deepcopy(auto_detected_models)" in src, (
         "api/config.py must wrap auto_detected_models in copy.deepcopy() at "
         "the unconfigured-provider fall-through (line ~2078) so dedup mutation "
@@ -214,4 +214,3 @@ def test_get_models_grouped_unconfigured_providers_get_independent_dicts(monkeyp
     assert groups[1]["models"][0]["id"] == "@provider-b:shared-model-x"
     assert groups[0]["models"][0]["label"].count("(") == 0
     assert groups[1]["models"][0]["label"].count("(") == 1
-

@@ -10,7 +10,7 @@ from tests.frontend_asset_contract import family_source
 
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
+BOOT_JS_PATH = REPO_ROOT / "static" / "boot_parts" / "006-composer-session-actions.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

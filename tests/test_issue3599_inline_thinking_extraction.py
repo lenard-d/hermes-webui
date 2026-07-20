@@ -10,6 +10,9 @@ from api.streaming import (
 
 REPO = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
+STREAM_RENDERER_JS = (
+    REPO / "static" / "messages_parts" / "stream_renderer.js"
+).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
 
@@ -97,12 +100,14 @@ def test_unclosed_inline_thinking_after_content_stays_visible_on_persist():
 
 
 def test_messages_js_live_and_persist_paths_share_extractor():
-    stream_display = _function_body(MESSAGES_JS, "function _streamDisplay")
-    parse_state = _function_body(MESSAGES_JS, "function _parseStreamState")
+    stream_display = _function_body(STREAM_RENDERER_JS, "function _streamDisplay")
+    parse_state = _function_body(STREAM_RENDERER_JS, "function _parseStreamState")
     split_persist = _function_body(MESSAGES_JS, "function _splitThinkFromContent")
 
-    assert "_extractInlineThinkingFromContent(_stripXmlToolCalls(assistantText), liveReasoningText, {streaming:true}).content" in stream_display
-    assert "return _extractInlineThinkingFromContent(_stripXmlToolCalls(assistantText), liveReasoningText, {streaming:true});" in parse_state
+    assert "const state=readState();" in stream_display
+    assert "_extractInlineThinkingFromContent(_stripXmlToolCalls(state.assistantText), state.liveReasoningText, {streaming:true}).content" in stream_display
+    assert "const state=readState();" in parse_state
+    assert "return _extractInlineThinkingFromContent(_stripXmlToolCalls(state.assistantText), state.liveReasoningText, {streaming:true});" in parse_state
     assert "return _extractInlineThinkingFromContent(rawContent, existingReasoning, {streaming:false});" in split_persist
     assert "window._extractInlineThinkingFromContentForRender" in MESSAGES_JS
     assert "_thinkingFenceMarkerAt" in MESSAGES_JS

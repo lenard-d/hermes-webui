@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """
 Sprint 37 Tests: Workspace panel open/closed state persists across refreshes via localStorage.
 """
@@ -5,7 +6,7 @@ import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-BOOT_JS   = (REPO_ROOT / "static" / "boot.js").read_text()
+BOOT_JS   = family_source("boot")
 HTML      = (REPO_ROOT / "static" / "index.html").read_text()
 
 

@@ -20,8 +20,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO = Path(__file__).resolve().parent.parent
-WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

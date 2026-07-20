@@ -1,8 +1,9 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
 
 

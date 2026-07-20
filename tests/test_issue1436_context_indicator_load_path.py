@@ -373,6 +373,9 @@ class TestIssue1436SourceMarkers:
 
     def test_routes_load_path_imports_get_model_context_length(self):
         src = ROUTES.read_text(encoding="utf-8")
+        owner_src = (ROUTES.parent / "routes_parts" / "session_models.py").read_text(
+            encoding="utf-8"
+        )
         # The session load path can call a helper, but the lazy import must
         # remain in routes.py so WebUI still works with older/missing agent
         # bundles by swallowing metadata-resolution failures.
@@ -383,8 +386,8 @@ class TestIssue1436SourceMarkers:
             "GET /api/session load-path block must resolve model context "
             "metadata for the context_length fallback (#1436)"
         )
-        assert "from agent.model_metadata import get_model_context_length" in src, (
-            "routes.py must lazy-import get_model_context_length for the "
+        assert "from agent.model_metadata import get_model_context_length" in owner_src, (
+            "session_models.py must lazy-import get_model_context_length for the "
             "context_length fallback (#1436)"
         )
 

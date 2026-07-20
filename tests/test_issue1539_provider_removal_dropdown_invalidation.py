@@ -41,6 +41,8 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _read_static(name: str) -> str:
+    if name == "commands.js":
+        return family_source("commands")
     return (REPO / "static" / name).read_text(encoding="utf-8")
 
 

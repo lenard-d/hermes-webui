@@ -137,7 +137,12 @@ class TestIssue909InjectedModelLabel:
 
     def test_config_uses_label_helper_not_raw_split(self):
         from pathlib import Path
-        config_src = (Path(__file__).resolve().parent.parent / "api" / "config.py").read_text()
+        config_src = (
+            Path(__file__).resolve().parent.parent
+            / "api"
+            / "config_parts"
+            / "model_catalog.py"
+        ).read_text()
         # The raw label-building pattern should be replaced by the helper
         assert "_get_label_for_model" in config_src, (
             "api/config.py must call _get_label_for_model() for injected default model labels (#909)"

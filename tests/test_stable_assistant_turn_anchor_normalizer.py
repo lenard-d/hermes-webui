@@ -9,6 +9,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ANCHORS_JS = REPO / "static" / "assistant_turn_anchors.js"
+ANCHOR_JS_PATHS = (
+    REPO / "static" / "assistant_turn_anchors_parts" / "model.js",
+    REPO / "static" / "assistant_turn_anchors_parts" / "activity_scene.js",
+    ANCHORS_JS,
+)
 MESSAGES_JS = REPO / "static" / "messages.js"
 UI_JS = REPO / "static" / "ui.js"
 SESSIONS_JS = REPO / "static" / "sessions.js"
@@ -30,7 +35,8 @@ def _normalizer_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});

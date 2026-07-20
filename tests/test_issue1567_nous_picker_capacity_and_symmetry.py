@@ -583,8 +583,7 @@ class TestFrontendExtrasContract:
         )
 
     def test_commands_js_loads_slash_args_from_extra_models(self):
-        from pathlib import Path
-        src = (Path(__file__).resolve().parent.parent / "static" / "commands.js").read_text(encoding="utf-8")
+        src = family_source("commands")
         idx = src.find("async function _loadSlashModelSubArgs")
         assert idx != -1
         body = src[idx : idx + 1500]

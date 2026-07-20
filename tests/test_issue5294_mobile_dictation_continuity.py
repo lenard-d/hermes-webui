@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
+BOOT_JS_PATH = REPO_ROOT / "static" / "boot_parts" / "003-speech-capture.js"
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

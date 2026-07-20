@@ -269,7 +269,7 @@ def test_mobile_sidebar_drawer_uses_transform_instead_of_left():
 
 def test_workspace_panel_inline_width_is_desktop_only():
     """Persisted rightpanel width must only be restored above compact/mobile breakpoints."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "function _syncWorkspacePanelInlineWidth()" in boot_js, \
         "_syncWorkspacePanelInlineWidth() must exist to keep panel width mobile-safe"
     assert "_syncWorkspacePanelInlineWidth();" in boot_js, \
@@ -282,7 +282,7 @@ def test_workspace_panel_inline_width_is_desktop_only():
 
 def test_workspace_panel_boot_restore_is_desktop_only():
     """Persisted workspace panels should not auto-cover compact/mobile launch."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "if(_ephPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';" in boot_js
     assert "if(S.session&&S.session.workspace&&panelPref&&!_isCompactWorkspaceViewport()){" in boot_js
     assert "if(_freshPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';" in boot_js
@@ -614,7 +614,7 @@ def test_mobile_rail_click_opens_full_screen_panel_drawer():
 
 def test_mobile_switch_panel_non_chat_opens_sidebar():
     """mobileSwitchPanel() non-chat path should open the full-screen panel drawer."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     fn_body = _js_function_body(boot_js, "mobileSwitchPanel")
     assert "if(name==='chat')" in fn_body, (
         "mobileSwitchPanel must close sidebar only on chat target"
@@ -632,7 +632,7 @@ def test_mobile_switch_panel_non_chat_opens_sidebar():
 
 def test_pwa_edge_swipe_opens_current_mobile_panel():
     """Left-edge swipe should open the current sidebar panel, matching hamburger."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     body = _js_function_body(boot_js, "_openMobileSidebarFromGesture")
     assert "switchPanel('chat',{bypassSettingsGuard:true})" not in body, (
         "Left-edge gesture should not force Chat; it should preserve the active panel"
@@ -686,7 +686,7 @@ def test_mobile_sidebar_open_syncs_panel_from_visible_detail_view():
     assert "_currentPanel=panel" in sync_body
     assert "document.querySelectorAll('[data-panel]')" in sync_body
     assert "document.querySelectorAll('.panel-view')" in sync_body
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     toggle_body = _js_function_body(boot_js, "toggleMobileSidebar")
     assert "_syncMobileSidebarPanelFromMainView()" in toggle_body, (
         "Hamburger-opened mobile sidebar should also sync from the visible detail view"
@@ -822,7 +822,7 @@ def test_workspace_close_button_present():
 
 def test_toggle_mobile_files_js_defined():
     """toggleMobileFiles() must be defined in boot.js."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "function toggleMobileFiles()" in boot_js, \
         "toggleMobileFiles() missing from static/boot.js"
     assert "mobile-open" in boot_js, \
@@ -833,7 +833,7 @@ def test_toggle_mobile_files_js_defined():
 
 def test_new_conversation_closes_mobile_sidebar():
     """New conversation must close the mobile drawer so the chat pane is visible immediately."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     # Handler is now multi-line — search for the full block rather than a single line.
     assert "$('btnNewChat').onclick" in boot_js, "btnNewChat onclick handler missing from static/boot.js"
     # Find the handler block and verify closeMobileSidebar appears in it.
@@ -858,7 +858,7 @@ def test_new_conversation_shortcut_works_while_busy():
     to wait for a long generation to finish before they could start something
     new — the exact moment they want to switch context.
     """
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     shortcut_line = next((ln for ln in boot_js.splitlines() if "e.key==='k'" in ln or "e.key === 'k'" in ln), "")
     assert shortcut_line, "Cmd/Ctrl+K new chat shortcut missing from static/boot.js"
     # Inspect the next 10 lines after the keybinding match — the gating block
@@ -1576,7 +1576,7 @@ def test_touch_device_inputs_meet_zoom_threshold():
 
 def test_touch_keyboard_inset_uses_touch_primary_media_query():
     """The keyboard inset path must key off touch-primary media queries."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "function _isTouchKeyboardViewport()" in boot_js, \
         "boot.js must define a touch-keyboard viewport predicate"
     assert "matchMedia('(hover:none) and (pointer:coarse)')" in boot_js or \
@@ -1590,7 +1590,7 @@ def test_touch_keyboard_inset_uses_touch_primary_media_query():
 
 def test_touch_keyboard_inset_writes_and_clears_css_variable():
     """visualViewport geometry must write and clear the keyboard inset variable."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "setProperty('--keyboard-bottom-inset'" in boot_js, \
         "boot.js must write --keyboard-bottom-inset on touch keyboard viewport changes"
     assert "removeProperty('--keyboard-bottom-inset')" in boot_js, \
@@ -1603,7 +1603,7 @@ def test_touch_keyboard_inset_ignores_pinch_zoom_scale():
     """A pinch-zoomed viewport (vv.scale != 1) must not be read as keyboard
     occlusion — otherwise Chromium 'force enable zoom' produces a large spurious
     inset that jitters on pan (#5738 UX-gate hardening)."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "vv.scale" in boot_js, \
         "boot.js must consult visualViewport.scale before treating shrinkage as keyboard occlusion"
     assert "Math.abs((vv.scale||1)-1)>0.05" in boot_js, \
@@ -1612,7 +1612,7 @@ def test_touch_keyboard_inset_ignores_pinch_zoom_scale():
 
 def test_touch_keyboard_inset_primes_during_visual_viewport_setup():
     """The existing visualViewport setup path must prime the inset immediately."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     setup_start = boot_js.index("if(window.visualViewport){")
     setup_end = boot_js.index("window.visualViewport.addEventListener('resize'", setup_start)
     setup_block = boot_js[setup_start:setup_end]
@@ -1622,7 +1622,7 @@ def test_touch_keyboard_inset_primes_during_visual_viewport_setup():
 
 def test_touch_keyboard_inset_primes_on_pageshow_restore():
     """BFCache restore must resync the inset before restore work continues."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     pageshow_start = boot_js.index("window.addEventListener('pageshow'")
     pageshow_end = boot_js.index("const _srch = document.getElementById('sessionSearch');", pageshow_start)
     pageshow_block = boot_js[pageshow_start:pageshow_end]
@@ -1664,21 +1664,21 @@ def test_mobile_bottom_nav_removed():
 
 def test_mobile_enter_newline_condition_present():
     """boot.js keydown handler must detect touch-primary devices via pointer:coarse."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "pointer:coarse" in boot_js, \
         "boot.js must use pointer:coarse media query for mobile Enter detection"
 
 
 def test_mobile_enter_newline_uses_match_media():
     """boot.js must call matchMedia for pointer detection, not a hardcoded flag."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "matchMedia('(pointer:coarse)')" in boot_js or 'matchMedia("(pointer:coarse)")' in boot_js, \
         "boot.js must use matchMedia('(pointer:coarse)') for mobile detection"
 
 
 def test_mobile_enter_newline_does_not_depend_on_viewport_heuristic():
     """The viewport-shrink heuristic was unreliable on iOS/Android and must be gone."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "function _isVirtualKeyboardLikelyOpen()" not in boot_js, \
         "the unreliable visualViewport keyboard heuristic function must be removed"
     assert "&&_isVirtualKeyboardLikelyOpen()" not in boot_js, \
@@ -1689,7 +1689,7 @@ def test_mobile_enter_newline_does_not_depend_on_viewport_heuristic():
 
 def test_mobile_enter_newline_respects_hardware_keyboard_on_touch_devices():
     """Touch devices with a co-existing fine pointer (hardware keyboard) keep desktop Enter=send."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     assert "any-pointer:fine" in boot_js, \
         "boot.js must use any-pointer:fine to detect a co-existing hardware keyboard/trackpad"
     assert "!_hasFinePointerCoexisting()" in boot_js, \
@@ -1698,7 +1698,7 @@ def test_mobile_enter_newline_respects_hardware_keyboard_on_touch_devices():
 
 def test_mobile_enter_newline_only_overrides_enter_default():
     """Mobile newline override must only apply when _sendKey is the default 'enter'."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     # The _mobileDefault check must gate on _sendKey==='enter' so ctrl+enter users aren't affected
     assert "_sendKey===" in boot_js and "'enter'" in boot_js, \
         "Mobile newline fallback must check window._sendKey==='enter' to avoid overriding user preference"
@@ -1706,7 +1706,7 @@ def test_mobile_enter_newline_only_overrides_enter_default():
 
 def test_mobile_enter_does_not_affect_desktop_logic():
     """The mobile Enter override must not alter the existing else branch for desktop users."""
-    boot_js = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
     # The else branch (desktop, sends on Enter without Shift) must still be present
     assert "if(!e.shiftKey){e.preventDefault();send();" in boot_js, \
         "Desktop Enter-to-send logic (else branch) must still be present in boot.js"

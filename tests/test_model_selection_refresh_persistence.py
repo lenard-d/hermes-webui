@@ -10,7 +10,7 @@ from pathlib import Path
 from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 SESSIONS_JS = family_source("sessions")
 UI_JS = family_source("ui")
 

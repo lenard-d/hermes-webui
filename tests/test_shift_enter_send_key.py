@@ -1,9 +1,10 @@
+from tests.frontend_asset_contract import family_source
 """Keyboard contract for the Shift+Enter send-key preference."""
 
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"

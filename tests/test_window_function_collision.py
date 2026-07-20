@@ -132,7 +132,7 @@ def test_inflight_state_limits_no_longer_collides_with_window_config():
     Confirms the function rename landed and the old colliding name is gone.
     """
     ui_js = family_source("ui")
-    boot_js = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    boot_js = family_source("boot")
 
     # The window-attached config still exists (we deliberately kept this name).
     assert "window._inflightStateLimits={" in boot_js, (

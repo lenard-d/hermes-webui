@@ -19,7 +19,6 @@ from tests._pytest_port import BASE
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 UI_JS = ROOT / "static" / "ui.js"
-WORKSPACE_JS = ROOT / "static" / "workspace.js"
 NODE = shutil.which("node")
 
 
@@ -64,7 +63,7 @@ def _make_session(workspace: pathlib.Path) -> str:
 
 
 def _read_workspace_js() -> str:
-    return WORKSPACE_JS.read_text(encoding="utf-8")
+    return family_source("workspace")
 
 
 def _workspace_escape_helper_block() -> str:

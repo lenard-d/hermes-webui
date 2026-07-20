@@ -27,6 +27,9 @@ import subprocess
 
 REPO = pathlib.Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
+STREAM_RENDERER_JS = (
+    REPO / "static" / "messages_parts" / "stream_renderer.js"
+).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 
@@ -141,33 +144,36 @@ class TestIndexHtmlSmdScript:
 
 class TestClosureVariables:
     """_smdParser, _smdWrittenLen and _smdReconnect must be declared in the
-    attachLiveStream closure, not inside a helper or handler."""
+    stream renderer owner, not inside a helper or handler."""
 
     def get_prelude(self):
-        return extract_attach_live_stream_prelude(MESSAGES_JS)
+        factory = re.search(r"function createStreamRenderer\(", STREAM_RENDERER_JS)
+        first_helper = re.search(r"\n\s*function _stripXmlToolCalls\(", STREAM_RENDERER_JS)
+        assert factory and first_helper
+        return STREAM_RENDERER_JS[factory.start() : first_helper.start()]
 
     def test_smd_parser_declared(self):
         prelude = self.get_prelude()
         assert prelude and "_smdParser" in prelude, (
-            "_smdParser must be declared in the attachLiveStream closure scope"
+            "_smdParser must be declared in the stream renderer owner scope"
         )
 
     def test_smd_written_len_declared(self):
         prelude = self.get_prelude()
         assert prelude and "_smdWrittenLen" in prelude, (
-            "_smdWrittenLen must be declared in the attachLiveStream closure scope"
+            "_smdWrittenLen must be declared in the stream renderer owner scope"
         )
 
     def test_smd_reconnect_declared(self):
         prelude = self.get_prelude()
         assert prelude and "_smdReconnect" in prelude, (
-            "_smdReconnect must be declared in the attachLiveStream closure scope"
+            "_smdReconnect must be declared in the stream renderer owner scope"
         )
 
     def test_smd_written_text_declared(self):
         prelude = self.get_prelude()
         assert prelude and "_smdWrittenText" in prelude, (
-            "_smdWrittenText must be declared in the attachLiveStream closure scope"
+            "_smdWrittenText must be declared in the stream renderer owner scope"
         )
 
     def test_smd_parser_initialised_null(self):
@@ -189,17 +195,17 @@ class TestSmdHelpers:
     """_smdNewParser, _smdEndParser and _smdWrite must exist and have the right shape."""
 
     def test_smd_new_parser_exists(self):
-        fn = extract_fn(MESSAGES_JS, "_smdNewParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn is not None, "_smdNewParser function must be defined"
 
     def test_smd_new_parser_resets_written_len(self):
-        fn = extract_fn(MESSAGES_JS, "_smdNewParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn and (
             "_smdWrittenLen=0" in fn or "_smdWrittenLen = 0" in fn
         ), "_smdNewParser must reset _smdWrittenLen to 0"
 
     def test_smd_new_parser_calls_safe_renderer(self):
-        fn = extract_fn(MESSAGES_JS, "_smdNewParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn and (
             "_safeSmdRenderer(" in fn or "_streamFadeRenderer(" in fn
         ), (
@@ -207,75 +213,75 @@ class TestSmdHelpers:
             "so URL scheme safety is applied inline via set_attr hook"
         )
         # Verify _safeSmdRenderer itself uses smd.default_renderer internally
-        safefn = extract_fn(MESSAGES_JS, "_safeSmdRenderer")
+        safefn = extract_fn(STREAM_RENDERER_JS, "_safeSmdRenderer")
         assert safefn and "default_renderer" in safefn, (
             "_safeSmdRenderer must call smd.default_renderer() to create the base renderer"
         )
 
     def test_smd_new_parser_calls_parser(self):
-        fn = extract_fn(MESSAGES_JS, "_smdNewParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn and (
             "window.smd.parser(" in fn or "smd.parser(" in fn
         ), "_smdNewParser must call smd.parser(renderer) to create a parser"
 
     def test_smd_new_parser_guards_on_window_smd(self):
-        fn = extract_fn(MESSAGES_JS, "_smdNewParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn and "window.smd" in fn, (
             "_smdNewParser must guard on window.smd before using the library"
         )
 
     def test_smd_end_parser_exists(self):
-        fn = extract_fn(MESSAGES_JS, "_smdEndParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert fn is not None, "_smdEndParser function must be defined"
 
     def test_smd_end_parser_calls_parser_end(self):
-        fn = extract_fn(MESSAGES_JS, "_smdEndParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert fn and "parser_end" in fn, (
             "_smdEndParser must call smd.parser_end() to flush remaining parser state"
         )
 
     def test_smd_end_parser_nulls_parser(self):
-        fn = extract_fn(MESSAGES_JS, "_smdEndParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert fn and (
             "_smdParser=null" in fn or "_smdParser = null" in fn
         ), "_smdEndParser must set _smdParser to null after flushing"
 
     def test_smd_end_parser_resets_written_len(self):
-        fn = extract_fn(MESSAGES_JS, "_smdEndParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert fn and (
             "_smdWrittenLen=0" in fn or "_smdWrittenLen = 0" in fn
         ), "_smdEndParser must reset _smdWrittenLen to 0"
 
     def test_smd_write_exists(self):
-        fn = extract_fn(MESSAGES_JS, "_smdWrite")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
         assert fn is not None, "_smdWrite function must be defined"
 
     def test_smd_write_slices_delta(self):
-        fn = extract_fn(MESSAGES_JS, "_smdWrite")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
         assert fn and "_smdWrittenLen" in fn, (
             "_smdWrite must slice from _smdWrittenLen to send only new chars"
         )
 
     def test_smd_write_calls_parser_write(self):
-        fn = extract_fn(MESSAGES_JS, "_smdWrite")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
         assert fn and "parser_write" in fn, (
             "_smdWrite must call smd.parser_write() to feed the chunk"
         )
 
     def test_smd_write_updates_written_len(self):
-        fn = extract_fn(MESSAGES_JS, "_smdWrite")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
         assert fn and "displayText.length" in fn, (
             "_smdWrite must advance _smdWrittenLen to displayText.length after writing"
         )
 
     def test_smd_write_has_prefix_desync_guard(self):
-        fn = extract_fn(MESSAGES_JS, "_smdWrite")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
         assert fn and "startsWith(_smdWrittenText)" in fn, (
             "_smdWrite must detect prefix desyncs and rebuild parser to avoid dropped chars"
         )
 
     def test_smd_write_guards_on_parser(self):
-        fn = extract_fn(MESSAGES_JS, "_smdWrite")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
         assert fn and "_smdParser" in fn, (
             "_smdWrite must guard on _smdParser before calling parser_write"
         )
@@ -290,19 +296,19 @@ class TestSmdUnderscoreEmphasisParity:
     """
 
     def test_smd_underscore_renderer_wrapper_exists(self):
-        fn = extract_fn(MESSAGES_JS, "_smdRendererWithoutUnderscoreEmphasis")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdRendererWithoutUnderscoreEmphasis")
         assert fn is not None, (
             "messages.js must define _smdRendererWithoutUnderscoreEmphasis()"
         )
 
     def test_smd_new_parser_wraps_renderer(self):
-        fn = extract_fn(MESSAGES_JS, "_smdNewParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn and "_smdRendererWithoutUnderscoreEmphasis(" in fn, (
             "_smdNewParser must wrap the smd renderer before parser creation"
         )
 
     def test_smd_wrapper_targets_only_underscore_tokens(self):
-        fn = extract_fn(MESSAGES_JS, "_smdRendererWithoutUnderscoreEmphasis")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdRendererWithoutUnderscoreEmphasis")
         assert fn and "ITALIC_UND" in fn and "STRONG_UND" in fn, (
             "The smd wrapper must neutralize underscore emphasis tokens"
         )
@@ -311,14 +317,14 @@ class TestSmdUnderscoreEmphasisParity:
         )
 
     def test_smd_wrapper_keeps_nested_token_stack(self):
-        fn = extract_fn(MESSAGES_JS, "_smdRendererWithoutUnderscoreEmphasis")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdRendererWithoutUnderscoreEmphasis")
         assert fn and "tokenStack" in fn and "tokenStack.push(null)" in fn, (
             "The wrapper must track non-suppressed tokens so nested links/code "
             "inside underscore text still close through the base renderer"
         )
 
     def test_smd_wrapper_runtime_matches_render_md_emphasis_policy(self):
-        helper = extract_fn(MESSAGES_JS, "_smdRendererWithoutUnderscoreEmphasis")
+        helper = extract_fn(STREAM_RENDERER_JS, "_smdRendererWithoutUnderscoreEmphasis")
         assert helper, "_smdRendererWithoutUnderscoreEmphasis function not found"
         script = f"""
 import * as smd from './static/vendor/smd.min.js';
@@ -384,7 +390,7 @@ class TestScheduleRenderSmdPath:
     """_scheduleRender must use smd when available and fall back to renderMd."""
 
     def get_fn(self):
-        return extract_fn(MESSAGES_JS, "_scheduleRender")
+        return extract_fn(STREAM_RENDERER_JS, "_scheduleRender")
 
     def test_smd_path_present(self):
         fn = self.get_fn()
@@ -625,7 +631,7 @@ class TestExistingStreamingGuardsIntact:
     """The smd integration must not break pre-existing correctness properties."""
 
     def test_stream_finalized_still_guards_schedule_render(self):
-        fn = extract_fn(MESSAGES_JS, "_scheduleRender")
+        fn = extract_fn(STREAM_RENDERER_JS, "_scheduleRender")
         assert fn and "_streamFinalized" in fn, (
             "_streamFinalized guard must still be present in _scheduleRender"
         )
@@ -684,7 +690,7 @@ class TestSmdUrlSchemeSanitization:
     """
 
     def test_sanitize_helper_exists(self):
-        assert "_sanitizeSmdLinks" in MESSAGES_JS, (
+        assert "_sanitizeSmdLinks" in STREAM_RENDERER_JS, (
             "messages.js must define _sanitizeSmdLinks() to strip javascript:/data:/vbscript: "
             "URLs from smd-rendered anchors and images (agent output is untrusted)"
         )
@@ -694,33 +700,33 @@ class TestSmdUrlSchemeSanitization:
         # renderMd path emitted (http/https + relative/anchor paths + mailto/tel)
         # and reject dangerous executable schemes. file:// anchors are rewritten
         # to api/media before click time rather than allowed through raw.
-        assert "_SMD_SAFE_URL_RE" in MESSAGES_JS, (
+        assert "_SMD_SAFE_URL_RE" in STREAM_RENDERER_JS, (
             "Expected a _SMD_SAFE_URL_RE regex defining the safe-scheme allowlist"
         )
         # Find the regex definition
         import re as _re
-        m = _re.search(r"_SMD_SAFE_URL_RE\s*=\s*/([^/]+)/i?", MESSAGES_JS)
+        m = _re.search(r"_SMD_SAFE_URL_RE\s*=\s*/([^/]+)/i?", STREAM_RENDERER_JS)
         assert m, "_SMD_SAFE_URL_RE regex literal not found in messages.js"
         pattern = m.group(1)
         # Must mention https? and must NOT mention javascript/vbscript/data
         assert "https?" in pattern, "allowlist must permit https?:"
         assert "file:" not in pattern, "raw file: anchors must be rewritten, not allowed through"
-        assert "api" in MESSAGES_JS, "allowlist must permit rewritten api/media anchors"
+        assert "api" in STREAM_RENDERER_JS, "allowlist must permit rewritten api/media anchors"
         for bad in ("javascript", "vbscript", "data:"):
             assert bad not in pattern, (
                 f"allowlist must NOT mention {bad!r} — schemes are denied by default"
             )
 
     def test_file_anchor_rewrite_helper_exists(self):
-        assert "_smdFileHref" in MESSAGES_JS
-        assert "api/media?path=" in MESSAGES_JS
+        assert "_smdFileHref" in STREAM_RENDERER_JS
+        assert "api/media?path=" in STREAM_RENDERER_JS
 
     def test_url_safety_via_renderer_set_attr(self):
         # URL scheme safety is now enforced inline by the renderer's set_attr
         # hook (_safeSmdRenderer or _streamFadeRenderer) as smd creates each
         # DOM node, eliminating the post-hoc _sanitizeSmdLinks O(DOM) scan
         # per token that caused progressive streaming freeze on long answers.
-        safefn = extract_fn(MESSAGES_JS, "_safeSmdRenderer")
+        safefn = extract_fn(STREAM_RENDERER_JS, "_safeSmdRenderer")
         assert safefn, "_safeSmdRenderer must exist for URL safety on the non-fade path"
         assert "set_attr" in safefn, (
             "_safeSmdRenderer must override set_attr to validate href/src inline"
@@ -736,18 +742,18 @@ class TestSmdUrlSchemeSanitization:
         )
         # _safeSmdRenderer algorithm must be the same as the proven
         # _streamFadeRenderer set_attr (fade path has been in production).
-        fadefn = extract_fn(MESSAGES_JS, "_streamFadeRenderer")
+        fadefn = extract_fn(STREAM_RENDERER_JS, "_streamFadeRenderer")
         assert fadefn and "set_attr" in fadefn, "_streamFadeRenderer must also have set_attr"
         # Both renderers go through _smdRendererWithoutUnderscoreEmphasis so
         # the set_attr hook is part of the final parser — verify the call chain.
-        newparser = extract_fn(MESSAGES_JS, "_smdNewParser")
+        newparser = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert newparser and "fade ? _streamFadeRenderer(el) : _safeSmdRenderer(el)" in newparser, (
             "_smdNewParser must route non-fade to _safeSmdRenderer and fade to _streamFadeRenderer"
         )
         # _sanitizeSmdLinks is still defined and used at parser_end as a final
         # safety net — not removed, just no longer called on every token.
-        assert "_sanitizeSmdLinks" in MESSAGES_JS, "_sanitizeSmdLinks must still exist"
-        endfn = extract_fn(MESSAGES_JS, "_smdEndParser")
+        assert "_sanitizeSmdLinks" in STREAM_RENDERER_JS, "_sanitizeSmdLinks must still exist"
+        endfn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert endfn and "_sanitizeSmdLinks" in endfn, (
             "_smdEndParser must still call _sanitizeSmdLinks as a final safety net"
         )
@@ -755,7 +761,7 @@ class TestSmdUrlSchemeSanitization:
     def test_sanitize_called_at_parser_end(self):
         # _smdEndParser flushes any remaining markdown — that flush can create new links,
         # so we must re-sanitize before the DOM is handed off to highlightCode / renderMessages.
-        fn = extract_fn(MESSAGES_JS, "_smdEndParser")
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert fn, "_smdEndParser function not found"
         assert "_sanitizeSmdLinks" in fn, (
             "_smdEndParser must call _sanitizeSmdLinks(assistantBody) after parser_end "
@@ -766,7 +772,7 @@ class TestSmdUrlSchemeSanitization:
         # The sanitizer must guard BOTH <a href> and <img src> — smd uses the same
         # href/src pipeline for markdown links and images respectively, and images
         # with javascript: src (e.g., ![alt](javascript:...)) are equally risky.
-        fn = extract_fn(MESSAGES_JS, "_sanitizeSmdLinks")
+        fn = extract_fn(STREAM_RENDERER_JS, "_sanitizeSmdLinks")
         assert fn, "_sanitizeSmdLinks function not found"
         assert "a[href]" in fn, "_sanitizeSmdLinks must query for a[href]"
         assert "img[src]" in fn, "_sanitizeSmdLinks must query for img[src]"

@@ -9,13 +9,21 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ANCHORS_JS = REPO / "static" / "assistant_turn_anchors.js"
+ANCHOR_JS_PATHS = (
+    REPO / "static" / "assistant_turn_anchors_parts" / "model.js",
+    REPO / "static" / "assistant_turn_anchors_parts" / "activity_scene.js",
+    ANCHORS_JS,
+)
 MESSAGES_JS = REPO / "static" / "messages.js"
+STREAM_ANCHOR_SCENE_JS = REPO / "static" / "messages_parts" / "stream_anchor_scene.js"
 UI_JS = REPO / "static" / "ui.js"
 SESSIONS_JS = REPO / "static" / "sessions.js"
 NODE = shutil.which("node")
 
 
 def _read(path: Path) -> str:
+    if path == ANCHORS_JS:
+        return "\n".join(item.read_text(encoding="utf-8") for item in ANCHOR_JS_PATHS)
     if path == UI_JS:
         return family_source("ui")
     if path == SESSIONS_JS:
@@ -59,7 +67,8 @@ def _registry_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -104,7 +113,8 @@ def _shadow_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -152,7 +162,8 @@ def _activity_scene_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -244,7 +255,8 @@ def _activity_scene_reconciliation_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -328,7 +340,8 @@ def _renderer_snapshot_adapter_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -465,7 +478,8 @@ def _final_projection_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -518,7 +532,8 @@ def _hardening_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -625,7 +640,8 @@ def _race_snapshot() -> dict:
     script = f"""
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync({json.dumps(str(ANCHORS_JS))}, 'utf8');
+const sources = {json.dumps([str(path) for path in ANCHOR_JS_PATHS])};
+const src = sources.map(path => fs.readFileSync(path, 'utf8')).join('\\n');
 const sandbox = {{window:{{}}}};
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, {{filename:'assistant_turn_anchors.js'}});
@@ -1346,7 +1362,9 @@ def test_slice6_live_shadow_feed_wires_anchor_scene_for_visible_order_handoff():
     assert "_flushReasoningToAnchor();" in done_body
     assert "_scheduleAnchorRegistryCleanup();" in done_body
     assert "_attachProjectedAnchorSceneToLastAssistant(S.messages);" in done_body
-    attach_body = _function_body(src, "_attachProjectedAnchorSceneToLastAssistant")
+    attach_body = _function_body(
+        _read(STREAM_ANCHOR_SCENE_JS), "_attachProjectedSceneToLastAssistant"
+    )
     assert "lastAsst._anchor_stream_id=streamId" in attach_body
     assert "lastAsst._anchor_activity_scene=scene" in attach_body
     assert "'_anchor_stream_id'" in src

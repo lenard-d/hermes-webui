@@ -122,7 +122,9 @@ class TestBackgroundCompletionHookWiring(unittest.TestCase):
     def test_run_bg_and_notify_calls_complete_background(self):
         """_handle_background must wrap _run_agent_streaming in a function
         that subsequently invokes complete_background(parent_sid, task_id, answer)."""
-        routes_src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+        routes_src = (REPO_ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
+            encoding="utf-8"
+        )
         # Locate the _handle_background function
         idx = routes_src.find("def _handle_background(")
         self.assertGreater(idx, -1, "_handle_background() not found in routes.py")

@@ -3,12 +3,9 @@ import json
 import re
 import subprocess
 import textwrap
-from pathlib import Path
-
-
 SESSIONS_JS = family_source("sessions")
 UI_JS = family_source("ui")
-BOOT_JS = Path("static/boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 
 

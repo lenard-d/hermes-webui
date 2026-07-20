@@ -5,7 +5,7 @@ from api.model_catalog import PROVIDER_MODELS
 
 
 def _src() -> str:
-    with open("api/config.py") as f:
+    with open("api/config_parts/model_catalog.py") as f:
         return f.read()
 
 

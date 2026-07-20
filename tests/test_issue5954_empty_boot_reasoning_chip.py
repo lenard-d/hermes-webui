@@ -1,9 +1,9 @@
 import json
 import subprocess
 import shutil
-from pathlib import Path
 
 import pytest
+from tests.frontend_asset_contract import family_source
 
 
 NODE = shutil.which("node")
@@ -11,7 +11,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node is required for boot 
 
 
 def _boot_completion_branch() -> str:
-    source = (Path(__file__).resolve().parents[1] / "static" / "boot.js").read_text(encoding="utf-8")
+    source = family_source("boot")
     marker = "    if(S.session) syncTopbar();"
     start = source.index(marker)
     end = source.index("\n  });\n  let _modelDropdownReadyFreshness", start)

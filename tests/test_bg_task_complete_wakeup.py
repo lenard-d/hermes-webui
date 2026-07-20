@@ -38,6 +38,63 @@ from tests._wakeup_helpers import FakeProcessRegistry as _FakeProcessRegistry
 from tests._wakeup_helpers import install_fake_registry as _install_fake_registry
 
 
+def test_completion_event_owner_and_background_facade_share_delivery_state():
+    from api import background_process as bp
+    from api.background_process_parts import completion_events as owner
+
+    assert bp._LAST_EMIT_TS is owner.LAST_EMIT_TS
+    assert bp._PENDING_EMIT_PAYLOADS is owner.PENDING_EMIT_PAYLOADS
+    assert bp._PENDING_EMIT_TIMERS is owner.PENDING_EMIT_TIMERS
+    assert bp._build_payload.__wrapped__ is owner.build_payload
+    assert (
+        bp._emit_bg_task_complete_events_coalesced.__wrapped__
+        is owner.emit_coalesced
+    )
+
+
+def test_fresh_background_facades_resolve_their_own_truncate_patch(monkeypatch):
+    """Owner callbacks must not fall back to the canonical module object."""
+    import importlib.util
+    from pathlib import Path
+
+    from api import background_process as canonical
+
+    source = Path(canonical.__file__)
+
+    def _load(name: str):
+        spec = importlib.util.spec_from_file_location(name, source)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    first = _load("_test_background_process_facade_first")
+    second = _load("_test_background_process_facade_second")
+    monkeypatch.setattr(canonical, "_truncate", lambda *_args: "canonical")
+    first._truncate = lambda *_args: "first-facade"
+    second._truncate = lambda *_args: "second-facade"
+    event = {
+        "type": "watch_match",
+        "session_id": "proc-1",
+        "command": "worker",
+        "pattern": "ready",
+        "output": "raw-output",
+    }
+
+    assert "Matched output:\nfirst-facade" in first.format_wakeup_prompt(event)
+    assert "Matched output:\nsecond-facade" in second.format_wakeup_prompt(event)
+    # Re-enter the first binding after the second to catch sticky global rebinding.
+    assert "Matched output:\nfirst-facade" in first.format_wakeup_prompt(event)
+
+
+def test_background_process_preserves_historical_typing_any_export():
+    import typing
+
+    from api import background_process as bp
+
+    assert bp.Any is typing.Any
+
+
 def _reset_cfg_state():
     from api import config as _cfg
     from api import background_process as bp

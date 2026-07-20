@@ -14,7 +14,7 @@ class TestComposerPlaceholderProfile:
 
     def test_applyBotName_uses_profile_name(self):
         """Non-default profiles must use the profile name instead of bot_name."""
-        src = _src("boot.js")
+        src = family_source("boot")
         ui_src = family_source("ui")
         assert "function assistantDisplayName()" in ui_src, \
             "assistant display name resolution should be shared"
@@ -54,7 +54,7 @@ class TestComposerPlaceholderProfile:
 
     def test_boot_applies_placeholder_after_active_profile_loads(self):
         """Boot must set the composer placeholder after S.activeProfile is known."""
-        src = _src("boot.js")
+        src = family_source("boot")
         fetch_idx = src.find("const activeProfileState = await _resolveActiveProfileBootstrapState();")
         assert fetch_idx >= 0, "boot.js should resolve the active profile during boot"
         label_idx = src.find("const profileLabel=$('profileChipLabel');", fetch_idx)
@@ -97,7 +97,7 @@ class TestComposerPlaceholderProfile:
 
     def test_placeholder_uses_name_variable(self):
         """The composer placeholder must use the resolved name variable."""
-        src = _src("boot.js")
+        src = family_source("boot")
         m = re.search(r'function applyBotName\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "applyBotName function must exist"
         body = m.group(0)

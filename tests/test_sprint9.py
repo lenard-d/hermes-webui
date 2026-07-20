@@ -3,20 +3,25 @@ Sprint 9 Tests: app.js module split verification, tool cards, todo panel.
 Run: ./scripts/test.sh tests/test_sprint9.py -v
 """
 from tests.frontend_asset_contract import family_source
-import json, pathlib, urllib.error, urllib.request
+import json, urllib.error, urllib.request
 
 from tests._pytest_port import BASE
 
+STATIC_FAMILIES = {
+    "/static/ui.js": "ui",
+    "/static/workspace.js": "workspace",
+    "/static/sessions.js": "sessions",
+    "/static/messages.js": "messages",
+    "/static/panels.js": "panels",
+    "/static/boot.js": "boot",
+}
+
 def get_text(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
-        served = r.read().decode()
-    family = {
-        "/static/ui.js": "ui",
-        "/static/sessions.js": "sessions",
-        "/static/messages.js": "messages",
-        "/static/panels.js": "panels",
-    }.get(path)
-    return family_source(family) if family else served
+        return r.read().decode()
+
+def get_family_source(path):
+    return family_source(STATIC_FAMILIES[path])
 
 def get(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
@@ -34,39 +39,71 @@ def post(path, body=None):
 
 # ── Module split: all 6 files served ──────────────────────────────────────
 
+def test_get_text_returns_http_response_not_local_family(monkeypatch):
+    """Regression: a successful HTTP read must never be replaced by local source."""
+    class SentinelResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b"SENTINEL_RESPONSE"
+
+    def fake_urlopen(url, timeout):
+        assert url == BASE + "/static/workspace.js"
+        assert timeout == 10
+        return SentinelResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert get_text("/static/workspace.js") == "SENTINEL_RESPONSE"
+
 def test_ui_js_served(cleanup_test_sessions):
-    src = get_text("/static/ui.js")
+    served = get_text("/static/ui.js")
+    assert "bootstrapHermesUI" in served
+    src = get_family_source("/static/ui.js")
     assert len(src) > 1000
     assert "function setBusy" in src
     assert "function syncTopbar" in src
     assert "const S=" in src or "const S =" in src
 
 def test_workspace_js_served(cleanup_test_sessions):
-    src = get_text("/static/workspace.js")
+    served = get_text("/static/workspace.js")
+    assert "installWorkspaceFacade" in served
+    src = get_family_source("/static/workspace.js")
     assert "async function api(" in src
     assert "async function loadDir(" in src
     assert "async function openFile(" in src  # renderFileTree is in ui.js
 
 def test_sessions_js_served(cleanup_test_sessions):
-    src = get_text("/static/sessions.js")
+    served = get_text("/static/sessions.js")
+    assert "installHermesSessionsFacade" in served
+    src = get_family_source("/static/sessions.js")
     assert "async function newSession(" in src
     assert "async function loadSession(" in src
     assert "async function renderSessionList(" in src
 
 def test_messages_js_served(cleanup_test_sessions):
-    src = get_text("/static/messages.js")
+    served = get_text("/static/messages.js")
+    assert "HermesMessages" in served
+    src = get_family_source("/static/messages.js")
     assert "async function send(" in src
     assert "function transcript(" in src
 
 def test_panels_js_served(cleanup_test_sessions):
-    src = get_text("/static/panels.js")
+    served = get_text("/static/panels.js")
+    assert "HermesPanels" in served
+    src = get_family_source("/static/panels.js")
     assert "async function switchPanel(" in src
     assert "async function loadCrons(" in src
     assert "async function loadSkills(" in src
     assert "async function loadMemory(" in src
 
 def test_boot_js_served(cleanup_test_sessions):
-    src = get_text("/static/boot.js")
+    served = get_text("/static/boot.js")
+    assert "bootstrapHermesBoot" in served
+    src = get_family_source("/static/boot.js")
     assert "btnSend" in src
     assert "btnNewChat" in src
     # boot IIFE
@@ -97,7 +134,7 @@ def test_no_duplicate_function_definitions(cleanup_test_sessions):
     modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "boot.js"]
     seen = {}
     for m in modules:
-        src = get_text(f"/static/{m}")
+        src = get_family_source(f"/static/{m}")
         fns = re.findall(r'(?:async )?function ([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(', src)
         for fn in fns:
             if fn in seen:
@@ -107,11 +144,10 @@ def test_no_duplicate_function_definitions(cleanup_test_sessions):
 
 def test_all_functions_present_across_modules(cleanup_test_sessions):
     """Key functions must be present somewhere in the split modules."""
-    import re
     modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "boot.js"]
     all_src = ""
     for m in modules:
-        all_src += get_text(f"/static/{m}")
+        all_src += get_family_source(f"/static/{m}")
     required = [
         "setBusy", "syncTopbar", "renderMessages", "send", "loadSession",
         "newSession", "renderSessionList", "loadDir", "switchPanel",

@@ -197,14 +197,14 @@ def test_boot_js_serves_ok():
 
 def test_boot_js_speech_recognition_check():
     """boot.js must check for SpeechRecognition (with webkit fallback)."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'SpeechRecognition' in js
     assert 'webkitSpeechRecognition' in js
 
 
 def test_boot_js_recognition_config():
     """boot.js must configure recognition.continuous, interimResults, and lang."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.continuous' in js
     assert 'recognition.interimResults' in js
     assert 'recognition.lang' in js
@@ -217,7 +217,7 @@ def test_boot_js_recognition_not_continuous():
     key (opt-in), but the default remains false: the expression only evaluates true
     when the key is explicitly "true", so an unset/absent key keeps auto-stop behavior.
     """
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert (
         'recognition.continuous=false' in js
         or 'recognition.continuous = false' in js
@@ -227,13 +227,13 @@ def test_boot_js_recognition_not_continuous():
 
 def test_boot_js_recognition_interim_results():
     """recognition.interimResults must be true (live transcription preview)."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.interimResults=true' in js or 'recognition.interimResults = true' in js
 
 
 def test_boot_js_recognition_lang_en():
     """recognition.lang must be set (static en-US or dynamic via _locale._speech)."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     # Accept either the old static value or the new locale-driven assignment
     assert (
         "recognition.lang='en-US'" in js
@@ -244,62 +244,62 @@ def test_boot_js_recognition_lang_en():
 
 def test_boot_js_onresult_handler():
     """boot.js must define recognition.onresult to handle transcription."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.onresult' in js
 
 
 def test_boot_js_onend_handler():
     """boot.js must define recognition.onend to reset state when recording stops."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.onend' in js
 
 
 def test_boot_js_onerror_handler():
     """boot.js must define recognition.onerror for graceful error handling."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.onerror' in js
 
 
 def test_boot_js_not_allowed_error_message():
     """onerror must handle 'not-allowed' with a user-friendly message."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'not-allowed' in js
     assert 'permission' in js.lower() or 'denied' in js.lower() or 'access' in js.lower()
 
 
 def test_boot_js_no_speech_error_message():
     """onerror must handle 'no-speech' with a user-friendly message."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'no-speech' in js
 
 
 def test_boot_js_network_error_message():
     """onerror must handle 'network' error."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "'network'" in js or '"network"' in js
 
 
 def test_boot_js_mic_active_flag():
     """boot.js must track recording state via _micActive flag."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert '_micActive' in js
 
 
 def test_boot_js_mic_recording_class_toggle():
     """boot.js must toggle 'recording' CSS class on the mic button."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "'recording'" in js or '"recording"' in js
 
 
 def test_boot_js_mic_status_toggle():
     """boot.js must show/hide #micStatus during recording."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'micStatus' in js
 
 
 def test_boot_js_send_stops_mic():
     """btnSend primary action path must stop mic before sending."""
-    boot_js, _ = get_text("/static/boot.js")
+    boot_js = family_source("boot")
     ui_js, _ = get_family_text("ui", "/static/ui.js")
     send_onclick_idx = boot_js.find("$('btnSend').onclick")
     assert send_onclick_idx != -1
@@ -313,32 +313,32 @@ def test_boot_js_send_stops_mic():
 
 def test_boot_js_btn_mic_onclick():
     """boot.js must attach an onclick handler to btnMic."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'btn.onclick' in js or "btnMic.onclick" in js or "$('btnMic').onclick" in js
 
 
 def test_boot_js_recognition_start():
     """boot.js must call recognition.start() to begin recording."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.start()' in js
 
 
 def test_boot_js_recognition_stop():
     """boot.js must call recognition.stop() to end recording."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'recognition.stop()' in js
 
 
 def test_boot_js_iife_guard():
     """Mic logic must be wrapped in an IIFE so it doesn't pollute global scope."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     # IIFE pattern: (function(){...})() or (() => {...})()
     assert '(function(){' in js or '(function () {' in js
 
 
 def test_boot_js_browser_unsupported_guard_uses_fallback_capabilities():
     """boot.js must keep the mic available when either speech recognition OR recorder capture exists."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'navigator.mediaDevices' in js
     assert 'getUserMedia' in js
     assert 'MediaRecorder' in js
@@ -348,14 +348,14 @@ def test_boot_js_browser_unsupported_guard_uses_fallback_capabilities():
 
 def test_boot_js_media_recorder_fallback_posts_to_transcribe_api():
     """Desktop fallback must send recorded audio to /api/transcribe for transcription."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'api/transcribe' in js
     assert 'fetch(' in js
 
 
 def test_boot_js_prefers_server_side_stt_by_default():
     """Default mic capture should prefer server STT only after the server confirms support."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "const _micForceMediaRecorderStored=localStorage.getItem(_micForceMediaRecorderKey);" in js
     assert "let _serverSttAvailable=false" in js
     assert "_micForceMediaRecorderStored===null?(_serverSttAvailable&&_canRecordAudio):" in js
@@ -364,7 +364,7 @@ def test_boot_js_prefers_server_side_stt_by_default():
 
 def test_boot_js_no_server_stt_first_click_uses_browser_speech_recognition():
     """No-server-STT installs must not lose the first mic click before fallback runs."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     default_idx = js.find("_micForceMediaRecorderStored===null?")
     assert default_idx != -1
     default_expr = js[default_idx:default_idx + 140]
@@ -375,7 +375,7 @@ def test_boot_js_no_server_stt_first_click_uses_browser_speech_recognition():
 
 def test_boot_js_falls_back_to_browser_stt_when_server_transcribe_unavailable():
     """If server-side STT is unavailable, browser SpeechRecognition should be re-enabled."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "function _isServerSttUnavailable(err)" in js
     assert "function _allowBrowserSttFallback()" in js
     assert "localStorage.setItem(_micForceMediaRecorderKey,'0')" in js
@@ -385,7 +385,7 @@ def test_boot_js_falls_back_to_browser_stt_when_server_transcribe_unavailable():
 
 def test_boot_js_keeps_explicit_server_stt_preference_on_transcribe_failure():
     """An explicit mic_force_mediarecorder='1' preference must not be silently overwritten."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "localStorage.getItem(_micForceMediaRecorderKey)!=='1'" in js
 
 
@@ -403,19 +403,19 @@ def test_routes_define_transcribe_capability_endpoint():
 
 def test_boot_js_shows_mic_button_when_any_voice_path_is_supported():
     """boot.js must reveal btnMic when speech recognition or recorder fallback is available."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "btn.style.display=''" in js or 'btn.style.display = ""' in js
 
 
 def test_boot_js_show_toast_on_error():
     """boot.js must call showToast() for mic errors."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'showToast' in js
 
 
 def test_boot_js_autoresize_called():
     """boot.js must call autoResize() after updating textarea from transcript."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert 'autoResize()' in js
 
 
@@ -424,13 +424,13 @@ def test_boot_js_autoresize_called():
 
 def test_boot_js_prefix_variable_declared():
     """boot.js must declare _prefix variable to snapshot pre-existing textarea content."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "_prefix" in js
 
 
 def test_boot_js_prefix_captured_on_start():
     """_prefix must be set from ta.value when the user starts recording."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     start_idx = js.find("async function _startMicCapture")
     start_end = js.find("async function _toggleMicCapture", start_idx)
     start_body = js[start_idx:start_end]
@@ -439,7 +439,7 @@ def test_boot_js_prefix_captured_on_start():
 
 def test_boot_js_onresult_prepends_prefix():
     """onresult must include _prefix when writing to textarea (append, not replace)."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     onresult_idx = js.find("sr.onresult")
     if onresult_idx == -1:
         onresult_idx = js.find("recognition.onresult")
@@ -451,7 +451,7 @@ def test_boot_js_onresult_prepends_prefix():
 
 def test_boot_js_onend_commits_with_prefix():
     """onend must commit _prefix + _finalText so appended text survives after recognition ends."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     onend_idx = js.find("sr.onend")
     if onend_idx == -1:
         onend_idx = js.find("recognition.onend")
@@ -462,7 +462,7 @@ def test_boot_js_onend_commits_with_prefix():
 
 def test_boot_js_prefix_reset_on_stop():
     """_prefix must be reset when recording stops so next session starts clean."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     # _setRecording(false) clears both _finalText and _prefix
     set_rec_idx = js.find("function _setRecording")
     set_rec_end = js.find("}", set_rec_idx) + 1
@@ -472,7 +472,7 @@ def test_boot_js_prefix_reset_on_stop():
 
 def test_boot_js_auto_space_between_prefix_and_transcript():
     """onend must insert a space between existing text and new transcript when needed."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     onend_idx = js.find("sr.onend")
     if onend_idx == -1:
         onend_idx = js.find("recognition.onend")
@@ -489,13 +489,13 @@ def test_boot_js_auto_space_between_prefix_and_transcript():
 
 def test_attach_button_still_wired():
     """btnAttach onclick must still be wired up (no regression)."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "$('btnAttach').onclick" in js
 
 
 def test_file_input_onchange_still_wired():
     """fileInput onchange must still be wired up (no regression)."""
-    js, _ = get_text("/static/boot.js")
+    js = family_source("boot")
     assert "$('fileInput').onchange" in js
 
 

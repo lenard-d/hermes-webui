@@ -40,7 +40,7 @@ def test_boot_hydration_defaults_true_when_setting_absent():
     """boot.js must hydrate _autoScrollFollow as True when the saved settings
     omit the key — `!!s.auto_scroll_follow` would wrongly default it OFF for
     every existing user, contradicting the config.py default."""
-    src = _read("static/boot.js")
+    src = family_source("boot")
     # Settings path: default-true read (=== false), not the truthy-coerce form.
     assert "window._autoScrollFollow=s.auto_scroll_follow!==false" in src, (
         "boot.js settings path must default _autoScrollFollow True when absent"

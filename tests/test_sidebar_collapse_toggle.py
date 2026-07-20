@@ -18,7 +18,7 @@ import re
 REPO = pathlib.Path(__file__).parent.parent
 HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 CSS  = family_source("style")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 
 

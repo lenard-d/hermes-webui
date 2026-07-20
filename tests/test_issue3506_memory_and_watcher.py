@@ -407,7 +407,12 @@ def test_lru_eviction_skips_active_runs():
     the cap) if every over-cap entry is active. Source-contract test: the deep
     streaming function isn't unit-invokable, so pin the invariant in source."""
     import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[1] / "api" / "streaming.py").read_text()
+    src = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "api"
+        / "streaming_parts"
+        / "local_run.py"
+    ).read_text()
     idx = src.index("while len(SESSION_AGENT_CACHE) > SESSION_AGENT_CACHE_MAX:")
     block = src[idx - 1600:idx + 700]
     # The eviction path must build an active-session set from ACTIVE_RUNS...

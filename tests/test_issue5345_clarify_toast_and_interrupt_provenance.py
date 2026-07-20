@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def _clarify_catch_block():
@@ -175,7 +175,7 @@ def test_explicit_cancel_call_sites_pass_a_reason():
     string (composer-stop, slash-stop, slash-interrupt, busy-interrupt) so the
     provenance log is meaningful rather than a bare 'explicit-cancel'."""
     ui = family_source("ui")
-    commands = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
+    commands = family_source("commands")
     messages = MESSAGES_JS
     combined = ui + commands + messages
     # No bare await cancelStream() with empty args at the explicit call sites.

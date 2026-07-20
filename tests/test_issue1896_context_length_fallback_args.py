@@ -26,7 +26,10 @@ import types
 
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+STREAMING_PY = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+SESSION_MODELS_PY = (
+    REPO / "api" / "routes_parts" / "session_models.py"
+).read_text(encoding="utf-8")
 
 
 # Both fallback callsites must pass these kwargs into get_model_context_length.
@@ -147,7 +150,7 @@ def test_config_context_length_parsed_safely():
     """Invalid config_context_length values must NOT crash the resolver call —
     they should fall through to provider/registry probing instead."""
     # Both blocks should wrap the int parse in try/except (TypeError, ValueError).
-    assert "except (TypeError, ValueError):" in STREAMING_PY, (
+    assert "except (TypeError, ValueError):" in SESSION_MODELS_PY, (
         "Config context_length parse must be guarded against (TypeError, ValueError) "
         "so a string like '256K' or 'one million' falls through to the resolver "
         "instead of crashing the SSE/save path."
@@ -175,11 +178,11 @@ def test_cfg_custom_providers_resolved_from_cfg_dict():
     # The parsing now lives in the shared route helper so session-load,
     # session-save, and SSE fallbacks cannot drift.
     assert "_context_length_lookup_inputs_for_model(" in STREAMING_PY
-    assert 'cfg.get("custom_providers")' in ROUTES_PY, (
+    assert 'cfg.get("custom_providers")' in SESSION_MODELS_PY, (
         "_cfg_custom_providers must be sourced from `cfg.get('custom_providers')` "
         "(per-profile config) so profile-scoped custom_providers entries work."
     )
-    assert 'cfg.get("model", {})' in ROUTES_PY, (
+    assert 'cfg.get("model", {})' in SESSION_MODELS_PY, (
         "_cfg_ctx_len must be sourced from `cfg.get('model', {}).get('context_length')` "
         "(per-profile config) so profile-scoped model.context_length overrides work."
     )
@@ -212,10 +215,12 @@ def test_routes_session_load_fallback_passes_config_overrides():
     block_end = ROUTES_PY.find("_session_tool_calls =", idx)
     assert block_end != -1, "session-load fallback block end not found after fallback comment"
     block = ROUTES_PY[idx:block_end]
-    helper_start = ROUTES_PY.find("def _resolve_context_length_for_session_model")
+    helper_start = SESSION_MODELS_PY.find("def _resolve_context_length_for_session_model")
     assert helper_start != -1, "context-length resolver helper not found"
-    helper_end = ROUTES_PY.find("\ndef ", helper_start + 1)
-    helper = ROUTES_PY[helper_start:helper_end if helper_end != -1 else len(ROUTES_PY)]
+    helper_end = SESSION_MODELS_PY.find("\ndef ", helper_start + 1)
+    helper = SESSION_MODELS_PY[
+        helper_start:helper_end if helper_end != -1 else len(SESSION_MODELS_PY)
+    ]
     assert "_resolve_context_length_for_session_model" in block
     assert "_should_accept_session_context_length_refresh" in block, (
         "session-load fallback must gate lower-confidence recomputes before "

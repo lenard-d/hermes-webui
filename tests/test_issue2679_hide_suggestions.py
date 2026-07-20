@@ -7,7 +7,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
 STYLE = REPO_ROOT / "static" / "style.css"
 PANELS = REPO_ROOT / "static" / "panels.js"
-BOOT = REPO_ROOT / "static" / "boot.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
 CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
@@ -34,7 +33,7 @@ def test_empty_state_has_hideable_suggestions_hook_and_css():
 
 
 def test_boot_applies_saved_hide_suggestions_preference():
-    js = BOOT.read_text(encoding="utf-8")
+    js = family_source("boot")
     assert "function applyEmptyStateSuggestionPref()" in js
     assert "window._hideEmptyStateSuggestions=s.hide_empty_state_suggestions===true" in js
     assert "window._hideEmptyStateSuggestions=false" in js

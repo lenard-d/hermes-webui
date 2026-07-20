@@ -177,7 +177,7 @@ class TestVoiceModePreferenceGate:
 
     def test_voice_mode_pref_is_localstorage_backed(self):
         """The pref reads from localStorage key 'hermes-voice-mode-button'."""
-        src = _src("boot.js")
+        src = family_source("boot")
         assert "'hermes-voice-mode-button'" in src, (
             "boot.js must read/write the localStorage key 'hermes-voice-mode-button' "
             "for the voice-mode visibility pref."
@@ -186,7 +186,7 @@ class TestVoiceModePreferenceGate:
     def test_voice_mode_button_hidden_until_pref_enabled(self):
         """Default state of btnVoiceMode display must be 'none'; visibility
         gated by the pref check, not unconditional."""
-        src = _src("boot.js")
+        src = family_source("boot")
         # Find the voice-mode pref helper. Must NOT contain an
         # unconditional `modeBtn.style.display='';` (the master bug).
         # Instead, the function _applyVoiceModePref must be the source of truth.
@@ -240,7 +240,7 @@ class TestVoiceModeRuntimePreferences:
     def test_voice_mode_silence_pref_reads_localstorage_with_floor(self):
         """boot.js must keep the silence timeout configurable without allowing
         tiny or invalid values to auto-send instantly."""
-        src = _src("boot.js")
+        src = family_source("boot")
         assert "localStorage.getItem('hermes-voice-silence-ms')" in src, (
             "voice mode must read hermes-voice-silence-ms from localStorage "
             "so pause timing survives reloads."
@@ -252,7 +252,7 @@ class TestVoiceModeRuntimePreferences:
 
     def test_voice_mode_continuous_pref_reads_localstorage(self):
         """boot.js must preserve the continuous-recognition preference across reloads."""
-        src = _src("boot.js")
+        src = family_source("boot")
         assert "localStorage.getItem('hermes-voice-continuous')==='true'" in src, (
             "voice mode must read hermes-voice-continuous from localStorage "
             "instead of hardcoding continuous recognition off."
@@ -265,7 +265,7 @@ class TestActiveStateTooltips:
 
     def test_dictation_active_tooltip_changes_when_recording(self):
         """_setRecording(on) should flip btnMic.title to voice_dictate_active."""
-        src = _src("boot.js")
+        src = family_source("boot")
         m = re.search(r"function _setRecording\(on\)\{.*?\n  \}", src, re.DOTALL)
         assert m, "_setRecording function must exist"
         body = m.group(0)
@@ -278,7 +278,7 @@ class TestActiveStateTooltips:
 
     def test_voice_mode_active_tooltip(self):
         """_activate() should set modeBtn.title to voice_mode_toggle_active."""
-        src = _src("boot.js")
+        src = family_source("boot")
         m = re.search(r"function _activate\(\)\{.*?\n  \}", src, re.DOTALL)
         assert m, "_activate function must exist"
         body = m.group(0)
@@ -289,7 +289,7 @@ class TestActiveStateTooltips:
 
     def test_voice_mode_idle_tooltip(self):
         """_deactivate() should set modeBtn.title back to voice_mode_toggle."""
-        src = _src("boot.js")
+        src = family_source("boot")
         m = re.search(r"function _deactivate\(\)\{.*?\n  \}", src, re.DOTALL)
         assert m, "_deactivate function must exist"
         body = m.group(0)

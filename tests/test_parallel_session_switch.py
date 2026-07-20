@@ -17,7 +17,7 @@ from unittest.mock import patch, MagicMock
 
 REPO = pathlib.Path(__file__).parent.parent
 SESSIONS_JS = family_source("sessions")
-WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
 
@@ -108,7 +108,7 @@ class TestLoadSessionIdleOverlap:
         )
 
 
-# ── 3. workspace.py: git_info_for_workspace is parallelized ────────────────
+# ── 3. workspace Git summary is parallelized ───────────────────────────────
 
 
 class TestGitInfoParallel:
@@ -116,7 +116,12 @@ class TestGitInfoParallel:
     to reduce wall-clock time."""
 
     def test_uses_thread_pool(self):
-        source = pathlib.Path(__file__).parent.parent / "api" / "workspace.py"
+        source = (
+            pathlib.Path(__file__).parent.parent
+            / "api"
+            / "workspace_parts"
+            / "git_summary.py"
+        )
         src = source.read_text()
         fn = src[src.find("def git_info_for_workspace") :]
         fn = fn[: fn.find("\ndef ")]

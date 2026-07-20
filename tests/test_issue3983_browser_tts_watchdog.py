@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 import re
 
@@ -24,7 +25,7 @@ def _extract_function(src: str, name: str) -> str:
 
 
 def test_boot_js_declares_browser_tts_recovery_helpers():
-    src = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     assert "let _browserTtsKeepAlive=null;" in src
     assert "let _browserTtsWatchdog=null;" in src
     assert "let _browserTtsSuppressNextErrorRearm=false;" in src
@@ -33,7 +34,7 @@ def test_boot_js_declares_browser_tts_recovery_helpers():
 
 
 def test_browser_tts_watchdog_rearms_listening_if_onend_drops():
-    src = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     arm_body = _extract_function(src, "_armBrowserTtsRecovery")
     assert "_browserTtsWatchdog=setTimeout" in arm_body
     assert "_voiceModeState!=='speaking'" in arm_body
@@ -46,7 +47,7 @@ def test_browser_tts_watchdog_rearms_listening_if_onend_drops():
 
 
 def test_browser_tts_callbacks_and_deactivate_clear_recovery_handles():
-    src = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     speak_body = _extract_function(src, "_speakResponse")
     assert "const utter=new SpeechSynthesisUtterance(clean);" in speak_body
     assert "utter.onend=()=>{" in speak_body
@@ -67,7 +68,7 @@ def test_browser_tts_callbacks_and_deactivate_clear_recovery_handles():
 
 
 def test_edge_audio_branch_stays_separate():
-    src = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+    src = family_source("boot")
     edge_match = re.search(
         r'if\(engine==="edge"\)\{(.*?)\n\s+return;\n\s+\}',
         src,

@@ -26,6 +26,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
+CHAT_RUNS_PY = ROOT / "api" / "routes_parts" / "chat_runs.py"
+SESSION_PROJECTION_PY = ROOT / "api" / "routes_parts" / "session_projection.py"
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +45,7 @@ def _route_handler_block(src: str, handler: str) -> str:
 
 
 def test_helper_is_defined():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
     assert "def _claim_or_synthesize_cli_session(" in src, (
         "shared foreign-session synthesiser must be defined; this helper "
         "closes the GET/POST asymmetry for CLI/TUI/Desktop sessions"
@@ -73,7 +75,7 @@ def test_chat_start_sanitises_500_error():
     when synth.save() fails must NOT leak the sidecar filesystem path to
     the client.  _sanitize_error replaces absolute paths with ``<path>``."""
     body = _route_handler_block(
-        ROUTES_PY.read_text(encoding="utf-8"), "_handle_chat_start"
+        CHAT_RUNS_PY.read_text(encoding="utf-8"), "_handle_chat_start"
     )
     # Locate the save-failure arm and assert the response uses the
     # sanitiser, not the raw exception.
@@ -110,7 +112,7 @@ def test_chat_start_sanitises_500_error():
 
 
 def test_classifier_helper_is_defined():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
     assert "def _session_index_marks_was_webui(" in src, (
         "WebUI-vs-foreign classifier must be extracted so GET and POST can "
         "share the #2782 deleted-WebUI-session 404 contract"
@@ -119,7 +121,7 @@ def test_classifier_helper_is_defined():
 
 def test_chat_start_no_longer_bare_404_on_keyerror():
     """The exact bug: POST /api/chat/start 404'd on missing sidecar."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = CHAT_RUNS_PY.read_text(encoding="utf-8")
     body = _route_handler_block(src, "_handle_chat_start")
     # Locate the KeyError arm specifically (the original 3-line bug).
     m = re.search(
@@ -729,7 +731,7 @@ def test_post_chat_start_returns_403_for_not_claimable(
     the 'not_claimable' reason to a 403 (not 404).  404 would trigger
     the frontend's empty-state self-heal which is the wrong UX for a
     legitimately-listed read-only session."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = CHAT_RUNS_PY.read_text(encoding="utf-8")
     # The new arm sits between the bare-404 collapse and the synth.save()
     # call.  Locate it via the "not_claimable" string and the 403 marker.
     m = re.search(
@@ -1287,7 +1289,7 @@ def test_helper_denylist_includes_gateway_and_unknown():
     # Use the ROUTES_PY constant (defined at module top) instead of
     # hardcoding the path so the test runs on any machine with the
     # project checked out, not just at /opt/hermes-webui/.
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
     # Find the function body
     m = re.search(
         r"def _is_claimable_cli_source.*?(?=\n\ndef |\Z)",

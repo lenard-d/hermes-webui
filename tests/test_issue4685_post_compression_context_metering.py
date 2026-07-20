@@ -178,7 +178,7 @@ def test_context_indicator_without_estimate_preserves_current_behavior():
 
 def test_reload_hydration_passes_post_compression_estimate_to_context_indicator():
     expected = "post_compression_context_tokens_estimate"
-    boot = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    boot = family_source("boot")
     for source, expected_calls in ((boot, 1), (family_source("sessions"), 3)):
         calls = source.split("_syncCtxIndicator({")[1:]
 

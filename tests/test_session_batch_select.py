@@ -141,8 +141,7 @@ def test_streaming_zero_message_sessions_stay_visible_after_reload():
 
 def test_boot_does_not_drop_zero_message_inflight_session():
     """Reloading /session/<id> during a running turn must keep the session open."""
-    with open('static/boot.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("boot")
     assert "const _restoredInFlight = S.session && (" in src, \
         "Boot must detect restored in-flight sessions before ephemeral cleanup"
     assert "S.session.active_stream_id" in src, \

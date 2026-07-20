@@ -19,6 +19,9 @@ CSS = family_source("style")
 HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+LOCAL_RUN_PY = (
+    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+).read_text(encoding="utf-8")
 TITLE_GENERATION_PY = (
     REPO_ROOT / "api" / "streaming_parts" / "title_generation.py"
 ).read_text(encoding="utf-8")
@@ -34,7 +37,7 @@ class TestTitleAutoGenerationCondition(unittest.TestCase):
         # Find the if-condition that calls title_from
         m = re.search(
             r'if\s+(s\.title\s*==.*?):\s*\n\s*s\.title\s*=\s*title_from',
-            STREAMING_PY,
+            LOCAL_RUN_PY,
             re.DOTALL,
         )
         self.assertIsNotNone(m, "Could not find title auto-generation condition in streaming.py")

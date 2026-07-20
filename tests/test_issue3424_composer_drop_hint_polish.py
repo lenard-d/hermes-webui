@@ -70,7 +70,7 @@ def test_os_upload_binder_composes_not_overwrites_move_binder():
     folder-row / breadcrumb element; if the OS-upload binder assigned el.ondrop
     it would clobber the move handler and a workspace-file drag would fall
     through to the composer (@path insert) instead of moving the file."""
-    WORKSPACE_JS = (ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+    WORKSPACE_JS = family_source("workspace")
     start = WORKSPACE_JS.find("function _bindWorkspaceOsUploadDropTarget(")
     assert start != -1, "_bindWorkspaceOsUploadDropTarget not found"
     # Bound the slice to the end of THIS function: scan brace depth from the

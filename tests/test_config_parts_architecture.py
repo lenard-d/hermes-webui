@@ -6,6 +6,7 @@ import sys
 import api.config as config
 from api.config_parts import (
     config_io,
+    model_catalog,
     models_cache,
     model_settings,
     model_reasoning,
@@ -282,6 +283,75 @@ def test_model_settings_does_not_own_persistent_or_catalog_cache_state():
     assert facade_owned_state <= vars(config).keys()
     assert facade_owned_state.isdisjoint(vars(model_settings))
     assert callable(config.get_available_models)
+
+
+def test_model_catalog_implementations_are_bound_to_config_facade_globals():
+    for name in model_catalog.__config_exports__:
+        facade_function = getattr(config, name)
+        owner_function = getattr(model_catalog, name)
+
+        assert facade_function is not owner_function
+        assert facade_function.__code__ is owner_function.__code__
+        assert facade_function.__globals__ is vars(config)
+        assert facade_function.__module__ == "api.config"
+
+
+def test_model_catalog_does_not_duplicate_mutable_catalog_state():
+    facade_owned_state = {
+        "_available_models_cache",
+        "_available_models_cache_ts",
+        "_available_models_live_rebuild_ts",
+        "_available_models_cache_source_fingerprint",
+        "_available_models_cache_lock",
+        "_cache_build_cv",
+        "_cache_build_in_progress",
+        "_models_cache_build_generation",
+        "_active_models_cache_build_generation",
+        "_models_cache_provenance",
+        "_advertised_model_ids_memo",
+        "_BUDGET_WARN_STATE",
+        "_BUDGET_WARN_LOCK",
+        "_CREDENTIAL_POOL_CACHE",
+    }
+
+    assert facade_owned_state <= vars(config).keys()
+    assert facade_owned_state.isdisjoint(vars(model_catalog))
+
+
+def test_model_catalog_resolves_patched_facade_collaborators_at_call_time(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        config,
+        "cfg",
+        {
+            "fallback_providers": [
+                {"provider": "patched-alias", "model": "patched-model"}
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        config,
+        "_resolve_provider_alias",
+        lambda provider: "canonical" if provider == "patched-alias" else provider,
+    )
+
+    badges = config._configured_model_badges_from_static_catalog(
+        [
+            {
+                "provider_id": "canonical",
+                "models": [{"id": "patched-model"}],
+            }
+        ],
+        active_provider=None,
+        default_model="",
+    )
+
+    assert badges["patched-model"] == {
+        "role": "fallback",
+        "label": "Fallback 1",
+        "provider": "canonical",
+    }
 
 
 def test_models_cache_does_not_own_mutable_cache_or_generation_state():

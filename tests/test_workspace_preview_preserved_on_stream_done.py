@@ -6,7 +6,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MESSAGES_JS = family_source("messages")
-WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
+WORKSPACE_JS = family_source("workspace")
 
 
 def _function_block(src: str, name: str) -> str:

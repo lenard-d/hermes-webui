@@ -7,6 +7,7 @@ import pytest
 
 from api import routes
 from api.routes_parts import tts
+from api.routes_parts import media_files
 
 
 _TTS_FUNCTION_EXPORTS = (
@@ -122,13 +123,15 @@ def test_tts_limiter_attribute_remains_owned_by_facade_function(monkeypatch):
     assert routes._handle_tts._tts_limiter is limiter
 
 
-def test_tts_implementation_is_file_backed_and_media_route_stays_in_facade():
+def test_tts_implementation_is_file_backed_and_media_route_has_its_own_owner():
     part_source = Path(tts.__file__).read_text(encoding="utf-8")
+    media_source = Path(media_files.__file__).read_text(encoding="utf-8")
     facade_source = Path(routes.__file__).read_text(encoding="utf-8")
 
     assert "def _handle_tts(" in part_source
     assert "class _PinnedHTTPSConnection(" in part_source
     assert "def _handle_tts(" not in facade_source
-    assert "def _html_preview_with_blank_base(" in facade_source
-    assert "def _handle_media(" in facade_source
+    assert "def _html_preview_with_blank_base(" in media_source
+    assert "def _handle_media(" in media_source
+    assert "def _handle_media(" not in facade_source
     assert "exec(" not in part_source

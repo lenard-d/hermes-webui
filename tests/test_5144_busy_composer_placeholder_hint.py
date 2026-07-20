@@ -10,7 +10,7 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
     encoding="utf-8"
 )
 PANELS_JS = family_source("panels")
-BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 UI_JS = family_source("ui")
 I18N_JS = family_source("i18n")
 def _function_block(src: str, name: str) -> str:

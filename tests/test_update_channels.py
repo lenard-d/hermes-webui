@@ -264,11 +264,17 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0},
     )
     # No lock present → clear-lock takes the "re-run normal update" branch.
+    inventory_calls = []
+
+    def fake_inventory(path):
+        inventory_calls.append(path)
+        return {'well_known_lock_present': False,
+                'well_known_lock_path': str(tmp_path / '.git/index.lock'),
+                'other_locks': []}
+
     monkeypatch.setattr(
         updates, '_inventory_locks',
-        lambda path: {'well_known_lock_present': False,
-                      'well_known_lock_path': str(tmp_path / '.git/index.lock'),
-                      'other_locks': []},
+        fake_inventory,
     )
     # User's configured channel is experimental.
     monkeypatch.setattr(updates, '_read_update_channel', lambda: 'experimental')
@@ -280,6 +286,7 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
 
     monkeypatch.setattr(updates, '_apply_update_inner', fake_inner)
     result = updates.apply_clear_lock('webui')
+    assert inventory_calls == [tmp_path]
     assert seen.get('channel') == 'experimental', (
         'clear-lock retry must preserve the experimental channel, not default to stable'
     )

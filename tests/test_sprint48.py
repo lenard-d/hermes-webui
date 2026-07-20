@@ -87,13 +87,14 @@ class TestXmlToolCallStrip:
     def test_strip_applied_to_assistant_messages(self):
         """Verify the strip call is applied to assistant message content after
         the agent run completes (server-side persistence fix)."""
-        src = read('api/streaming.py')
-        assert '_strip_xml_tool_calls' in src, (
+        facade_src = read('api/streaming.py')
+        run_src = read('api/streaming_parts/local_run.py')
+        assert '_strip_xml_tool_calls' in facade_src, (
             "_strip_xml_tool_calls must be referenced in api/streaming.py"
         )
-        # Confirm it is called on message content, not just defined
-        assert src.count('_strip_xml_tool_calls') >= 2, (
-            "_strip_xml_tool_calls must be both defined and called"
+        # Confirm the run owner calls the facade helper on message content.
+        assert '_strip_xml_tool_calls' in run_src, (
+            "_strip_xml_tool_calls must be called by the local run owner"
         )
 
     def test_client_side_strip_in_messages_js(self):

@@ -29,7 +29,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-COMMANDS_JS = (REPO / "static" / "commands.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
 SESSIONS_JS = family_source("sessions")
 
 

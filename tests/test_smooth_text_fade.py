@@ -9,8 +9,13 @@ CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_tex
 )
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
-MESSAGES_JS = family_source("messages")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+STREAM_RENDERER_JS = (
+    REPO / "static" / "messages_parts" / "stream_renderer.js"
+).read_text(encoding="utf-8")
+STREAM_JS = (REPO / "static" / "messages_parts" / "stream.js").read_text(
+    encoding="utf-8"
+)
+BOOT_JS = family_source("boot")
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")
 
@@ -68,7 +73,7 @@ def slice_between(src: str, start_anchor: str, end_anchor: str) -> str:
 
 def fade_helper_script(performance_stub: str = "{_t:0,now(){return this._t;}}") -> str:
     helpers = "\n".join(
-        function_block(MESSAGES_JS, name)
+        function_block(STREAM_RENDERER_JS, name)
         for name in [
             "_streamFadeWordCountOf",
             "_streamFadePauseAfter",
@@ -151,13 +156,13 @@ def test_stream_fade_uses_incremental_renderer_without_changing_default_path():
     # brace-counting function_block parser can't handle template literals
     # with ${...} that contain braces.  Use the full file for assertions
     # instead — the checked strings are unique enough.
-    assert re.search(r"function\s+_scheduleRender\(", MESSAGES_JS)
-    render_block = function_block(MESSAGES_JS, "_renderStreamingFadeMarkdown")
-    renderer_block = function_block(MESSAGES_JS, "_streamFadeRenderer")
-    cleanup_block = function_block(MESSAGES_JS, "_streamFadeBindCleanup")
+    assert re.search(r"function\s+_scheduleRender\(", STREAM_RENDERER_JS)
+    render_block = function_block(STREAM_RENDERER_JS, "_renderStreamingFadeMarkdown")
+    renderer_block = function_block(STREAM_RENDERER_JS, "_streamFadeRenderer")
+    cleanup_block = function_block(STREAM_RENDERER_JS, "_streamFadeBindCleanup")
 
     assert_contains_all(
-        MESSAGES_JS,
+        STREAM_RENDERER_JS,
         [
             "_renderStreamingFadeMarkdown(displayText)",
             "_smdWrite(displayText)",
@@ -183,7 +188,7 @@ def test_stream_fade_uses_incremental_renderer_without_changing_default_path():
     )
     assert "_streamFadeAppendText(assistantBody,delta)" not in render_block
     assert "_streamFadeBindCleanup(assistantBody)" not in render_block
-    append_block = function_block(MESSAGES_JS, "_streamFadeAppendText")
+    append_block = function_block(STREAM_RENDERER_JS, "_streamFadeAppendText")
     assert_contains_all(
         append_block,
         [
@@ -209,15 +214,15 @@ def test_stream_fade_uses_incremental_renderer_without_changing_default_path():
         cleanup_block,
         ["animationend", "span.replaceWith(document.createTextNode"],
     )
-    assert "_wrapStreamingFadeWords" not in MESSAGES_JS
+    assert "_wrapStreamingFadeWords" not in STREAM_RENDERER_JS
     assert "animationDelay" not in renderer_block
-    assert "_STREAM_FADE_STAGGER_MS" not in MESSAGES_JS
-    assert "_streamFadeAppendOffset" not in MESSAGES_JS
+    assert "_STREAM_FADE_STAGGER_MS" not in STREAM_RENDERER_JS
+    assert "_streamFadeAppendOffset" not in STREAM_RENDERER_JS
 
 
 def test_stream_fade_appends_new_spans_without_replacing_existing_nodes():
     script = (
-        function_block(MESSAGES_JS, "_streamFadeAppendText")
+        function_block(STREAM_RENDERER_JS, "_streamFadeAppendText")
         + r"""
 const _STREAM_FADE_MS=620;
 let _streamFadeLatestAnimationEndAt=0;
@@ -265,8 +270,8 @@ if(spans.map(node=>node.textContent).join('|')!=='alpha|beta|gamma'){
 
 
 def test_transparent_anchor_prose_uses_fade_renderer_when_enabled():
-    anchor_block = function_block(MESSAGES_JS, "_anchorProseIncrementalNode")
-    predicate_block = function_block(MESSAGES_JS, "_shouldUseLiveProseFade")
+    anchor_block = function_block(STREAM_RENDERER_JS, "_anchorProseIncrementalNode")
+    predicate_block = function_block(STREAM_RENDERER_JS, "_shouldUseLiveProseFade")
     assert_contains_all(
         anchor_block,
         [
@@ -286,14 +291,14 @@ def test_transparent_anchor_prose_uses_fade_renderer_when_enabled():
             "_shouldUseTransparentStreamFade()",
         ],
     )
-    assert "function _shouldUseTransparentStreamFade()" in MESSAGES_JS
-    assert "typeof isTransparentStream==='function'&&isTransparentStream()" in MESSAGES_JS
+    assert "function _shouldUseTransparentStreamFade()" in STREAM_RENDERER_JS
+    assert "typeof isTransparentStream==='function'&&isTransparentStream()" in STREAM_RENDERER_JS
 
 
 def test_reduced_motion_disables_live_prose_fade_predicate():
     script = (
         "\n".join(
-            function_block(MESSAGES_JS, name)
+            function_block(STREAM_RENDERER_JS, name)
             for name in [
                 "_shouldUseStreamFade",
                 "_shouldUseTransparentStreamFade",
@@ -333,21 +338,30 @@ if(!_shouldUseLiveProseFade()) throw new Error('regular fade preference should w
 
 
 def test_transparent_stream_hidden_body_appends_plain_text_only():
-    script = (
-        function_block(MESSAGES_JS, "_renderStreamingFadeMarkdown")
-        + r"""
-let _streamFadeDomText='';
-let _smdParser=null;
-let _smdReconnect=false;
-let parserEnded=false;
-function _streamFadeNextText(){ return {changed:true,caughtUp:false,text:'alpha beta'}; }
-function _shouldUseTransparentStreamFade(){ return true; }
-function _smdEndParser(){ parserEnded=true; }
+    script = STREAM_RENDERER_JS + r"""
+let now=0;
+const timers=[];
+global.performance={now(){ now+=100; return now; }};
+global.requestAnimationFrame=(callback)=>{ callback(); return 1; };
+global.cancelAnimationFrame=()=>{};
+global.setTimeout=(callback)=>{ timers.push(callback); return timers.length+1; };
+global.clearTimeout=()=>{};
+global.isTransparentStream=()=>true;
+global.removeThinking=()=>{};
+global._extractInlineThinkingFromContent=(content, thinkingText)=>({
+  content,
+  displayText:content,
+  thinkingText,
+  inThinking:false,
+});
+global.renderMd=null;
+global.esc=(text)=>String(text||'');
+global.window={_fadeTextEffect:false,_showThinking:false,smd:null};
 const assistantBody={
   textContent:'',
   innerHTML:'',
   children:[],
-  classList:{added:[],add(name){ this.added.push(name); }},
+  classList:{added:[],add(name){ this.added.push(name); },remove(){}},
   appendChild(node){
     this.children.push(node);
     this.textContent += String(node.textContent || '');
@@ -357,22 +371,36 @@ const assistantBody={
 global.document={
   createTextNode(text){ return {type:'text',textContent:String(text)}; },
 };
-const caughtUp=_renderStreamingFadeMarkdown('alpha beta');
-if(caughtUp) throw new Error('expected fade playout to remain catching up');
+const state={
+  assistantText:'alpha beta',
+  liveReasoningText:'',
+  reasoningText:'',
+  segmentStart:0,
+  assistantBody,
+  assistantRow:{},
+  streamFinalized:false,
+};
+let projected='';
+const renderer=HermesMessages.createStreamRenderer({
+  readState:()=>state,
+  upsertAnchorProse:(text)=>{ projected=text; },
+});
+if(!Object.isFrozen(renderer)) throw new Error('renderer interface must be frozen');
+renderer.scheduleRender({displayText:'alpha beta',thinkingText:'',inThinking:false});
+while(timers.length) timers.shift()();
 if(assistantBody.textContent!=='alpha beta') throw new Error(`wrong hidden text: ${assistantBody.textContent}`);
-if(_streamFadeDomText!=='alpha beta') throw new Error(`wrong dom text: ${_streamFadeDomText}`);
+if(projected!=='alpha beta') throw new Error(`wrong projected text: ${projected}`);
 if(assistantBody.children.some(node=>node.className==='stream-fade-word is-new')){
   throw new Error('hidden body received fade span');
 }
 if(!assistantBody.classList.added.includes('stream-fade-active')) throw new Error('missing stream fade active marker');
 """
-    )
     run_node(script)
 
 
 def test_transparent_anchor_prose_receives_revealed_fade_text():
     render_section = slice_between(
-        MESSAGES_JS,
+        STREAM_RENDERER_JS,
         "const displayText = segmentStart===0",
         "scrollIfPinned();",
     )
@@ -397,8 +425,8 @@ def test_transparent_anchor_prose_receives_revealed_fade_text():
 
 
 def test_stream_fade_done_drain_has_hard_cap_for_large_buffered_responses():
-    drain_block = function_block(MESSAGES_JS, "_drainStreamFadeBeforeDone")
-    assert "const _STREAM_FADE_DONE_DRAIN_MAX_MS=1400" in MESSAGES_JS
+    drain_block = function_block(STREAM_RENDERER_JS, "_drainStreamFadeBeforeDone")
+    assert "const _STREAM_FADE_DONE_DRAIN_MAX_MS=1400" in STREAM_RENDERER_JS
     assert_contains_all(
         drain_block,
         [
@@ -472,11 +500,11 @@ def test_stream_fade_css_is_opacity_only_and_hides_live_cursor():
 
 
 def test_stream_fade_reduced_motion_listener_is_cleaned_up_on_terminal_paths():
-    assert "_streamFadeReduceMotionOnChange" in MESSAGES_JS
-    assert "function _streamFadeCleanupReduceMotionListener()" in MESSAGES_JS
-    assert "removeEventListener('change',_streamFadeReduceMotionOnChange)" in MESSAGES_JS
-    assert "removeListener(_streamFadeReduceMotionOnChange)" in MESSAGES_JS
-    assert MESSAGES_JS.count("_streamFadeCleanupReduceMotionListener();") >= 4
+    assert "_streamFadeReduceMotionOnChange" in STREAM_RENDERER_JS
+    assert "function _streamFadeCleanupReduceMotionListener()" in STREAM_RENDERER_JS
+    assert "removeEventListener('change',_streamFadeReduceMotionOnChange)" in STREAM_RENDERER_JS
+    assert "removeListener(_streamFadeReduceMotionOnChange)" in STREAM_RENDERER_JS
+    assert STREAM_JS.count("_streamFadeCleanupReduceMotionListener();") >= 4
 
 
 def test_stream_fade_duration_scales_up_with_playback_speed():

@@ -91,6 +91,13 @@ def test_show_all_row_uses_i18n_key():
 
 
 def test_openrouter_overflow_preserves_hidden_tail(monkeypatch):
+    config_path = config._get_config_path()
+    monkeypatch.setattr(config, "_cfg_path", config_path)
+    try:
+        config_mtime = Path(config_path).stat().st_mtime
+    except OSError:
+        config_mtime = 0.0
+    monkeypatch.setattr(config, "_cfg_mtime", config_mtime)
     monkeypatch.setattr(
         config,
         "cfg",

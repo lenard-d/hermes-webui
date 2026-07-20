@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 """Regression tests for PR #1441 — IME composition Enter on Safari + broader IME coverage.
 
 Original guard was `e.isComposing` only, which fails on Safari where the committing
@@ -12,7 +13,7 @@ import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 
 
 def test_ime_helper_function_exists():

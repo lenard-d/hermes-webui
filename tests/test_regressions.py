@@ -14,6 +14,9 @@ import urllib.error
 import urllib.request
 import urllib.parse
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
+STREAM_RENDERER_SRC = (
+    REPO_ROOT / "static" / "messages_parts" / "stream_renderer.js"
+).read_text(encoding="utf-8")
 SESSION_LIFECYCLE_SRC = next(
     path for path in family_asset_paths("sessions")
     if path.name == "002-session-lifecycle.js"
@@ -168,10 +171,10 @@ def test_streaming_py_imports_has_pending(cleanup_test_sessions):
     """R4: api/streaming.py must import an approval-check function.
     When missing, the approval check mid-stream caused NameError.
     """
-    src = (REPO_ROOT / "api/streaming.py").read_text()
-    assert "has_blocking_approval" in src, "has_blocking_approval not found in api/streaming.py"
+    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
+    assert "has_blocking_approval" in src, "has_blocking_approval not found in local_run.py"
     assert "import" in src and "has_blocking_approval" in src, \
-        "has_blocking_approval must be imported in api/streaming.py"
+        "has_blocking_approval must be imported in local_run.py"
 
 
 def test_aiagent_imported_in_streaming(cleanup_test_sessions):
@@ -202,7 +205,14 @@ def test_server_py_sse_loop_breaks_on_cancel(cleanup_test_sessions):
     import re
     # Check server.py first, then api/routes.py (Sprint 11 extracted routes)
     src = (REPO_ROOT / "server.py").read_text()
-    routes_src = (REPO_ROOT / "api" / "routes.py").read_text() if (REPO_ROOT / "api" / "routes.py").exists() else ""
+    routes_src = "\n".join(
+        path.read_text()
+        for path in (
+            REPO_ROOT / "api" / "routes.py",
+            REPO_ROOT / "api" / "routes_parts" / "stream_transport.py",
+        )
+        if path.exists()
+    )
     combined = src + routes_src
     m = re.search(r"if event in \([^)]+\):\s*break", combined)
     assert m, "SSE break condition not found in server.py or api/routes.py"
@@ -914,7 +924,7 @@ def test_streaming_bridge_accepts_current_tool_progress_callback_signature(clean
     The agent now calls tool_progress_callback(event_type, name, preview, args, **kwargs).
     If the WebUI bridge only accepts (name, preview, args), live tool updates silently vanish.
     """
-    src = (REPO_ROOT / "api/streaming.py").read_text()
+    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
     assert "def on_tool(*cb_args, **cb_kwargs):" in src, \
         "streaming.py must accept variable callback args for tool progress events"
     assert "reasoning_callback=on_reasoning" in src, \
@@ -932,7 +942,7 @@ def test_streaming_reads_reasoning_effort_from_config_dict(cleanup_test_sessions
     regardless of what `/reasoning <level>` had been set to.  This static
     source assertion pins the fix because the runtime symptom is silent.
     """
-    src = (REPO_ROOT / "api/streaming.py").read_text()
+    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
     assert "_cfg.cfg" not in src, \
         "get_config() returns a dict; accessing _cfg.cfg drops reasoning_config to None"
     assert "_cfg.get('agent', {})" in src or '_cfg.get("agent", {})' in src, \
@@ -946,7 +956,7 @@ def test_streaming_agent_cache_signature_includes_reasoning_config(cleanup_test_
     matches the old entry and the operator's `/reasoning xhigh` change has
     no effect on the live session.
     """
-    src = (REPO_ROOT / "api/streaming.py").read_text()
+    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
     start = src.find("_sig_blob = _json.dumps")
     end = src.find("_agent_sig", start)
     assert start >= 0 and end > start, "agent cache signature block not found"
@@ -988,7 +998,7 @@ def test_messages_js_supports_live_reasoning_and_tool_completion(cleanup_test_se
         "live reasoning SSE events must keep the current segment's Worklog Thinking Card as fallback"
     assert "source.addEventListener('tool_complete'" in src or 'source.addEventListener("tool_complete"' in src, \
         "messages.js must listen for live tool completion SSE events"
-    assert "function _parseStreamState()" in src, \
+    assert "function _parseStreamState()" in STREAM_RENDERER_SRC, \
         "messages.js must parse live stream state into reasoning + visible answer"
 
 
@@ -1003,7 +1013,7 @@ def test_messages_js_supports_interim_assistant_events(cleanup_test_sessions):
     src = family_source("messages")
     assert "source.addEventListener('interim_assistant'" in src or 'source.addEventListener("interim_assistant"' in src, \
         "messages.js must listen for interim_assistant SSE events"
-    assert "function _resetAssistantSegment()" in src, \
+    assert "function _resetAssistantSegment()" in STREAM_RENDERER_SRC, \
         "messages.js should share live-segment reset logic between interim assistant updates and tool events"
     assert "_resetAssistantSegment();" in src, \
         "messages.js should apply segment reset when tool or interim assistant events require it"
@@ -1099,9 +1109,9 @@ def test_messages_js_stream_perf_cleanup_lifecycle(cleanup_test_sessions):
     src = family_source("messages")
     assert "function _cancelThrottledSnapshotTimer()" in src
     assert "clearTimeout(_snapshotLiveTurnTimer)" in src
-    assert "function _clearAnchorProseIncrementalNode()" in src
-    assert "window.__anchorProseIncrementalNode===_anchorProseIncrementalNode" in src
-    assert "_anchorProseSmdCache.clear();" in src
+    assert "function _clearAnchorProseIncrementalNode()" in STREAM_RENDERER_SRC
+    assert "window.__anchorProseIncrementalNode===_anchorProseIncrementalNode" in STREAM_RENDERER_SRC
+    assert "_anchorProseSmdCache.clear();" in STREAM_RENDERER_SRC
     fallback_start = src.find("function _finalizeStreamEndFallback")
     recovery_start = src.find("async function _runStreamEndRecovery", fallback_start)
     assert fallback_start >= 0 and recovery_start > fallback_start
@@ -1203,7 +1213,7 @@ def test_skills_slash_command_defined():
     must still exist and be registered, otherwise ``/skills`` would fall
     through to \"not yet supported\".
     """
-    src = (REPO_ROOT / "static/commands.js").read_text()
+    src = family_source("commands")
 
     # 1. cmdSkills function must be defined
     assert "async function cmdSkills" in src or "function cmdSkills" in src, \

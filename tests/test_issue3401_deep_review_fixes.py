@@ -34,8 +34,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
+RUN_JOURNAL_JS = (
+    REPO / "static" / "messages_parts" / "stream_run_journal.js"
+).read_text(encoding="utf-8")
 CSS = family_source("style")
-BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
+BOOT_JS = family_source("boot")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 
 
@@ -89,15 +92,16 @@ def test_extractor_and_stripper_anchoring_agree():
 def test_run_journal_cursor_persisted_into_inflight():
     """_rememberRunJournalCursor must write the advanced seq onto INFLIGHT so a reload
     replays from the correct after_seq floor (not 0 over restored live text)."""
-    body = _function_body(MESSAGES_JS, "_rememberRunJournalCursor")
-    assert "INFLIGHT[activeSid]" in body, (
-        "the cursor must be mirrored onto the persisted INFLIGHT entry (#3401 reconnect dup)"
+    body = _function_body(RUN_JOURNAL_JS, "_rememberRunJournalCursor")
+    assert "const inflight=getInflight();" in body
+    assert "getInflight:()=>INFLIGHT[activeSid]" in MESSAGES_JS, (
+        "the cursor owner must receive the active stream's INFLIGHT entry (#3401 reconnect dup)"
     )
     assert "lastRunJournalSeq=seq" in body.replace(" ", ""), (
         "INFLIGHT[activeSid].lastRunJournalSeq must be set to the advanced seq"
     )
     # And a persist must be scheduled so the value survives a reload.
-    assert "_throttledPersist" in body or "persistInflightState" in body, (
+    assert "persist();" in body and "persist:()=>_throttledPersist()" in MESSAGES_JS, (
         "advancing the cursor must schedule an INFLIGHT persist"
     )
 

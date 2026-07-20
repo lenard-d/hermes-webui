@@ -22,7 +22,7 @@ def test_composer_model_dropdown_has_scope_advisory():
 
 
 def test_model_selection_toast_describes_conversation_scope():
-    boot = read("static/boot.js")
+    boot = family_source("boot")
     i18n = family_source("i18n")
 
     assert "model_scope_toast" in boot

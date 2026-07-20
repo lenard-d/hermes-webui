@@ -142,7 +142,7 @@ class TestCancelledTurnPersistenceGuards:
         assert _session_has_cancel_marker(session) is False
 
     def test_silent_failure_path_checks_cancel_event_before_persisting_provider_error(self):
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         silent_idx = src.find("# ── Detect silent agent failure")
         if silent_idx == -1:
             silent_idx = src.find("# ── Detect missing final assistant reply")
@@ -160,7 +160,7 @@ class TestCancelledTurnPersistenceGuards:
         )
 
     def test_streamed_progress_without_final_assistant_still_reports_error(self):
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         failure_idx = src.find("_is_agent_result_terminal = _agent_result_terminal_failure(result)")
         assert failure_idx != -1, "terminal-failure result guard not found"
         apperror_idx = src.find("put('apperror', _error_payload)", failure_idx)
@@ -175,7 +175,7 @@ class TestCancelledTurnPersistenceGuards:
         )
 
     def test_exception_path_classifies_after_cancel_event_before_generic_error(self):
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         except_idx = src.find("print('[webui] stream error:")
         assert except_idx != -1, "stream exception handler not found"
         classify_idx = src.find("_classify_provider_error", except_idx)
@@ -192,7 +192,7 @@ class TestCancelledTurnPersistenceGuards:
         assert "Interruption details" in src
 
     def test_post_run_cancel_guard_runs_before_normal_success_merge(self):
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         run_idx = src.find("result = agent.run_conversation(")
         merge_idx = src.find("_result_messages = result.get", run_idx)
         assert run_idx != -1 and merge_idx != -1, "run/merge path not found"
@@ -241,13 +241,12 @@ class TestCancelledTurnPersistenceGuards:
 
     def test_worker_cancel_events_do_not_embed_session_payload(self):
         src = _read("api/streaming.py")
+        worker_src = _read("api/streaming_parts/local_run.py")
         controls_src = _read("api/streaming_parts/live_controls.py")
-        worker_start = src.find("def _run_agent_streaming(")
-        cancel_stream_start = src.find("def cancel_stream(", worker_start)
-        assert worker_start != -1 and cancel_stream_start != -1, "streaming worker/cancel_stream not found"
-        worker_block = src[worker_start:cancel_stream_start]
+        assert "_streaming_local_run.run_agent_streaming(" in src
+        assert "def run_agent_streaming(" in worker_src
 
-        assert "_cancel_event_payload('Cancelled by user', s)" not in worker_block
-        assert "_cancel_event_payload('Cancelled by user', session=" not in worker_block
-        assert "None if ephemeral else s" not in worker_block
+        assert "_cancel_event_payload('Cancelled by user', s)" not in worker_src
+        assert "_cancel_event_payload('Cancelled by user', session=" not in worker_src
+        assert "None if ephemeral else s" not in worker_src
         assert 'session=cancel_session_payload' in controls_src

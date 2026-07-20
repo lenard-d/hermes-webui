@@ -15,8 +15,8 @@ import pathlib
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
-BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+COMMANDS_JS = family_source("commands")
+BOOT_JS = family_source("boot")
 STYLE_CSS = family_source("style")
 
 

@@ -6,8 +6,7 @@ import re
 
 def test_boot_calls_fetchReasoningChip():
     """boot.js must call fetchReasoningChip() during boot initialization."""
-    with open("static/boot.js") as f:
-        src = f.read()
+    src = family_source("boot")
     assert "fetchReasoningChip" in src, "fetchReasoningChip must be referenced in boot.js"
     # Must be called (not just defined)
     assert re.search(r"fetchReasoningChip\s*\(\s*\)", src), \
@@ -16,8 +15,7 @@ def test_boot_calls_fetchReasoningChip():
 
 def test_boot_call_before_session_load():
     """fetchReasoningChip() should be called before session load in boot sequence."""
-    with open("static/boot.js") as f:
-        src = f.read()
+    src = family_source("boot")
     boot_marker = "await loadSession(saved, {preserveActiveInput:true});"
     boot_pos = src.index(boot_marker)
     fetch_pos = src.index("fetchReasoningChip()", src.index("_profileQueryIntentFromLocation"))
@@ -27,8 +25,7 @@ def test_boot_call_before_session_load():
 
 def test_boot_call_has_typeof_guard():
     """fetchReasoningChip() call in boot.js should have a typeof guard."""
-    with open("static/boot.js") as f:
-        src = f.read()
+    src = family_source("boot")
     assert "typeof fetchReasoningChip" in src, \
         "fetchReasoningChip call should be guarded with typeof check"
 
@@ -93,8 +90,7 @@ def test_syncReasoningChip_called_on_session_load():
 
 def test_syncReasoningChip_called_on_model_change():
     """Model picker changes must refresh reasoning chip with or without a session."""
-    with open("static/boot.js") as f:
-        boot_src = f.read()
+    boot_src = family_source("boot")
     marker = "$('modelSelect').onchange=async()=>{"
     start = boot_src.index(marker)
     tail = boot_src[start:]

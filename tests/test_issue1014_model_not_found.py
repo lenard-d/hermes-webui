@@ -78,7 +78,7 @@ class TestStreamingHtmlSanitization:
 
     def test_html_strip_before_classification(self):
         """HTML tags must be stripped before error classification."""
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         # Find the HTML sanitization block in the exception handler
         # It should appear before _exc_lower = err_str.lower()
         sanitize_idx = src.find("re.sub(r'<[^>]+>'")
@@ -93,7 +93,7 @@ class TestStreamingHtmlSanitization:
 
     def test_whitespace_normalization(self):
         """Stripped HTML must have whitespace collapsed."""
-        src = _read("api/streaming.py")
+        src = _read("api/streaming_parts/local_run.py")
         sanitize_idx = src.find("re.sub(r'<[^>]+>'")
         block = src[sanitize_idx:sanitize_idx + 300]
         assert r"\s+" in block, (

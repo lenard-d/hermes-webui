@@ -28,7 +28,7 @@ class TestAccumulatorReplaced:
     """The flat string accumulator must be replaced by a per-message dict."""
 
     def test_bare_string_declaration_removed(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         # The old declaration was exactly: _reasoning_text = ''
         # It must no longer exist as a bare string assignment (the comment that
         # mentions it by name is allowed, but the assignment itself must be gone).
@@ -38,7 +38,7 @@ class TestAccumulatorReplaced:
         )
 
     def test_segments_dict_declared(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         assert '_reasoning_segments' in src, (
             "_reasoning_segments dict must be declared in api/streaming.py"
         )
@@ -47,7 +47,7 @@ class TestAccumulatorReplaced:
         )
 
     def test_segments_dict_is_dict_type(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         # Declaration must be an empty dict, not a string
         assert re.search(r'_reasoning_segments\s*(?::\s*dict\s*)?\=\s*\{\}', src), (
             "_reasoning_segments must be initialized as an empty dict"
@@ -62,7 +62,7 @@ class TestOnReasoningPerMessageIndexing:
     _current_reasoning_idx instead of appending to a flat string."""
 
     def _on_reasoning_body(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         m = re.search(
             r'def on_reasoning\(text\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
             src, re.DOTALL,
@@ -105,7 +105,7 @@ class TestInterimAssistantAdvancesIndex:
     deltas are attributed to the next assistant message."""
 
     def _interim_body(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         m = re.search(
             r'def on_interim_assistant\(text.*?\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
             src, re.DOTALL,
@@ -134,7 +134,7 @@ class TestSettlementLoopForward:
 
     def _settlement_block(self):
         """Extract the reasoning-persistence settlement block from streaming.py."""
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         # Anchor on the comment that appears just before the settlement block
         start = src.find('# #3587: use per-message segments')
         assert start >= 0, (
@@ -186,7 +186,7 @@ class TestMultiTurnOffset:
     reasoning stored on earlier turns."""
 
     def _settlement_block(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         start = src.find('# #3587: use per-message segments')
         assert start >= 0, 'Settlement block not found'
         return src[start:start + 1500]
@@ -223,7 +223,7 @@ class TestToolCallBoundary:
     accumulated before a tool-call-only assistant message gets its own segment."""
 
     def _on_tool_body(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         m = re.search(
             r'def on_tool\(\*cb_args.*?\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
             src, re.DOTALL,
@@ -246,7 +246,7 @@ class TestToolCallBoundary:
         )
 
     def test_tool_boundary_flag_declared(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         assert '_tool_boundary_advanced' in src, (
             "_tool_boundary_advanced flag must be declared in streaming.py"
         )
@@ -254,7 +254,7 @@ class TestToolCallBoundary:
     def test_reasoning_resets_tool_boundary_flag(self):
         """New reasoning arriving after a tool boundary must reset the guard
         so the next tool-call batch can advance the index again."""
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         m = re.search(
             r'def on_reasoning\(text\):\s*\n(.*?)(?=\n\s{12}def |\n\s{8}def )',
             src, re.DOTALL,
@@ -277,7 +277,7 @@ class TestSettlementCounterSingleIncrement:
     reasoning (the exact data-loss scenario the refactor was meant to fix)."""
 
     def _settlement_block(self):
-        src = read('api/streaming.py')
+        src = read('api/streaming_parts/local_run.py')
         start = src.find('# #3587: use per-message segments')
         assert start >= 0
         return src[start:start + 1500]
