@@ -6,7 +6,9 @@ REPO = Path(__file__).parent.parent
 CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-CONFIG_PY = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+SETTINGS_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
 
 
@@ -23,7 +25,7 @@ def test_catppuccin_skin_in_client_and_server_allowlists():
     assert "catppuccin:1" in INDEX_HTML, (
         "Catppuccin missing from early-init skin allowlist"
     )
-    assert '"catppuccin"' in CONFIG_PY, (
+    assert '"catppuccin"' in SETTINGS_PY, (
         "Catppuccin missing from server settings skin allowlist"
     )
     assert "/catppuccin/" in I18N_JS, "Catppuccin missing from /theme help text"

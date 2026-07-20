@@ -4,7 +4,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")

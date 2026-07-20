@@ -131,10 +131,12 @@ def test_boot_primes_visible_default_model_without_catalog_fetch():
 
 
 def test_settings_exposes_default_model_provider_for_lazy_boot_catalog():
-    src = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'settings["default_model_provider"]' in src
-    assert 'model_cfg = get_config().get("model", {})' in src
+    assert 'model_cfg = cfg.get_config().get("model", {})' in src
 
 
 def test_boot_renders_session_list_before_workspace_and_onboarding_settle():

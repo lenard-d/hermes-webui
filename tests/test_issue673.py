@@ -14,13 +14,14 @@ Covers:
 
 import json
 import pathlib
-import re
 import unittest
 import urllib.error
 import urllib.request
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (
+    REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
+).read_text(encoding="utf-8")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")

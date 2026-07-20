@@ -5,7 +5,9 @@ from pathlib import Path
 REPO = Path(__file__).parent.parent
 CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-CONFIG_PY = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+SETTINGS_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 COMMANDS_JS = (REPO / "static" / "commands.js").read_text(encoding="utf-8")
 
@@ -15,7 +17,7 @@ def test_geist_contrast_skin_is_registered_with_matching_key_and_label():
     assert "value:'geist-contrast'" in BOOT_JS
     assert "s.value||s.name" in BOOT_JS
     assert "'geist-contrast':1" in INDEX_HTML
-    assert '"geist-contrast"' in CONFIG_PY
+    assert '"geist-contrast"' in SETTINGS_PY
 
 
 def test_geist_contrast_slash_theme_uses_skin_value_key():

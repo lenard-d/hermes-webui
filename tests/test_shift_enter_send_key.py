@@ -5,7 +5,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-CONFIG_PY = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 
 
 def _listener_body() -> str:

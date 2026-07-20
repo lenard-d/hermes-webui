@@ -11,7 +11,7 @@ PANELS = REPO_ROOT / "static" / "panels.js"
 UI_JS = REPO_ROOT / "static" / "ui.js"
 BOOT = REPO_ROOT / "static" / "boot.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
-CONFIG = REPO_ROOT / "api" / "config.py"
+SETTINGS = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 
 
 def test_quota_chip_settings_field_present():
@@ -22,7 +22,7 @@ def test_quota_chip_settings_field_present():
 
 
 def test_quota_chip_default_off_in_config_defaults():
-    src = CONFIG.read_text(encoding="utf-8")
+    src = SETTINGS.read_text(encoding="utf-8")
     assert '"show_quota_chip": False' in src, "show_quota_chip must default to False (opt-in)"
     # Must be in the writable settings allow-list (bool keys)
     assert '"show_quota_chip",' in src, "show_quota_chip must be in _SETTINGS_BOOL_KEYS"

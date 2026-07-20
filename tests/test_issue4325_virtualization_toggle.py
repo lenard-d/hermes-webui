@@ -22,7 +22,7 @@ PANELS = REPO_ROOT / "static" / "panels.js"
 BOOT = REPO_ROOT / "static" / "boot.js"
 UI = REPO_ROOT / "static" / "ui.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
-CONFIG = REPO_ROOT / "api" / "config.py"
+CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 
 
 def test_virtualize_transcript_setting_is_default_off_and_allowed():

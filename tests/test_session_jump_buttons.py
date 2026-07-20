@@ -7,7 +7,9 @@ INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
 I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
 PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-CONFIG_PY = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 
 
 def _function_body(src: str, signature: str) -> str:

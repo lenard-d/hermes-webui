@@ -3,7 +3,9 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-CONFIG_PY = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
 MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")

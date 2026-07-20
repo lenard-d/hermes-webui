@@ -5,7 +5,9 @@ from pathlib import Path
 REPO = Path(__file__).parent.parent
 CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-CONFIG_PY = (REPO / "api" / "config.py").read_text(encoding="utf-8")
+SETTINGS_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
 
@@ -13,7 +15,7 @@ I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
 def test_verdigris_skin_is_registered_in_all_files():
     assert "{name:'Verdigris'" in BOOT_JS
     assert "'verdigris':1" in INDEX_HTML
-    assert '"verdigris"' in CONFIG_PY
+    assert '"verdigris"' in SETTINGS_PY
 
 
 def test_verdigris_dark_palette_is_emerald():

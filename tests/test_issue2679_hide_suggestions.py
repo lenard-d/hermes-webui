@@ -7,7 +7,7 @@ STYLE = REPO_ROOT / "static" / "style.css"
 PANELS = REPO_ROOT / "static" / "panels.js"
 BOOT = REPO_ROOT / "static" / "boot.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
-CONFIG = REPO_ROOT / "api" / "config.py"
+CONFIG = REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 

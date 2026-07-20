@@ -268,7 +268,9 @@ class TestStructuredCodeSettingsWiring:
     """The setting must be a real, persisted WebUI setting — not a localStorage hack."""
 
     def test_server_defaults_and_validation(self):
-        with open("api/config.py", "r", encoding="utf-8") as f:
+        with open(
+            "api/config_parts/settings_persistence.py", "r", encoding="utf-8"
+        ) as f:
             content = f.read()
         # Defaults preserve current behavior: auto + threshold 10.
         assert '"structured_code_default_view": "auto"' in content

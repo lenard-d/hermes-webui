@@ -23,7 +23,9 @@ def _function_body(src, name):
 
 
 def test_setting_in_defaults():
-    src = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+        encoding="utf-8"
+    )
     assert '"worklog_details_expanded_default"' in src or "'worklog_details_expanded_default'" in src, \
         "worklog_details_expanded_default must exist in _SETTINGS_DEFAULTS"
     # Verify default is False
@@ -32,13 +34,17 @@ def test_setting_in_defaults():
 
 
 def test_setting_in_bool_keys():
-    src = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+        encoding="utf-8"
+    )
     assert re.search(r'_SETTINGS_BOOL_KEYS\b.*?worklog_details_expanded_default', src, re.DOTALL), \
         "worklog_details_expanded_default must appear inside _SETTINGS_BOOL_KEYS (not just anywhere in config.py)"
 
 
 def test_legacy_activity_feed_setting_migrates_without_remaining_primary_semantics():
-    src = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+    src = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+        encoding="utf-8"
+    )
     assert '"activity_feed_expanded_default"' in src, \
         "config.py should still accept the legacy key as a migration alias"
     assert re.search(r'_SETTINGS_LEGACY_DROP_KEYS\b.*?activity_feed_expanded_default', src, re.DOTALL), \

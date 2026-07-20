@@ -18,7 +18,7 @@ def _read(rel):
 
 
 def test_auto_scroll_follow_default_is_true_in_config():
-    src = _read("api/config.py")
+    src = _read("api/config_parts/settings_persistence.py")
     assert re.search(r'["\']auto_scroll_follow["\']\s*:\s*True', src), (
         "auto_scroll_follow must default to True in _SETTINGS_DEFAULTS "
         "(sticky-bottom follow; scroll-up unpins)"
@@ -26,7 +26,7 @@ def test_auto_scroll_follow_default_is_true_in_config():
 
 
 def test_auto_scroll_follow_in_bool_keys():
-    src = _read("api/config.py")
+    src = _read("api/config_parts/settings_persistence.py")
     m = re.search(r"_SETTINGS_BOOL_KEYS\s*=\s*\{([^}]+)\}", src, re.DOTALL)
     assert m, "_SETTINGS_BOOL_KEYS not found"
     assert "auto_scroll_follow" in m.group(1), (

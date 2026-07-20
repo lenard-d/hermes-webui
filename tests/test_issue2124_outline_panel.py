@@ -11,7 +11,9 @@ OUTLINE_JS  = (STATIC / "outline.js").read_text(encoding="utf-8")
 STYLE_CSS   = (STATIC / "style.css").read_text(encoding="utf-8")
 BOOT_JS     = (STATIC / "boot.js").read_text(encoding="utf-8")
 PANELS_JS   = (STATIC / "panels.js").read_text(encoding="utf-8")
-CONFIG_PY   = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 
 # Number of locale blocks in i18n.js: en, it, ja, ru, es, de, zh, zh-Hant, pt, ko, fr, tr
 LOCALE_COUNT = 12

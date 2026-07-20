@@ -9,7 +9,9 @@ import urllib.request
 from tests._pytest_port import BASE
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+SETTINGS_PY = (
+    ROOT / "api" / "config_parts" / "settings_persistence.py"
+).read_text(encoding="utf-8")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
 
@@ -253,12 +255,12 @@ def test_invalid_speech_settings_preserve_previous_values_and_unrelated_settings
 
 def test_backend_schema_contains_typed_speech_validation():
     for key in SPEECH_DEFAULTS:
-        assert f'"{key}"' in CONFIG_PY
-    assert '"voice_silence_ms": (200, 60000)' in CONFIG_PY
-    assert '"tts_rate": (0.5, 2.0)' in CONFIG_PY
-    assert '"tts_pitch": (0.0, 2.0)' in CONFIG_PY
-    assert "_SETTINGS_TTS_ENGINE_RE" in CONFIG_PY
-    assert 'k == "tts_voice"' in CONFIG_PY
+        assert f'"{key}"' in SETTINGS_PY
+    assert '"voice_silence_ms": (200, 60000)' in SETTINGS_PY
+    assert '"tts_rate": (0.5, 2.0)' in SETTINGS_PY
+    assert '"tts_pitch": (0.0, 2.0)' in SETTINGS_PY
+    assert "_SETTINGS_TTS_ENGINE_RE" in SETTINGS_PY
+    assert 'k == "tts_voice"' in SETTINGS_PY
 
 
 def test_boot_mirrors_server_settings_before_tts_apply_and_preserves_failure_fallback():

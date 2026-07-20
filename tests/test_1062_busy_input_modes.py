@@ -14,7 +14,9 @@ from pathlib import Path
 from tests.helpers import source_between as _source_between
 
 ROOT = Path(__file__).parent.parent
-CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
+    encoding="utf-8"
+)
 COMMANDS_JS = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
 MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
 UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
