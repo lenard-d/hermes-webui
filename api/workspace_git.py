@@ -8,510 +8,56 @@ pathspecs, and keeps all Git subprocess calls shell-free and bounded.
 from __future__ import annotations
 
 import difflib
-import logging
 import os
-import shutil
 import subprocess
-import sys
 import tempfile
-import threading
-import re
-from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-logger = logging.getLogger(__name__)
-
-
-def _windows_hide_flags() -> int:
-    """Win32 ``creationflags`` that hide a short-lived console child's window
-    (``CREATE_NO_WINDOW``) without detaching it, so ``capture_output`` still
-    works. Returns ``0`` on non-Windows — the ``subprocess`` default, a genuine
-    no-op. Mirrors the ``api/updates.py`` pattern; kept local so workspace-git
-    never takes a hard dependency on the optional ``hermes_cli`` package (a
-    standalone/agent-less WebUI must keep full git functionality). See #5692.
-    """
-    if sys.platform == "win32":
-        return getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return 0
-
-
 from api.workspace import rmtree_anchored, safe_resolve_ws, unlink_anchored
+from api.workspace_git_parts.repository import (
+    GIT_REMOTE_TIMEOUT,
+    GIT_TIMEOUT,  # noqa: F401 - compatibility re-export
+    WORKSPACE_GIT_DESTRUCTIVE_ENV,  # noqa: F401 - compatibility re-export
+    GitContext,
+    GitWorkspaceError,
+    _FILTER_CONFIG_RE,  # noqa: F401 - compatibility re-export
+    _GIT_DESTRUCTIVE_HARDENED_CONFIG,  # noqa: F401 - compatibility re-export
+    _GIT_ENV_SCRUB_KEYS,  # noqa: F401 - compatibility re-export
+    _GIT_ENV_SCRUB_PREFIXES,  # noqa: F401 - compatibility re-export
+    _GIT_HARDENED_CONFIG,  # noqa: F401 - compatibility re-export
+    _LOCKS_GUARD,  # noqa: F401 - compatibility re-export
+    _MERGE_DRIVER_CONFIG_RE,  # noqa: F401 - compatibility re-export
+    _OP_LOCKS,  # noqa: F401 - compatibility re-export
+    _REMOTE_HELPER_CONFIG_RE,  # noqa: F401 - compatibility re-export
+    _block_filtered_destructive_write,
+    _classify_git_error,  # noqa: F401 - compatibility re-export
+    _clean_git_env,
+    _config_names_for_scope,  # noqa: F401 - compatibility re-export
+    _destructive_filter_overrides,  # noqa: F401 - compatibility re-export
+    _destructive_merge_driver_overrides,  # noqa: F401 - compatibility re-export
+    _destructive_remote_command_args,  # noqa: F401 - compatibility re-export
+    _destructive_remote_helper_overrides,  # noqa: F401 - compatibility re-export
+    _filter_names_for_scope,  # noqa: F401 - compatibility re-export
+    _git_mutation_lock,
+    _hardened_git_argv,  # noqa: F401 - compatibility re-export
+    _has_repo_local_filters,
+    _merge_driver_names_for_scope,  # noqa: F401 - compatibility re-export
+    _repo_rel,
+    _remote_helper_names_for_scope,  # noqa: F401 - compatibility re-export
+    _windows_hide_flags,  # noqa: F401 - compatibility re-export
+    _workspace_pathspec,
+    _workspace_rel,
+    resolve_git_context,
+    run_git as _run_git,
+    workspace_git_destructive_enabled,
+)
 
 
-GIT_TIMEOUT = 5
-GIT_REMOTE_TIMEOUT = 60
 STATUS_FILE_LIMIT = 500
 DIFF_SIZE_LIMIT = 512 * 1024
 COMMIT_MESSAGE_DIFF_LIMIT = 64 * 1024
-WORKSPACE_GIT_DESTRUCTIVE_ENV = "HERMES_WEBUI_WORKSPACE_GIT_DESTRUCTIVE"
-_GIT_ENV_SCRUB_KEYS = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_CONFIG_GLOBAL",
-    "GIT_CONFIG_SYSTEM",
-    "GIT_CONFIG_COUNT",
-    "GIT_CONFIG_PARAMETERS",
-    "GIT_ASKPASS",
-    "SSH_ASKPASS",
-    "GIT_SSH",
-    "GIT_SSH_COMMAND",
-)
-_GIT_ENV_SCRUB_PREFIXES = ("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
 _HERMES_BRANCH_SWITCH_STASH_PREFIX = "hermes-webui branch switch"
-_GIT_HARDENED_CONFIG = (
-    # Workspace Git operations can run against repositories provided by agents,
-    # restored sessions, or mounted workspaces. Keep repo-local configuration
-    # from turning read/status/fetch calls into host command execution.
-    ("core.fsmonitor", "false"),
-    # Force the unmodified system ssh binary rather than clearing it — an empty
-    # value would break legitimate ssh fetches, while "ssh" overrides any
-    # repo-local core.sshCommand that points at an attacker helper.
-    ("core.sshCommand", "ssh"),
-    ("core.askPass", ""),
-    ("credential.helper", ""),
-    ("protocol.ext.allow", "never"),
-    # Neutralize repo-local core.gitProxy, which specifies an external proxy
-    # command reachable on `git fetch` against a git:// remote.
-    ("core.gitProxy", ""),
-    # Prevent submodule operations from recursing into nested repos, which
-    # could trigger hooks or fetch from attacker-controlled submodule URLs.
-    ("submodule.recurse", "false"),
-    ("fetch.recurseSubmodules", "false"),
-)
-_GIT_DESTRUCTIVE_HARDENED_CONFIG = (
-    # Disable signing helper command resolution while performing destructive
-    # Git operations. Hooks are redirected to a temporary empty directory in
-    # _run_git() so Git never falls back to .git/hooks.
-    ("commit.gpgSign", "false"),
-    ("push.gpgSign", "false"),
-    ("gpg.program", ""),
-    ("gpg.ssh.program", ""),
-    ("gpg.x509.program", ""),
-    ("core.alternateRefsCommand", ""),
-)
-
-
-def _hardened_git_argv(
-    args: list[str],
-    *,
-    destructive: bool = False,
-    attributes_file: str | None = None,
-    hooks_path: str | None = None,
-) -> list[str]:
-    argv = ["git"]
-    for key, value in _GIT_HARDENED_CONFIG:
-        argv.extend(["-c", f"{key}={value}"])
-    if destructive:
-        for key, value in _GIT_DESTRUCTIVE_HARDENED_CONFIG:
-            argv.extend(["-c", f"{key}={value}"])
-        if hooks_path:
-            argv.extend(["-c", f"core.hooksPath={hooks_path}"])
-    if attributes_file:
-        argv.extend(["-c", f"core.attributesFile={attributes_file}"])
-    argv.extend(args)
-    return argv
-
-
-def workspace_git_destructive_enabled() -> bool:
-    return os.getenv(WORKSPACE_GIT_DESTRUCTIVE_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def _clean_git_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-    env = os.environ.copy()
-    if extra:
-        env.update(extra)
-    for key in _GIT_ENV_SCRUB_KEYS:
-        env.pop(key, None)
-    for key in list(env):
-        if key.startswith(_GIT_ENV_SCRUB_PREFIXES):
-            env.pop(key, None)
-    env["GIT_TERMINAL_PROMPT"] = "0"
-    return env
-
-
-class GitWorkspaceError(RuntimeError):
-    """User-facing Git operation error."""
-
-    def __init__(self, message: str, code: str = "git_failed"):
-        super().__init__(message)
-        self.code = code
-
-
-@dataclass(frozen=True)
-class GitContext:
-    workspace: Path
-    repo_root: Path
-    workspace_prefix: str
-
-
-_LOCKS_GUARD = threading.Lock()
-_OP_LOCKS: dict[str, threading.Lock] = {}
-
-
-@contextmanager
-def _git_mutation_lock(ctx: GitContext):
-    # Key by repo root so sessions in the same repository serialize mutations.
-    # Separate worktrees get separate locks; Git still protects shared metadata
-    # with its own locks.
-    key = str(ctx.repo_root)
-    with _LOCKS_GUARD:
-        lock = _OP_LOCKS.setdefault(key, threading.Lock())
-    if not lock.acquire(timeout=GIT_REMOTE_TIMEOUT):
-        raise GitWorkspaceError("Another Git operation is still running", "operation_in_progress")
-    try:
-        yield
-    finally:
-        lock.release()
-
-
-def _classify_git_error(message: str, args: list[str] | None = None) -> str:
-    text = (message or "").lower()
-    joined = " ".join(args or []).lower()
-    if "timed out" in text:
-        return "timeout"
-    if "not installed" in text or "no such file or directory: 'git'" in text:
-        return "missing_git"
-    if "not a git repository" in text:
-        return "not_a_repo"
-    if "outside the workspace" in text or "outside the git repository" in text:
-        return "path_outside_workspace"
-    if "authentication failed" in text or "permission denied" in text or "could not read username" in text:
-        return "auth_failed"
-    if "no upstream" in text or "no configured push destination" in text or "has no upstream branch" in text:
-        return "no_upstream"
-    if (
-        "non-fast-forward" in text
-        or "fetch first" in text
-        or ("rejected" in text and "push" in joined)
-    ):
-        return "non_fast_forward"
-    if "conflict" in text or "unmerged" in text or ("merge" in text and "needs" in text):
-        return "conflict"
-    if "working tree" in text and ("clean" in text or "dirty" in text):
-        return "dirty_worktree"
-    if "local changes" in text or "would be overwritten by checkout" in text:
-        return "dirty_worktree"
-    if "invalid reference" in text or "not a valid" in text or "unknown revision" in text:
-        return "invalid_ref"
-    if "hook" in text:
-        return "hook_failed"
-    return "git_failed"
-
-
-def _run_git(
-    ctx_or_cwd: GitContext | Path,
-    args: list[str],
-    *,
-    timeout: int = GIT_TIMEOUT,
-    check: bool = False,
-    env: dict[str, str] | None = None,
-    destructive: bool = False,
-    force_destructive_hardening: bool = False,
-    disable_filter_attributes: bool = False,
-    neutralize_filter_programs: bool = False,
-    neutralize_remote_helpers: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    cwd = ctx_or_cwd.repo_root if isinstance(ctx_or_cwd, GitContext) else ctx_or_cwd
-    run_env = _clean_git_env(env)
-    effective_destructive = destructive and workspace_git_destructive_enabled()
-    hardened_destructive_path = effective_destructive or force_destructive_hardening
-    attributes_file = None
-    hooks_path = None
-    extra_configs: list[tuple[str, str]] = []
-    temporary_attributes: list[str] = []
-    temporary_dirs: list[str] = []
-    try:
-        if disable_filter_attributes:
-            fd, attributes_path = tempfile.mkstemp(prefix="hermes-webui-git-attrs-")
-            os.close(fd)
-            attributes_file = attributes_path
-            temporary_attributes = [attributes_path]
-        if disable_filter_attributes or neutralize_filter_programs:
-            # Read/status/fetch paths treat repo-local filter programs as
-            # untrusted code. Prefer raw-byte visibility over executing them.
-            extra_configs.extend(_destructive_filter_overrides(cwd, run_env))
-        if effective_destructive:
-            extra_configs.extend(_destructive_merge_driver_overrides(cwd, run_env))
-        if effective_destructive or neutralize_remote_helpers:
-            extra_configs.extend(_destructive_remote_helper_overrides(cwd, run_env))
-            args = _destructive_remote_command_args(args, cwd, run_env)
-        if hardened_destructive_path:
-            hooks_path = tempfile.mkdtemp(prefix="hermes-webui-git-hooks-")
-            temporary_dirs = [hooks_path]
-        if extra_configs:
-            run_env["GIT_CONFIG_COUNT"] = str(len(extra_configs))
-            for i, (key, value) in enumerate(extra_configs):
-                run_env[f"GIT_CONFIG_KEY_{i}"] = key
-                run_env[f"GIT_CONFIG_VALUE_{i}"] = value
-        result = subprocess.run(
-            _hardened_git_argv(
-                args,
-                destructive=hardened_destructive_path,
-                attributes_file=attributes_file,
-                hooks_path=hooks_path,
-            ),
-            cwd=str(cwd),
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=run_env,
-            creationflags=_windows_hide_flags(),
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise GitWorkspaceError("Git command timed out", "timeout") from exc
-    except FileNotFoundError as exc:
-        raise GitWorkspaceError("Git is not installed or not available on PATH", "missing_git") from exc
-    except OSError as exc:
-        raise GitWorkspaceError(str(exc), _classify_git_error(str(exc), args)) from exc
-    finally:
-        for path in temporary_attributes:
-            Path(path).unlink(missing_ok=True)
-        for path in temporary_dirs:
-            shutil.rmtree(path, ignore_errors=True)
-    if check and result.returncode != 0:
-        message = (result.stderr or result.stdout or "Git command failed").strip()
-        raise GitWorkspaceError(message, _classify_git_error(message, args))
-    return result
-
-
-_FILTER_CONFIG_RE = re.compile(r"^filter\.(.+)\.(clean|smudge|process|required)$")
-
-
-_MERGE_DRIVER_CONFIG_RE = re.compile(r"^merge\.(.+)\.driver$")
-_REMOTE_HELPER_CONFIG_RE = re.compile(r"^remote\.(.+)\.(uploadpack|receivepack)$")
-
-
-def _config_names_for_scope(
-    scope: str,
-    cwd: Path,
-    env: dict[str, str],
-    config_pattern: str,
-    name_re: re.Pattern[str],
-    *,
-    ignore_unsupported: bool = False,
-) -> set[str]:
-    result = subprocess.run(
-        ["git", "config", "--includes", scope, "--name-only", "--get-regexp", config_pattern],
-        cwd=str(cwd),
-        shell=False,
-        text=True,
-        capture_output=True,
-        timeout=GIT_TIMEOUT,
-        env=env,
-        creationflags=_windows_hide_flags(),
-    )
-    if result.returncode not in {0, 1}:
-        if ignore_unsupported:
-            return set()
-        message = (result.stderr or result.stdout or "Git command failed").strip()
-        raise GitWorkspaceError(message, _classify_git_error(message, ["config"]))
-    names: set[str] = set()
-    for line in (result.stdout or "").splitlines():
-        match = name_re.match(line.strip())
-        if match:
-            names.add(match.group(1))
-    return names
-
-
-def _filter_names_for_scope(
-    scope: str,
-    cwd: Path,
-    env: dict[str, str],
-    *,
-    ignore_unsupported: bool = False,
-) -> set[str]:
-    return _config_names_for_scope(
-        scope,
-        cwd,
-        env,
-        r"^filter\..*\.(clean|smudge|process|required)$",
-        _FILTER_CONFIG_RE,
-        ignore_unsupported=ignore_unsupported,
-    )
-
-
-def _merge_driver_names_for_scope(
-    scope: str,
-    cwd: Path,
-    env: dict[str, str],
-    *,
-    ignore_unsupported: bool = False,
-) -> set[str]:
-    return _config_names_for_scope(
-        scope,
-        cwd,
-        env,
-        r"^merge\..*\.driver$",
-        _MERGE_DRIVER_CONFIG_RE,
-        ignore_unsupported=ignore_unsupported,
-    )
-
-
-def _remote_helper_names_for_scope(
-    scope: str,
-    cwd: Path,
-    env: dict[str, str],
-    *,
-    ignore_unsupported: bool = False,
-) -> set[str]:
-    return _config_names_for_scope(
-        scope,
-        cwd,
-        env,
-        r"^remote\..*\.(uploadpack|receivepack)$",
-        _REMOTE_HELPER_CONFIG_RE,
-        ignore_unsupported=ignore_unsupported,
-    )
-
-
-def _destructive_filter_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[str, str]]:
-    names = _filter_names_for_scope("--local", cwd, env)
-    names |= _filter_names_for_scope(
-        "--worktree",
-        cwd,
-        env,
-        ignore_unsupported=True,
-    )
-    overrides: list[tuple[str, str]] = []
-    for name in sorted(names):
-        if "\n" in name or "\0" in name:
-            logger.warning("Skipping filter name with illegal characters: %r", name)
-            continue
-        overrides.extend(
-            [
-                (f"filter.{name}.clean", "cat"),
-                (f"filter.{name}.smudge", "cat"),
-                (f"filter.{name}.process", ""),
-                (f"filter.{name}.required", "false"),
-            ]
-        )
-    return overrides
-
-
-def _destructive_merge_driver_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[str, str]]:
-    names = _merge_driver_names_for_scope("--local", cwd, env)
-    names |= _merge_driver_names_for_scope(
-        "--worktree",
-        cwd,
-        env,
-        ignore_unsupported=True,
-    )
-    # Replace repo-defined merge drivers with Git's trusted three-way merge
-    # binary so stash restores cannot invoke workspace-controlled helpers.
-    overrides: list[tuple[str, str]] = []
-    for name in sorted(names):
-        if "\n" in name or "\0" in name:
-            logger.warning("Skipping merge driver name with illegal characters: %r", name)
-            continue
-        overrides.append((f"merge.{name}.driver", 'git merge-file "%A" "%O" "%B"'))
-    return overrides
-
-
-def _destructive_remote_helper_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[str, str]]:
-    names = _remote_helper_names_for_scope("--local", cwd, env)
-    names |= _remote_helper_names_for_scope(
-        "--worktree",
-        cwd,
-        env,
-        ignore_unsupported=True,
-    )
-    overrides: list[tuple[str, str]] = []
-    for name in sorted(names):
-        if "\n" in name or "\0" in name:
-            logger.warning("Skipping remote helper name with illegal characters: %r", name)
-            continue
-        overrides.extend(
-            [
-                (f"remote.{name}.uploadpack", "git-upload-pack"),
-                (f"remote.{name}.receivepack", "git-receive-pack"),
-            ]
-        )
-    return overrides
-
-
-def _destructive_remote_command_args(args: list[str], cwd: Path, env: dict[str, str]) -> list[str]:
-    if not args:
-        return args
-    names = _remote_helper_names_for_scope("--local", cwd, env)
-    names |= _remote_helper_names_for_scope(
-        "--worktree",
-        cwd,
-        env,
-        ignore_unsupported=True,
-    )
-    if not names:
-        return args
-    command = args[0]
-    if command in {"fetch", "pull"}:
-        return [command, "--upload-pack=git-upload-pack", *args[1:]]
-    if command == "push":
-        return [command, "--receive-pack=git-receive-pack", *args[1:]]
-    return args
-
-
-def _has_repo_local_filters(cwd: Path, env: dict[str, str]) -> bool:
-    names = _filter_names_for_scope("--local", cwd, env)
-    names |= _filter_names_for_scope("--worktree", cwd, env, ignore_unsupported=True)
-    return bool(names)
-
-
-def _block_filtered_destructive_write(ctx: GitContext, message: str) -> None:
-    if workspace_git_destructive_enabled() and _has_repo_local_filters(ctx.repo_root, _clean_git_env()):
-        raise GitWorkspaceError(message, "filtered_path")
-
-
-def resolve_git_context(workspace: str | Path) -> GitContext | None:
-    ws = Path(workspace).expanduser().resolve()
-    result = _run_git(ws, ["rev-parse", "--show-toplevel"], check=False)
-    if result.returncode != 0:
-        return None
-    repo_root = Path(result.stdout.strip()).resolve()
-    try:
-        prefix = ws.relative_to(repo_root).as_posix()
-    except ValueError:
-        return None
-    return GitContext(workspace=ws, repo_root=repo_root, workspace_prefix="" if prefix == "." else prefix)
-
-
-def _workspace_pathspec(ctx: GitContext) -> str:
-    return ctx.workspace_prefix or "."
-
-
-def _repo_rel(ctx: GitContext, workspace_rel: str) -> str:
-    try:
-        target = safe_resolve_ws(ctx.workspace, workspace_rel or ".")
-    except ValueError as exc:
-        raise GitWorkspaceError(str(exc), "path_outside_workspace") from exc
-    try:
-        repo_rel = target.relative_to(ctx.repo_root).as_posix()
-    except ValueError as exc:
-        raise GitWorkspaceError("Path is outside the Git repository", "path_outside_workspace") from exc
-    if ctx.workspace_prefix:
-        try:
-            target.relative_to(ctx.workspace)
-        except ValueError as exc:
-            raise GitWorkspaceError("Path is outside the workspace", "path_outside_workspace") from exc
-    return repo_rel
-
-
-def _workspace_rel(ctx: GitContext, repo_rel: str) -> str | None:
-    repo_rel = repo_rel.replace("\\", "/")
-    if not ctx.workspace_prefix:
-        return repo_rel
-    prefix = ctx.workspace_prefix.rstrip("/") + "/"
-    if repo_rel == ctx.workspace_prefix:
-        return "."
-    if repo_rel.startswith(prefix):
-        return repo_rel[len(prefix) :]
-    return None
 
 
 def _empty_status() -> dict:
