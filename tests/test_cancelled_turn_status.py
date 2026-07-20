@@ -241,13 +241,13 @@ class TestCancelledTurnPersistenceGuards:
 
     def test_worker_cancel_events_do_not_embed_session_payload(self):
         src = _read("api/streaming.py")
+        controls_src = _read("api/streaming_parts/live_controls.py")
         worker_start = src.find("def _run_agent_streaming(")
         cancel_stream_start = src.find("def cancel_stream(", worker_start)
         assert worker_start != -1 and cancel_stream_start != -1, "streaming worker/cancel_stream not found"
         worker_block = src[worker_start:cancel_stream_start]
-        cancel_stream_block = src[cancel_stream_start:]
 
         assert "_cancel_event_payload('Cancelled by user', s)" not in worker_block
         assert "_cancel_event_payload('Cancelled by user', session=" not in worker_block
         assert "None if ephemeral else s" not in worker_block
-        assert "_cancel_event_payload('Cancelled by user', session=_cancel_session_payload)" in cancel_stream_block
+        assert 'session=cancel_session_payload' in controls_src

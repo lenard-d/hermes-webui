@@ -5,6 +5,7 @@ import sys
 
 from api import streaming
 from api.streaming_parts import gateway_routing_metadata
+from api.streaming_parts import live_controls
 from api.streaming_parts import payloads
 from api.streaming_parts import runtime_resolution
 from api.streaming_parts.bindings import streaming_api
@@ -744,6 +745,52 @@ def test_gateway_routing_module_imports_without_streaming_facade():
             sys.executable,
             "-c",
             "import sys; import api.streaming_parts.gateway_routing_metadata; "
+            "assert 'api.streaming' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_live_control_facade_delegates_through_canonical_module(monkeypatch):
+    calls = []
+
+    def fake_cancel(api, stream_id):
+        calls.append((api, stream_id))
+        return "cancelled"
+
+    monkeypatch.setattr(live_controls, "cancel_stream", fake_cancel)
+
+    assert streaming.cancel_stream("stream-1") == "cancelled"
+    assert calls == [(streaming, "stream-1")]
+    assert streaming.cancel_stream.__module__ == "api.streaming"
+
+
+def test_live_control_steer_facade_delegates_through_canonical_module(monkeypatch):
+    calls = []
+    handler = object()
+    body = {"session_id": "session-1", "text": "continue differently"}
+
+    def fake_steer(api, received_handler, received_body):
+        calls.append((api, received_handler, received_body))
+        return "accepted"
+
+    monkeypatch.setattr(live_controls, "handle_chat_steer", fake_steer)
+
+    assert streaming._handle_chat_steer(handler, body) == "accepted"
+    assert calls == [(streaming, handler, body)]
+    assert streaming._handle_chat_steer.__module__ == "api.streaming"
+
+
+def test_live_controls_module_imports_without_streaming_facade():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import api.streaming_parts.live_controls; "
             "assert 'api.streaming' not in sys.modules",
         ],
         check=False,

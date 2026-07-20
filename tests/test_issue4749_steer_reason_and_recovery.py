@@ -6,7 +6,7 @@ Covers:
   3. Backend parity — frontend reason map covers all backend fallback codes
   4. Recovery DOM — _showSteerRecovery creates correct structure; dismiss removes it
 """
-from tests.frontend_asset_contract import family_asset_paths
+from tests.frontend_asset_contract import family_asset_paths, family_source
 
 import re
 import subprocess
@@ -16,8 +16,9 @@ from pathlib import Path
 
 REPO = Path(__file__).parent.parent
 I18N_JS = REPO / "static" / "i18n.js"
-COMMANDS_JS = REPO / "static" / "commands.js"
+COMMANDS_JS = family_source("commands")
 STREAMING_PY = REPO / "api" / "streaming.py"
+LIVE_CONTROLS_PY = REPO / "api" / "streaming_parts" / "live_controls.py"
 
 EXPECTED_I18N_KEYS = [
     "steer_fail_no_cached_agent",
@@ -127,23 +128,30 @@ def test_reason_map_contract():
 def test_backend_parity():
     """Frontend reason map covers all backend fallback codes from _handle_chat_steer."""
     streaming_text = STREAMING_PY.read_text(encoding="utf-8")
-    # Extract fallback codes from _handle_chat_steer function only
-    fn_match = re.search(r"def _handle_chat_steer\b.*?(?=\ndef |\Z)", streaming_text, re.DOTALL)
-    assert fn_match, "Could not find _handle_chat_steer in streaming.py"
+    facade_match = re.search(r"def _handle_chat_steer\b.*?(?=\ndef |\Z)", streaming_text, re.DOTALL)
+    assert facade_match, "Could not find _handle_chat_steer facade in streaming.py"
+    facade_body = facade_match.group(0)
+    assert "_streaming_live_controls.handle_chat_steer(" in facade_body
+    assert "_streaming_api()" in facade_body
+
+    controls_text = LIVE_CONTROLS_PY.read_text(encoding="utf-8")
+    # Extract fallback codes from the actual handle_chat_steer owner only.
+    fn_match = re.search(r"def handle_chat_steer\b.*?(?=\ndef |\Z)", controls_text, re.DOTALL)
+    assert fn_match, "Could not find handle_chat_steer in live_controls.py"
     fn_body = fn_match.group(0)
     # Exclude placeholder strings like "<reason>" that appear in docstrings
     found_codes = set(
         c for c in re.findall(r'"fallback":\s*"([^"<>]+)"', fn_body)
         if c  # non-empty after filtering
     )
-    assert found_codes, "No fallback codes found in _handle_chat_steer"
+    assert found_codes, "No fallback codes found in handle_chat_steer owner"
     assert found_codes == BACKEND_CODES | HANDLED_NON_RECOVERY_CODES, (
         f"Backend fallback codes mismatch.\n"
         f"  Found:    {sorted(found_codes)}\n"
         f"  Expected: {sorted(BACKEND_CODES | HANDLED_NON_RECOVERY_CODES)}"
     )
     # Also confirm frontend adds network_error
-    commands_text = COMMANDS_JS.read_text(encoding="utf-8")
+    commands_text = COMMANDS_JS
     assert FRONTEND_NETWORK_CODE in commands_text, (
         "network_error not found in commands.js"
     )

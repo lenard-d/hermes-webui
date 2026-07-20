@@ -458,21 +458,30 @@ class TestIssue765FollowupHardening:
 
     def test_cancel_stream_uses_repository_edit_owner(self):
         """Cancel cleanup must serialize and persist through the repository."""
-        src = (Path(__file__).parent.parent / "api" / "streaming.py").read_text(
+        repo = Path(__file__).parent.parent
+        facade_src = (repo / "api" / "streaming.py").read_text(
             encoding="utf-8"
         )
-        cancel_idx = src.find("def cancel_stream(")
-        assert cancel_idx != -1, "cancel_stream function not found"
-        cancel_block = src[cancel_idx:]
+        facade_idx = facade_src.find("def cancel_stream(")
+        assert facade_idx != -1, "cancel_stream facade not found"
+        facade_block = facade_src[facade_idx:]
+        assert "_streaming_live_controls.cancel_stream(_streaming_api(), stream_id)" in facade_block
+
+        owner_src = (repo / "api" / "streaming_parts" / "live_controls.py").read_text(
+            encoding="utf-8"
+        )
+        cancel_idx = owner_src.find("def cancel_stream(")
+        assert cancel_idx != -1, "cancel_stream owner not found"
+        cancel_block = owner_src[cancel_idx:]
         # Find the session cleanup section
         cleanup_idx = cancel_block.find("Session cleanup stays outside STREAMS_LOCK")
-        assert cleanup_idx != -1, "Session cleanup comment not found in cancel_stream"
+        assert cleanup_idx != -1, "Session cleanup lock-order comment not found in live_controls owner"
         cleanup_section = cancel_block[cleanup_idx:cleanup_idx + 1000]
         assert "with edit_session(" in cleanup_section, (
             "cancel_stream must use the repository edit owner during session "
             "cleanup to serialize with checkpoint and endpoint writers"
         )
-        assert "save_when=lambda _current: _cancel_persisted" in cleanup_section
+        assert "save_when=lambda _current: cancel_persisted" in cleanup_section
 
     @pytest.mark.parametrize("operation_name", ["retry_last", "undo_last"])
     def test_session_ops_retry_undo_hold_agent_lock(self, operation_name):
