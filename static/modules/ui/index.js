@@ -8,7 +8,14 @@ import * as composerControls from './composer-controls.js';
 import * as messageScrollFollow from './message-scroll-follow.js';
 import * as mobileComposerConfig from './mobile-composer-config.js';
 import * as contentPostprocessing from './content-postprocessing.js';
-import * as dialogsAndReconnect from './dialogs-and-reconnect.js';
+import * as appDialogs from './app-dialogs.js';
+import * as clipboard from './clipboard.js';
+import * as inflightState from './inflight-state.js';
+import * as liveTurnRecovery from './live-turn-recovery.js';
+import * as messageCopyActions from './message-copy-actions.js';
+import * as reconnectBanner from './reconnect-banner.js';
+import * as textToSpeech from './text-to-speech.js';
+import * as todoState from './todo-state.js';
 import * as healthAndUpdates from './health-and-updates.js';
 import * as liveActivity from './live-activity.js';
 import * as mediaAndQuota from './media-and-quota.js';
@@ -43,7 +50,14 @@ const modules = Object.assign(Object.create(null), {
   assistantTurnPresentation,
   activityPresentation,
   composer,
-  dialogsAndReconnect,
+  appDialogs,
+  clipboard,
+  inflightState,
+  liveTurnRecovery,
+  messageCopyActions,
+  reconnectBanner,
+  textToSpeech,
+  todoState,
   healthAndUpdates,
   presentation,
   transparentWorklog,

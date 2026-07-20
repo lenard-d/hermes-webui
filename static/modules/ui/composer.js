@@ -1,5 +1,5 @@
 import { _clearActivityElapsedTimer, scrollIfPinned } from './activity-and-scroll.js';
-import { _copyText } from './dialogs-and-reconnect.js';
+import { _copyText } from './clipboard.js';
 import { isCompressionUiRunning } from './live-activity.js';
 import { _dynamicModelLabels, _inlineMediaHtmlForRef, _isSafeDataImageUri, _mdImageHtml } from './media-and-quota.js';
 import { syncModelChip } from './model-catalog.js';

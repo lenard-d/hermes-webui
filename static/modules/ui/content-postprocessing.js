@@ -2,7 +2,7 @@ import { _clearActivityElapsedTimer, _sanitizeThinkingDisplayText, scrollIfPinne
 import { _renderLiveAnchorActivitySceneForStream } from './anchor-scenes.js';
 import { _firstValidTimestampSeconds, _scrollPinned } from './composer-controls.js';
 import { setStatus } from './composer.js';
-import { _copyText } from './dialogs-and-reconnect.js';
+import { _copyText } from './clipboard.js';
 import { _mountMermaidViewer } from './media-and-quota.js';
 import { _deliberateSessionModelPick, _reArmRecoveryPick } from './model-state.js';
 import { _suppressBrowserOverflowAnchor } from './navigation.js';

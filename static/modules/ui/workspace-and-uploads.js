@@ -1,5 +1,5 @@
 import { setStatus, showToast, updateSendBtn } from './composer.js';
-import { showConfirmDialog, showPromptDialog } from './dialogs-and-reconnect.js';
+import { showConfirmDialog, showPromptDialog } from './app-dialogs.js';
 import { _ARCHIVE_EXTS, _IMAGE_EXTS, _SVG_EXTS, _mediaKindForName } from './media-and-quota.js';
 import { syncTopbar } from './topbar-presentation.js';
 import { renderMessages } from './renderer.js';
