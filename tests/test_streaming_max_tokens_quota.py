@@ -7,40 +7,68 @@ max_tokens". The stream then looked like a stuck Thinking card instead of a
 clear quota error.
 """
 from pathlib import Path
+from types import SimpleNamespace
 
+from api.runs.local_agent_config import build_local_agent_configuration
+from api.streaming import _classify_provider_error
 
-STREAMING = (
-    Path(__file__).resolve().parents[1]
-    / "api"
-    / "streaming_parts"
-    / "local_run.py"
+LOCAL_AGENT_CACHE = (
+    Path(__file__).resolve().parents[1] / "api" / "runs" / "local_agent_cache.py"
 )
-STREAMING_FACADE = Path(__file__).resolve().parents[1] / "api" / "streaming.py"
 
 
-def _src() -> str:
-    return STREAMING.read_text(encoding="utf-8")
+def _build_agent_config(config):
+    class Agent:
+        def __init__(self, model, max_tokens=None, **_kwargs):
+            pass
+
+    callbacks = SimpleNamespace(
+        token=None,
+        reasoning=None,
+        tool=None,
+        interim_assistant=None,
+        tool_start=None,
+        tool_complete=None,
+        status=None,
+    )
+    return build_local_agent_configuration(
+        agent_class=Agent,
+        config=config,
+        model="gpt-test",
+        provider="openrouter",
+        base_url=None,
+        api_key="secret",
+        toolsets=[],
+        session_id="quota-test",
+        session_db=None,
+        prefill_messages=[],
+        callbacks=callbacks,
+        clarify_callback=None,
+        runtime={},
+        request_overrides=None,
+    )
 
 
 def test_streaming_passes_configured_max_tokens_to_agent():
-    src = _src()
-    assert "_raw_max_tokens = _cfg.get('max_tokens')" in src
-    assert "_agent_cfg_for_tokens.get('max_tokens')" in src
-    assert "_agent_kwargs['max_tokens'] = _max_tokens_cfg" in src
+    top_level = _build_agent_config({"max_tokens": "4096"})
+    nested = _build_agent_config({"agent": {"max_tokens": "2048"}})
+
+    assert top_level.max_tokens == 4096
+    assert top_level.kwargs["max_tokens"] == 4096
+    assert nested.max_tokens == 2048
+    assert nested.kwargs["max_tokens"] == 2048
 
 
 def test_streaming_agent_cache_signature_includes_max_tokens_and_fallback():
-    src = _src()
-    assert "_max_tokens_cfg or ''" in src
-    assert "_fallback_resolved or {}" in src
+    src = LOCAL_AGENT_CACHE.read_text(encoding="utf-8")
+    assert "max_tokens or \"\"" in src
+    assert "fallback_models or {}" in src
 
 
 def test_openrouter_more_credits_error_is_classified_as_quota():
-    src = _src()
-    facade_src = STREAMING_FACADE.read_text(encoding="utf-8")
-    assert "'more credits' in _err_lower" in facade_src
-    assert "'can only afford' in _err_lower" in facade_src
-    assert "'fewer max_tokens' in _err_lower" in facade_src
-    assert "'more credits' in _exc_lower" in src
-    assert "'can only afford' in _exc_lower" in src
-    assert "'fewer max_tokens' in _exc_lower" in src
+    for message in (
+        "more credits are required",
+        "account can only afford 1024 tokens",
+        "retry with fewer max_tokens",
+    ):
+        assert _classify_provider_error(message)["type"] == "quota_exhausted"

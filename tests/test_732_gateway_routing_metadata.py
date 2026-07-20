@@ -9,7 +9,6 @@ from api.streaming import _normalize_gateway_routing_metadata
 
 
 REPO = Path(__file__).resolve().parents[1]
-STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")

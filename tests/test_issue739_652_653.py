@@ -10,14 +10,12 @@ from tests.frontend_asset_contract import family_source
 import re
 import pathlib
 
-from api.streaming import _sanitize_messages_for_api
+from api.streaming import _classify_provider_error, _sanitize_messages_for_api
 
 STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local.py'
-STREAMING_FACADE = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
-TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'title_generation.py'
+TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming' / 'title_generation.py'
 
 streaming_src = STREAMING.read_text(encoding='utf-8')
-streaming_facade_src = STREAMING_FACADE.read_text(encoding='utf-8')
 title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')
 messages_js_src = family_source("messages")
 
@@ -28,13 +26,15 @@ class TestQuotaDetection:
     """Quota-exhausted errors must be classified separately from rate limits."""
 
     def test_quota_patterns_present_in_silent_failure_path(self):
-        """The silent-failure path checks for credit/quota strings."""
-        block = streaming_facade_src
-        assert 'insufficient credit' in block
-        assert 'credit balance' in block
-        assert 'credits exhausted' in block
-        assert 'quota_exceeded' in block
-        assert 'exceeded your current quota' in block
+        """All supported provider texts classify as quota exhaustion."""
+        for message in (
+            'insufficient credit',
+            'credit balance depleted',
+            'credits exhausted',
+            'quota_exceeded',
+            'exceeded your current quota',
+        ):
+            assert _classify_provider_error(message)['type'] == 'quota_exhausted'
 
     def test_quota_type_emitted_as_quota_exhausted(self):
         """The apperror type is 'quota_exhausted', not 'error' or 'rate_limit'."""

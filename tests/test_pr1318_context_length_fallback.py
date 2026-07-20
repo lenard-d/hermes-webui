@@ -23,8 +23,8 @@ from pathlib import Path
 STREAMING = (
     Path(__file__).resolve().parent.parent
     / "api"
-    / "streaming_parts"
-    / "local_run.py"
+    / "runs"
+    / "local.py"
 )
 
 
@@ -32,7 +32,7 @@ def _persistence_block():
     """Return the source range covering the post-merge per-turn save block."""
     src = STREAMING.read_text(encoding="utf-8")
     start = src.find("Persist reasoning trace in the session")
-    assert start != -1, "Reasoning trace marker not found in streaming.py"
+    assert start != -1, "Reasoning trace marker not found in the local-run owner"
     save_match = re.search(r"\n[ \t]+s\.save\(\)", src[start:])
     assert save_match is not None, "s.save() not found after the reasoning trace marker"
     end = start + save_match.start()

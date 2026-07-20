@@ -13,6 +13,7 @@ Covers:
 import pathlib
 from tests.frontend_asset_contract import family_source
 import re
+from types import SimpleNamespace
 
 REPO = pathlib.Path(__file__).parent.parent
 
@@ -417,28 +418,68 @@ class TestReasoningConfigHelpers:
         assert st['reasoning_effort'] == ''
 
 
-# ── api/streaming.py — AIAgent receives reasoning_config ──────────────────────
+# ── Local agent configuration — AIAgent receives reasoning_config ───────────
 
 class TestStreamingReasoningWiring:
-    """Confirm api/streaming.py reads agent.reasoning_effort from config and
-    passes parsed reasoning_config to AIAgent (so effort changes take effect
-    on the next session)."""
+    """Confirm the local-agent configuration owner resolves reasoning effort."""
 
-    def test_streaming_reads_reasoning_effort_from_config(self):
-        facade_src = read('api/streaming.py')
-        run_src = read('api/runs/local_agent_config.py')
-        assert 'parse_reasoning_effort' in facade_src, (
-            "api/streaming.py must import parse_reasoning_effort to translate "
-            "config.yaml agent.reasoning_effort into AIAgent reasoning_config"
+    def test_streaming_reads_reasoning_effort_from_config(self, monkeypatch):
+        import api.runs.local_agent_config as agent_config
+
+        class Agent:
+            def __init__(self, model, reasoning_config=None, **_kwargs):
+                pass
+
+        calls = []
+        monkeypatch.setattr(
+            agent_config,
+            "coerce_reasoning_effort_for_model",
+            lambda effort, model, **kwargs: calls.append(
+                ("coerce", effort, model, kwargs)
+            ) or "high",
         )
-        assert 'coerce_reasoning_effort_for_model' in facade_src, (
-            "api/streaming.py must clamp/drop unsupported model-specific effort "
-            "levels before sending reasoning_config to the provider"
+        monkeypatch.setattr(
+            agent_config,
+            "parse_reasoning_effort",
+            lambda effort: calls.append(("parse", effort)) or {"effort": effort},
         )
-        assert "reasoning_config" in run_src and '"reasoning_config" in parameters' in run_src, (
-            "api/streaming.py must guard the reasoning_config kwarg with "
-            "inspect.signature so older hermes-agent builds don't TypeError"
+        callbacks = SimpleNamespace(
+            token=None,
+            reasoning=None,
+            tool=None,
+            interim_assistant=None,
+            tool_start=None,
+            tool_complete=None,
+            status=None,
         )
+        result = agent_config.build_local_agent_configuration(
+            agent_class=Agent,
+            config={"agent": {"reasoning_effort": "max"}},
+            model="gpt-test",
+            provider="openai-codex",
+            base_url=None,
+            api_key="secret",
+            toolsets=[],
+            session_id="reasoning-test",
+            session_db=None,
+            prefill_messages=[],
+            callbacks=callbacks,
+            clarify_callback=None,
+            runtime={},
+            request_overrides=None,
+        )
+
+        assert calls == [
+            (
+                "coerce",
+                "max",
+                "gpt-test",
+                {"provider_id": "openai-codex", "base_url": None},
+            ),
+            ("parse", "high"),
+        ]
+        assert result.reasoning == {"effort": "high"}
+        assert result.kwargs["reasoning_config"] == {"effort": "high"}
 
 
 # ── HTTP owner modules — /api/reasoning endpoints ─────────────────────────────

@@ -1,7 +1,7 @@
 """Regression test for issue #2024.
 
 tools.skills_tool / tools.skill_manager_tool imports must NOT appear
-inside an ``_ENV_LOCK`` body in api/streaming.py.  First-time module
+inside an ``_ENV_LOCK`` body in the local-run environment owner. First-time module
 imports can be slow (disk I/O, transitive deps, plugin discovery) and
 holding the lock during them serialises every concurrent session behind
 the slowest import.
@@ -19,13 +19,13 @@ import ast
 import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-STREAMING_PY = REPO / "api" / "streaming.py"
+AGENT_LOADER_PY = REPO / "api" / "streaming" / "agent_loader.py"
 LOCAL_RUN_PY = REPO / "api" / "runs" / "local_environment.py"
 PROFILES_PY = REPO / "api" / "profiles" / "__init__.py"
 
 
 def _read_streaming() -> str:
-    return STREAMING_PY.read_text(encoding="utf-8")
+    return AGENT_LOADER_PY.read_text(encoding="utf-8")
 
 
 def _read_local_run() -> str:
@@ -86,7 +86,7 @@ class TestNoSkillToolImportsInsideEnvLock:
     def test_no_skill_imports_in_env_lock(self):
         source = _read_local_run()
         bodies = _find_env_lock_with_bodies(source)
-        assert bodies, "Expected at least one `with _ENV_LOCK:` block in streaming.py"
+        assert bodies, "Expected at least one `with _ENV_LOCK:` block in local_environment.py"
         for body in bodies:
             found = _imports_in_body(body, _TARGET_MODULES)
             assert found == [], (
@@ -108,7 +108,7 @@ class TestPrewarmHelperExists:
             if isinstance(node, ast.FunctionDef)
         }
         assert "_prewarm_skill_tool_modules" in func_names, (
-            "_prewarm_skill_tool_modules() helper must be defined in streaming.py"
+            "_prewarm_skill_tool_modules() helper must be defined in agent_loader.py"
         )
 
     def test_prewarm_references_both_modules(self):
@@ -117,10 +117,10 @@ class TestPrewarmHelperExists:
         # Simple string check is sufficient and more robust than AST for
         # dynamic __import__ calls.
         assert "tools.skills_tool" in source, (
-            "streaming.py must reference 'tools.skills_tool'"
+            "agent_loader.py must reference 'tools.skills_tool'"
         )
         assert "tools.skill_manager_tool" in source, (
-            "streaming.py must reference 'tools.skill_manager_tool'"
+            "agent_loader.py must reference 'tools.skill_manager_tool'"
         )
 
     def test_prewarm_called_before_env_lock(self):
@@ -133,7 +133,7 @@ class TestPrewarmHelperExists:
         for i, line in enumerate(lines, 1):
             if "_prewarm_skill_tool_modules()" in line and prewarm_line is None:
                 prewarm_line = i
-            if "with self.api._ENV_LOCK:" in line and first_env_lock_line is None:
+            if "with _ENV_LOCK:" in line and first_env_lock_line is None:
                 first_env_lock_line = i
         assert prewarm_line is not None, "_prewarm_skill_tool_modules() call not found"
         assert first_env_lock_line is not None, "with _ENV_LOCK: not found"
@@ -157,7 +157,7 @@ class TestSysModulesLookupInEnvLock:
         depth = 0
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith("with self.api._ENV_LOCK:"):
+            if stripped.startswith("with _ENV_LOCK:"):
                 in_lock = True
                 depth = 0
                 continue

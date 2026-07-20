@@ -2,27 +2,32 @@ from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
+from api.streaming import _persistent_state_changes, _persistent_state_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
+LIVE_TOOLS_JS = (
+    ROOT / "static" / "modules" / "messages" / "live-tools.js"
+).read_text(encoding="utf-8")
 STREAMING_PY = (ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
 def _tool_complete_listener_block() -> str:
-    start = MESSAGES_JS.index("source.addEventListener('tool_complete'")
-    end = MESSAGES_JS.index("source.addEventListener('approval'", start)
-    return MESSAGES_JS[start:end]
+    start = LIVE_TOOLS_JS.index("source.addEventListener('tool_complete'")
+    end = LIVE_TOOLS_JS.index("return source;", start)
+    return LIVE_TOOLS_JS[start:end]
 
 
 def test_tool_complete_notifies_on_persistent_state_writes():
     assert "function _maybeNotifyPersistentStateSaved(tool)" in MESSAGES_JS
     block = _tool_complete_listener_block()
 
-    assert "_maybeNotifyPersistentStateSaved(tc);" in block
-    assert block.index("tc.is_error=!!d.is_error;") < block.index("_maybeNotifyPersistentStateSaved(tc);")
-    assert block.index("if(!S.session||S.session.session_id!==activeSid) return;") < block.index("_maybeNotifyPersistentStateSaved(tc);")
-    assert block.index("_maybeNotifyPersistentStateSaved(tc);") < block.index("refreshOpenPreviewIfMutated")
+    assert "notifyPersistentStateSaved(toolCall);" in block
+    notify_idx = block.index("notifyPersistentStateSaved(toolCall);")
+    assert block.index("toolCall.is_error=!!payload.is_error;") < notify_idx
+    assert block.index("if(!ownsVisibleStream()) return;") < notify_idx
+    assert notify_idx < block.index("refreshOpenPreview();")
 
 
 def test_persistent_state_toast_classifier_is_write_only_and_deduped():
@@ -50,10 +55,24 @@ def test_persistent_state_toasts_use_existing_user_visible_labels():
     assert "showToast(t('memory_saved'),3600,'success')" in notify
 
 
-def test_backend_emits_state_saved_sse_from_file_snapshots():
-    facade_py = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
-    assert "def _persistent_state_snapshot" in facade_py
-    assert "def _persistent_state_changes" in facade_py
+def test_backend_emits_state_saved_sse_from_file_snapshots(tmp_path):
+    before = _persistent_state_snapshot(str(tmp_path))
+    memory_file = tmp_path / "memories" / "MEMORY.md"
+    skill_file = tmp_path / "skills" / "demo" / "SKILL.md"
+    memory_file.parent.mkdir(parents=True)
+    skill_file.parent.mkdir(parents=True)
+    memory_file.write_text("remember this", encoding="utf-8")
+    skill_file.write_text("# Demo", encoding="utf-8")
+
+    changes = _persistent_state_changes(
+        before,
+        _persistent_state_snapshot(str(tmp_path)),
+    )
+
+    assert changes == {
+        "memory_saved": True,
+        "skills": [{"name": "demo", "path": "demo/SKILL.md", "action": "created"}],
+    }
     assert '_persistent_state_before = _persistent_state_snapshot(_profile_home)' in STREAMING_PY
     assert 'put("state_saved", {' in STREAMING_PY
     assert '"kind": "memory"' in STREAMING_PY

@@ -16,11 +16,9 @@ import pathlib
 import re
 import urllib.request
 from tests.conftest import TEST_STATE_DIR
+from api.streaming import _classify_provider_error
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-PROVIDER_ERRORS = (
-    REPO_ROOT / "api" / "streaming_parts" / "provider_errors.py"
-).read_text(encoding="utf-8")
 from tests._pytest_port import BASE
 
 
@@ -49,70 +47,36 @@ def _post(path, body=None):
 # ── 1. streaming.py: auth error detection ───────────────────────────────────
 
 class TestStreamingAuthErrorDetection:
-    """streaming.py must classify auth/401 errors as auth_mismatch."""
+    """The provider-error owner must classify auth failures distinctly."""
 
     def test_auth_mismatch_type_defined_in_streaming(self):
         """'auth_mismatch' type must be emitted for auth errors."""
-        src = PROVIDER_ERRORS
-        assert "auth_mismatch" in src, (
-            "auth_mismatch type not found in the provider error classifier — "
-            "401/auth errors will not be surfaced with a helpful message"
-        )
+        assert _classify_provider_error("authentication failed")["type"] == "auth_mismatch"
 
     def test_is_auth_error_flag_defined(self):
-        """auth error variable must exist in the error handler (exception path and silent-failure path)."""
-        src = _read("api/runs/local.py")
-        # Variable renamed to _exc_is_auth in exception path, _is_auth in silent-failure path
-        assert "_exc_is_auth" in src or "_is_auth" in src, (
-            "auth error flag not found in streaming.py"
-        )
+        """Credential failures must remain distinct from generic errors."""
+        result = _classify_provider_error("invalid api key")
+        assert result["type"] == "auth_mismatch"
 
     def test_auth_error_detects_401(self):
         """'401' must be part of the auth error detection logic."""
-        src = _read("api/runs/local.py")
-        # Find the is_auth_error block
-        # Variable renamed to _exc_is_auth in exception path, _is_auth in silent-failure path
-        idx = src.find("_exc_is_auth")
-        assert idx != -1
-        block = src[idx:idx + 500]
-        assert "'401'" in block or '"401"' in block, (
-            "'401' not in auth error detection block"
-        )
+        assert _classify_provider_error("HTTP 401")["type"] == "auth_mismatch"
 
     def test_auth_error_detects_unauthorized(self):
         """'unauthorized' must be part of the auth error detection logic."""
-        src = _read("api/runs/local.py")
-        # Variable renamed to _exc_is_auth in exception path
-        idx = src.find("_exc_is_auth")
-        block = src[idx:idx + 500]
-        assert "unauthorized" in block.lower(), (
-            "'unauthorized' not in auth error detection block"
-        )
+        assert _classify_provider_error("Unauthorized")["type"] == "auth_mismatch"
 
     def test_auth_error_hint_mentions_hermes_model(self):
         """The auth_mismatch hint must mention 'hermes model' command."""
-        src = PROVIDER_ERRORS
-        # Find the auth_mismatch apperror block
-        idx = src.find("auth_mismatch")
-        block = src[idx:idx + 500]
-        assert "hermes model" in block, (
+        result = _classify_provider_error("invalid api key")
+        assert "hermes model" in result["hint"], (
             "auth_mismatch hint must mention 'hermes model' command "
             "so users know how to fix provider mismatch"
         )
 
     def test_auth_error_does_not_catch_rate_limit(self):
         """Rate limit errors must not be reclassified as auth_mismatch."""
-        src = _read("api/runs/local.py")
-        # Variables renamed: _exc_is_rate_limit / _exc_is_auth in exception path
-        # Quota check comes first (before rate limit), then rate limit, then auth
-        rl_idx = src.find("_exc_is_rate_limit")
-        ae_idx = src.find("_exc_is_auth")
-        assert rl_idx != -1, "_exc_is_rate_limit not found in streaming.py exception path"
-        assert ae_idx != -1, "_exc_is_auth not found in streaming.py exception path"
-        assert rl_idx < ae_idx, (
-            "_exc_is_rate_limit check should precede _exc_is_auth — "
-            "rate limit errors must not be mistaken for auth errors"
-        )
+        assert _classify_provider_error("HTTP 429 rate limit")["type"] == "rate_limit"
 
 
 # ── 2. static/ui.js: _checkProviderMismatch() ───────────────────────────────

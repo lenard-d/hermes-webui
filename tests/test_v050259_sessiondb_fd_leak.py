@@ -44,7 +44,7 @@ def test_cached_agent_reuse_uses_adopt_helper():
     assert reuse_idx != -1, "cached-agent reuse block missing"
     block = src[reuse_idx : reuse_idx + 2500]
 
-    assert "api._adopt_session_db_for_cached_agent" in block, (
+    assert "_adopt_session_db_for_cached_agent" in block, (
         "cached-agent reuse path must call _adopt_session_db_for_cached_agent "
         "instead of unconditionally closing agent._session_db. Unconditional "
         "close breaks background subagents that share the handle by reference."
@@ -60,7 +60,7 @@ def test_cached_agent_reuse_uses_adopt_helper():
 
 
 def test_adopt_and_is_open_helpers_exist():
-    src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "streaming" / "agent_cache.py").read_text(encoding="utf-8")
     assert "def _session_db_is_open(" in src
     assert "def _adopt_session_db_for_cached_agent(" in src
     # self-heal path must also refuse to close a still-open handle
@@ -94,7 +94,7 @@ def test_lru_eviction_closes_evicted_agent_session_db():
     subagents are expected to still be writing into that agent.)
     """
     run_src = (REPO / "api" / "runs" / "local_agent_cache.py").read_text(encoding="utf-8")
-    src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "streaming" / "agent_cache.py").read_text(encoding="utf-8")
 
     eviction_idx = run_src.find("for evicted_session_id, entry in evicted:")
     assert eviction_idx != -1, "LRU eviction close loop missing"
@@ -106,7 +106,7 @@ def test_lru_eviction_closes_evicted_agent_session_db():
         "is the original bug shape."
     )
 
-    assert "api._close_evicted_agent_at_session_boundary(\n                evicted_session_id, evicted_agent" in block, (
+    assert "_close_evicted_agent_at_session_boundary(\n                evicted_session_id, evicted_agent" in block, (
         "LRU eviction must route the evicted agent through the session-boundary "
         "close helper."
     )

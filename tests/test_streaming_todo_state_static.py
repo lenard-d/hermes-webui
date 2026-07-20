@@ -4,7 +4,6 @@ import ast
 from pathlib import Path
 
 
-STREAMING_PY = Path(__file__).parent.parent / "api" / "streaming.py"
 LOCAL_RUN_PY = Path(__file__).parent.parent / "api" / "runs" / "local_events.py"
 
 
@@ -14,15 +13,19 @@ def _emit_todo_state_calls() -> list[ast.Call]:
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "emit_todo_state"
+            and (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "emit_todo_state"
+                or isinstance(node.func, ast.Attribute)
+                and node.func.attr == "emit_todo_state"
+            )
         ):
             calls.append(node)
     return calls
 
 
 def test_streaming_imports_todo_state_emitter():
-    tree = ast.parse(STREAMING_PY.read_text(encoding="utf-8"))
+    tree = ast.parse(LOCAL_RUN_PY.read_text(encoding="utf-8"))
 
     assert any(
         isinstance(node, ast.ImportFrom)

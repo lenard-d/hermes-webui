@@ -5,7 +5,7 @@ These tests exist specifically to prevent those bugs from silently returning.
 Each test is tagged with the sprint/commit where the bug was found and fixed.
 """
 import json
-from tests.frontend_asset_contract import family_asset_paths, family_source, module_family_paths
+from tests.frontend_asset_contract import family_source, module_family_paths
 import os
 import pathlib
 import re
@@ -19,6 +19,9 @@ STREAM_RENDERER_SRC = (
 ).read_text(encoding="utf-8")
 STREAM_PROGRESS_SRC = (
     REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
+).read_text(encoding="utf-8")
+LIVE_TOOLS_SRC = (
+    REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
 ).read_text(encoding="utf-8")
 SESSION_LIFECYCLE_SRC = next(
     path for path in module_family_paths("sessions")
@@ -180,14 +183,26 @@ def test_streaming_py_imports_has_pending(cleanup_test_sessions):
         "has_blocking_approval must be imported in local_run.py"
 
 
-def test_aiagent_imported_in_streaming(cleanup_test_sessions):
-    """R2b: api/streaming.py must resolve AIAgent through the runtime guard.
-    When missing, the streaming thread crashed immediately after being spawned.
-    """
-    src = (REPO_ROOT / "api/streaming.py").read_text()
-    assert "get_ai_agent_class" in src, "guarded AIAgent resolver not referenced in api/streaming.py"
-    assert "from api.runs.agent_runtime import" in src and "get_ai_agent_class" in src, \
-        "AIAgent must be resolved through api.runs.agent_runtime in api/streaming.py"
+def test_aiagent_imported_in_streaming(cleanup_test_sessions, monkeypatch):
+    """R2b: the streaming loader must refresh and resolve a missing AIAgent."""
+    import api.streaming.agent_loader as loader
+
+    resolved = type("ResolvedAgent", (), {})
+    calls = []
+    monkeypatch.setattr(loader, "AIAgent", None)
+    monkeypatch.setattr(
+        loader,
+        "ensure_agent_runtime_current",
+        lambda: calls.append("refresh"),
+    )
+    monkeypatch.setattr(
+        loader,
+        "get_ai_agent_class",
+        lambda: calls.append("resolve") or resolved,
+    )
+
+    assert loader._get_ai_agent() is resolved
+    assert calls == ["refresh", "resolve"]
 
 
 # ── R5: SSE loop did not break on cancel event (Sprint 10 bug) ───────────────
@@ -1155,16 +1170,16 @@ def test_messages_js_finalizes_thinking_card_before_tool_card(cleanup_test_sessi
     """R19e: later reasoning after a tool call must render in a fresh Worklog
     Thinking Card without discarding durable reasoning.
     """
-    src = family_source("messages")
+    src = LIVE_TOOLS_SRC
     tool_start = src.find("source.addEventListener('tool'")
     tool_complete_start = src.find("source.addEventListener('tool_complete'", tool_start + 1)
     assert tool_start >= 0 and tool_complete_start > tool_start
     body = src[tool_start:tool_complete_start]
-    assert "finalizeThinkingCard()" in body, \
+    assert "finalizeThinking();" in body, \
         "tool handler must finalize the current live thinking card before appending a tool card"
-    assert "liveReasoningText='';" in body or 'liveReasoningText = "";' in body, \
+    assert "clearReasoning();" in body, \
         "tool handler must reset the active reasoning segment before post-tool reasoning arrives"
-    assert "reasoningText=''" not in body and 'reasoningText = ""' not in body, \
+    assert "reasoningText" not in body, \
         "tool handler must not discard durable reasoning already assigned to the Worklog"
 
 
@@ -1303,7 +1318,7 @@ def test_provider_oauth_authenticated_rejects_flag_only_credential_pool_entries(
 
 
 def test_status_from_runtime_marks_openai_codex_ready_from_credential_pool(
-    cleanup_test_sessions, tmp_path
+    cleanup_test_sessions, tmp_path, monkeypatch
 ):
     """R18b: provider_ready should be true when auth lives only in credential_pool."""
     _make_auth_json_with_credential_pool(
@@ -1325,18 +1340,12 @@ def test_status_from_runtime_marks_openai_codex_ready_from_credential_pool(
     from api.onboarding import _status_from_runtime
     import api.onboarding.status as _ob
 
-    orig_home = _ob.get_active_hermes_home
-    orig_found = _ob._HERMES_FOUND
-    _ob.get_active_hermes_home = lambda: tmp_path
-    _ob._HERMES_FOUND = True
-    try:
-        result = _status_from_runtime(
-            {"model": {"provider": "openai-codex", "default": "codex-mini-latest"}},
-            True,
-        )
-    finally:
-        _ob.get_active_hermes_home = orig_home
-        _ob._HERMES_FOUND = orig_found
+    monkeypatch.setattr(_ob, "get_active_hermes_home", lambda: tmp_path)
+    monkeypatch.setattr(_ob, "is_hermes_agent_available", lambda: True)
+    result = _status_from_runtime(
+        {"model": {"provider": "openai-codex", "default": "codex-mini-latest"}},
+        True,
+    )
 
     assert result["provider_configured"] is True
     assert result["provider_ready"] is True

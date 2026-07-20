@@ -12,18 +12,17 @@ import pathlib
 import re
 import unittest
 
-from api.streaming import _sanitize_generated_title
+from api.streaming import _generate_llm_session_title_for_agent, _sanitize_generated_title
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 CSS = family_source("style")
 HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
-STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
     REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 TITLE_GENERATION_PY = (
-    REPO_ROOT / "api" / "streaming_parts" / "title_generation.py"
+    REPO_ROOT / "api" / "streaming" / "title_generation.py"
 ).read_text(encoding="utf-8")
 
 
@@ -70,10 +69,9 @@ class TestIssue495TitleStreaming(unittest.TestCase):
     """Regression checks for issue #495 title SSE behavior."""
 
     def test_streaming_has_llm_title_helper(self):
-        self.assertIn(
-            "def _generate_llm_session_title_for_agent(",
-            STREAMING_PY,
-            "streaming.py should define an agent-backed LLM title helper for session titles",
+        self.assertTrue(
+            callable(_generate_llm_session_title_for_agent),
+            "the public streaming package should expose its agent-backed title helper",
         )
 
     def test_streaming_rejects_generic_completion_titles(self):
