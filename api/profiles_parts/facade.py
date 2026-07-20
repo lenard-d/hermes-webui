@@ -1,8 +1,11 @@
-"""Late-bound access to the :mod:`api.profiles` compatibility facade."""
+"""Binding helpers for the :mod:`api.profiles` compatibility facade."""
 
+import contextlib
+import functools
+import inspect
+import types
 from collections.abc import Callable
 from contextvars import ContextVar
-from functools import wraps
 from types import ModuleType
 
 
@@ -29,21 +32,44 @@ def profiles_api() -> ModuleType:
 
 
 def bind_profile_function(facade: ModuleType, implementation: Callable) -> Callable:
-    """Bind one implementation call to the facade instance exporting it.
+    """Rebind an extracted implementation to its exporting facade.
 
-    Tests intentionally import fresh ``api.profiles`` module objects and later
-    restore an older object in ``sys.modules``.  A process-global resolver alone
-    cannot distinguish those instances.  The wrapper supplies the exporting
-    facade through a context-local for the duration of each call, including
-    nested calls through other facade functions.
+    A pass-through wrapper would retain this helper module as ``__globals__``
+    while ``functools.wraps`` advertised the implementation module.  That split
+    identity breaks introspection, monkeypatch seams, and pickle's module/name
+    lookup.  A real function rebound to the facade globals has one authoritative
+    identity and naturally remains isolated when tests load multiple fresh
+    ``api.profiles`` module objects.
+
+    Context-manager decorators need one extra step: their wrapper closes over
+    the original generator.  Rebuild the decorator around a rebound generator
+    so ``inspect.unwrap`` also terminates in the facade namespace.
     """
+    facade_globals = vars(facade)
+    wrapped = getattr(implementation, "__wrapped__", None)
+    is_contextmanager = wrapped is not None and inspect.isgeneratorfunction(wrapped)
+    if is_contextmanager:
+        rebound_generator = bind_profile_function(facade, wrapped)
+        rebound_generator.__dict__.pop("__wrapped__", None)
+        rebound = contextlib.contextmanager(rebound_generator)
+    else:
+        rebound = types.FunctionType(
+            implementation.__code__,
+            facade_globals,
+            name=implementation.__name__,
+            argdefs=implementation.__defaults__,
+            closure=implementation.__closure__,
+        )
+        rebound.__kwdefaults__ = implementation.__kwdefaults__
+        rebound.__annotations__ = implementation.__annotations__
 
-    @wraps(implementation)
-    def bound(*args, **kwargs):
-        token = _active_profiles_api.set(facade)
-        try:
-            return implementation(*args, **kwargs)
-        finally:
-            _active_profiles_api.reset(token)
-
-    return bound
+    functools.update_wrapper(rebound, implementation)
+    if is_contextmanager:
+        rebound.__wrapped__ = rebound_generator
+    else:
+        # update_wrapper adds a link back to the part implementation even when
+        # it had no decorator chain.  Remove that false ownership trail so
+        # inspect.unwrap() returns the facade-bound function.
+        rebound.__dict__.pop("__wrapped__", None)
+    rebound.__module__ = facade.__name__
+    return rebound

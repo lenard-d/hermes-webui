@@ -8,20 +8,21 @@ Profile switches update os.environ['HERMES_HOME'] and monkey-patch module-level
 cached paths in hermes-agent modules (skills_tool, skill_manager_tool,
 cron/jobs) that snapshot HERMES_HOME at import time.
 """
-import json
+import json  # noqa: F401 - historical compatibility-facade export
 import logging
 import os
 import re
 import shutil  # noqa: F401 - historical compatibility-facade export
 import sys
 import threading
-from contextlib import contextmanager
+import time  # noqa: F401 - rebound catalog implementation dependency
+from contextlib import contextmanager  # noqa: F401 - compatibility export
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401 - compatibility export
 
-import yaml
+import yaml  # noqa: F401 - historical compatibility-facade export
 
-from api.session_events import publish_session_list_changed
+from api.session_events import publish_session_list_changed  # noqa: F401 - cron adapter seam
 from api.profiles_parts.facade import bind_profile_function, bind_profiles_api
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,11 @@ logger = logging.getLogger(__name__)
 # historical imports and monkeypatch seams continue to observe one namespace.
 bind_profiles_api(lambda: sys.modules[__name__])
 _PROFILE_FACADE = sys.modules[__name__]
+
+
+def profiles_api():
+    """Return this facade instance to functions rebound from profile parts."""
+    return _PROFILE_FACADE
 
 # ── Constants (match hermes_cli.profiles upstream) ─────────────────────────
 _PROFILE_ID_RE = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
@@ -65,26 +71,15 @@ _tls = threading.local()
 _SKILL_HOME_MODULES = ("tools.skills_tool", "tools.skill_manager_tool")
 
 
-def snapshot_skill_home_modules() -> dict[str, dict[str, object]]:
-    """Snapshot imported skill-module path globals before a temporary patch."""
-    snapshot: dict[str, dict[str, object]] = {}
-    for module_name in _SKILL_HOME_MODULES:
-        module = sys.modules.get(module_name)
-        if module is None:
-            snapshot[module_name] = {"module_present": False}
-            continue
-        snapshot[module_name] = {
-            "module_present": True,
-            "has_HERMES_HOME": hasattr(module, "HERMES_HOME"),
-            "HERMES_HOME": getattr(module, "HERMES_HOME", None),
-            "has_SKILLS_DIR": hasattr(module, "SKILLS_DIR"),
-            "SKILLS_DIR": getattr(module, "SKILLS_DIR", None),
-        }
-    return snapshot
+from api.profiles_parts import runtime_scope as _runtime_scope
+
+snapshot_skill_home_modules = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.snapshot_skill_home_modules
+)
 
 
 def patch_skill_home_modules(home: Path) -> None:
-    """Patch imported skill modules that cache HERMES_HOME at import time."""
+    """Patch already-imported skill modules without importing under env locks."""
     for module_name in _SKILL_HOME_MODULES:
         module = sys.modules.get(module_name)
         if module is None:
@@ -96,35 +91,9 @@ def patch_skill_home_modules(home: Path) -> None:
             logger.debug("Failed to patch %s module", module_name)
 
 
-def restore_skill_home_modules(snapshot: dict[str, dict[str, object]]) -> None:
-    """Restore skill-module globals captured by snapshot_skill_home_modules()."""
-    for module_name, values in snapshot.items():
-        module = sys.modules.get(module_name)
-        if not values.get("module_present"):
-            if module is not None:
-                sys.modules.pop(module_name, None)
-                parent_name, _, child_name = module_name.rpartition(".")
-                parent = sys.modules.get(parent_name)
-                if parent is not None:
-                    try:
-                        delattr(parent, child_name)
-                    except AttributeError:
-                        pass
-            continue
-        if module is None:
-            continue
-        for attr in ("HERMES_HOME", "SKILLS_DIR"):
-            has_attr = bool(values.get(f"has_{attr}"))
-            try:
-                if has_attr:
-                    setattr(module, attr, values.get(attr))
-                else:
-                    try:
-                        delattr(module, attr)
-                    except AttributeError:
-                        pass
-            except AttributeError:
-                logger.debug("Failed to restore %s.%s", module_name, attr)
+restore_skill_home_modules = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.restore_skill_home_modules
+)
 
 
 def _unwrap_profile_home_to_base(home: Path) -> Path:
@@ -478,278 +447,41 @@ def get_active_hermes_home() -> Path:
 
 
 
-# ── Cron-call profile isolation (issue: Scheduled jobs ignored active profile) ─
-# `cron.jobs` reads HERMES_HOME from os.environ (process-global) at function-
-# call time. That bypasses our per-request thread-local profile, so the
-# `/api/crons*` endpoints always returned the process-default profile's jobs.
-# This context manager swaps HERMES_HOME (and the cached module-level constants
-# in cron.jobs) for the duration of a cron call, serialized by a lock so
-# concurrent requests from different profiles don't race on the global env var.
-#
-# Thread-safety note on os.environ mutation:
-# CPython's os.environ assignment is GIL-protected at the bytecode level, but
-# multi-step read-modify-write sequences (snapshot prev → assign new → restore
-# on exit) are NOT atomic without explicit serialization. The _cron_env_lock
-# below makes the entire context-manager body run-to-completion serially, so
-# all webui access to HERMES_HOME goes through one thread at a time. Any
-# subprocess.Popen() call inside `run_job` inherits the env at fork time,
-# which is also under the lock — so child processes always see a consistent
-# (own-profile) HERMES_HOME, never a half-swapped state.
+# Cron libraries cache process-global Hermes paths. The adapter owns their
+# serialized setup/restore lifecycle while this facade retains the lock seam.
 _cron_env_lock = threading.Lock()
 
+from api.profiles_parts import cron_scope as _cron_scope
 
-def _cron_profile_context_depth() -> int:
-    return int(getattr(_tls, 'cron_profile_depth', 0) or 0)
-
-
-def _push_cron_profile_context_depth() -> None:
-    _tls.cron_profile_depth = _cron_profile_context_depth() + 1
-
-
-def _pop_cron_profile_context_depth() -> None:
-    depth = _cron_profile_context_depth()
-    _tls.cron_profile_depth = max(0, depth - 1)
-
-
-def _home_for_scheduled_cron_job(job: dict) -> Path:
-    """Resolve the profile home an auto-fired scheduler job should execute in.
-
-    Legacy jobs with no profile keep the scheduler's server-default profile.
-    Jobs pinned to a named profile execute under that profile's HERMES_HOME, so
-    an in-process WebUI scheduler thread does not leak process-global config or
-    .env into the agent run. If a profile was deleted after the job was saved,
-    fall back to the server default rather than crashing every scheduler tick.
-    """
-    raw = str((job or {}).get('profile') or '').strip()
-    if _is_isolated_profile_mode():
-        active = _isolated_profile_name()
-        if raw and not _profiles_match(raw, active):
-            logger.warning(
-                "Cron job %s references profile %r outside isolated profile %r; falling back to isolated home",
-                (job or {}).get('id', '?'), raw, active,
-            )
-        return get_active_hermes_home()
-    if not raw:
-        return get_active_hermes_home()
-    if _is_root_profile(raw):
-        return _DEFAULT_HERMES_HOME
-    if not _PROFILE_ID_RE.fullmatch(raw):
-        logger.warning(
-            "Cron job %s has invalid profile %r; falling back to server default",
-            (job or {}).get('id', '?'), raw,
-        )
-        return get_active_hermes_home()
-    home = _resolve_named_profile_home(raw)
-    if not home.is_dir():
-        logger.warning(
-            "Cron job %s references missing profile %r; falling back to server default",
-            (job or {}).get('id', '?'), raw,
-        )
-        return get_active_hermes_home()
-    return home
+_cron_profile_context_depth = bind_profile_function(
+    _PROFILE_FACADE, _cron_scope._cron_profile_context_depth
+)
+_push_cron_profile_context_depth = bind_profile_function(
+    _PROFILE_FACADE, _cron_scope._push_cron_profile_context_depth
+)
+_pop_cron_profile_context_depth = bind_profile_function(
+    _PROFILE_FACADE, _cron_scope._pop_cron_profile_context_depth
+)
+_home_for_scheduled_cron_job = bind_profile_function(
+    _PROFILE_FACADE, _cron_scope._home_for_scheduled_cron_job
+)
+install_cron_scheduler_profile_isolation = bind_profile_function(
+    _PROFILE_FACADE, _cron_scope.install_cron_scheduler_profile_isolation
+)
 
 
-def install_cron_scheduler_profile_isolation() -> None:
-    """Patch cron.scheduler.run_job for WebUI in-process scheduler safety.
-
-    Standard WebUI deployments do not start the scheduler thread in-process, but
-    if a future/single-process deployment calls cron.scheduler.tick() from the
-    WebUI worker, tick's background job path has no request TLS context. Wrap
-    run_job so each auto-fired job's persisted ``profile`` field gets the same
-    HERMES_HOME isolation as the manual /api/crons/run path.
-    """
-    try:
-        import cron.scheduler as _cs
-    except ImportError:
-        logger.debug("install_cron_scheduler_profile_isolation: cron.scheduler unavailable")
-        return
-
-    original = getattr(_cs, 'run_job', None)
-    if original is None or getattr(original, '_webui_profile_isolated', False):
-        return
-
-    def _webui_profile_isolated_run_job(job, *args, **kwargs):
-        # Manual WebUI runs already enter cron_profile_context_for_home before
-        # calling run_job. Avoid nesting the non-reentrant env lock or changing
-        # the explicitly selected manual execution profile.
-        if _cron_profile_context_depth() > 0:
-            return original(job, *args, **kwargs)
-        try:
-            with cron_profile_context_for_home(_home_for_scheduled_cron_job(job)):
-                return original(job, *args, **kwargs)
-        finally:
-            event_profile = str((job or {}).get("profile") or "").strip() or None
-            if _is_isolated_profile_mode():
-                event_profile = _isolated_profile_name()
-            try:
-                publish_session_list_changed("cron_complete", profile=event_profile)
-            except TypeError:
-                # Focused tests and older integrations may patch the publisher
-                # with the historical one-argument shape.
-                publish_session_list_changed("cron_complete")
-
-    _webui_profile_isolated_run_job._webui_profile_isolated = True
-    _webui_profile_isolated_run_job._webui_original_run_job = original
-    _cs.run_job = _webui_profile_isolated_run_job
-
-
-class cron_profile_context_for_home:
-    """Context manager that pins HERMES_HOME to an explicit profile home path.
-
-    Use this variant from worker threads that don't have TLS context (e.g. the
-    background thread started by /api/crons/run). The HTTP-side variant below
-    resolves the home via TLS.
-    """
+class cron_profile_context_for_home(_cron_scope.CronProfileContextForHome):
+    """Compatibility facade for an explicit-home cron scope."""
 
     def __init__(self, home: Path):
-        self._home = Path(home)
-
-    def __enter__(self):
-        _cron_env_lock.acquire()
-        _push_cron_profile_context_depth()
-        try:
-            self._prev_env = os.environ.get('HERMES_HOME')
-            os.environ['HERMES_HOME'] = str(self._home)
-
-            # Re-patch cron.jobs module-level constants (see main context manager
-            # below for the rationale).
-            self._prev_cj = None
-            try:
-                import cron.jobs as _cj
-                self._prev_cj = (_cj.HERMES_DIR, _cj.CRON_DIR, _cj.JOBS_FILE, _cj.OUTPUT_DIR)
-                _cj.HERMES_DIR = self._home
-                _cj.CRON_DIR = self._home / 'cron'
-                _cj.JOBS_FILE = _cj.CRON_DIR / 'jobs.json'
-                _cj.OUTPUT_DIR = _cj.CRON_DIR / 'output'
-            except (ImportError, AttributeError):
-                logger.debug("cron_profile_context_for_home: cron.jobs unavailable")
-
-            # cron.scheduler snapshots _hermes_home at import time and run_job()
-            # reads config/.env from that module global. Patch it alongside
-            # cron.jobs so manual WebUI runs actually execute under the selected
-            # profile, not merely write output metadata there (#617).
-            self._prev_cs = None
-            try:
-                import cron.scheduler as _cs
-                self._prev_cs = (
-                    getattr(_cs, '_hermes_home', None),
-                    getattr(_cs, '_LOCK_DIR', None),
-                    getattr(_cs, '_LOCK_FILE', None),
-                )
-                _cs._hermes_home = self._home
-                _cs._LOCK_DIR = self._home / 'cron'
-                _cs._LOCK_FILE = _cs._LOCK_DIR / '.tick.lock'
-            except (ImportError, AttributeError):
-                logger.debug("cron_profile_context_for_home: cron.scheduler unavailable")
-        except Exception:
-            _pop_cron_profile_context_depth()
-            _cron_env_lock.release()
-            raise
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
-            if self._prev_env is None:
-                os.environ.pop('HERMES_HOME', None)
-            else:
-                os.environ['HERMES_HOME'] = self._prev_env
-            if self._prev_cj is not None:
-                try:
-                    import cron.jobs as _cj
-                    _cj.HERMES_DIR, _cj.CRON_DIR, _cj.JOBS_FILE, _cj.OUTPUT_DIR = self._prev_cj
-                except (ImportError, AttributeError):
-                    pass
-            if getattr(self, '_prev_cs', None) is not None:
-                try:
-                    import cron.scheduler as _cs
-                    _cs._hermes_home, _cs._LOCK_DIR, _cs._LOCK_FILE = self._prev_cs
-                except (ImportError, AttributeError):
-                    pass
-        finally:
-            _pop_cron_profile_context_depth()
-            _cron_env_lock.release()
-        return False
+        super().__init__(_PROFILE_FACADE, home)
 
 
-class cron_profile_context:
-    """Context manager that pins HERMES_HOME to the TLS-active profile.
+class cron_profile_context(_cron_scope.CronProfileContext):
+    """Compatibility facade for the request-active cron scope."""
 
-    Usage:
-        with cron_profile_context():
-            from cron.jobs import list_jobs
-            jobs = list_jobs(include_disabled=True)
-
-    Serializes cron API calls across profiles (cron API is low-frequency;
-    serialization cost is negligible compared to correctness).
-    """
-
-    def __enter__(self):
-        _cron_env_lock.acquire()
-        _push_cron_profile_context_depth()
-        try:
-            self._prev_env = os.environ.get('HERMES_HOME')
-            home = get_active_hermes_home()
-            os.environ['HERMES_HOME'] = str(home)
-
-            # Re-patch cron.jobs module-level constants. They are snapshot at
-            # import time (line 68-71 of cron/jobs.py) and don't participate in
-            # the module's __getattr__ lazy path, so env-var alone is not enough
-            # for callers that reference the module constants directly.
-            self._prev_cj = None
-            try:
-                import cron.jobs as _cj
-                self._prev_cj = (_cj.HERMES_DIR, _cj.CRON_DIR, _cj.JOBS_FILE, _cj.OUTPUT_DIR)
-                _cj.HERMES_DIR = home
-                _cj.CRON_DIR = home / 'cron'
-                _cj.JOBS_FILE = _cj.CRON_DIR / 'jobs.json'
-                _cj.OUTPUT_DIR = _cj.CRON_DIR / 'output'
-            except (ImportError, AttributeError):
-                logger.debug("cron_profile_context: cron.jobs unavailable; env-var only")
-
-            self._prev_cs = None
-            try:
-                import cron.scheduler as _cs
-                self._prev_cs = (
-                    getattr(_cs, '_hermes_home', None),
-                    getattr(_cs, '_LOCK_DIR', None),
-                    getattr(_cs, '_LOCK_FILE', None),
-                )
-                _cs._hermes_home = home
-                _cs._LOCK_DIR = home / 'cron'
-                _cs._LOCK_FILE = _cs._LOCK_DIR / '.tick.lock'
-            except (ImportError, AttributeError):
-                logger.debug("cron_profile_context: cron.scheduler unavailable; env-var only")
-        except Exception:
-            _pop_cron_profile_context_depth()
-            _cron_env_lock.release()
-            raise
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
-            # Restore env var
-            if self._prev_env is None:
-                os.environ.pop('HERMES_HOME', None)
-            else:
-                os.environ['HERMES_HOME'] = self._prev_env
-
-            # Restore cron.jobs module constants
-            if self._prev_cj is not None:
-                try:
-                    import cron.jobs as _cj
-                    _cj.HERMES_DIR, _cj.CRON_DIR, _cj.JOBS_FILE, _cj.OUTPUT_DIR = self._prev_cj
-                except (ImportError, AttributeError):
-                    pass
-            if getattr(self, '_prev_cs', None) is not None:
-                try:
-                    import cron.scheduler as _cs
-                    _cs._hermes_home, _cs._LOCK_DIR, _cs._LOCK_FILE = self._prev_cs
-                except (ImportError, AttributeError):
-                    pass
-        finally:
-            _pop_cron_profile_context_depth()
-            _cron_env_lock.release()
-        return False
+    def __init__(self):
+        super().__init__(_PROFILE_FACADE)
 
 
 def get_hermes_home_for_profile(name: str) -> Path:
@@ -767,154 +499,51 @@ def get_hermes_home_for_profile(name: str) -> Path:
 
 
 _TERMINAL_ENV_MAPPINGS = {
-    'backend': 'TERMINAL_ENV',
-    'env_type': 'TERMINAL_ENV',
-    'cwd': 'TERMINAL_CWD',
-    'timeout': 'TERMINAL_TIMEOUT',
-    'lifetime_seconds': 'TERMINAL_LIFETIME_SECONDS',
-    'modal_mode': 'TERMINAL_MODAL_MODE',
-    'docker_image': 'TERMINAL_DOCKER_IMAGE',
-    'docker_forward_env': 'TERMINAL_DOCKER_FORWARD_ENV',
-    'docker_env': 'TERMINAL_DOCKER_ENV',
-    'docker_mount_cwd_to_workspace': 'TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE',
-    'singularity_image': 'TERMINAL_SINGULARITY_IMAGE',
-    'modal_image': 'TERMINAL_MODAL_IMAGE',
-    'daytona_image': 'TERMINAL_DAYTONA_IMAGE',
-    'container_cpu': 'TERMINAL_CONTAINER_CPU',
-    'container_memory': 'TERMINAL_CONTAINER_MEMORY',
-    'container_disk': 'TERMINAL_CONTAINER_DISK',
-    'container_persistent': 'TERMINAL_CONTAINER_PERSISTENT',
-    'docker_volumes': 'TERMINAL_DOCKER_VOLUMES',
-    'persistent_shell': 'TERMINAL_PERSISTENT_SHELL',
-    'ssh_host': 'TERMINAL_SSH_HOST',
-    'ssh_user': 'TERMINAL_SSH_USER',
-    'ssh_port': 'TERMINAL_SSH_PORT',
-    'ssh_key': 'TERMINAL_SSH_KEY',
-    'ssh_persistent': 'TERMINAL_SSH_PERSISTENT',
-    'local_persistent': 'TERMINAL_LOCAL_PERSISTENT',
+    "backend": "TERMINAL_ENV",
+    "env_type": "TERMINAL_ENV",
+    "cwd": "TERMINAL_CWD",
+    "timeout": "TERMINAL_TIMEOUT",
+    "lifetime_seconds": "TERMINAL_LIFETIME_SECONDS",
+    "modal_mode": "TERMINAL_MODAL_MODE",
+    "docker_image": "TERMINAL_DOCKER_IMAGE",
+    "docker_forward_env": "TERMINAL_DOCKER_FORWARD_ENV",
+    "docker_env": "TERMINAL_DOCKER_ENV",
+    "docker_mount_cwd_to_workspace": "TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE",
+    "singularity_image": "TERMINAL_SINGULARITY_IMAGE",
+    "modal_image": "TERMINAL_MODAL_IMAGE",
+    "daytona_image": "TERMINAL_DAYTONA_IMAGE",
+    "container_cpu": "TERMINAL_CONTAINER_CPU",
+    "container_memory": "TERMINAL_CONTAINER_MEMORY",
+    "container_disk": "TERMINAL_CONTAINER_DISK",
+    "container_persistent": "TERMINAL_CONTAINER_PERSISTENT",
+    "docker_volumes": "TERMINAL_DOCKER_VOLUMES",
+    "persistent_shell": "TERMINAL_PERSISTENT_SHELL",
+    "ssh_host": "TERMINAL_SSH_HOST",
+    "ssh_user": "TERMINAL_SSH_USER",
+    "ssh_port": "TERMINAL_SSH_PORT",
+    "ssh_key": "TERMINAL_SSH_KEY",
+    "ssh_persistent": "TERMINAL_SSH_PERSISTENT",
+    "local_persistent": "TERMINAL_LOCAL_PERSISTENT",
 }
 
-
-def _stringify_env_value(value) -> str:
-    if isinstance(value, bool):
-        return 'true' if value else 'false'
-    if isinstance(value, (list, dict)):
-        return json.dumps(value)
-    return str(value)
-
-
-def get_profile_runtime_env(home: Path) -> dict[str, str]:
-    """Return env vars needed to run an agent turn for a profile home.
-
-    WebUI profile switching is per-client/cookie scoped, so it intentionally
-    does not call ``switch_profile(..., process_wide=True)`` for every browser.
-    Agent/tool code still consumes terminal backend settings through
-    environment variables (matching ``hermes -p <profile>``), so streaming must
-    apply the selected profile's terminal config and ``.env`` for the duration
-    of that run.
-    """
-    home = Path(home).expanduser()
-    env: dict[str, str] = {}
-
-    try:
-        import yaml as _yaml
-
-        cfg_path = home / 'config.yaml'
-        cfg = _yaml.safe_load(cfg_path.read_text(encoding='utf-8')) if cfg_path.exists() else {}
-        if not isinstance(cfg, dict):
-            cfg = {}
-    except Exception:
-        cfg = {}
-
-    terminal_cfg = cfg.get('terminal', {}) if isinstance(cfg, dict) else {}
-    if isinstance(terminal_cfg, dict):
-        for key, env_key in _TERMINAL_ENV_MAPPINGS.items():
-            if key in terminal_cfg and terminal_cfg[key] is not None:
-                env[env_key] = _stringify_env_value(terminal_cfg[key])
-
-    env_path = home / '.env'
-    if env_path.exists():
-        try:
-            for line in env_path.read_text(encoding='utf-8').splitlines():
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    k, v = line.split('=', 1)
-                    k = k.strip()
-                    v = v.strip().strip('"').strip("'")
-                    if k and v:
-                        # #4589: never let a profile's own .env override an
-                        # operator/deployment posture (e.g. disable isolation via
-                        # HERMES_WEBUI_ISOLATED_PROFILE=0) on the runtime-env path
-                        # the same way _reload_dotenv() protects the live env.
-                        if k in _PROTECTED_ENV_KEYS:
-                            continue
-                        env[k] = v
-        except Exception:
-            logger.debug("Failed to read runtime env from %s", env_path)
-
-    return env
-
-
-# Match Hermes Agent gateway behavior: profile-scoped WebUI runs should
-# project intended runtime vars (credentials, HERMES_HOME, TERMINAL_*)
-# without allowing profile env to override core shell identity variables
-# like HOME or PATH.
 _BLOCKED_RUNTIME_ENV_KEYS = {
-    'HOME',
-    'PATH',
-    'PWD',
-    'SHELL',
-    'USER',
-    'LOGNAME',
-    'SHLVL',
-    'OLDPWD',
-    'PYTHONPATH',
-    'VIRTUAL_ENV',
-    'LD_LIBRARY_PATH',
-    # #4589: operator/deployment isolation posture — never overridable by a
-    # profile's own env on any runtime/gateway-parity path.
-    'HERMES_WEBUI_ISOLATED_PROFILE',
+    "HOME",
+    "PATH",
+    "PWD",
+    "SHELL",
+    "USER",
+    "LOGNAME",
+    "SHLVL",
+    "OLDPWD",
+    "PYTHONPATH",
+    "VIRTUAL_ENV",
+    "LD_LIBRARY_PATH",
+    "HERMES_WEBUI_ISOLATED_PROFILE",
 }
 
-
-def filter_runtime_env_for_gateway_parity(env: dict[str, str]) -> dict[str, str]:
-    """Return a profile runtime env filtered to mimic Hermes gateway semantics."""
-    filtered: dict[str, str] = {}
-    for key, value in (env or {}).items():
-        k = str(key).strip()
-        if not k:
-            continue
-        if k in _BLOCKED_RUNTIME_ENV_KEYS:
-            continue
-        if k.startswith('XDG_'):
-            continue
-        filtered[k] = value
-    return filtered
-
-
-# Credential env vars the agent runtime resolves via raw os.getenv() that are
-# NOT in hermes_cli.auth.PROVIDER_REGISTRY (so the registry-derived scrub set
-# would miss them). Fail-closed list — verified against the installed agent:
-#   CUSTOM_API_KEY            hermes_cli/models.py (generic custom provider key)
-#   AZURE_ANTHROPIC_KEY       hermes_cli/runtime_provider.py (Azure-hosted Anthropic)
-#   AZURE_FOUNDRY_API_KEY     hermes_cli/runtime_provider.py (Azure Foundry key)
-#   AZURE_* identity family   agent/azure_identity_adapter.py (service-principal /
-#                             workload-identity model auth)
-#   AWS_BEARER_TOKEN_BEDROCK  hermes_cli/model_switch.py (Bedrock bearer token)
-#   AWS_* credential chain    agent/bedrock_adapter.py + model_switch._has_aws_creds
-#                             (boto3 access keys, session token, profile,
-#                              container/web-identity credential providers)
-# NOTE: region/base-url config vars (AWS_REGION, AWS_DEFAULT_REGION,
-# AZURE_FOUNDRY_BASE_URL) are deliberately NOT included — they're configuration,
-# not credentials, and the child probe may legitimately need them.
-# Stripping these in a profile-scoped read prevents an empty named profile from
-# inheriting the server-process credential (#3961 residual cross-profile leak).
+# Fail-closed credential floor beyond hermes_cli.auth.PROVIDER_REGISTRY.
 _NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES: tuple[str, ...] = (
     "CUSTOM_API_KEY",
-    # Anthropic OAuth/token aliases. These ARE in the agent auth registry, but
-    # are duplicated here as a fail-closed floor so the scrub still covers them
-    # when the agent package can't be imported (e.g. a WebUI-only CI/test env
-    # where hermes_cli.auth is absent) — the registry union is best-effort.
     "ANTHROPIC_TOKEN",
     "CLAUDE_CODE_OAUTH_TOKEN",
     "AZURE_ANTHROPIC_KEY",
@@ -923,10 +552,6 @@ _NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES: tuple[str, ...] = (
     "AZURE_CLIENT_SECRET",
     "AZURE_TENANT_ID",
     "AZURE_FEDERATED_TOKEN_FILE",
-    # Azure managed-identity (App Service MSI / IMDS) credential-source vars —
-    # agent/azure_identity_adapter.py treats these as ManagedIdentityCredential
-    # sources, so an empty named profile must not inherit the host's managed
-    # identity. (NOT AZURE_FOUNDRY_BASE_URL — that's config, kept.)
     "IDENTITY_ENDPOINT",
     "IDENTITY_HEADER",
     "MSI_ENDPOINT",
@@ -941,165 +566,47 @@ _NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES: tuple[str, ...] = (
     "AWS_WEB_IDENTITY_TOKEN_FILE",
 )
 
-
-def _agent_registry_credential_env_names() -> set[str]:
-    """Credential env-var names the *agent* runtime reads, beyond the WebUI's own
-    settable-key map. Two sources:
-
-    1. ``hermes_cli.auth.PROVIDER_REGISTRY[*].api_key_env_vars`` — every provider
-       the agent CLI knows, incl. OAuth/token-flow providers like Anthropic's
-       ``ANTHROPIC_TOKEN`` / ``CLAUDE_CODE_OAUTH_TOKEN`` that the WebUI's own
-       ``_PROVIDER_ENV_VAR`` map omits (they aren't WebUI-settable API keys).
-    2. ``_NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES`` — a fail-closed fallback for
-       credential env vars the agent resolves via raw ``os.getenv()`` that are NOT
-       in the auth registry (the generic ``CUSTOM_API_KEY`` and the AWS/Bedrock
-       credential family the bedrock adapter relies on).
-
-    A profile scrub built only from the WebUI map would leave all of these in
-    ``os.environ`` — letting an empty named profile inherit the server-process
-    credential on the quota subprocess and detached-worker model-rebuild paths
-    (#3961 residual cross-profile leak)."""
-    names: set[str] = set(_NON_REGISTRY_AGENT_CREDENTIAL_ENV_NAMES)
-    try:
-        from hermes_cli.auth import PROVIDER_REGISTRY
-
-        registry = PROVIDER_REGISTRY
-        items = registry.items() if hasattr(registry, "items") else enumerate(registry)
-        for _key, entry in items:
-            env_vars = getattr(entry, "api_key_env_vars", None)
-            for env_var in env_vars or ():
-                if env_var:
-                    names.add(str(env_var))
-    except Exception:
-        logger.debug(
-            "Failed to load agent registry credential env names for profile scope",
-            exc_info=True,
-        )
-    return names
-
-
-def _profile_secret_env_names(profile_home_path: Path) -> set[str]:
-    names: set[str] = set()
-    try:
-        from api.providers import _provider_credential_env_vars
-
-        names.update(_provider_credential_env_vars())
-    except Exception:
-        logger.debug(
-            "Failed to load provider credential env names for profile scope",
-            exc_info=True,
-        )
-
-    # Also scrub credential env vars the agent runtime resolves directly
-    # (OAuth/token-flow providers absent from the WebUI's settable-key map) so a
-    # profile-scoped read can't inherit the server process's ANTHROPIC_TOKEN /
-    # CLAUDE_CODE_OAUTH_TOKEN etc. (#3961 cross-profile residual leak).
-    names.update(_agent_registry_credential_env_names())
-
-    config_path = Path(profile_home_path) / "config.yaml"
-    if not config_path.exists():
-        return names
-    try:
-        payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except Exception:
-        logger.debug(
-            "Failed to inspect custom-provider credential env names from %s",
-            config_path,
-            exc_info=True,
-        )
-        return names
-
-    custom_providers = payload.get("custom_providers") if isinstance(payload, dict) else None
-    if not isinstance(custom_providers, list):
-        return names
-    for custom_provider in custom_providers:
-        if not isinstance(custom_provider, dict):
-            continue
-        key_env = str(custom_provider.get("key_env") or "").strip()
-        if key_env:
-            names.add(key_env)
-        api_key = str(custom_provider.get("api_key") or "").strip()
-        match = re.fullmatch(r"\$\{([^}]+)\}", api_key)
-        if match:
-            env_name = str(match.group(1) or "").strip()
-            if env_name:
-                names.add(env_name)
-    return names
-
-
-def _apply_profile_env_to_process(
-    process_env,
-    safe_runtime_env: dict[str, str],
-    *,
-    secret_env_names: set[str],
-) -> dict[str, Optional[str]]:
-    scoped_keys = set(safe_runtime_env) | set(secret_env_names)
-    previous_env = {key: process_env.get(key) for key in scoped_keys}
-    for key in secret_env_names:
-        if key not in safe_runtime_env:
-            process_env.pop(key, None)
-    return previous_env
-
-
+# Capability probes and loaded-key ownership remain facade state so reloads and
+# historical monkeypatches observe the same authoritative values.
 _secret_scope_available = None
-
-
-def _resolve_secret_scope_module():
-    global _secret_scope_available
-    import sys as _sys
-    mod = _sys.modules.get('agent.secret_scope')
-    if mod is not None:
-        return mod
-    if _secret_scope_available is False:
-        return None
-    if _secret_scope_available is None:
-        try:
-            import importlib.util
-            _secret_scope_available = importlib.util.find_spec('agent') is not None
-        except Exception:
-            _secret_scope_available = False
-    if _secret_scope_available:
-        try:
-            from agent.secret_scope import set_secret_scope, reset_secret_scope  # noqa: F401
-            return _sys.modules.get('agent.secret_scope')
-        except ImportError:
-            _secret_scope_available = False
-    return None
-
-
-# #5567: hermes-agent v0.18.0+ exposes a CONTEXT-LOCAL Hermes-home override
-# (`hermes_constants.set_hermes_home_override`) that `get_hermes_home()` — and
-# therefore `hermes_cli.config.get_config_path()` / `load_config()` — consults
-# BEFORE the process-global `os.environ["HERMES_HOME"]`. Installing it inside the
-# profile worker scope eliminates the cross-profile HERMES_HOME race at the
-# reader (a config read resolves the task-local profile home even if another
-# thread clobbers os.environ mid-body) WITHOUT serializing workers or mutating
-# shared state. Resolved lazily + optionally so OLDER agents (no override symbol)
-# degrade gracefully to the pre-existing os.environ-mirror behavior — unchanged.
 _hermes_home_override_available = None
 
-
-def _resolve_hermes_home_override():
-    """Return the hermes_constants module iff it exposes the v0.18.0+ context-local
-    home override (set/reset), else None. Cached; import-safe on older agents."""
-    global _hermes_home_override_available
-    import sys as _sys
-    if _hermes_home_override_available is False:
-        return None
-    mod = _sys.modules.get('hermes_constants')
-    if mod is None and _hermes_home_override_available is None:
-        try:
-            import hermes_constants as mod  # noqa: F811
-        except Exception:
-            _hermes_home_override_available = False
-            return None
-    if mod is not None and hasattr(mod, 'set_hermes_home_override') and hasattr(
-        mod, 'reset_hermes_home_override'
-    ):
-        _hermes_home_override_available = True
-        return mod
-    _hermes_home_override_available = False
-    return None
+_stringify_env_value = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._stringify_env_value
+)
+get_profile_runtime_env = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.get_profile_runtime_env
+)
+filter_runtime_env_for_gateway_parity = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.filter_runtime_env_for_gateway_parity
+)
+_agent_registry_credential_env_names = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._agent_registry_credential_env_names
+)
+_profile_secret_env_names = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._profile_secret_env_names
+)
+_apply_profile_env_to_process = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._apply_profile_env_to_process
+)
+_resolve_secret_scope_module = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._resolve_secret_scope_module
+)
+_resolve_hermes_home_override = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._resolve_hermes_home_override
+)
+_profile_env_for_background_worker_impl = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.profile_env_for_background_worker
+)
+_profile_env_for_active_request_readonly_impl = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.profile_env_for_active_request_readonly
+)
+_profile_env_for_active_request_impl = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.profile_env_for_active_request
+)
+_profile_scope_for_detached_worker_impl = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope.profile_scope_for_detached_worker
+)
 
 
 @contextmanager
@@ -1108,137 +615,11 @@ def profile_env_for_background_worker(
     purpose: str = "background worker",
     logger_override: Optional[logging.Logger] = None,
 ):
-    """Temporarily route detached worker config reads through a profile.
-
-    Background WebUI workers run outside the request/streaming thread that
-    established the profile-scoped environment.  Workers that read agent config,
-    runtime provider settings, or skill paths must temporarily apply the
-    session/request profile env or they can fall back to the server-default
-    profile. Pass either a session-like object with `.profile` or a profile name.
-    """
-    log = logger_override or logger
-    raw_profile = session if isinstance(session, str) else getattr(session, "profile", "")
-    profile = str(raw_profile or "").strip()
-    if not profile or profile == "default":
+    """Temporarily route detached worker config reads through a profile."""
+    with _profile_env_for_background_worker_impl(
+        session, purpose, logger_override=logger_override
+    ):
         yield
-        return
-
-    try:
-        # Lazy imports avoid a module-load cycle: streaming imports this helper.
-        from api.config import _clear_thread_env, _set_thread_env, _thread_ctx
-        from api.streaming import _ENV_LOCK
-
-        profile_home_path = Path(get_hermes_home_for_profile(profile))
-        runtime_env = get_profile_runtime_env(profile_home_path)
-        safe_runtime_env = filter_runtime_env_for_gateway_parity(runtime_env)
-        secret_env_names = _profile_secret_env_names(profile_home_path)
-    except Exception:
-        log.debug(
-            "Failed to resolve profile env for %s profile %s; falling back to current env",
-            purpose,
-            profile,
-            exc_info=True,
-        )
-        yield
-        return
-
-    thread_env = dict(safe_runtime_env)
-    thread_env["HERMES_HOME"] = str(profile_home_path)
-    # Hybrid profile routing: keep the broad runtime env in WebUI's thread-local
-    # channel for WebUI helpers, and also mirror it into process env for the
-    # worker body because several production Hermes readers still call
-    # os.getenv() directly for provider credentials.  Keep the _ENV_LOCK scope
-    # narrow: serialize only setup/restore, not the whole worker body.
-    skill_home_snapshot = None
-    old_runtime_env: dict[str, Optional[str]] = {}
-    old_hermes_home = None
-    had_hermes_home = False
-    previous_thread_env = getattr(_thread_ctx, "env", {}).copy()
-    previous_block_process_env = bool(
-        getattr(_thread_ctx, "block_process_env_fallback", False)
-    )
-    _scope_token = None
-    _has_scope = False
-    # #5567: context-local Hermes-home override (hermes-agent v0.18.0+). None on
-    # older agents → graceful no-op (falls back to the os.environ mirror below).
-    _home_override_mod = None
-    _home_override_token = None
-    try:
-        _set_thread_env(**thread_env)
-        _thread_ctx.block_process_env_fallback = True
-        _secret_scope_mod = _resolve_secret_scope_module()
-        _scope_token = None
-        _has_scope = False
-        if _secret_scope_mod is not None:
-            try:
-                _scope_token = _secret_scope_mod.set_secret_scope(thread_env)
-                _has_scope = True
-            except Exception:
-                pass
-        # #5567: install the context-local Hermes-home override so the agent
-        # config reader (get_hermes_home -> get_config_path/load_config) resolves
-        # THIS profile's home from task-local state, immune to a concurrent
-        # cross-profile os.environ["HERMES_HOME"] clobber during the worker body.
-        # No-op on agents < v0.18.0 (resolver returns None) → os.environ mirror
-        # below remains the behavior, exactly as today.
-        _home_override_mod = _resolve_hermes_home_override()
-        if _home_override_mod is not None:
-            try:
-                _home_override_token = _home_override_mod.set_hermes_home_override(
-                    str(profile_home_path)
-                )
-            except Exception:
-                _home_override_token = None
-        with _ENV_LOCK:
-            old_runtime_env = _apply_profile_env_to_process(
-                os.environ,
-                safe_runtime_env,
-                secret_env_names=secret_env_names,
-            )
-            had_hermes_home = "HERMES_HOME" in os.environ
-            old_hermes_home = os.environ.get("HERMES_HOME")
-            skill_home_snapshot = snapshot_skill_home_modules()
-            os.environ.update(safe_runtime_env)
-            os.environ["HERMES_HOME"] = str(profile_home_path)
-            try:
-                patch_skill_home_modules(profile_home_path)
-            except Exception:
-                log.debug(
-                    "Failed to patch skill modules for %s profile %s",
-                    purpose,
-                    profile,
-                    exc_info=True,
-                )
-        yield
-    finally:
-        # #5567: pop the context-local home override first (reverse of setup order).
-        if _home_override_mod is not None and _home_override_token is not None:
-            try:
-                _home_override_mod.reset_hermes_home_override(_home_override_token)
-            except Exception:
-                pass
-        if _has_scope and _secret_scope_mod is not None:
-            try:
-                _secret_scope_mod.reset_secret_scope(_scope_token)
-            except Exception:
-                pass
-        _thread_ctx.block_process_env_fallback = previous_block_process_env
-        if previous_thread_env:
-            _set_thread_env(**previous_thread_env)
-        else:
-            _clear_thread_env()
-        with _ENV_LOCK:
-            for key, old_value in old_runtime_env.items():
-                if old_value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = old_value
-            if had_hermes_home:
-                os.environ["HERMES_HOME"] = old_hermes_home or ""
-            else:
-                os.environ.pop("HERMES_HOME", None)
-            if skill_home_snapshot is not None:
-                restore_skill_home_modules(skill_home_snapshot)
 
 
 @contextmanager
@@ -1246,97 +627,11 @@ def profile_env_for_active_request_readonly(
     purpose: str = "provider/model read",
     logger_override: Optional[logging.Logger] = None,
 ):
-    """Apply the active per-request profile's env to thread-local state only (#3957).
-
-    WebUI profile switching is per-client/cookie scoped (issue #798): a browser
-    on a named profile sets a ``hermes_profile`` cookie, which ``server.py``
-    turns into a thread-local via ``set_request_profile()``.  This wrapper keeps
-    provider-credential reads isolated to the request profile and does not touch
-    process-wide environment for read-only endpoints.
-
-    A thread-local read-only scope is used for ``/api/providers`` and
-    ``/api/models`` flows that now resolve credentials through thread-local
-    environment first. It also sets a context-local Hermes-home override so
-    agent-side auth-store reads stay on the active profile without mutating
-    process-global ``os.environ``.
-
-    No-ops for the default/root profile, which is the common single-profile
-    deployment case.
-    """
-    profile = (get_active_profile_name() or "").strip()
-    if not profile or _is_root_profile(profile):
+    """Apply the active profile only to context-local read paths."""
+    with _profile_env_for_active_request_readonly_impl(
+        purpose, logger_override=logger_override
+    ):
         yield
-        return
-    try:
-        from api.config import _clear_thread_env, _set_thread_env, _thread_ctx
-        profile_home_path = Path(get_hermes_home_for_profile(profile))
-        runtime_env = get_profile_runtime_env(profile_home_path)
-        safe_runtime_env = filter_runtime_env_for_gateway_parity(runtime_env)
-    except Exception:
-        log = logger_override or logger
-        log.debug(
-            "Failed to resolve profile env for active request profile %s in %s; "
-            "falling back to current env",
-            profile,
-            purpose,
-            exc_info=True,
-        )
-        yield
-        return
-    try:
-        from hermes_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
-        )
-    except Exception:
-        reset_hermes_home_override = None
-        set_hermes_home_override = None
-
-    thread_env = dict(safe_runtime_env)
-    thread_env["HERMES_HOME"] = str(profile_home_path)
-    previous_thread_env = getattr(_thread_ctx, "env", {}).copy()
-    previous_block_process_env = bool(
-        getattr(_thread_ctx, "block_process_env_fallback", False)
-    )
-    home_override_token = None
-    _scope_token = None
-    _has_scope = False
-    try:
-        _set_thread_env(**thread_env)
-        _thread_ctx.block_process_env_fallback = True
-        _secret_scope_mod = _resolve_secret_scope_module()
-        _scope_token = None
-        _has_scope = False
-        if _secret_scope_mod is not None:
-            try:
-                _scope_token = _secret_scope_mod.set_secret_scope(thread_env)
-                _has_scope = True
-            except Exception:
-                pass
-        if set_hermes_home_override is not None:
-            home_override_token = set_hermes_home_override(profile_home_path)
-        yield
-    finally:
-        if _has_scope and _secret_scope_mod is not None:
-            try:
-                _secret_scope_mod.reset_secret_scope(_scope_token)
-            except Exception:
-                pass
-        if home_override_token is not None and reset_hermes_home_override is not None:
-            try:
-                reset_hermes_home_override(home_override_token)
-            except Exception:
-                (logger_override or logger).debug(
-                    "Failed to reset Hermes-home override for active request profile %s in %s",
-                    profile,
-                    purpose,
-                    exc_info=True,
-                )
-        _thread_ctx.block_process_env_fallback = previous_block_process_env
-        if previous_thread_env:
-            _set_thread_env(**previous_thread_env)
-        else:
-            _clear_thread_env()
 
 
 @contextmanager
@@ -1344,18 +639,9 @@ def profile_env_for_active_request(
     purpose: str = "active request",
     logger_override: Optional[logging.Logger] = None,
 ):
-    """Apply the active per-request profile through the legacy mirrored path.
-
-    Some request-scoped readers still delegate into Hermes helpers that resolve
-    credentials directly from process env or ``get_hermes_home()``. Those paths
-    stay on the mirrored scope until they are fully audited.
-    """
-    profile = (get_active_profile_name() or "").strip()
-    if not profile or _is_root_profile(profile):
-        yield
-        return
-    with profile_env_for_background_worker(
-        profile, purpose, logger_override=logger_override
+    """Apply the active profile through the legacy process-mirrored path."""
+    with _profile_env_for_active_request_impl(
+        purpose, logger_override=logger_override
     ):
         yield
 
@@ -1366,110 +652,19 @@ def profile_scope_for_detached_worker(
     purpose: str = "detached worker",
     logger_override: Optional[logging.Logger] = None,
 ):
-    """Bind BOTH the per-request profile TLS and the profile env on a NEW thread (#3957).
-
-    A detached worker thread (e.g. the ``models-catalog-rebuild`` daemon that
-    ``get_available_models`` spawns for a bounded rebuild) inherits neither the
-    spawning request's profile thread-local (issue #798) nor its ``os.environ``.
-    Without re-establishing both, the worker resolves the *default* profile:
-      - profile-keyed paths (``_get_models_cache_path`` / ``_get_config_path`` /
-        ``_get_auth_store_path`` / ``_models_cache_source_fingerprint``) read the
-        per-request profile via ``get_active_profile_name()`` — needs the TLS;
-      - credential lookups (``provider_model_ids`` / ``_lookup_custom_api_key_env``)
-        read ``os.environ`` — needs the profile ``.env`` applied.
-
-    Pass the profile name CAPTURED on the spawning thread (where the TLS is
-    valid) into the worker, then enter this scope at the top of the worker body.
-    It sets the request-profile TLS for this (worker) thread and applies the
-    profile env via ``profile_env_for_background_worker``, restoring both on exit.
-    No-op for the default/root profile.
-
-    Unlike ``profile_env_for_active_request`` (which reads the *current* thread's
-    TLS and must NOT clear it — the request thread keeps using it after the call),
-    this sets and then CLEARS the TLS, which is correct for a dedicated worker
-    thread that has no other use for it.
-    """
-    name = (profile_name or "").strip()
-    if not name or _is_root_profile(name):
+    """Bind request TLS and profile env on a detached worker thread."""
+    with _profile_scope_for_detached_worker_impl(
+        profile_name, purpose, logger_override=logger_override
+    ):
         yield
-        return
-    set_request_profile(name)
-    try:
-        with profile_env_for_background_worker(
-            name, purpose, logger_override=logger_override
-        ):
-            yield
-    finally:
-        clear_request_profile()
 
 
-def _set_hermes_home(home: Path):
-    """Set HERMES_HOME env var and monkey-patch cached module-level paths."""
-    os.environ['HERMES_HOME'] = str(home)
-
-    patch_skill_home_modules(home)
-
-    # Patch cron/jobs module-level cache
-    try:
-        import cron.jobs as _cj
-        _cj.HERMES_DIR = home
-        _cj.CRON_DIR = home / 'cron'
-        _cj.JOBS_FILE = _cj.CRON_DIR / 'jobs.json'
-        _cj.OUTPUT_DIR = _cj.CRON_DIR / 'output'
-    except (ImportError, AttributeError):
-        logger.debug("Failed to patch cron.jobs module")
-
-    try:
-        import cron.scheduler as _cs
-        _cs._hermes_home = home
-        _cs._LOCK_DIR = home / 'cron'
-        _cs._LOCK_FILE = _cs._LOCK_DIR / '.tick.lock'
-    except (ImportError, AttributeError):
-        logger.debug("Failed to patch cron.scheduler module")
-
-
-def _reload_dotenv(home: Path):
-    """Load .env from the profile dir into os.environ with profile isolation.
-
-    Clears env vars that were loaded from the previously active profile before
-    applying the current profile's .env. This prevents API keys and other
-    profile-scoped secrets from leaking across profile switches.
-    """
-    global _loaded_profile_env_keys
-
-    # Remove keys loaded from the previous profile first.
-    for key in list(_loaded_profile_env_keys):
-        os.environ.pop(key, None)
-    _loaded_profile_env_keys = set()
-
-    env_path = home / '.env'
-    if not env_path.exists():
-        return
-    try:
-        loaded_keys: set[str] = set()
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                k, v = line.split('=', 1)
-                k = k.strip()
-                v = v.strip().strip('"').strip("'")
-                if k and v:
-                    # Operator/deployment-level keys are never overridable by a
-                    # profile's own .env (#4589 — prevents a contained user from
-                    # disabling their isolation via HERMES_WEBUI_ISOLATED_PROFILE=0).
-                    if k in _PROTECTED_ENV_KEYS:
-                        logger.warning(
-                            "Ignoring protected key %s in profile .env %s; "
-                            "operator/deployment env takes precedence",
-                            k, env_path,
-                        )
-                        continue
-                    os.environ[k] = v
-                    loaded_keys.add(k)
-        _loaded_profile_env_keys = loaded_keys
-    except Exception:
-        _loaded_profile_env_keys = set()
-        logger.debug("Failed to reload dotenv from %s", env_path)
+_set_hermes_home = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._set_hermes_home
+)
+_reload_dotenv = bind_profile_function(
+    _PROFILE_FACADE, _runtime_scope._reload_dotenv
+)
 
 
 def init_profile_state() -> None:

@@ -43,10 +43,29 @@ def _bind_function(function, facade_globals: dict):
     return rebound
 
 
+def _bind_class(class_, facade_globals: dict):
+    """Rebuild a facade-owned class whose methods resolve facade patches."""
+    namespace = {}
+    for name, value in class_.__dict__.items():
+        if name in {"__dict__", "__weakref__"}:
+            continue
+        if isinstance(value, staticmethod):
+            value = staticmethod(_bind_function(value.__func__, facade_globals))
+        elif isinstance(value, classmethod):
+            value = classmethod(_bind_function(value.__func__, facade_globals))
+        elif isinstance(value, types.FunctionType):
+            value = _bind_function(value, facade_globals)
+        namespace[name] = value
+    namespace["__module__"] = facade_globals["__name__"]
+    return type(class_.__name__, class_.__bases__, namespace)
+
+
 def install_provider_part(facade_globals: dict, part: ModuleType) -> None:
     """Install one cohesive provider module into the compatibility facade."""
     for name in part.__provider_exports__:
         value = getattr(part, name)
         if isinstance(value, types.FunctionType):
             value = _bind_function(value, facade_globals)
+        elif isinstance(value, type):
+            value = _bind_class(value, facade_globals)
         facade_globals[name] = value
