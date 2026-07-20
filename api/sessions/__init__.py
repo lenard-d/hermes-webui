@@ -45,14 +45,15 @@ from .repository import (
     get_full_session,
     session_write_owner,
 )
-from .cache import get_session, new_session
+from .session_cache_repository import get_session
+from .session_creation import new_session
 from .anchor_scene import AnchorSceneMessageNotFound, persist_anchor_activity_scene
 from .focused_continuation import start_or_get_focused_continuation
 from .external import clear_cli_sessions_cache
 from .pending_recovery.sidecar_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 from .process_wakeup import clear_process_wakeup_pause
 from .projects import load_projects, title_from
-from .reconciliation import merge_session_messages_append_only
+from .reconciliation_merge import merge_session_messages_append_only
 from .records import (
     SESSION_DIR,
     Session,
@@ -61,7 +62,7 @@ from .records import (
 )
 from .sidebar import all_sessions
 from .sources import is_messaging_session_record, requires_external_metadata_lookup
-from .state_db import _active_state_db_path, get_session_for_file_ops
+from .state_db_access import _active_state_db_path, get_session_for_file_ops
 
 REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
 

@@ -99,13 +99,18 @@ def _append_state_db_rows(path: Path, sid: str, rows):
 
 def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     import api.config as config
-    import api.sessions.cache as session_cache
-    import api.sessions.external_sidebar as session_external
+    import api.sessions.external_sidebar_context as external_context
+    import api.sessions.external_sidebar_projection as external_projection
     import api.sessions.pending_recovery.sidecar_recovery as pending_recovery
     import api.sessions.projects as session_projects
     import api.sessions.records as session_records
     import api.sessions.sidebar as session_sidebar
-    import api.sessions.state_db as session_state_db
+    import api.sessions.session_cache_eviction as cache_eviction
+    import api.sessions.session_cache_repository as cache_repository
+    import api.sessions.session_creation as session_creation
+    import api.sessions.state_db_access as state_db_access
+    import api.sessions.state_db_messages as state_db_messages
+    import api.sessions.state_db_sidebar as state_db_sidebar
     import api.sessions.store as models
     import api.routes as routes
     import api.profiles as profiles
@@ -118,7 +123,9 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     sessions = OrderedDict()
     for module in (
         models,
-        session_cache,
+        cache_eviction,
+        cache_repository,
+        session_creation,
         session_records,
         session_sidebar,
         pending_recovery,
@@ -126,8 +133,7 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
         monkeypatch.setattr(module, "SESSIONS", sessions, raising=False)
     for module in (
         models,
-        session_cache,
-        session_external,
+        external_projection,
         pending_recovery,
         session_records,
         session_sidebar,
@@ -135,8 +141,7 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
         monkeypatch.setattr(module, "SESSION_DIR", session_dir, raising=False)
     for module in (
         models,
-        session_cache,
-        session_external,
+        external_context,
         pending_recovery,
         session_projects,
         session_records,
@@ -144,8 +149,9 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     ):
         monkeypatch.setattr(module, "SESSION_INDEX_FILE", session_index_file, raising=False)
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path, raising=False)
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
-    monkeypatch.setattr(session_state_db, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
+    monkeypatch.setattr(state_db_access, "_active_state_db_path", lambda: tmp_path / "state.db")
+    monkeypatch.setattr(state_db_messages, "_active_state_db_path", lambda: tmp_path / "state.db")
+    monkeypatch.setattr(state_db_sidebar, "_active_state_db_path", lambda: tmp_path / "state.db")
     monkeypatch.setattr(session_sidebar, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     monkeypatch.setattr(routes, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     session_dir.mkdir(parents=True, exist_ok=True)

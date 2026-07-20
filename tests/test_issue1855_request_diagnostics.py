@@ -3,7 +3,6 @@ import logging
 from urllib.parse import urlsplit
 
 import api.routes as routes
-import api.sessions.cache as session_cache
 import api.sessions.records as session_records
 import api.sessions.sidebar as session_sidebar
 from api.http import router
@@ -65,7 +64,7 @@ def test_all_sessions_reports_internal_index_stages(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    for owner in (session_cache, session_records, session_sidebar):
+    for owner in (session_records, session_sidebar):
         monkeypatch.setattr(owner, "SESSION_DIR", session_dir)
         monkeypatch.setattr(owner, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(

@@ -25,7 +25,7 @@ from api.config import (
 )
 from api.metering import meter
 from api.session_state import session_agent_lock as _get_session_agent_lock
-from api.sessions.cache import get_session
+from api.sessions.session_cache_repository import get_session
 from api.sessions.process_wakeup import (
     clear_process_wakeup_pause,
 )

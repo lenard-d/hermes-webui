@@ -24,17 +24,20 @@ from api.sessions import (
     session_sidebar_projection as sidebar_projection,
 )
 from api.sessions.sidebar import all_sessions
-from api.sessions.store import (
+from api.sessions.external_sidebar import get_cli_sessions
+from api.sessions.records import (
     _clear_webui_zero_message_orphan_tombstone,
-    _enrich_sidebar_lineage_metadata,
-    _hide_from_default_sidebar,
     _load_webui_zero_message_orphan_tombstone,
     _record_webui_zero_message_orphan_tombstone,
-    agent_session_rows_existing,
-    agent_session_zero_message_sids,
-    get_cli_sessions,
+    Session,
     prune_session_from_index,
 )
+from api.sessions.sidebar import _hide_from_default_sidebar
+from api.sessions.state_db_access import (
+    agent_session_rows_existing,
+    agent_session_zero_message_sids,
+)
+from api.sessions.state_db_sidebar import _enrich_sidebar_lineage_metadata
 from api.sessions.runtime_recovery import _reconcile_stale_stream_state_for_session_rows
 from api.sessions.sidebar_cache import (
     _SESSIONS_CACHE_STALE_WAIT_SECONDS,
@@ -295,8 +298,7 @@ def _prune_orphaned_webui_zero_message_sessions(rows, *, diag_stage=None):
                 # pays nothing because it skips the load via the
                 # ``else`` branch below.
                 try:
-                    from api.sessions.store import Session as _Session
-                    _loaded = _Session.load(sid)
+                    _loaded = Session.load(sid)
                     sidecar_has_messages = bool(
                         _loaded is not None and len(_loaded.messages or []) > 0
                     )

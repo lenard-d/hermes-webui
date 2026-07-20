@@ -4,21 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from importlib.util import find_spec
-from pathlib import Path
 
-from api.agent_sessions import normalize_agent_session_source
-from api.config import HOME, LOCK, SESSIONS, SESSION_DIR, SESSION_INDEX_FILE
-from api.workspace import get_last_workspace
+from api.config import LOCK, SESSIONS, SESSION_DIR, SESSION_INDEX_FILE
 from .external_sidebar import get_cli_sessions  # noqa: F401 - compatibility re-export
-from .state_db import (
-    _active_state_db_path,
+from .state_db_sidebar import (
     _apply_sidebar_state_db_overrides,
     _enrich_sidebar_lineage_metadata,
-    state_db_has_session,
 )
-from .cache import get_session
 from .records import (
     Session,
     _active_stream_ids,
@@ -32,7 +24,6 @@ from .records import (
     _write_session_index,
     is_safe_session_id,
 )
-from .process_wakeup import _get_profile_home
 
 logger = logging.getLogger(__name__)
 

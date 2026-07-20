@@ -13,7 +13,10 @@ import time
 from api.config import runtime_stream_alive, runtime_worker_alive
 from api.runs.transcript import _materialize_pending_user_turn_before_error
 from api.sessions.repository import edit_session
-from api.sessions.store import get_session
+from api.sessions.pending_recovery.sidecar_recovery import (
+    _REPAIR_STALE_PENDING_GRACE_SECONDS,
+)
+from api.sessions.session_cache_repository import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,6 @@ def _clear_stale_stream_state(session) -> bool:
         return False
     grace_seconds = 30.0
     try:
-        from api.sessions.store import _REPAIR_STALE_PENDING_GRACE_SECONDS
         grace_seconds = float(_REPAIR_STALE_PENDING_GRACE_SECONDS)
         pending_started_at = getattr(session, "pending_started_at", None)
         pending_age = time.time() - float(pending_started_at) if pending_started_at else None

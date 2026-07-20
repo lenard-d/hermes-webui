@@ -4,11 +4,13 @@ import threading
 import time
 
 import api.sessions.external_sidebar as models
+import api.sessions.external_sidebar_cache as cache
+import api.sessions.external_sidebar_context as context
 import api.profiles as profiles
 
 
 def _set_active_streams(monkeypatch, ids):
-    monkeypatch.setattr(models, "_active_stream_ids", lambda: set(ids))
+    monkeypatch.setattr(context, "_active_stream_ids", lambda: set(ids))
 
 
 def test_cli_cache_key_stays_frozen_during_streaming(monkeypatch, tmp_path):
@@ -20,32 +22,32 @@ def test_cli_cache_key_stays_frozen_during_streaming(monkeypatch, tmp_path):
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     monkeypatch.setattr(
-        models,
+        context,
         "_default_claude_code_projects_dir",
         lambda: tmp_path / "projects",
     )
 
     fp = {"value": 0}
     monkeypatch.setattr(
-        models,
+        context,
         "state_db_cache_key",
         lambda _p: ("fp", fp["value"]),
     )
 
     _set_active_streams(monkeypatch, {"live-1"})
-    _, _, _, key_streaming_a = models._resolve_cli_sessions_context(None)
+    _, _, _, key_streaming_a = context._resolve_cli_sessions_context(None)
     fp["value"] = 1
-    _, _, _, key_streaming_b = models._resolve_cli_sessions_context(None)
+    _, _, _, key_streaming_b = context._resolve_cli_sessions_context(None)
     fp["value"] = 2
-    _, _, _, key_streaming_c = models._resolve_cli_sessions_context(None)
+    _, _, _, key_streaming_c = context._resolve_cli_sessions_context(None)
 
     assert key_streaming_a == key_streaming_b == key_streaming_c
 
     _set_active_streams(monkeypatch, set())
     fp["value"] = 10
-    _, _, _, key_idle_a = models._resolve_cli_sessions_context(None)
+    _, _, _, key_idle_a = context._resolve_cli_sessions_context(None)
     fp["value"] = 11
-    _, _, _, key_idle_b = models._resolve_cli_sessions_context(None)
+    _, _, _, key_idle_b = context._resolve_cli_sessions_context(None)
 
     assert key_idle_a != key_idle_b
 
@@ -56,11 +58,11 @@ def test_get_cli_sessions_follower_reuses_stale_rows_during_slow_rebuild(monkeyp
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    (_, _, _, cache_key) = models._resolve_cli_sessions_context(None)
-    cache_stamp = models._cli_sessions_cache_invalidation_stamp()
-    with models._CLI_SESSIONS_CACHE_LOCK:
-        models._CLI_SESSIONS_CACHE[cache_key] = (
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    (_, _, _, cache_key) = context._resolve_cli_sessions_context(None)
+    cache_stamp = cache._cli_sessions_cache_invalidation_stamp()
+    with cache._CLI_SESSIONS_CACHE_LOCK:
+        cache._CLI_SESSIONS_CACHE[cache_key] = (
             time.monotonic() - 1.0,
             cache_stamp,
             [{"session_id": "stale", "title": "stale-row"}],
@@ -106,7 +108,7 @@ def test_get_cli_sessions_cold_followers_join_single_rebuild(monkeypatch, tmp_pa
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
 
     owner_started = threading.Event()
     owner_block = threading.Event()
@@ -159,8 +161,8 @@ def test_get_cli_sessions_cold_follower_times_out_to_independent_rebuild(monkeyp
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_WAIT_SECONDS", 0.05, raising=False)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_WAIT_SECONDS", 0.05)
 
     owner_started = threading.Event()
     owner_block = threading.Event()
@@ -214,7 +216,7 @@ def test_get_cli_sessions_clear_during_rebuild_does_not_restore_stale_rows(monke
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
 
     owner_started = threading.Event()
     owner_block = threading.Event()
@@ -227,7 +229,7 @@ def test_get_cli_sessions_clear_during_rebuild_does_not_restore_stale_rows(monke
 
     monkeypatch.setattr(models, "_load_cli_sessions_uncached", _blocking_loader)
 
-    _, _, _, cache_key = models._resolve_cli_sessions_context(None)
+    _, _, _, cache_key = context._resolve_cli_sessions_context(None)
 
     owner = threading.Thread(
         target=lambda: results.setdefault("owner", models.get_cli_sessions()),
@@ -242,14 +244,14 @@ def test_get_cli_sessions_clear_during_rebuild_does_not_restore_stale_rows(monke
     owner.join(1.0)
 
     assert results.get("owner") == [{"session_id": "fresh", "title": "fresh-row"}]
-    with models._CLI_SESSIONS_CACHE_LOCK:
-        assert cache_key not in models._CLI_SESSIONS_CACHE
+    with cache._CLI_SESSIONS_CACHE_LOCK:
+        assert cache_key not in cache._CLI_SESSIONS_CACHE
 
     monkeypatch.setattr(models, "_load_cli_sessions_uncached", lambda *_args, **_kwargs: [{"session_id": "recovered", "title": "recovered-row"}])
     recovered = models.get_cli_sessions()
     assert recovered == [{"session_id": "recovered", "title": "recovered-row"}]
-    with models._CLI_SESSIONS_CACHE_LOCK:
-        assert cache_key in models._CLI_SESSIONS_CACHE
+    with cache._CLI_SESSIONS_CACHE_LOCK:
+        assert cache_key in cache._CLI_SESSIONS_CACHE
 
 
 def test_get_cli_sessions_clear_during_rebuild_preserves_joiners(monkeypatch, tmp_path):
@@ -258,7 +260,7 @@ def test_get_cli_sessions_clear_during_rebuild_preserves_joiners(monkeypatch, tm
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
 
     owner_started = threading.Event()
     owner_block = threading.Event()
@@ -329,13 +331,13 @@ def test_get_cli_sessions_clear_during_rebuild_reclaims_after_invalidated_wait(m
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_STALE_WAIT_SECONDS", 0.2, raising=False)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_STALE_WAIT_SECONDS", 0.2)
 
-    (_, _, _, cache_key) = models._resolve_cli_sessions_context(None)
-    cache_stamp = models._cli_sessions_cache_invalidation_stamp()
-    with models._CLI_SESSIONS_CACHE_LOCK:
-        models._CLI_SESSIONS_CACHE[cache_key] = (
+    (_, _, _, cache_key) = context._resolve_cli_sessions_context(None)
+    cache_stamp = cache._cli_sessions_cache_invalidation_stamp()
+    with cache._CLI_SESSIONS_CACHE_LOCK:
+        cache._CLI_SESSIONS_CACHE[cache_key] = (
             time.monotonic() - 1.0,
             cache_stamp,
             [{"session_id": "stale", "title": "stale-row"}],
@@ -394,10 +396,10 @@ def test_cache_cli_sessions_if_current_skips_stale_store(monkeypatch, tmp_path):
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
     models.clear_cli_sessions_cache()
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
+    monkeypatch.setattr(cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
 
-    _, _, _, cache_key = models._resolve_cli_sessions_context(None)
-    invalidation_stamp = models._cli_sessions_cache_invalidation_stamp()
+    _, _, _, cache_key = context._resolve_cli_sessions_context(None)
+    invalidation_stamp = cache._cli_sessions_cache_invalidation_stamp()
 
     models.clear_cli_sessions_cache()
 
@@ -409,5 +411,5 @@ def test_cache_cli_sessions_if_current_skips_stale_store(monkeypatch, tmp_path):
     )
 
     assert stored is False
-    with models._CLI_SESSIONS_CACHE_LOCK:
-        assert cache_key not in models._CLI_SESSIONS_CACHE
+    with cache._CLI_SESSIONS_CACHE_LOCK:
+        assert cache_key not in cache._CLI_SESSIONS_CACHE

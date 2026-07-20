@@ -12,11 +12,11 @@ from pathlib import Path
 from api.agent_ops import is_cli_session_row
 from api.profiles import _profiles_match
 from api.workspace import get_last_workspace
-from .cache import cache_full_session, get_session
+from .session_cache_repository import cache_full_session, get_session
 from .external_sidebar import get_cli_sessions
 from .gateway_identity import gateway_session_identity
 from .message_identity import _session_messages_have_prefix
-from .reconciliation import get_cli_session_messages
+from .reconciliation_projection import get_cli_session_messages
 from .repository import get_full_session
 from .projects import import_cli_session, title_from
 from .records import (
@@ -32,7 +32,7 @@ from .sources import (
     is_messaging_session_record,
     is_messaging_session_record as _is_messaging_session_record,
 )
-from .state_db import _active_state_db_path
+from .state_db_access import _active_state_db_path
 
 logger = logging.getLogger(__name__)
 

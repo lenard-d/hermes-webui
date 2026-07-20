@@ -117,10 +117,10 @@ def test_sidecar_metadata_cached_across_rebuilds(tmp_path):
         return real_prefix(p, *a, **k)
 
     with (
-        mock.patch("api.sessions.external_sidebar.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.external_sidebar.get_last_workspace", return_value=str(tmp_path)),
-        mock.patch("api.sessions.external_sidebar.ensure_cron_project", return_value="cron-pid"),
-        mock.patch("api.sessions.external_sidebar.SESSION_DIR", session_dir),
+            mock.patch("api.sessions.external_sidebar_projection.get_claude_code_sessions", return_value=[]),
+            mock.patch("api.sessions.external_sidebar_projection.get_last_workspace", return_value=str(tmp_path)),
+            mock.patch("api.sessions.external_sidebar_projection.ensure_cron_project", return_value="cron-pid"),
+            mock.patch("api.sessions.external_sidebar_projection.SESSION_DIR", session_dir),
         mock.patch("api.sessions.records.SESSION_DIR", session_dir),
         mock.patch("api.sessions.records._read_metadata_json_prefix", side_effect=_counting_prefix),
     ):
@@ -157,7 +157,7 @@ def test_sidecar_cache_invalidates_on_rename(tmp_path):
     )
 
     with (
-        mock.patch("api.sessions.external_sidebar.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.external_sidebar_projection.SESSION_DIR", session_dir),
         mock.patch("api.sessions.records.SESSION_DIR", session_dir),
     ):
         first = external_sessions._state_projection_sidecar_metadata(sid)
@@ -189,7 +189,7 @@ def test_sidecar_metadata_returns_independent_copies(tmp_path):
         encoding="utf-8",
     )
     with (
-        mock.patch("api.sessions.external_sidebar.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.external_sidebar_projection.SESSION_DIR", session_dir),
         mock.patch("api.sessions.records.SESSION_DIR", session_dir),
     ):
         first = external_sessions._state_projection_sidecar_metadata(sid)
@@ -205,7 +205,7 @@ def test_missing_sidecar_returns_default_without_caching_growth(tmp_path):
     external_sessions.clear_sidecar_metadata_cache()
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    with mock.patch("api.sessions.external_sidebar.SESSION_DIR", session_dir):
+    with mock.patch("api.sessions.external_sidebar_projection.SESSION_DIR", session_dir):
         meta = external_sessions._state_projection_sidecar_metadata("cron_nope_999")
     assert meta == {"title": None, "archived": False}
     # No file → nothing cached (so the cache can't be poisoned by absent files).
@@ -233,10 +233,10 @@ def test_jobs_json_parsed_once_per_build(tmp_path):
         return real_read_text(self, *a, **k)
 
     with (
-        mock.patch("api.sessions.external_sidebar.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.external_sidebar.get_last_workspace", return_value=str(tmp_path)),
-        mock.patch("api.sessions.external_sidebar.ensure_cron_project", return_value="cron-pid"),
-        mock.patch("api.sessions.external_sidebar.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.external_sidebar_projection.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.external_sidebar_projection.get_last_workspace", return_value=str(tmp_path)),
+        mock.patch("api.sessions.external_sidebar_projection.ensure_cron_project", return_value="cron-pid"),
+        mock.patch("api.sessions.external_sidebar_projection.Session.load_metadata_only", return_value=None),
         mock.patch.object(pathlib.Path, "read_text", _counting_read_text),
     ):
         result = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
@@ -261,10 +261,10 @@ def test_get_last_workspace_called_once_per_build(tmp_path):
         return str(tmp_path)
 
     with (
-        mock.patch("api.sessions.external_sidebar.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.external_sidebar.get_last_workspace", side_effect=_counting_ws),
-        mock.patch("api.sessions.external_sidebar.ensure_cron_project", return_value="cron-pid"),
-        mock.patch("api.sessions.external_sidebar.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.external_sidebar_projection.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.external_sidebar_projection.get_last_workspace", side_effect=_counting_ws),
+        mock.patch("api.sessions.external_sidebar_projection.ensure_cron_project", return_value="cron-pid"),
+        mock.patch("api.sessions.external_sidebar_projection.Session.load_metadata_only", return_value=None),
     ):
         result = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 
@@ -287,7 +287,7 @@ def test_clear_cli_sessions_cache_also_clears_sidecar_cache(tmp_path):
         encoding="utf-8",
     )
     with (
-        mock.patch("api.sessions.external_sidebar.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.external_sidebar_projection.SESSION_DIR", session_dir),
         mock.patch("api.sessions.records.SESSION_DIR", session_dir),
     ):
         external_sessions._state_projection_sidecar_metadata(sid)

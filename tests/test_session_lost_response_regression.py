@@ -24,7 +24,7 @@ import time
 import pytest
 
 import api.sessions.store as models
-import api.sessions.cache as session_cache
+import api.sessions.session_cache_freshness as session_cache_freshness
 import api.sessions.pending_recovery.journal_retry as pending_journal_retry
 import api.sessions.pending_recovery.sidecar_recovery as pending_sidecar_recovery
 import api.sessions.pending_recovery.state_db_recovery as pending_state_db_recovery
@@ -48,9 +48,10 @@ def _isolate_session_dir(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    for module in (models, session_cache, pending_sidecar_recovery, session_records):
+    for module in (models, pending_sidecar_recovery, session_records):
         monkeypatch.setattr(module, "SESSION_DIR", session_dir)
         monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_cache_freshness, "SESSION_DIR", session_dir)
     models.SESSIONS.clear()
     yield session_dir, index_file
     models.SESSIONS.clear()

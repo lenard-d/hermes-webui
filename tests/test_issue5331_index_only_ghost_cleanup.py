@@ -35,7 +35,6 @@ def mock_env(tmp_path, monkeypatch):
     """
     import api.config as config_mod
     import api.routes as routes
-    import api.sessions.cache as session_cache
     import api.sessions.records as session_records
     import api.sessions.store as models
 
@@ -57,9 +56,6 @@ def mock_env(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "SESSION_DIR", sessions_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(models, "SESSIONS", in_memory_sessions)
-    monkeypatch.setattr(session_cache, "SESSION_DIR", sessions_dir)
-    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(session_cache, "SESSIONS", in_memory_sessions)
     monkeypatch.setattr(session_records, "SESSION_DIR", sessions_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(session_records, "SESSIONS", in_memory_sessions)

@@ -12,7 +12,7 @@ import re
 import threading
 from typing import Optional
 
-from api.sessions.cache import get_session
+from api.sessions.session_cache_repository import get_session
 from api.sessions.operations import mark_session_title_generated, session_has_manual_title
 from api.sessions.repository import edit_session
 

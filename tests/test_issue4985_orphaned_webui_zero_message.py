@@ -122,7 +122,7 @@ def _make_state_db(path: Path, session_ids, *, messages_per_session=None):
 
 def test_agent_session_zero_message_sids_returns_only_orphans(tmp_path, monkeypatch):
     """Mixed input: only ids with zero message rows are returned."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -139,7 +139,7 @@ def test_agent_session_zero_message_sids_returns_only_orphans(tmp_path, monkeypa
 
 def test_agent_session_zero_message_sids_empty_when_db_missing(tmp_path, monkeypatch):
     """No agent DB -> return frozenset() so the caller prunes nothing."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     monkeypatch.setattr(
         models, "_active_state_db_path", lambda: tmp_path / "nope" / "state.db"
@@ -152,7 +152,7 @@ def test_agent_session_zero_message_sids_handles_missing_messages_table(
     tmp_path, monkeypatch,
 ):
     """A state.db without a ``messages`` table degrades to frozenset() — never prune."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -170,7 +170,7 @@ def test_agent_session_zero_message_sids_handles_missing_sessions_table(
     tmp_path, monkeypatch,
 ):
     """A state.db without a ``sessions`` table degrades to frozenset()."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -185,7 +185,7 @@ def test_agent_session_zero_message_sids_handles_missing_sessions_table(
 
 def test_agent_session_zero_message_sids_empty_id_filtered(tmp_path, monkeypatch):
     """Empty / None / whitespace-only ids are filtered before probing."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -200,7 +200,7 @@ def test_agent_session_zero_message_sids_empty_id_filtered(tmp_path, monkeypatch
 
 def test_agent_session_zero_message_sids_batches_over_500_ids(tmp_path, monkeypatch):
     """Batched chunked probe mirrors agent_session_rows_existing (chunk=500)."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     home = tmp_path / "home"
     home.mkdir()
@@ -221,7 +221,7 @@ def test_agent_session_zero_message_sids_only_returns_existing_sessions(
     tmp_path, monkeypatch,
 ):
     """Ids that have NO row in ``sessions`` are not in the result (the join filters them)."""
-    from api.sessions import state_db as models
+    from api.sessions import state_db_access as models
 
     home = tmp_path / "home"
     home.mkdir()

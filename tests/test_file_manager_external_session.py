@@ -119,12 +119,12 @@ def _make_state_db(path: Path, sid: str) -> None:
 
 @pytest.fixture
 def state_db_module():
-    return pytest.importorskip("api.sessions.state_db")
+    return pytest.importorskip("api.sessions.state_db_access")
 
 
 def test_get_session_for_file_ops_webui_passthrough(state_db_module, monkeypatch):
     """(a) WebUI session — delegates to get_session, no state.db consulted."""
-    cache_module = pytest.importorskip("api.sessions.cache")
+    cache_module = pytest.importorskip("api.sessions.session_cache_repository")
     profiles_module = pytest.importorskip("api.profiles")
     sentinel = SimpleNamespace(profile=None)
     called = {"get_session": 0, "profile_match": 0, "state_db": 0}
@@ -156,7 +156,7 @@ def test_get_session_for_file_ops_rejects_foreign_profile(
     state_db_module, monkeypatch, tmp_path, caplog
 ):
     """WebUI sessions must belong to the active profile before file access."""
-    cache_module = pytest.importorskip("api.sessions.cache")
+    cache_module = pytest.importorskip("api.sessions.session_cache_repository")
     profiles_module = pytest.importorskip("api.profiles")
     foreign_session = SimpleNamespace(profile="research", workspace=str(tmp_path))
     called = {"get_session": 0, "profile_match": 0, "state_db": 0}
@@ -246,7 +246,7 @@ def test_get_session_for_file_ops_state_db_fallback(
     state_db_module, monkeypatch, tmp_path
 ):
     """(b) state.db-only session — returns view with workspace populated."""
-    cache_module = pytest.importorskip("api.sessions.cache")
+    cache_module = pytest.importorskip("api.sessions.session_cache_repository")
     db = tmp_path / "state.db"
     _make_state_db(db, "tg-123")
     workspace = tmp_path / "ws"
@@ -274,7 +274,7 @@ def test_get_session_for_file_ops_unknown_session_raises(
     state_db_module, monkeypatch, tmp_path
 ):
     """(c) Unknown session — KeyError propagates so callers still 404."""
-    cache_module = pytest.importorskip("api.sessions.cache")
+    cache_module = pytest.importorskip("api.sessions.session_cache_repository")
     db = tmp_path / "state.db"
     _make_state_db(db, "tg-123")
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-from .cache import get_session
-from .state_db import (
+from .session_cache_repository import get_session
+from .state_db_messages import (
     get_state_db_session_message_keys_before_timestamp,
     get_state_db_session_message_prefix_summary,
     get_state_db_session_summary,
@@ -16,7 +16,7 @@ from .message_identity import (
     _session_message_merge_key,
     _session_message_visible_key,
 )
-from .reconciliation import merge_session_messages_append_only
+from .reconciliation_merge import merge_session_messages_append_only
 from .records import (
     SESSION_DIR,
     Session,

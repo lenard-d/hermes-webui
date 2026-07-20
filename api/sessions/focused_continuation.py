@@ -6,7 +6,8 @@ import copy
 import threading
 import uuid
 
-from .cache import _evict_sessions_over_cap, find_compression_recovery_session
+from .session_cache_eviction import _evict_sessions_over_cap
+from .session_creation import find_compression_recovery_session
 from .records import LOCK, SESSIONS, Session
 
 

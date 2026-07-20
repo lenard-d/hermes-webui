@@ -13,7 +13,7 @@ cap (enrich all), (4) lists at/under the cap probe everything.
 """
 from __future__ import annotations
 
-import api.sessions.state_db as state_db
+import api.sessions.state_db_sidebar as state_db
 
 
 def _capture_probed_ids(monkeypatch):

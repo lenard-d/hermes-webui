@@ -83,7 +83,7 @@ def test_materializing_cron_session_preserves_non_cli_identity(monkeypatch):
 
 def test_cron_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path):
     """A hidden archived sidecar must still mark the state.db cron projection archived."""
-    from api.sessions import external_sidebar as external, records
+    from api.sessions import external_sidebar_projection as external, records
 
     sid = "cron_job123_20260618"
     db_path = tmp_path / "state.db"
@@ -144,7 +144,7 @@ def test_cron_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path)
 
 def test_webhook_state_projection_preserves_archived_sidecar(monkeypatch, tmp_path):
     """Archived webhook sidecars must not reappear as unarchived state.db rows."""
-    from api.sessions import external_sidebar as external, records
+    from api.sessions import external_sidebar_projection as external, records
 
     sid = "webhook_archive_20260618"
     db_path = tmp_path / "state.db"

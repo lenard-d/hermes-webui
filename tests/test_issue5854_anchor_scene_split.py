@@ -21,7 +21,7 @@ import json
 
 import pytest
 
-import api.sessions.cache as C
+import api.sessions.session_cache_freshness as C
 import api.sessions.records as M
 
 

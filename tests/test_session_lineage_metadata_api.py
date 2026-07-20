@@ -6,10 +6,11 @@ import time
 import pytest
 
 import api.routes as routes
-import api.sessions.cache as session_cache
 import api.sessions.records as session_records
 import api.sessions.sidebar as session_sidebar
-import api.sessions.state_db as session_state_db
+import api.sessions.state_db_access as state_db_access
+import api.sessions.state_db_messages as state_db_messages
+import api.sessions.state_db_sidebar as state_db_sidebar
 import api.runs.runtime_state as runtime_state
 from api.sessions import session_sidebar_projection
 from api.sessions.records import SESSIONS, Session
@@ -25,11 +26,11 @@ def _isolate(tmp_path, monkeypatch):
     index_file.write_text("[]", encoding="utf-8")
     monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(session_sidebar, "SESSION_DIR", session_dir)
     monkeypatch.setattr(session_sidebar, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(session_state_db, "_active_state_db_path", lambda: state_db)
+    monkeypatch.setattr(state_db_access, "_active_state_db_path", lambda: state_db)
+    monkeypatch.setattr(state_db_messages, "_active_state_db_path", lambda: state_db)
+    monkeypatch.setattr(state_db_sidebar, "_active_state_db_path", lambda: state_db)
 
     def uncached_persisted_session_ids():
         return frozenset(

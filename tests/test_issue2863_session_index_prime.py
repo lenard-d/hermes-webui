@@ -6,7 +6,7 @@ import time
 
 
 def test_missing_index_starts_background_rebuild_while_preserving_first_scan(monkeypatch, tmp_path):
-    from api.sessions import cache, records, sidebar
+    from api.sessions import records, sidebar
     from api.sessions import session_index
 
     # Hermetic isolation: a prior test in the same worker may have left the
@@ -31,7 +31,7 @@ def test_missing_index_starts_background_rebuild_while_preserving_first_scan(mon
     monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_index_file)
     monkeypatch.setattr(sidebar, "SESSION_DIR", session_dir)
     monkeypatch.setattr(sidebar, "SESSION_INDEX_FILE", session_index_file)
-    cache.SESSIONS.clear()
+    records.SESSIONS.clear()
 
     for idx in range(3):
         payload = {

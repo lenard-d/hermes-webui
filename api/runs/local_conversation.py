@@ -6,8 +6,8 @@ import time
 from dataclasses import dataclass
 
 from api.metering import meter
-from api.sessions.reconciliation import reconciled_state_db_messages_for_session
-from api.sessions.state_db import get_state_db_session_messages
+from api.sessions.reconciliation_projection import reconciled_state_db_messages_for_session
+from api.sessions.state_db_messages import get_state_db_session_messages
 from api.workspace_context import _workspace_context_prefix
 
 from .attachments import _build_native_multimodal_message

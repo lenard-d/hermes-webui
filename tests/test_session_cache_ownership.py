@@ -3,17 +3,14 @@ from io import BytesIO
 from types import SimpleNamespace
 
 import api.config as config
-import api.sessions.cache as session_cache
 import api.sessions.records as session_records
-from api.sessions.cache import get_session
+from api.sessions.session_cache_repository import get_session
 from api.sessions.records import Session
 
 
 def test_get_session_evicts_cached_object_with_wrong_session_id(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     session_records.SESSIONS.clear()
@@ -45,8 +42,6 @@ def test_get_session_evicts_cached_object_with_wrong_session_id(tmp_path, monkey
 def test_get_session_metadata_only_evicts_cached_object_with_wrong_session_id(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     session_records.SESSIONS.clear()

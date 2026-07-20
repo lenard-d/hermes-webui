@@ -491,7 +491,10 @@ def _materialize_sidecar_from_state_db(session_dir: Path, state_db_path: Path | 
     if target.exists():
         return {"session_id": sid, "action": "materialize_sidecar_from_state_db", "applied": False, "skipped": "sidecar_exists"}
     try:
-        from api.sessions.recovery import _read_state_db_missing_sidecar_rows, _state_db_row_to_sidecar
+        from api.sessions.recovery_materialization import (
+            _read_state_db_missing_sidecar_rows,
+            _state_db_row_to_sidecar,
+        )
     except Exception as exc:
         return {"session_id": sid, "action": "materialize_sidecar_from_state_db", "applied": False, "error": f"recovery_import_failed:{exc}"}
     rows = {str(row.get("id") or ""): row for row in _read_state_db_missing_sidecar_rows(session_dir, state_db_path)}

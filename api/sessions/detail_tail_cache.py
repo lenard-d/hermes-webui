@@ -15,7 +15,7 @@ from .sources import (
     is_messaging_session_record,
     requires_external_metadata_lookup,
 )
-from .state_db import _active_state_db_path
+from .state_db_access import _active_state_db_path
 
 
 _CACHE_VERSION = 1

@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-import api.sessions.reconciliation as models
+import api.sessions.reconciliation_merge as models
 
 
 class _CountingList(list):

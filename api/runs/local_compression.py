@@ -7,7 +7,7 @@ import logging
 from api.agent_cache import locked_agent_cache
 from api.compression_anchor import visible_messages_for_anchor
 from api.session_state import LOCK, SESSIONS, alias_session_agent_lock
-from api.sessions.cache import _evict_sessions_over_cap
+from api.sessions.session_cache_eviction import _evict_sessions_over_cap
 
 from .agent_cache import (
     _cached_agent_matches_session,

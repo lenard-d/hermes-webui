@@ -11,7 +11,9 @@ Both are regression tests — they should FAIL against the current code
 """
 from __future__ import annotations
 
-from api.sessions import reconciliation, records
+from api.sessions import reconciliation_merge as reconciliation
+from api.sessions import reconciliation_projection
+from api.sessions import records
 import api.webui_session_db as webui_db
 
 
@@ -395,12 +397,12 @@ def test_reconciled_passes_truncation_boundary(monkeypatch, tmp_path):
     ]
 
     monkeypatch.setattr(
-        reconciliation,
+        reconciliation_projection,
         "get_state_db_session_messages",
         lambda sid: state_db,
     )
 
-    reconciled = reconciliation.reconciled_state_db_messages_for_session(session)
+    reconciled = reconciliation_projection.reconciled_state_db_messages_for_session(session)
     contents = [m["content"] for m in reconciled]
 
     assert "deleted 1" not in contents, (

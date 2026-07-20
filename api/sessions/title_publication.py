@@ -14,7 +14,7 @@ from api.config import load_settings
 from api.runs.title_generation import generate_session_title_for_session
 from api.sessions.events import publish_session_list_changed
 from api.sessions.repository import edit_session, get_full_session
-from api.sessions.store import Session
+from api.sessions.records import Session
 
 
 logger = logging.getLogger(__name__)

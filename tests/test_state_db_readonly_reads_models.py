@@ -19,7 +19,10 @@ from pathlib import Path
 
 import api.agent_sessions as agent_sessions
 import api.sessions.store as models
-import api.sessions.state_db as session_state_db
+import api.sessions.state_db_access as state_db_access
+import api.sessions.state_db_messages as state_db_messages
+import api.sessions.state_db_sidebar as state_db_sidebar
+import api.sessions.reconciliation_projection as reconciliation_projection
 from api.agent_sessions import open_state_db_readonly
 
 
@@ -74,7 +77,7 @@ def _record_connects(monkeypatch):
 
 
 def _point_models_at(monkeypatch, db):
-    for module in (models, session_state_db):
+    for module in (state_db_access, state_db_messages, state_db_sidebar):
         monkeypatch.setattr(module, "_active_state_db_path", lambda: db, raising=False)
         monkeypatch.setattr(module, "_agent_state_db_path", lambda *, profile=None: db, raising=False)
 
@@ -91,8 +94,8 @@ def test_state_db_has_session_opens_read_only(tmp_path, monkeypatch):
     _point_models_at(monkeypatch, db)
     calls = _record_connects(monkeypatch)
 
-    assert models.state_db_has_session("sess-1") is True
-    assert models.state_db_has_session("nope") is False
+    assert state_db_access.state_db_has_session("sess-1") is True
+    assert state_db_access.state_db_has_session("nope") is False
     _assert_read_only(calls)
 
 
@@ -102,7 +105,7 @@ def test_agent_session_rows_existing_opens_read_only(tmp_path, monkeypatch):
     _point_models_at(monkeypatch, db)
     calls = _record_connects(monkeypatch)
 
-    result = models.agent_session_rows_existing(["sess-1", "ghost"])
+    result = state_db_access.agent_session_rows_existing(["sess-1", "ghost"])
     assert result == frozenset({"sess-1"})
     _assert_read_only(calls)
 
@@ -114,7 +117,7 @@ def test_agent_session_zero_message_sids_opens_read_only(tmp_path, monkeypatch):
     calls = _record_connects(monkeypatch)
 
     # sess-1 has 2 messages → not zero-message.
-    result = models.agent_session_zero_message_sids(["sess-1"])
+    result = state_db_access.agent_session_zero_message_sids(["sess-1"])
     assert "sess-1" not in result
     _assert_read_only(calls)
 
@@ -124,7 +127,7 @@ def test_sidebar_overrides_opens_read_only(tmp_path, monkeypatch):
     _make_state_db(db)
     calls = _record_connects(monkeypatch)
 
-    overrides = models._read_state_db_sidebar_overrides(db, {"sess-1"})
+    overrides = state_db_sidebar._read_state_db_sidebar_overrides(db, {"sess-1"})
     assert isinstance(overrides, dict)
     _assert_read_only(calls)
 
@@ -135,7 +138,7 @@ def test_get_state_db_session_messages_opens_read_only(tmp_path, monkeypatch):
     _point_models_at(monkeypatch, db)
     calls = _record_connects(monkeypatch)
 
-    msgs = models.get_state_db_session_messages("sess-1")
+    msgs = state_db_messages.get_state_db_session_messages("sess-1")
     assert [m.get("role") for m in msgs] == ["user", "assistant"]
     _assert_read_only(calls)
 
@@ -146,7 +149,7 @@ def test_get_state_db_message_keys_before_timestamp_opens_read_only(tmp_path, mo
     _point_models_at(monkeypatch, db)
     calls = _record_connects(monkeypatch)
 
-    keys = models.get_state_db_session_message_keys_before_timestamp("sess-1", 1000.5)
+    keys = state_db_messages.get_state_db_session_message_keys_before_timestamp("sess-1", 1000.5)
     assert keys is not None
     _assert_read_only(calls)
 
@@ -157,7 +160,7 @@ def test_get_state_db_message_prefix_summary_opens_read_only(tmp_path, monkeypat
     _point_models_at(monkeypatch, db)
     calls = _record_connects(monkeypatch)
 
-    summary = models.get_state_db_session_message_prefix_summary("sess-1", 1000.5)
+    summary = state_db_messages.get_state_db_session_message_prefix_summary("sess-1", 1000.5)
 
     assert summary == {"count": 1, "null_timestamp_count": 0}
     _assert_read_only(calls)
@@ -183,7 +186,7 @@ def test_get_state_db_message_prefix_summary_preserves_active_filtering(tmp_path
     conn.close()
     _point_models_at(monkeypatch, db)
 
-    summary = models.get_state_db_session_message_prefix_summary("sess-1", 30.0)
+    summary = state_db_messages.get_state_db_session_message_prefix_summary("sess-1", 30.0)
 
     assert summary == {"count": 1, "null_timestamp_count": 1}
 
@@ -199,7 +202,7 @@ def test_get_state_db_message_prefix_summary_returns_none_for_inconclusive_schem
     conn.close()
     _point_models_at(monkeypatch, db)
 
-    assert models.get_state_db_session_message_prefix_summary("sess-1", 1000.5) is None
+    assert state_db_messages.get_state_db_session_message_prefix_summary("sess-1", 1000.5) is None
 
 
 def test_get_state_db_message_prefix_summary_missing_db_creates_no_sqlite_files(
@@ -209,7 +212,7 @@ def test_get_state_db_message_prefix_summary_missing_db_creates_no_sqlite_files(
     db = tmp_path / "missing" / "state.db"
     _point_models_at(monkeypatch, db)
 
-    summary = models.get_state_db_session_message_prefix_summary("sess-1", 1000.5)
+    summary = state_db_messages.get_state_db_session_message_prefix_summary("sess-1", 1000.5)
 
     assert summary == {"count": 0, "null_timestamp_count": 0}
     assert not db.exists()
@@ -223,7 +226,7 @@ def test_get_state_db_session_summary_opens_read_only(tmp_path, monkeypatch):
     _point_models_at(monkeypatch, db)
     calls = _record_connects(monkeypatch)
 
-    summary = models.get_state_db_session_summary("sess-1")
+    summary = state_db_messages.get_state_db_session_summary("sess-1")
     assert summary["message_count"] == 2
     _assert_read_only(calls)
 
@@ -239,7 +242,7 @@ def test_count_conversation_rounds_opens_read_only(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     calls = _record_connects(monkeypatch)
 
-    rounds = models.count_conversation_rounds("sess-1")
+    rounds = reconciliation_projection.count_conversation_rounds("sess-1")
     assert rounds == 1  # one user + one assistant = one round
     _assert_read_only(calls)
 

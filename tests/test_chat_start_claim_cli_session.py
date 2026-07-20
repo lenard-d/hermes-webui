@@ -362,20 +362,28 @@ def isolated_state_db(tmp_path, monkeypatch):
     index_path = sessions_dir / "_index.json"
     index_path.write_text("[]", encoding="utf-8")
     import api.routes as _routes
-    import api.sessions.cache as _cache
-    import api.sessions.external_sidebar as _external
+    import api.sessions.external_sidebar_context as _external_context
+    import api.sessions.external_sidebar_projection as _external_projection
     import api.sessions.records as _records
-    import api.sessions.state_db as _state_db
+    import api.sessions.session_cache_freshness as _cache_freshness
+    import api.sessions.state_db_access as _state_db_access
+    import api.sessions.state_db_messages as _state_db_messages
+    import api.sessions.state_db_sidebar as _state_db_sidebar
     import api.sessions.store as _models
 
-    monkeypatch.setattr(_state_db, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(_state_db_access, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(_state_db_messages, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(_state_db_sidebar, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_models, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(materialization, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(materialization, "SESSION_INDEX_FILE", index_path)
     monkeypatch.setattr(_routes, "SESSION_INDEX_FILE", index_path)
-    for module in (_records, _cache, _external, _models):
+    for module in (_records, _models):
         monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_path)
         monkeypatch.setattr(module, "SESSION_DIR", sessions_dir)
+    monkeypatch.setattr(_cache_freshness, "SESSION_DIR", sessions_dir)
+    monkeypatch.setattr(_external_context, "SESSION_INDEX_FILE", index_path)
+    monkeypatch.setattr(_external_projection, "SESSION_DIR", sessions_dir)
     return {"db": db, "state_dir": state_dir, "sessions_dir": sessions_dir,
             "index_path": index_path}
 

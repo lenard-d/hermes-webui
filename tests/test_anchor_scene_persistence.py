@@ -13,17 +13,22 @@ from api.sessions.anchor_scene import persistence as anchor_persistence_owner
 @pytest.fixture
 def isolated_anchor_session_env(tmp_path, monkeypatch):
     """Point session record/cache owners at one isolated sidecar directory."""
-    from api.sessions import cache, records
+    from api.sessions import records
+    from api.sessions import session_cache_eviction as cache_eviction
+    from api.sessions import session_cache_freshness as cache_freshness
+    from api.sessions import session_cache_repository as cache_repository
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
     sessions = OrderedDict()
     lock = threading.RLock()
-    for owner in (records, cache):
-        monkeypatch.setattr(owner, "SESSION_DIR", session_dir)
-        monkeypatch.setattr(owner, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(cache_freshness, "SESSION_DIR", session_dir)
+    for owner in (records, cache_eviction, cache_repository):
         monkeypatch.setattr(owner, "SESSIONS", sessions)
+    for owner in (records, cache_repository):
         monkeypatch.setattr(owner, "LOCK", lock)
     return session_dir
 

@@ -94,13 +94,15 @@ def test_claude_code_scan_skips_symlinks_and_oversized_files(tmp_path):
 
 def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
     import api.sessions.external_sidebar as external_sessions
+    import api.sessions.external_sidebar_cache as external_cache
+    import api.sessions.external_sidebar_projection as external_projection
     import api.profiles as profiles
 
     hermes_home = tmp_path / "hermes"
     hermes_home.mkdir()
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(external_sessions, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    monkeypatch.setattr(external_cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
     external_sessions.clear_cli_sessions_cache()
 
     calls = 0
@@ -120,7 +122,7 @@ def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
         ]
 
     monkeypatch.setattr(
-        external_sessions, "get_claude_code_sessions", fake_claude_code_sessions
+        external_projection, "get_claude_code_sessions", fake_claude_code_sessions
     )
 
     first = external_sessions.get_cli_sessions()
@@ -134,6 +136,8 @@ def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
 
 def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch, tmp_path):
     import api.sessions.external_sidebar as external_sessions
+    import api.sessions.external_sidebar_cache as external_cache
+    import api.sessions.external_sidebar_projection as external_projection
     import api.profiles as profiles
 
     hermes_home = tmp_path / "hermes"
@@ -142,8 +146,8 @@ def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch,
     db_path.write_text("initial", encoding="utf-8")
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(external_sessions, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
-    monkeypatch.setattr(external_sessions, "get_claude_code_sessions", lambda: [])
+    monkeypatch.setattr(external_cache, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    monkeypatch.setattr(external_projection, "get_claude_code_sessions", lambda: [])
     external_sessions.clear_cli_sessions_cache()
 
     calls = 0
@@ -167,7 +171,7 @@ def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch,
         ]
 
     monkeypatch.setattr(
-        external_sessions, "read_importable_agent_session_rows", fake_rows
+        external_projection, "read_importable_agent_session_rows", fake_rows
     )
 
     first = external_sessions.get_cli_sessions()

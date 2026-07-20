@@ -184,7 +184,7 @@ def active_stream_id_for_session(session_id: str) -> Optional[str]:
 def persisted_message_count_for_session(session_id: str) -> Optional[int]:
     """Return the persisted message count for reconnect reconciliation."""
     try:
-        from api.sessions.cache import get_session
+        from api.sessions.session_cache_repository import get_session
 
         session = get_session(session_id, metadata_only=True)
         count = getattr(session, "_metadata_message_count", None)

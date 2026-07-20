@@ -6,14 +6,14 @@ import logging
 import time
 
 from api.config import session_agent_lock as _get_session_agent_lock
-from ..reconciliation import reconciled_state_db_messages_for_session
+from ..reconciliation_projection import reconciled_state_db_messages_for_session
 from ..records import (
     Session,
     _active_stream_ids,
     _last_message_timestamp,
     is_safe_session_id,
 )
-from ..state_db import get_state_db_session_messages, get_state_db_session_summary
+from ..state_db_messages import get_state_db_session_messages, get_state_db_session_summary
 from .sidecar_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 
 logger = logging.getLogger(__name__)

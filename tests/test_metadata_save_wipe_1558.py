@@ -30,15 +30,24 @@ def temp_session_dir(tmp_path, monkeypatch):
     sd.mkdir()
     # api.models reads SESSION_DIR at import time; patch the module-level binding.
     import api.sessions.store as _m
-    import api.sessions.cache as session_cache
     import api.sessions.pending_recovery.sidecar_recovery as pending_recovery
     import api.sessions.records as session_records
+    import api.sessions.session_cache_eviction as session_cache_eviction
+    import api.sessions.session_cache_repository as session_cache_repository
+    import api.sessions.session_creation as session_creation
     from collections import OrderedDict
     sessions = OrderedDict()
     monkeypatch.setattr(_m, "SESSION_DIR", sd)
     monkeypatch.setattr(_m, "SESSIONS", sessions)
-    for module in (session_cache, pending_recovery, session_records):
+    for module in (pending_recovery, session_records):
         monkeypatch.setattr(module, "SESSION_DIR", sd)
+    for module in (
+        pending_recovery,
+        session_cache_eviction,
+        session_cache_repository,
+        session_creation,
+        session_records,
+    ):
         monkeypatch.setattr(module, "SESSIONS", sessions)
     yield sd
 
@@ -473,15 +482,16 @@ def test_recover_all_sessions_on_startup_does_not_read_live_files_without_backup
     )
 
     import api.sessions.recovery as sr
+    import api.sessions.recovery_backups as recovery_backups
 
-    real_msg_count = sr._msg_count
+    real_msg_count = recovery_backups._msg_count
     msg_count_paths = []
 
     def tracking_msg_count(path):
         msg_count_paths.append(path)
         return real_msg_count(path)
 
-    monkeypatch.setattr(sr, "_msg_count", tracking_msg_count)
+    monkeypatch.setattr(recovery_backups, "_msg_count", tracking_msg_count)
 
     result = sr.recover_all_sessions_on_startup(temp_session_dir)
 
@@ -528,7 +538,7 @@ def test_recover_all_sessions_on_startup_skips_non_session_index_json(temp_sessi
 
 def test_msg_count_returns_neg1_for_non_dict_top_level(temp_session_dir):
     """``_msg_count`` must not raise on a JSON file whose top-level is a list."""
-    from api.sessions.recovery import _msg_count
+    from api.sessions.recovery_backups import _msg_count
     list_shaped = temp_session_dir / "_index.json"
     list_shaped.write_text(json.dumps([{"session_id": "x"}]), encoding="utf-8")
     # Pre-fix: AttributeError. Post-fix: -1.

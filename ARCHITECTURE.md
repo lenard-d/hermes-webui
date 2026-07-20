@@ -122,13 +122,31 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         profile_model_config.py Profile-scoped model-config cache and strict worktree defaults
         session_model_context.py Context-window lookup identity and threshold projection
         session_model_state.py Persisted mutation and side-effect-free display projection
-        external_sidebar.py Profile-aware CLI/cron/webhook projection and single-flight cache
+        external_sidebar.py Stable CLI/cron/webhook sidebar interface and orchestration
+        external_sidebar_cache.py Bounded single-flight cache and invalidation owner
+        external_sidebar_context.py Profile, stream, and persistence cache identity
+        external_sidebar_projection.py External session row and sidecar projection
         gateway_identity.py Gateway registry identity projection and stat-keyed cache
         pending_recovery/  Interrupted-turn marker, journal replay/retry, sidecar, and state.db owners
         materialization.py Foreign-session ownership policy and WebUI materialization
         runtime_recovery.py Stale stream-state reconciliation and durable repair
         sidebar_listing.py Sidebar collection, projection cache, and orphan pruning
-        state_db.py        Read-only Agent state queries, transcript readers, and cache fingerprints
+        state_db.py        Stable read-only Agent state compatibility interface
+        state_db_access.py Profile-aware DB access and exact existence probes
+        state_db_identity.py Commit-sensitive cache fingerprints
+        state_db_messages.py Transcript and summary queries
+        state_db_sidebar.py Sidebar metadata and lineage projection
+        session_cache_repository.py Full-session cache publication and lazy loading
+        session_cache_freshness.py Sidecar freshness and scene-fingerprint checks
+        session_cache_eviction.py Conservative bounded LRU policy
+        session_creation.py New-session and recovery-child creation
+        reconciliation_context.py Compression-aware context anchors
+        reconciliation_merge.py Append-only transcript merge algorithm
+        reconciliation_projection.py Session-facing reconciled transcript views
+        recovery_backups.py Backup inspection and conservative restoration
+        recovery_deletion.py Durable no-resurrection deletion signals
+        recovery_materialization.py Fail-closed state.db-to-sidecar materialization
+        recovery_audit.py Read-only recovery classification and reporting
         title_publication.py Generated-title persistence, insights sync, and publication
       providers/           Provider compatibility package plus credential, cost-history,
                            and account/quota owners
@@ -461,6 +479,18 @@ larger migration remains incremental:
   `record_recovery.py` owns recovered message/context projections; and
   `record_projection.py` builds compact sidebar records. These owners receive
   the active sidecar paths explicitly where profile or test isolation matters.
+- Session persistence reads are split by semantic ownership while the old
+  module names remain small compatibility Interfaces. `state_db_access.py`
+  owns profile-aware database resolution and exact existence probes;
+  `state_db_messages.py`, `state_db_sidebar.py`, and `state_db_identity.py` own
+  transcript reads, sidebar metadata, and cache identity respectively.
+  `session_cache_repository.py` is the full-session cache publication and
+  lazy-load interface; freshness, conservative eviction, and creation live in
+  their dedicated owners. `reconciliation_merge.py` keeps the cohesive
+  append-only merge algorithm intact, with compression context and projections
+  in neighboring modules. New production code imports these owners directly;
+  `state_db.py`, `cache.py`, and `reconciliation.py` preserve stable legacy
+  imports without duplicating mutable state.
 - `api/sessions/pending_recovery/` owns interrupted-turn read-side repair while
   keeping its state layers explicit. `interruption.py` classifies the observed
   failure and builds user-visible terminal markers; `journal_replay.py`
@@ -474,14 +504,24 @@ larger migration remains incremental:
   clears pending ownership only after its selected transcript projection is
   durably saved, never treats maintenance as fresh activity, and never resumes
   provider execution.
+- Recovery is organized around durable responsibility: `recovery_backups.py`
+  restores only proven-safe backup candidates; `recovery_deletion.py` owns
+  no-resurrection signals; `recovery_materialization.py` creates missing
+  sidecars from readable canonical rows using atomic replacement; and
+  `recovery_audit.py` classifies state without mutation. `recovery.py` remains
+  the startup/CLI orchestration Interface. These owners preserve the
+  per-session lock, persist-before-publish, atomic-write, and fail-closed
+  recovery contracts.
 - Foreign-session reads are organized by their authoritative store.
   `api/sessions/gateway_identity.py` owns Gateway registry path resolution and
   cached identity lookup; `api/sessions/claude_code.py` owns defensive JSONL
-  discovery and transcript parsing; `api/sessions/external_sidebar.py` owns
-  the profile-aware CLI/cron/webhook sidebar projection, sidecar metadata
-  overlay, and generation-checked single-flight cache. Agent SQLite transcript
-  reads, prefix proofs, summaries, and commit fingerprints live with the
-  existing `api/sessions/state_db.py` owner. `api/sessions/external.py` is a
+  discovery and transcript parsing; `external_sidebar_projection.py` owns the
+  CLI/cron/webhook row and sidecar overlay, `external_sidebar_context.py` owns
+  profile/stream cache identity, and `external_sidebar_cache.py` owns the
+  bounded generation-checked single-flight cache. `external_sidebar.py` is the
+  stable orchestration Interface. Agent SQLite transcript reads, prefix proofs,
+  summaries, and commit fingerprints live with the narrow state-db owners
+  above. `api/sessions/external.py` is a
   stateless compatibility Interface only; mutable cache state is not duplicated
   there. Callers and tests use the owning Module when they need an internal
   seam.

@@ -7,7 +7,7 @@ import sqlite3
 from types import SimpleNamespace
 
 import api.sessions.store as models
-import api.sessions.state_db as session_state_db
+import api.sessions.state_db_messages as session_state_db
 import api.routes as routes
 from api.sessions import (
     foreign_session_access,

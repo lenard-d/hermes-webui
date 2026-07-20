@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from api.config import resolve_model_provider
 from api.session_state import session_agent_lock
-from api.sessions.store import get_session
+from api.sessions.session_cache_repository import get_session
 
 from .agent_cache import _attempt_credential_self_heal, _build_session_db_for_stream
 from .agent_loader import _get_ai_agent

@@ -4,7 +4,6 @@ import weakref
 
 import api.config as config
 import api.sessions.store as models
-import api.sessions.cache as session_cache
 import api.sessions.cleanup as session_cleanup
 import api.sessions.records as session_records
 import pytest
@@ -16,8 +15,6 @@ def _isolate_session_store(tmp_path, monkeypatch):
     session_dir.mkdir()
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     models.SESSIONS.clear()

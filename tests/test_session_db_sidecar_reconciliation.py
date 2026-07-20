@@ -360,9 +360,6 @@ def test_recover_missing_sidecars_uses_per_process_tmp_suffix(tmp_path):
     concurrent calls cannot corrupt each other's writes. See Opus review on
     PR #2041 (matches Session.save() pattern at api/models.py:484).
     """
-    import os
-    import threading
-
     _make_state_db(tmp_path / "state.db", sid="tmp_suffix_001", messages=1)
 
     # Snapshot the directory before, run reconciliation, then check no
@@ -377,7 +374,12 @@ def test_recover_missing_sidecars_uses_per_process_tmp_suffix(tmp_path):
 
     # And the source explicitly references pid + tid in the suffix
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "api" / "sessions" / "recovery.py").read_text(encoding="utf-8")
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "api"
+        / "sessions"
+        / "recovery_materialization.py"
+    ).read_text(encoding="utf-8")
     assert "os.getpid()" in src and "threading.current_thread().ident" in src, (
         ".reconcile.tmp suffix must include pid + tid for concurrency safety"
     )

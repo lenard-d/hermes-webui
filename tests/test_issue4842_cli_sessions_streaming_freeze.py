@@ -20,7 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import api.sessions.external_sidebar as M
+import api.sessions.external_sidebar as external_sidebar
+import api.sessions.external_sidebar_context as M
 
 
 def _set_active_streams(monkeypatch, ids):
@@ -110,8 +111,8 @@ def test_structural_change_listener_clears_cli_cache(monkeypatch):
     import api.sessions.store as compatibility_store
 
     cleared = {"n": 0}
-    monkeypatch.setattr(M, "clear_cli_sessions_cache", lambda: cleared.__setitem__("n", cleared["n"] + 1))
-    monkeypatch.setattr(compatibility_store, "clear_cli_sessions_cache", M.clear_cli_sessions_cache)
+    monkeypatch.setattr(external_sidebar, "clear_cli_sessions_cache", lambda: cleared.__setitem__("n", cleared["n"] + 1))
+    monkeypatch.setattr(compatibility_store, "clear_cli_sessions_cache", external_sidebar.clear_cli_sessions_cache)
     # The route module imports the symbol lazily inside the listener, so patching
     # api.sessions.store.clear_cli_sessions_cache is what the listener resolves.
     R._on_session_list_changed("default")

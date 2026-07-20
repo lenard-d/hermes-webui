@@ -8,9 +8,9 @@ from collections import OrderedDict
 from pathlib import Path
 
 from api.config import LOCK, SESSION_DIR, SESSIONS, SETTINGS_FILE
-from .state_db import state_db_content_fingerprint
+from .state_db_identity import state_db_content_fingerprint
 from api.sessions.records import _active_stream_ids
-from api.sessions.state_db import _active_state_db_path
+from api.sessions.state_db_access import _active_state_db_path
 from api.profiles import profiles_match as _profiles_match
 
 
