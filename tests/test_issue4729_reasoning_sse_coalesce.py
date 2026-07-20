@@ -27,8 +27,8 @@ STREAMING = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 MESSAGES = family_source("messages")
 
 
-def test_reasoning_uses_coalescing_buffer_not_drop():
-    _api, events, translator = _translator()
+def test_reasoning_uses_coalescing_buffer_not_drop(monkeypatch):
+    _api, events, translator = _translator(monkeypatch)
     translator._reasoning_last_publish = time.monotonic() + 60
     translator.reasoning("one")
     translator.reasoning(" two")
@@ -39,23 +39,23 @@ def test_reasoning_uses_coalescing_buffer_not_drop():
     ]
 
 
-def test_reasoning_throttle_is_rate_limited():
-    _api, events, translator = _translator()
+def test_reasoning_throttle_is_rate_limited(monkeypatch):
+    _api, events, translator = _translator(monkeypatch)
     translator._reasoning_last_publish = time.monotonic()
     translator.reasoning("one")
     translator.reasoning("two")
     assert not [event for event, _payload in events if event == "reasoning"]
 
 
-def test_reasoning_tail_flushed_on_phase_end():
-    _api, events, translator = _translator()
+def test_reasoning_tail_flushed_on_phase_end(monkeypatch):
+    _api, events, translator = _translator(monkeypatch)
     translator._reasoning_last_publish = time.monotonic() + 60
     translator.reasoning("tail")
     translator.reasoning(None)
     assert ("reasoning", {"text": "tail"}) in events
 
 
-def test_reasoning_buffer_flushed_at_every_boundary():
+def test_reasoning_buffer_flushed_at_every_boundary(monkeypatch):
     # #4729 (Codex re-gate): on_reasoning(None) is effectively dead — the agent never
     # calls reasoning_callback(None) — so the buffered tail must be flushed at the REAL
     # boundaries that close/reorder the live reasoning stream, or it's silently lost:
@@ -64,7 +64,7 @@ def test_reasoning_buffer_flushed_at_every_boundary():
     #   - on_tool (tool boundary)
     #   - after agent.run_conversation() returns (terminal catch-all: a turn can end on
     #     reasoning with no trailing token/tool)
-    _api, events, translator = _translator()
+    _api, events, translator = _translator(monkeypatch)
     translator._reasoning_last_publish = time.monotonic() + 60
     translator.reasoning("before token")
     translator.token("answer")

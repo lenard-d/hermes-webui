@@ -39,13 +39,13 @@ class TestAccumulatorReplaced:
             "per-message _reasoning_segments dict (#3587)"
         )
 
-    def test_segments_dict_declared(self):
-        _api, _events, translator = _translator()
+    def test_segments_dict_declared(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         assert translator.reasoning_segments == {}
         assert translator.current_reasoning_idx == 0
 
-    def test_segments_dict_is_dict_type(self):
-        _api, _events, translator = _translator()
+    def test_segments_dict_is_dict_type(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         assert isinstance(translator.reasoning_segments, dict)
 
 
@@ -56,21 +56,21 @@ class TestOnReasoningPerMessageIndexing:
     """The on_reasoning callback must index into _reasoning_segments using
     _current_reasoning_idx instead of appending to a flat string."""
 
-    def test_on_reasoning_uses_segments_not_flat_string(self):
-        _api, _events, translator = _translator()
+    def test_on_reasoning_uses_segments_not_flat_string(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         translator.reasoning("first")
         assert translator.reasoning_segments == {0: "first"}
 
-    def test_on_reasoning_indexes_by_current_idx(self):
-        _api, _events, translator = _translator()
+    def test_on_reasoning_indexes_by_current_idx(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         translator.current_reasoning_idx = 2
         translator.reasoning("third")
         assert translator.reasoning_segments == {2: "third"}
 
-    def test_stream_reasoning_text_mirror_still_present(self):
+    def test_stream_reasoning_text_mirror_still_present(self, monkeypatch):
         """cancel_stream() uses STREAM_REASONING_TEXT for its own partial-message
         persist path; this mirror must remain even after the per-message fix."""
-        api, _events, translator = _translator()
+        api, _events, translator = _translator(monkeypatch)
         translator.reasoning("persist me")
         assert api._test_reasoning == [("stream-1", "persist me")]
 
@@ -83,8 +83,8 @@ class TestInterimAssistantAdvancesIndex:
     results. It must increment _current_reasoning_idx so subsequent reasoning
     deltas are attributed to the next assistant message."""
 
-    def test_interim_assistant_increments_idx(self):
-        _api, _events, translator = _translator()
+    def test_interim_assistant_increments_idx(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         translator.interim_assistant(None)
         assert translator.current_reasoning_idx == 1
 
@@ -187,27 +187,27 @@ class TestToolCallBoundary:
     reasoning index must advance at tool-call boundaries instead, so reasoning
     accumulated before a tool-call-only assistant message gets its own segment."""
 
-    def test_on_tool_advances_reasoning_idx(self):
-        _api, _events, translator = _translator()
+    def test_on_tool_advances_reasoning_idx(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         translator.reasoning("before")
         translator.tool("tool.started", "terminal", None, {})
         assert translator.current_reasoning_idx == 1
 
-    def test_tool_boundary_guard_prevents_double_advance(self):
-        _api, _events, translator = _translator()
+    def test_tool_boundary_guard_prevents_double_advance(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         translator.reasoning("before")
         translator.tool("tool.started", "terminal", None, {})
         translator.tool("tool.started", "browser", None, {})
         assert translator.current_reasoning_idx == 1
 
-    def test_tool_boundary_flag_declared(self):
-        _api, _events, translator = _translator()
+    def test_tool_boundary_flag_declared(self, monkeypatch):
+        _api, _events, translator = _translator(monkeypatch)
         assert translator.tool_boundary_advanced is False
 
-    def test_reasoning_resets_tool_boundary_flag(self):
+    def test_reasoning_resets_tool_boundary_flag(self, monkeypatch):
         """New reasoning arriving after a tool boundary must reset the guard
         so the next tool-call batch can advance the index again."""
-        _api, _events, translator = _translator()
+        _api, _events, translator = _translator(monkeypatch)
         translator.reasoning("before")
         translator.tool("tool.started", "terminal", None, {})
         assert translator.tool_boundary_advanced is True

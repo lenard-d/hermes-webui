@@ -446,36 +446,40 @@ def test_auto_compression_running_sse_uses_active_session_running_card():
 
 
 def test_agent_status_callback_emits_compressing_and_warning_events():
-    src = _read("api/runs/local_events.py")
-    config_src = _read("api/runs/local_agent_config.py")
-    cache_src = _read("api/runs/local_agent_cache.py")
-    runtime_src = _read("api/streaming_parts/runtime_resolution.py")
-    start = src.find("def status(")
-    assert start != -1, "agent status callback bridge not found"
-    end = src.find("def flush_reasoning", start)
-    assert end != -1, "status callback block end marker not found"
-    block = src[start:end]
+    from api.runs.local_events import LocalEventTranslator
 
-    # compressing events only via the narrowed helper (no broad substring matcher)
-    assert 'self.publish(\n                "compressing"' in block
-    assert '"session_id": self.session_id' in block
-    assert '"message": "Compressing context"' in block
-    assert "self.api._is_agent_compression_start_status(kind_text, text)" in block
-    assert "or 'compressing' in _lower" not in block
-    assert "or 'preflight compression' in _lower" not in block
+    events = []
+    translator = LocalEventTranslator(
+        session_id="session-1",
+        stream_id="stream-1",
+        publish=lambda event, payload: events.append((event, payload)),
+        usage=None,
+        agent_params=set,
+    )
 
-    # warning events with type:fallback for rate-limit/fallback lifecycle notices
-    assert 'self.publish("warning"' in block
-    assert '"type": "fallback"' in block
-    assert "'rate limited'" in runtime_src
-    assert "'switching to fallback'" in runtime_src
-    assert "'falling back'" in runtime_src
-    assert "'fallback activated'" in runtime_src
-    assert "'trying fallback'" in runtime_src
+    translator.status(
+        "lifecycle",
+        "Preflight compression: context is near the provider limit",
+    )
+    translator.status(
+        "lifecycle",
+        "Rate limited — switching to fallback provider...",
+    )
+    translator.status("tool", "Preflight compression: unrelated tool output")
 
-    # Verify callback is wired to agent
-    assert '"status_callback": callbacks.status' in config_src
-    assert '("status_callback", "status_callback")' in cache_src
+    assert events == [
+        (
+            "compressing",
+            {"session_id": "session-1", "message": "Compressing context"},
+        ),
+        (
+            "warning",
+            {
+                "type": "fallback",
+                "message": "Rate limited — switching to fallback provider...",
+            },
+        ),
+    ]
 
 
 def test_agent_compression_start_status_matches_real_emitters_only():

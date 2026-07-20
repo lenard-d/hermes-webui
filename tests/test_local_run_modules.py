@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 
+from api import streaming as _streaming_facade  # noqa: F401
+import api.runs.local_agent_config as local_agent_config
+import api.runs.local_events as local_events
+import api.runs.local_usage as local_usage
 from api.runs.local_agent_config import build_local_agent_configuration
 from api.runs.local_events import LocalEventTranslator
 from api.runs.local_usage import LocalUsageTracker
@@ -34,41 +37,49 @@ class _Usage:
         return True
 
 
-def _event_api():
+def _event_owner_spies(monkeypatch):
     meter = _Meter()
     partials = []
     reasoning = []
     started = []
     finished = []
     todos = []
+    partial_text = {}
+    reasoning_text = {}
+
+    monkeypatch.setattr(local_events, "meter", lambda: meter)
+    monkeypatch.setattr(local_events, "STREAM_PARTIAL_TEXT", partial_text)
+    monkeypatch.setattr(local_events, "STREAM_REASONING_TEXT", reasoning_text)
+    monkeypatch.setattr(
+        local_events,
+        "append_runtime_partial_text",
+        lambda stream_id, text: partials.append((stream_id, text)),
+    )
+    monkeypatch.setattr(
+        local_events,
+        "append_runtime_reasoning_text",
+        lambda stream_id, text: reasoning.append((stream_id, text)),
+    )
+    monkeypatch.setattr(local_events, "replace_runtime_reasoning_text", lambda *_args: None)
+    monkeypatch.setattr(
+        local_events,
+        "start_runtime_tool_call",
+        lambda stream_id, **kwargs: started.append((stream_id, kwargs)),
+    )
+    monkeypatch.setattr(
+        local_events,
+        "finish_runtime_tool_call",
+        lambda stream_id, **kwargs: finished.append((stream_id, kwargs)),
+    )
+    monkeypatch.setattr(
+        local_events,
+        "emit_todo_state",
+        lambda *_args, **kwargs: todos.append(kwargs),
+    )
+
     return SimpleNamespace(
-        meter=lambda: meter,
-        logger=SimpleNamespace(
-            debug=lambda *_a, **_k: None, warning=lambda *_a, **_k: None
-        ),
-        STREAM_PARTIAL_TEXT={},
-        STREAM_REASONING_TEXT={},
-        _TOOL_ARG_CONTENT_CAP=500,
-        _TOOL_ARG_CONTENT_KEYS={"content"},
-        _compact_for_echo_compare=lambda value: " ".join(str(value).split()),
-        _strip_compact_echo_suffix=lambda value, _suffix: (value, False),
-        _is_agent_compression_start_status=lambda _kind, text: text == "compress",
-        _is_fallback_lifecycle_message=lambda _kind, text: text == "fallback",
-        _tool_result_snippet=lambda value: str(value)[:120],
-        append_runtime_partial_text=lambda stream_id, text: partials.append(
-            (stream_id, text)
-        ),
-        append_runtime_reasoning_text=lambda stream_id, text: reasoning.append(
-            (stream_id, text)
-        ),
-        replace_runtime_reasoning_text=lambda *_args: None,
-        start_runtime_tool_call=lambda stream_id, **kwargs: started.append(
-            (stream_id, kwargs)
-        ),
-        finish_runtime_tool_call=lambda stream_id, **kwargs: finished.append(
-            (stream_id, kwargs)
-        ),
-        emit_todo_state=lambda *_args, **kwargs: todos.append(kwargs),
+        STREAM_PARTIAL_TEXT=partial_text,
+        STREAM_REASONING_TEXT=reasoning_text,
         _test_meter=meter,
         _test_partials=partials,
         _test_reasoning=reasoning,
@@ -78,22 +89,21 @@ def _event_api():
     )
 
 
-def _translator(*, parameters=()):
-    api = _event_api()
+def _translator(monkeypatch, *, parameters=()):
+    spies = _event_owner_spies(monkeypatch)
     events = []
     translator = LocalEventTranslator(
-        api,
         session_id="session-1",
         stream_id="stream-1",
         publish=lambda event, payload: events.append((event, payload)),
         usage=_Usage(),
         agent_params=lambda: set(parameters),
     )
-    return api, events, translator
+    return spies, events, translator
 
 
-def test_event_translator_preserves_reasoning_before_visible_output():
-    api, events, translator = _translator()
+def test_event_translator_preserves_reasoning_before_visible_output(monkeypatch):
+    api, events, translator = _translator(monkeypatch)
 
     translator.reasoning("one")
     translator.reasoning(" two")
@@ -110,8 +120,10 @@ def test_event_translator_preserves_reasoning_before_visible_output():
     assert translator.token_sent is True
 
 
-def test_event_translator_keeps_reasoning_segments_separate_at_real_boundaries():
-    api, events, translator = _translator()
+def test_event_translator_keeps_reasoning_segments_separate_at_real_boundaries(
+    monkeypatch,
+):
+    api, events, translator = _translator(monkeypatch)
 
     translator.reasoning("before tool")
     translator.tool("tool.started", "terminal", None, {})
@@ -134,10 +146,12 @@ def test_event_translator_keeps_reasoning_segments_separate_at_real_boundaries()
     )
 
 
-def test_reasoning_buffer_flushes_on_none_token_tool_and_explicit_finalization():
+def test_reasoning_buffer_flushes_on_none_token_tool_and_explicit_finalization(
+    monkeypatch,
+):
     import time
 
-    _api, events, translator = _translator()
+    _api, events, translator = _translator(monkeypatch)
 
     translator._reasoning_last_publish = time.monotonic() + 60
     translator.reasoning("a")
@@ -160,22 +174,33 @@ def test_reasoning_buffer_flushes_on_none_token_tool_and_explicit_finalization()
     ]
 
 
-def test_event_translator_captures_terminal_status_and_routes_lifecycle_events():
-    _api, events, translator = _translator()
+def test_event_translator_captures_terminal_status_and_routes_lifecycle_events(
+    monkeypatch,
+):
+    _api, events, translator = _translator(monkeypatch)
 
     translator.status("lifecycle", "Non-retryable error HTTP 400")
-    translator.status("lifecycle", "compress")
-    translator.status("lifecycle", "fallback")
+    translator.status("lifecycle", "Preflight compression: context is near limit")
+    translator.status("lifecycle", "Rate limited — switching to fallback provider")
 
     assert translator.captured_terminal_error[0] == "Non-retryable error HTTP 400"
     assert events == [
         ("compressing", {"session_id": "session-1", "message": "Compressing context"}),
-        ("warning", {"type": "fallback", "message": "fallback"}),
+        (
+            "warning",
+            {
+                "type": "fallback",
+                "message": "Rate limited — switching to fallback provider",
+            },
+        ),
     ]
 
 
-def test_structured_tool_callbacks_are_idempotent_and_checkpoint_completion():
+def test_structured_tool_callbacks_are_idempotent_and_checkpoint_completion(
+    monkeypatch,
+):
     api, events, translator = _translator(
+        monkeypatch,
         parameters={"tool_start_callback", "tool_complete_callback"}
     )
 
@@ -199,8 +224,11 @@ def test_structured_tool_callbacks_are_idempotent_and_checkpoint_completion():
     ]
 
 
-def test_legacy_tool_progress_is_suppressed_when_structured_callbacks_exist():
+def test_legacy_tool_progress_is_suppressed_when_structured_callbacks_exist(
+    monkeypatch,
+):
     api, events, translator = _translator(
+        monkeypatch,
         parameters={"tool_start_callback", "tool_complete_callback"}
     )
 
@@ -214,8 +242,8 @@ def test_legacy_tool_progress_is_suppressed_when_structured_callbacks_exist():
     assert api._test_finished == []
 
 
-def test_legacy_tool_completion_prefers_full_result_for_todo_state():
-    api, _events, translator = _translator()
+def test_legacy_tool_completion_prefers_full_result_for_todo_state(monkeypatch):
+    api, _events, translator = _translator(monkeypatch)
 
     translator.tool(
         "tool.completed",
@@ -228,7 +256,7 @@ def test_legacy_tool_completion_prefers_full_result_for_todo_state():
     assert api._test_todos[0]["function_result"] == {"todos": ["complete"]}
 
 
-def test_agent_configuration_adapts_to_installed_constructor_and_config():
+def test_agent_configuration_adapts_to_installed_constructor_and_config(monkeypatch):
     class Agent:
         def __init__(
             self,
@@ -247,11 +275,18 @@ def test_agent_configuration_adapts_to_installed_constructor_and_config():
         ):
             pass
 
-    api, _events, translator = _translator()
-    api.coerce_reasoning_effort_for_model = lambda value, *_args, **_kwargs: value
-    api.parse_reasoning_effort = lambda value: {"effort": value}
+    _spies, _events, translator = _translator(monkeypatch)
+    monkeypatch.setattr(
+        local_agent_config,
+        "coerce_reasoning_effort_for_model",
+        lambda value, *_args, **_kwargs: value,
+    )
+    monkeypatch.setattr(
+        local_agent_config,
+        "parse_reasoning_effort",
+        lambda value: {"effort": value},
+    )
     result = build_local_agent_configuration(
-        api,
         agent_class=Agent,
         config={
             "agent": {"max_turns": "123", "reasoning_effort": "high"},
@@ -301,27 +336,31 @@ def test_agent_configuration_adapts_to_installed_constructor_and_config():
     assert result.kwargs["gateway_session_key"] == "session-1"
 
 
-def test_usage_tracker_reanchors_tool_estimate_to_fresh_exact_prompt_tokens():
+def test_usage_tracker_reanchors_tool_estimate_to_fresh_exact_prompt_tokens(monkeypatch):
     calls = []
     session = SimpleNamespace(last_prompt_tokens=100)
     agent = SimpleNamespace(
         context_compressor=SimpleNamespace(last_prompt_tokens=100),
     )
-    api = SimpleNamespace(
-        json=json,
-        _tool_result_snippet=lambda value: str(value),
-        _live_usage_session_snapshot=lambda _sid, current, _cache: current,
-        live_usage_prompt_estimate_after_tool_delta=lambda **kwargs: (
+    monkeypatch.setattr(local_usage, "_tool_result_snippet", lambda value: str(value))
+    monkeypatch.setattr(
+        local_usage,
+        "_live_usage_session_snapshot",
+        lambda _sid, current, _cache: current,
+    )
+    monkeypatch.setattr(
+        local_usage,
+        "live_usage_prompt_estimate_after_tool_delta",
+        lambda **kwargs: (
             calls.append(kwargs)
             or {
                 "last_prompt_tokens": kwargs["exact_prompt_tokens"] + 9,
                 "turn_tool_prompt_tokens": 9,
             }
         ),
-        prompt_cache_hit_percent=lambda *_args: None,
     )
+    monkeypatch.setattr(local_usage, "prompt_cache_hit_percent", lambda *_args: None)
     tracker = LocalUsageTracker(
-        api,
         session_id="session-1",
         session_getter=lambda: session,
         agent_getter=lambda: agent,
