@@ -35,13 +35,18 @@ def test_streaming_uses_webui_platform():
 
 
 def test_routes_uses_webui_platform_for_all_agent_calls():
-    """api/routes.py must use platform='webui' for all AIAgent instantiations."""
-    routes_py = _load_source("api/routes.py")
-    webui_count = _count_platform_kwargs(routes_py, "webui")
-    cli_count = _count_platform_kwargs(routes_py, "cli")
+    """Route facade and extracted parts must use platform='webui' for AIAgent."""
+    routes_source = "\n".join(
+        (
+            _load_source("api/routes.py"),
+            _load_source("api/routes_parts/git.py"),
+        )
+    )
+    webui_count = _count_platform_kwargs(routes_source, "webui")
+    cli_count = _count_platform_kwargs(routes_source, "cli")
     assert cli_count == 0, (
-        f"routes.py still has {cli_count} platform='cli' AIAgent call(s); convert to 'webui'"
+        f"route modules still have {cli_count} platform='cli' AIAgent call(s); convert to 'webui'"
     )
     assert webui_count >= 2, (
-        f"routes.py expected ≥2 platform='webui' calls, found {webui_count}"
+        f"route modules expected ≥2 platform='webui' calls, found {webui_count}"
     )
