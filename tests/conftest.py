@@ -1227,6 +1227,32 @@ def _restore_hermes_cli_module():
 
 # ── Per-test session cleanup ──────────────────────────────────────────────────
 
+def _show_cli_sessions_is_persisted_off() -> bool:
+    """Return whether the isolated server has the test default on disk.
+
+    The server writes ``settings.json`` atomically, so reading the persisted
+    value is a cheap and race-free fast path. Missing, malformed, or otherwise
+    uncertain state deliberately returns ``False`` so the caller fails closed
+    and restores the known test default through the public settings endpoint.
+    """
+    try:
+        stored = json.loads(
+            (TEST_STATE_DIR / "settings.json").read_text(encoding="utf-8")
+        )
+    except Exception:
+        return False
+    return isinstance(stored, dict) and stored.get("show_cli_sessions") is False
+
+
+def _restore_cli_session_visibility_default() -> None:
+    """Restore the isolated server setting only when it actually drifted."""
+    if _show_cli_sessions_is_persisted_off():
+        return
+    try:
+        _post(TEST_BASE, "/api/settings", {"show_cli_sessions": False})
+    except Exception:
+        pass
+
 @pytest.fixture(autouse=True)
 def cleanup_test_sessions():
     """
@@ -1240,19 +1266,17 @@ def cleanup_test_sessions():
     was left in an unexpected state by a prior test in the same shard.
     """
     created: list[str] = []
-    # Defense-in-depth: reset the CLI-session visibility setting to its default
-    # BEFORE the test runs too, not only in teardown. Teardown-only reset relies
-    # on every sibling test being wrapped by this fixture AND on its teardown
-    # actually completing; a pre-test reset guarantees each test starts from a
-    # known visibility state regardless of what a prior test left behind. The
-    # primary root-cause fix for the gateway_sync row-absence flake is the
-    # commit-reliable state.db content fingerprint in the cache keys
-    # (api/models.py _sqlite_content_fingerprint) — this pre-reset is belt-and-
-    # suspenders against setting bleed under shard ordering.
-    try:
-        _post(TEST_BASE, "/api/settings", {"show_cli_sessions": False})
-    except Exception:
-        pass
+    # Defense-in-depth: verify the persisted value BEFORE the test too. The
+    # common path is a local atomic-file read; only missing, malformed, or
+    # non-default state pays for an HTTP write. This preserves the old pre-test
+    # guarantee even if a prior fixture teardown did not complete, without
+    # issuing two global settings writes for every unrelated test.
+    _restore_cli_session_visibility_default()
+
+    # The pytest process has its own api.models cache, separate from the test
+    # server subprocess. Start every test cold so tests that exercise model
+    # helpers cannot leak cached projections to a sibling. One setup clear is
+    # sufficient: it also covers an interrupted prior teardown.
     try:
         from api.models import clear_cli_sessions_cache
         clear_cli_sessions_cache()
@@ -1277,17 +1301,10 @@ def cleanup_test_sessions():
     except Exception:
         pass
 
-    # Reset the CLI-session visibility setting to its default so it never bleeds
-    # across tests (33 gateway_sync tests flip it on; only ~30 reset it).
-    try:
-        _post(TEST_BASE, "/api/settings", {"show_cli_sessions": False})
-    except Exception:
-        pass
-    try:
-        from api.models import clear_cli_sessions_cache
-        clear_cli_sessions_cache()
-    except Exception:
-        pass
+    # Restore after success, assertion failure, or exception. Tests that
+    # already restored the setting take the local-file fast path; a failed
+    # toggle test that left it enabled is repaired through the public endpoint.
+    _restore_cli_session_visibility_default()
 
 
 # ── Convenience helpers ────────────────────────────────────────────────────────
