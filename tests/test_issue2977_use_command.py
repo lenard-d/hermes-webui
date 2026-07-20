@@ -1,9 +1,16 @@
 from tests.frontend_asset_contract import family_source
 
+import json
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DIRECTIVE_OWNER = ROOT / "static" / "modules" / "commands" / "forced-skill-directive.js"
+NODE = shutil.which("node")
 
 
 def read(path):
@@ -30,15 +37,43 @@ def test_cmdUse_function_defined():
 
 
 def test_forced_skill_directive_declared():
-    src = read("static/commands.js")
+    src = DIRECTIVE_OWNER.read_text(encoding="utf-8")
     assert "let _forcedSkillDirectivePending=null;" in src, "_forcedSkillDirectivePending must be declared at module scope"
+
+
+@pytest.mark.skipif(NODE is None, reason="node not on PATH")
+def test_forced_skill_directive_owner_cannot_clear_a_newer_pending_value():
+    script = f"""
+      const owner = await import({json.dumps(DIRECTIVE_OWNER.as_uri())});
+      const first = {{id: 1}};
+      const second = {{id: 2}};
+      owner.publishForcedSkillDirective(first);
+      owner.publishForcedSkillDirective(second);
+      const staleClear = owner.clearForcedSkillDirective(first);
+      const retained = owner.getForcedSkillDirective() === second;
+      const currentClear = owner.clearForcedSkillDirective(second);
+      const empty = owner.getForcedSkillDirective() === null;
+      process.stdout.write(JSON.stringify({{staleClear, retained, currentClear, empty}}));
+    """
+    result = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == {
+        "staleClear": False,
+        "retained": True,
+        "currentClear": True,
+        "empty": True,
+    }
 
 
 def test_forced_skill_directive_set_in_cmdUse():
     src = read("static/commands.js")
     assert "pending.promise = new Promise" in src, "cmdUse must create a pending Promise"
-    assert "_forcedSkillDirectivePending = pending;" in src, "cmdUse must publish the pending directive before awaiting"
-    assert "resolve({name:match.name,directive,content:skillContent});" in src, \
+    assert "publishForcedSkillDirective(pending);" in src, "cmdUse must publish the pending directive before awaiting"
+    assert "resolve({name:match.name,directive,content});" in src, \
         "cmdUse must resolve the pending payload with skill name, directive, and fetched content"
 
 
@@ -60,20 +95,17 @@ def test_use_entry_has_subArgs_skills():
 
 
 def test_directive_consumed_at_injection_site():
-    """_forcedSkillDirectivePending is cleared at the consume site, not in finally."""
+    """The pending directive is cleared through its owner at the consume site."""
     src = family_source("messages")
-    finally_part = src.split("finally")[1] if "finally" in src else ""
-    assert "_forcedSkillDirectivePending = null;" not in finally_part, \
-        "_forcedSkillDirectivePending must NOT be cleared in the finally block"
     assert "const _directivePayload = await _pending.promise;" in src, \
         "consume site must await the pending promise"
-    assert "_forcedSkillDirectivePending = null;" in src, \
-        "_forcedSkillDirectivePending must be cleared somewhere in messages.js"
+    assert "clearForcedSkillDirective(_pending);" in src, \
+        "send must ask the state owner to clear the exact consumed directive"
 
 
 def test_directive_injection_before_empty_guard():
     src = family_source("messages")
-    inject_pos = src.index("_forcedSkillDirectivePending")
+    inject_pos = src.index("getForcedSkillDirective()")
     guard_pos = src.index("if(!msgText){setComposerStatus('Nothing to send');return;}")
     assert inject_pos < guard_pos, "directive injection must appear before the if(!msgText) guard"
 
@@ -98,7 +130,7 @@ def test_pending_promise_set_synchronously():
     src = read("static/commands.js")
     fn_start = src.index("async function cmdUse(args)")
     fn_body = src[fn_start:]
-    pending_pos = fn_body.index("_forcedSkillDirectivePending = pending;")
+    pending_pos = fn_body.index("publishForcedSkillDirective(pending);")
     first_await = fn_body.index("await ")
     assert pending_pos < first_await, \
         "_forcedSkillDirectivePending must be set before the first await to close the race window"
@@ -108,7 +140,7 @@ def test_directive_survives_local_slash_commands():
     """The consume block must appear after the slash-command early-return, not before."""
     src = family_source("messages")
     early_return = src.index("autoResize();hideCmdDropdown();return;")
-    consume = src.index("_forcedSkillDirectivePending")
+    consume = src.index("getForcedSkillDirective()")
     assert early_return < consume, \
         "slash-command early-return must precede the directive consume block"
 
@@ -117,17 +149,17 @@ def test_directive_pending_captures_session_id():
     src = read("static/commands.js")
     assert "const pending = {sessionId:S.session&&S.session.session_id||null,promise:null};" in src, \
         "cmdUse must capture the session where /use was issued"
-    assert "const isCurrentSession = () => !pending.sessionId || (S.session&&S.session.session_id)===pending.sessionId;" in src, \
+    assert "const isCurrentSession=()=>!pending.sessionId||(S.session&&S.session.session_id)===pending.sessionId;" in src, \
         "async /use completion must avoid writing status messages into a different session"
 
 
 def test_directive_only_consumed_by_matching_session():
     src = family_source("messages")
-    assert "const _pending=_forcedSkillDirectivePending;" in src, \
+    assert "const _pending=getForcedSkillDirective();" in src, \
         "send() must snapshot the pending directive before awaiting it"
     assert "if(!_pending.sessionId||_pending.sessionId===activeSid){" in src, \
         "send() must only consume /use directives issued for the active session"
-    assert "if(_forcedSkillDirectivePending===_pending)_forcedSkillDirectivePending = null;" in src, \
+    assert "clearForcedSkillDirective(_pending);" in src, \
         "send() must not clear a newer pending directive created while awaiting"
     assert "[FORCED SKILL CONTEXT: ${_forcedSkillName}]" in src, \
         "send() must prepend deterministic forced-skill content before the user message"

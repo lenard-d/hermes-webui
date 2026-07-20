@@ -200,8 +200,8 @@ actions. The topbar remains focused on conversation context and the workspace/fi
                            stream rendering, approval, clarify, and session-event domains
       panels.js            Panels compatibility bootstrap loaded before ordered panel domain scripts
       panels_parts/        Direct-loaded cron, kanban, settings, profile, skill, and workspace domains
-      commands.js          Slash registry/autocomplete facade loaded after command_parts/
-      command_parts/       Desktop, compression, run-control, and session-history owners
+      modules/commands/    Native slash-command catalog, dispatch, remote metadata,
+                           autocomplete, presentation, and semantic handler owners
       boot.js              Boot compatibility facade loaded after boot_parts/
       boot_parts/          Run control, navigation, speech, voice, composer, appearance, bootstrap
       assistant_turn_anchors.js Compatibility facade for stable assistant-turn anchors
@@ -529,6 +529,15 @@ larger migration remains incremental:
   ephemeral turn-field carry-forward, while `stream-progress.js` owns delayed
   INFLIGHT persistence and DOM snapshots. These modules are complete native
   modules; no handler or function body is split across files.
+- The native `static/modules/commands/` graph has a directed ownership chain:
+  `command-catalog.js` owns the built-in catalog, parsing, and local dispatch;
+  `remote-command-catalog.js` owns Agent, plugin, bundle, and skill metadata
+  caches plus transport; `slash-autocomplete.js` owns suggestion parsing and
+  subargument/path caches; and `command-dropdown.js` owns DOM presentation and
+  selection. Model, workspace, preferences, and Agent-capability handlers live
+  with their semantic owners. `forced-skill-directive.js` is the explicit
+  single-use state seam shared with message sending. `registry.js` only composes
+  the stable command Interface; it does not duplicate those implementations.
 
 These Interfaces are intentionally deep: route and rendering code state the
 operation they need while lock ordering, cache accounting, and multi-registry
@@ -811,7 +820,10 @@ The main directly loaded families are:
    owners include lifecycle, drafts, unread/visit persistence, runtime recovery,
    list rendering, discovery, and management. Its compatibility domain is
    published only by the entrypoint.
-6. Ordered `command_parts/`, then `commands.js`, preserving the command globals consumed by message sending.
+6. `static/modules/commands/index.js`, a native-module entrypoint over a
+   directed graph for catalog/dispatch, remote metadata, autocomplete,
+   dropdown presentation, and semantic command handlers. `registry.js` is the
+   stable composition Interface published by the boot compatibility seam.
 7. `messages.js`, then ordered `messages_parts/` for send, anchor modeling,
    stream rendering/lifecycle, approvals, clarification, and session events.
 8. `static/modules/panels/index.js`, the native-module entrypoint for cron,

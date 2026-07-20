@@ -22,6 +22,10 @@ import {
 } from './clarify.js';
 import { attachLiveStream } from './stream.js';
 import {handlePetSlashCommand} from '../commands/desktop-companion.js';
+import {
+  clearForcedSkillDirective,
+  getForcedSkillDirective,
+} from '../commands/forced-skill-directive.js';
 
 // Guard against concurrent send() calls.  Without this, two rapid sends
 // (e.g. queue drain + user click) can both pass the S.busy check because
@@ -509,11 +513,11 @@ export async function send(){
   let msgText=text;
   if(uploaded.length&&!msgText)msgText=`I've uploaded ${uploaded.length} file(s): ${uploadedPaths.join(', ')}`;
   else if(uploaded.length)msgText=`${text}\n\n[Attached files: ${uploadedPaths.join(', ')}]`;
-  if(_forcedSkillDirectivePending){
-    const _pending=_forcedSkillDirectivePending;
+  const _pending=getForcedSkillDirective();
+  if(_pending){
     if(!_pending.sessionId||_pending.sessionId===activeSid){
       const _directivePayload = await _pending.promise;
-      if(_forcedSkillDirectivePending===_pending)_forcedSkillDirectivePending = null;
+      clearForcedSkillDirective(_pending);
       if(_directivePayload){
         const _directive = typeof _directivePayload==='string'
           ? _directivePayload

@@ -73,10 +73,19 @@ _MESSAGE_MODULE_NAMES = (
 )
 
 _COMMAND_MODULE_NAMES = (
+    "forced-skill-directive.js",
+    "capability-commands.js",
     "desktop-companion.js",
     "manual-compression.js",
+    "model-command.js",
+    "preference-commands.js",
     "run-controls.js",
     "session-history.js",
+    "workspace-commands.js",
+    "command-catalog.js",
+    "remote-command-catalog.js",
+    "slash-autocomplete.js",
+    "command-dropdown.js",
     "registry.js",
     "index.js",
 )

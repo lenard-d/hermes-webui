@@ -16,10 +16,19 @@ INDEX = MODULES_DIR / "index.js"
 
 def test_commands_use_semantic_native_modules_without_legacy_parts():
     assert [path.name for path in family_asset_paths("commands")] == [
+        "forced-skill-directive.js",
+        "capability-commands.js",
         "desktop-companion.js",
         "manual-compression.js",
+        "model-command.js",
+        "preference-commands.js",
         "run-controls.js",
         "session-history.js",
+        "workspace-commands.js",
+        "command-catalog.js",
+        "remote-command-catalog.js",
+        "slash-autocomplete.js",
+        "command-dropdown.js",
         "registry.js",
         "index.js",
     ]
@@ -45,18 +54,38 @@ def test_command_modules_parse_independently_and_export_interfaces():
             assert result.returncode == 0, result.stderr
 
 
-def test_registry_imports_domain_handlers_and_exports_the_command_interface():
+def test_registry_composes_domain_owners_and_exports_the_command_interface():
     source = (MODULES_DIR / "registry.js").read_text(encoding="utf-8")
     for owner in (
-        "./desktop-companion.js",
+        "./command-catalog.js",
+        "./command-dropdown.js",
         "./manual-compression.js",
+        "./remote-command-catalog.js",
         "./run-controls.js",
+        "./slash-autocomplete.js",
         "./session-history.js",
     ):
         assert owner in source
-    assert "const COMMANDS=[" in source
     assert "const commandInterface=Object.freeze({" in source
     assert "Object.assign(root" not in source
+
+    catalog = (MODULES_DIR / "command-catalog.js").read_text(encoding="utf-8")
+    assert "const COMMANDS=[" in catalog
+    assert "function parseCommand(" in catalog
+    assert "function executeCommand(" in catalog
+
+
+def test_command_modules_follow_the_directed_owner_graph():
+    catalog = (MODULES_DIR / "command-catalog.js").read_text(encoding="utf-8")
+    remote = (MODULES_DIR / "remote-command-catalog.js").read_text(encoding="utf-8")
+    autocomplete = (MODULES_DIR / "slash-autocomplete.js").read_text(encoding="utf-8")
+    dropdown = (MODULES_DIR / "command-dropdown.js").read_text(encoding="utf-8")
+
+    assert "./command-catalog.js" in remote
+    assert "./remote-command-catalog.js" in autocomplete
+    assert "./slash-autocomplete.js" in dropdown
+    assert "remote-command-catalog.js" not in catalog
+    assert "command-dropdown.js" not in autocomplete
 
 
 def test_commands_are_loaded_transitively_by_the_single_boot_entrypoint():

@@ -1,3 +1,5 @@
+// Public command entrypoint. Registry composes the owner modules while this
+// file preserves the stable import surface used by boot and compatibility code.
 export {
   COMMANDS,
   HANDLERS,
