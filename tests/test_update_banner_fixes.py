@@ -1742,8 +1742,8 @@ class TestUpdateSummaryRouteModelSelection:
         monkeypatch.setitem(sys.modules, 'agent', fake_agent)
         monkeypatch.setitem(sys.modules, 'agent.auxiliary_client', fake_auxiliary_client)
 
-        with updates._cache_lock:
-            updates._summary_cache.clear()
+        from api import update_summary
+        update_summary._summary_cache.clear()
 
         monkeypatch.setenv('HERMES_HOME', 'default-home')
         monkeypatch.setenv('HERMES_TEST_PROFILE_ENV', 'default-runtime')
@@ -2673,7 +2673,7 @@ class TestWhatsNewSummaryToggle:
 
     def test_settings_js_loads_saves_and_boots_summary_toggle(self):
         panels = family_source("panels")
-        boot = read('static/boot.js')
+        boot = family_source("boot")
         assert "$('settingsWhatsNewSummary')" in panels
         assert 'payload.whats_new_summary_enabled' in panels
         assert 'settings.whats_new_summary_enabled' in panels
@@ -2889,14 +2889,15 @@ if(!window._whatsNewGeneratedSummaries || !window._whatsNewGeneratedSummaries.we
     def test_summary_endpoint_and_prompt_are_human_readable_not_technical(self):
         routes = read('api/routes.py')
         updates = read('api/updates.py')
+        update_summary = read('api/update_summary.py')
         assert '"/api/updates/summary"' in routes
         assert 'summarize_update_payload' in routes
         assert 'def summarize_update_payload' in updates
-        assert 'human-readable' in updates
-        assert 'avoid technical jargon' in updates
-        assert 'regular diff comparison' in updates
-        assert 'Return only prefixed bullets' in updates
-        assert 'def _format_update_summary_sections' in updates
+        assert 'human-readable' in update_summary
+        assert 'avoid technical jargon' in update_summary
+        assert 'regular diff links' in update_summary
+        assert 'Return only prefixed bullets' in update_summary
+        assert 'def _format_update_summary_sections' in update_summary
 
     def test_update_summary_formats_llm_text_into_stable_sections(self):
         from api.updates import summarize_update_payload
@@ -3097,8 +3098,9 @@ if(!window._whatsNewGeneratedSummaries || !window._whatsNewGeneratedSummaries.we
 
     def test_update_summary_cache_reuses_same_update_summary(self):
         import api.updates as upd
+        from api import update_summary
 
-        upd._summary_cache.clear()
+        update_summary._summary_cache.clear()
         calls = []
         payload = {
             'webui': {'behind': 2, 'current_sha': 'abc', 'latest_sha': 'def', 'compare_url': 'https://example.test/webui'},
@@ -3121,8 +3123,9 @@ if(!window._whatsNewGeneratedSummaries || !window._whatsNewGeneratedSummaries.we
 
     def test_update_summary_cache_is_bounded_lru(self):
         import api.updates as upd
+        from api import update_summary
 
-        upd._summary_cache.clear()
+        update_summary._summary_cache.clear()
         calls = []
 
         def payload(n):
@@ -3140,33 +3143,34 @@ if(!window._whatsNewGeneratedSummaries || !window._whatsNewGeneratedSummaries.we
             return f'- Generated summary #{len(calls)}'
 
         try:
-            for i in range(upd._SUMMARY_CACHE_MAX):
+            for i in range(update_summary._SUMMARY_CACHE_MAX):
                 upd.summarize_update_payload(payload(i), llm_callback=fake_llm)
 
-            assert len(upd._summary_cache) == upd._SUMMARY_CACHE_MAX
-            assert len(calls) == upd._SUMMARY_CACHE_MAX
+            assert len(update_summary._summary_cache) == update_summary._SUMMARY_CACHE_MAX
+            assert len(calls) == update_summary._SUMMARY_CACHE_MAX
 
             first_again = upd.summarize_update_payload(payload(0), llm_callback=fake_llm)
             assert first_again['cached'] is True
-            assert len(calls) == upd._SUMMARY_CACHE_MAX
+            assert len(calls) == update_summary._SUMMARY_CACHE_MAX
 
-            upd.summarize_update_payload(payload(upd._SUMMARY_CACHE_MAX), llm_callback=fake_llm)
-            assert len(upd._summary_cache) == upd._SUMMARY_CACHE_MAX
+            upd.summarize_update_payload(payload(update_summary._SUMMARY_CACHE_MAX), llm_callback=fake_llm)
+            assert len(update_summary._summary_cache) == update_summary._SUMMARY_CACHE_MAX
 
             still_cached = upd.summarize_update_payload(payload(0), llm_callback=fake_llm)
             assert still_cached['cached'] is True
-            assert len(calls) == upd._SUMMARY_CACHE_MAX + 1
+            assert len(calls) == update_summary._SUMMARY_CACHE_MAX + 1
 
             evicted = upd.summarize_update_payload(payload(1), llm_callback=fake_llm)
             assert evicted['cached'] is False
-            assert len(calls) == upd._SUMMARY_CACHE_MAX + 2
+            assert len(calls) == update_summary._SUMMARY_CACHE_MAX + 2
         finally:
-            upd._summary_cache.clear()
+            update_summary._summary_cache.clear()
 
     def test_update_summary_can_be_generated_per_target_and_cached_separately(self):
         import api.updates as upd
+        from api import update_summary
 
-        upd._summary_cache.clear()
+        update_summary._summary_cache.clear()
         calls = []
         payload = {
             'webui': {'behind': 2, 'current_sha': 'web-a', 'latest_sha': 'web-b', 'compare_url': 'https://example.test/webui'},
