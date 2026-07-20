@@ -9,7 +9,7 @@ reordering keys alphabetically.
 
 Fix:
 - onboarding.py now imports _write_env_file from providers.py (which holds
-  _ENV_LOCK from api.streaming for the entire load→modify→write cycle).
+  the shared config environment lock for the entire load→modify→write cycle).
 - _write_env_file in providers.py now preserves comments, blank lines, and
   original key order instead of rebuilding from a sorted dict.
 
@@ -144,14 +144,14 @@ class TestOnboardingUsesProviderWriteEnv(unittest.TestCase):
         )
 
     def test_providers_write_env_holds_env_lock(self):
-        """providers._write_env_file must acquire _ENV_LOCK from api.streaming."""
+        """providers._write_env_file must acquire the shared config lock."""
         import inspect
         from api.providers import _write_env_file
         source = inspect.getsource(_write_env_file)
-        self.assertIn("_ENV_LOCK", source,
-                      "_write_env_file must use _ENV_LOCK for concurrency safety")
-        self.assertIn("from api.streaming import _ENV_LOCK", source,
-                      "_ENV_LOCK must be imported from api.streaming")
+        self.assertIn("environment_mutation_lock", source,
+                      "_write_env_file must use the shared config lock")
+        self.assertIn("from api.config import environment_mutation_lock", source,
+                      "the environment lock must come from its config owner")
 
     def test_providers_write_env_uses_atomic_rename(self):
         """providers._write_env_file must write atomically via tempfile +

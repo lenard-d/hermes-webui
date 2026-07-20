@@ -11,7 +11,7 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
-from api.streaming import _sanitize_messages_for_api
+from api.runs.message_sanitization import _sanitize_messages_for_api
 
 
 def _asst_with_reasoning(content="hello", reasoning="I think about this..."):

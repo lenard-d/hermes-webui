@@ -7,9 +7,8 @@ from pathlib import Path
 import re
 import urllib.error
 
-from api.runs import gateway as gateway_chat
+from api.runs import attachments, gateway as gateway_chat, webui_prefill
 import api.sessions.store as models
-import api.streaming as streaming
 from api.config import PENDING_GOAL_CONTINUATION, STREAMS, create_stream_channel
 from api.sessions.store import new_session
 from api.gateway_chat import (
@@ -305,7 +304,7 @@ def test_gateway_chat_worker_translates_sse_and_persists_session(tmp_path, monke
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_API_KEY", "secret-token")
     monkeypatch.setattr(gateway_chat, "_gateway_reasoning_effort_for_request", lambda *args, **kwargs: "high")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {
         "status": "loaded",
         "source": "test",
         "label": "test",
@@ -315,7 +314,7 @@ def test_gateway_chat_worker_translates_sse_and_persists_session(tmp_path, monke
             {"role": "user", "content": "prefill"},
         ],
     })
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: list(ctx["messages"]) + [{"role": "user", "content": "webui session context"}])
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: list(ctx["messages"]) + [{"role": "user", "content": "webui session context"}])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fake_urlopen)
 
     s = new_session()
@@ -427,8 +426,8 @@ def test_gateway_chat_worker_classifies_terminal_provider_error_without_text(tmp
             yield b"data: [DONE]\n\n"
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     events = []
@@ -651,8 +650,8 @@ def test_gateway_chat_worker_persists_reasoning_and_tool_state_on_terminal_error
             yield b"data: [DONE]\n\n"
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     events = []
@@ -991,22 +990,22 @@ def test_gateway_chat_worker_normalizes_prefill_slice_before_system_prefix(tmp_p
         captured["body"] = json.loads(req.data.decode("utf-8"))
         return FakeResponse()
 
-    original_normalizer = streaming._normalize_prefill_messages_before_user_turn
+    original_normalizer = webui_prefill._normalize_prefill_messages_before_user_turn
 
     def recording_normalizer(messages):
         captured["normalizer_input"] = list(messages)
         return original_normalizer(messages)
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {
         "status": "loaded",
         "source": "test",
         "label": "test",
         "message_count": len(prefill_raw),
         "messages": prefill_raw,
     })
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: list(ctx["messages"]))
-    monkeypatch.setattr(streaming, "_normalize_prefill_messages_before_user_turn", recording_normalizer)
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: list(ctx["messages"]))
+    monkeypatch.setattr(gateway_chat, "_normalize_prefill_messages_before_user_turn", recording_normalizer)
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fake_urlopen)
 
     s = new_session()
@@ -1051,8 +1050,8 @@ def test_gateway_chat_worker_backfills_context_only_turns_into_display(tmp_path,
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
@@ -1114,8 +1113,8 @@ def test_gateway_chat_worker_preserves_old_visible_turns_when_context_is_compact
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
@@ -1192,8 +1191,8 @@ def test_gateway_chat_worker_keeps_repeated_identical_visible_turns(tmp_path, mo
             yield b'data: [DONE]\n\n'
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", lambda req, timeout=0: FakeResponse())
 
     s = new_session()
@@ -1270,8 +1269,8 @@ def test_gateway_chat_worker_forwards_image_attachments_as_multimodal_parts(tmp_
         return FakeResponse()
 
     monkeypatch.setenv("HERMES_WEBUI_GATEWAY_BASE_URL", "http://gateway.local")
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
-    monkeypatch.setattr(streaming, "_prefill_messages_with_webui_context", lambda ctx, cfg: [{"role": "user", "content": "webui session context"}])
+    monkeypatch.setattr(gateway_chat, "_load_webui_prefill_context", lambda cfg: {"status": "not_configured", "source": "none", "label": "", "message_count": 0, "messages": []})
+    monkeypatch.setattr(gateway_chat, "_prefill_messages_with_webui_context", lambda ctx, cfg: [{"role": "user", "content": "webui session context"}])
     monkeypatch.setattr(gateway_chat.urllib.request, "urlopen", fake_urlopen)
 
     s = new_session()
@@ -1346,7 +1345,7 @@ def test_resolve_image_input_mode_unknown_model_forwards_native(monkeypatch):
     _install_fake_agent_routing(monkeypatch, decision="text", supports=None)
     cfg = {"agent": {"image_input_mode": "auto"},
            "auxiliary": {"vision": {"provider": "auto"}}}
-    assert streaming._resolve_image_input_mode(cfg) == "native"
+    assert attachments._resolve_image_input_mode(cfg) == "native"
 
 
 def test_resolve_image_input_mode_known_text_only_routes_text(monkeypatch):
@@ -1366,14 +1365,14 @@ def test_resolve_image_input_mode_known_text_only_routes_text(monkeypatch):
     _install_fake_agent_routing(monkeypatch, decision="text", supports=False)
     cfg = {"agent": {"image_input_mode": "auto"},
            "auxiliary": {"vision": {"provider": "auto"}}}
-    assert streaming._resolve_image_input_mode(cfg) == "text"
+    assert attachments._resolve_image_input_mode(cfg) == "text"
 
 
 def test_resolve_image_input_mode_known_vision_model_forwards_native(monkeypatch):
     """A model KNOWN to support vision forwards natively (canonical native)."""
     _install_fake_agent_routing(monkeypatch, decision="native", supports=True)
     cfg = {"agent": {"image_input_mode": "auto"}}
-    assert streaming._resolve_image_input_mode(cfg) == "native"
+    assert attachments._resolve_image_input_mode(cfg) == "native"
 
 
 def test_resolve_image_input_mode_explicit_text_signal_honored(monkeypatch):
@@ -1384,9 +1383,9 @@ def test_resolve_image_input_mode_explicit_text_signal_honored(monkeypatch):
     ``auxiliary.vision`` backend count as explicit signals.
     """
     _install_fake_agent_routing(monkeypatch, decision="text", supports=None)
-    assert streaming._resolve_image_input_mode(
+    assert attachments._resolve_image_input_mode(
         {"agent": {"image_input_mode": "text"}}) == "text"
-    assert streaming._resolve_image_input_mode(
+    assert attachments._resolve_image_input_mode(
         {"agent": {"image_input_mode": "auto"},
          "auxiliary": {"vision": {"provider": "openai", "model": "gpt-4o"}}}) == "text"
 
@@ -1405,14 +1404,14 @@ def test_resolve_image_input_mode_fallback_when_agent_unavailable(monkeypatch):
 
     # No explicit signal -> native (this is what keeps the gateway image test
     # green, since agent is not importable there either).
-    assert streaming._resolve_image_input_mode(
+    assert attachments._resolve_image_input_mode(
         {"agent": {"image_input_mode": "auto"},
          "auxiliary": {"vision": {"provider": "auto"}}}) == "native"
     # Explicit text mode -> text.
-    assert streaming._resolve_image_input_mode(
+    assert attachments._resolve_image_input_mode(
         {"agent": {"image_input_mode": "text"}}) == "text"
     # Explicit auxiliary vision backend -> text.
-    assert streaming._resolve_image_input_mode(
+    assert attachments._resolve_image_input_mode(
         {"auxiliary": {"vision": {"provider": "anthropic"}}}) == "text"
 
 

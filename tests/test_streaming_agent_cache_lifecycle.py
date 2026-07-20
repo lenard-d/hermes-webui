@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 
 def test_evicted_agent_lifecycle_commits_unregisters_and_shutdowns(monkeypatch):
-    from api.streaming import agent_cache
+    from api.runs import agent_cache
 
     events = []
 
@@ -37,7 +37,7 @@ def test_evicted_agent_lifecycle_commits_unregisters_and_shutdowns(monkeypatch):
 
 
 def test_evicted_agent_lifecycle_shutdown_uses_empty_messages_when_missing(monkeypatch):
-    from api.streaming import agent_cache
+    from api.runs import agent_cache
 
     monkeypatch.setattr(agent_cache, "_lifecycle_commit_session_memory", lambda *a, **kw: True)
     monkeypatch.setattr(agent_cache, "_lifecycle_has_uncommitted_work", lambda session_id: False)
@@ -54,7 +54,7 @@ def test_evicted_agent_lifecycle_shutdown_uses_empty_messages_when_missing(monke
 
 
 def test_cached_agent_entry_lifecycle_extracts_agent_from_cache_tuple(monkeypatch):
-    from api.streaming import agent_cache
+    from api.runs import agent_cache
 
     closed = []
     monkeypatch.setattr(
@@ -70,7 +70,7 @@ def test_cached_agent_entry_lifecycle_extracts_agent_from_cache_tuple(monkeypatc
 
 
 def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(monkeypatch):
-    from api.streaming import agent_cache
+    from api.runs import agent_cache
 
     def fake_commit(session_id, *, agent=None, wait=False):
         return True
@@ -93,10 +93,10 @@ def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(mo
 
 def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     sources = [
+        open("api/runs/agent_cache.py", encoding="utf-8").read(),
         open("api/runs/local.py", encoding="utf-8").read(),
         open("api/runs/local_agent_cache.py", encoding="utf-8").read(),
         open("api/streaming/live_controls.py", encoding="utf-8").read(),
-        open("api/streaming/agent_cache.py", encoding="utf-8").read(),
     ]
 
     expected_markers = [
@@ -109,7 +109,7 @@ def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     for marker in expected_markers:
         assert any(marker in source for source in sources)
 
-    cache_owner = sources[1]
+    cache_owner = sources[2]
     for variable in ("identity_mismatch", "stale"):
         pop_idx = cache_owner.index(
             f"{variable} = SESSION_AGENT_CACHE.pop(session_id, None)"
@@ -121,7 +121,7 @@ def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
 
     close_markers = [
         "_close_cached_agent_entry_at_session_boundary(old_sid, _skipped_agent_migration_entry)",
-        "_close_cached_agent_entry_at_session_boundary(sid, evicted_cached_entry)",
+        "sid, evicted_cached_entry)",
         "_close_cached_agent_entry_at_session_boundary(session_id, _evicted_entry)",
     ]
     for marker in close_markers:

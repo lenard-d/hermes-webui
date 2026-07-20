@@ -15,12 +15,14 @@ import types
 import unittest
 from unittest import mock
 
+import api.config as config
+
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 AGENT_CACHE_PY = (
-    REPO_ROOT / "api" / "streaming" / "agent_cache.py"
+    REPO_ROOT / "api" / "runs" / "agent_cache.py"
 ).read_text(encoding="utf-8")
 POST_COMPRESSION_CONTEXT_PY = (
-    REPO_ROOT / "api" / "streaming" / "post_compression_context.py"
+    REPO_ROOT / "api" / "runs" / "post_compression_context.py"
 ).read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
     REPO_ROOT / "api" / "runs" / "local.py"
@@ -37,6 +39,7 @@ LOCAL_EVENTS_PY = (
 
 REPO = REPO_ROOT  # alias used by #427 tests
 _SESSIONS_JS = REPO_ROOT / 'static' / 'sessions.js'
+_STREAMING_PY = REPO_ROOT / 'api' / 'runs' / 'agent_cache.py'
 _MESSAGES_JS = REPO_ROOT / 'static' / 'messages.js'
 _UI_JS = REPO_ROOT / 'static' / 'ui.js'
 
@@ -146,7 +149,7 @@ class TestRuntimeRouteInjection(unittest.TestCase):
 
     def test_runtime_route_is_forwarded_from_resolver_into_agent_init(self):
         """The resolved ACP route should be passed through to AIAgent kwargs."""
-        import api.streaming as streaming
+        from api.runs import local_entrypoint as streaming
 
         captured = {}
         fake_session_db = object()
@@ -265,8 +268,8 @@ class TestRuntimeRouteInjection(unittest.TestCase):
                      "hermes_state": fake_hermes_state,
                  },
              ):
-            streaming.STREAMS[fake_stream_id] = fake_queue
-            streaming._run_agent_streaming(
+            config.STREAMS[fake_stream_id] = fake_queue
+            streaming.run_agent_streaming(
                 session_id=fake_session.session_id,
                 msg_text="hello from webui",
                 model="gpt-5.4",
@@ -289,7 +292,7 @@ class TestRuntimeRouteInjection(unittest.TestCase):
 
     def test_runtime_provider_forwards_interim_assistant_callback(self):
         """WebUI must pass interim_assistant_callback to AIAgent and emit SSE events."""
-        import api.streaming as streaming
+        from api.runs import local_entrypoint as streaming
 
         captured = {}
 
@@ -411,8 +414,8 @@ class TestRuntimeRouteInjection(unittest.TestCase):
                  "hermes_cli.runtime_provider": fake_rt_module,
                  "hermes_state": fake_hermes_state,
              }):
-            streaming.STREAMS[fake_stream_id] = fake_queue
-            streaming._run_agent_streaming(
+            config.STREAMS[fake_stream_id] = fake_queue
+            streaming.run_agent_streaming(
                 session_id="sess-interim-test",
                 msg_text="hello",
                 model="gpt-4o",
@@ -474,7 +477,7 @@ class TestRuntimeRouteInjection(unittest.TestCase):
 
     def test_clarify_callback_passes_configured_timeout_seconds(self):
         """clarify prompt data should use clarify.timeout from config when present."""
-        import api.streaming as streaming
+        from api.runs import local_entrypoint as streaming
 
         captured = {}
         submit_payloads = []
@@ -581,7 +584,7 @@ class TestRuntimeRouteInjection(unittest.TestCase):
         with mock.patch.object(streaming, "get_session", return_value=fake_session), \
              mock.patch.object(streaming, "_get_ai_agent", return_value=CapturingAgent), \
              mock.patch.object(streaming, "resolve_model_provider", return_value=("gpt-5.4", "openai-codex", None)), \
-             mock.patch("api.streaming.agent_loader.get_config", return_value={"clarify": {"timeout": 300}}), \
+             mock.patch("api.runs.agent_loader.get_config", return_value={"clarify": {"timeout": 300}}), \
              mock.patch("api.config._resolve_cli_toolsets", return_value=[]), \
              mock.patch("api.clarify.submit_pending", side_effect=fake_submit_pending), \
              mock.patch.dict(sys.modules, {
@@ -589,8 +592,8 @@ class TestRuntimeRouteInjection(unittest.TestCase):
                 "hermes_cli.runtime_provider": fake_rt_module,
                 "hermes_state": fake_hermes_state,
              }):
-            streaming.STREAMS[fake_stream_id] = fake_queue
-            streaming._run_agent_streaming(
+            config.STREAMS[fake_stream_id] = fake_queue
+            streaming.run_agent_streaming(
                 session_id="sess-clarify-timeout",
                 msg_text="please run task",
                 model="gpt-5.4",
@@ -827,7 +830,7 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
         "local_run.py must restore prior reasoning metadata into model context"
     assert "s.messages = _merge_display_messages_after_agent_result(" in run_src, \
         "local_run.py must merge restored result messages into the visible transcript"
-    from api.streaming import _restore_display_reasoning_metadata
+    from api.runs.post_compression_context import _restore_display_reasoning_metadata
 
     reasoning_only = {
         "role": "assistant",
@@ -866,7 +869,7 @@ class TestCredentialPoolBackwardCompat(unittest.TestCase):
 
     def test_older_agent_without_credential_pool_does_not_crash(self):
         """WebUI must not crash with TypeError when AIAgent lacks credential_pool."""
-        import api.streaming as streaming
+        from api.runs import local_entrypoint as streaming
 
         captured = {}
 
@@ -954,9 +957,9 @@ class TestCredentialPoolBackwardCompat(unittest.TestCase):
                  "hermes_cli.runtime_provider": fake_rt_module,
                  "hermes_state": fake_hermes_state,
              }):
-            streaming.STREAMS[fake_stream_id] = fake_queue
+            config.STREAMS[fake_stream_id] = fake_queue
             # Must not raise TypeError
-            streaming._run_agent_streaming(
+            streaming.run_agent_streaming(
                 session_id="sess-compat-test",
                 msg_text="hello",
                 model="gpt-4o",
@@ -973,7 +976,7 @@ class TestAgentCacheCredentialPoolStability(unittest.TestCase):
     """Credential-pool token churn must not evict cached WebUI agents."""
 
     def test_credential_pool_signature_ignores_volatile_runtime_token(self):
-        import api.streaming as streaming
+        from api.runs import agent_cache as streaming
 
         pool = object()
         self.assertEqual(
@@ -986,7 +989,7 @@ class TestAgentCacheCredentialPoolStability(unittest.TestCase):
         )
 
     def test_cached_agent_runtime_refresh_swaps_key_without_losing_agent_state(self):
-        import api.streaming as streaming
+        from api.runs import agent_cache as streaming
 
         class FakeAgent:
             def __init__(self):
@@ -1038,12 +1041,12 @@ class TestAgentCacheCredentialPoolStability(unittest.TestCase):
         self.assertEqual(agent._primary_runtime['api_key'], 'new-token')
         self.assertEqual(agent._primary_runtime['client_kwargs']['api_key'], 'new-token')
         self.assertEqual(agent._primary_runtime['compressor_api_key'], 'new-token')
-        self.assertEqual(getattr(agent.context_compressor, 'api_key'), 'new-token')
+        self.assertEqual(agent.context_compressor.api_key, 'new-token')
         self.assertEqual(agent.header_refreshes, [('https://chatgpt.com/backend-api/codex', 'new-token')])
         self.assertEqual(agent.replacements, ['webui_credential_refresh'])
 
     def test_same_key_refresh_repairs_stale_primary_runtime_snapshot(self):
-        import api.streaming as streaming
+        from api.runs import agent_cache as streaming
 
         class FakeAgent:
             api_key = 'current-token'
@@ -1070,7 +1073,7 @@ class TestAgentCacheCredentialPoolStability(unittest.TestCase):
         self.assertEqual(agent._primary_runtime['client_kwargs']['api_key'], 'current-token')
 
     def test_fallback_active_refresh_requests_rebuild_without_mutating_fallback(self):
-        import api.streaming as streaming
+        from api.runs import agent_cache as streaming
 
         class FakeAgent:
             api_key = 'fallback-token'

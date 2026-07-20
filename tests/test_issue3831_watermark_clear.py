@@ -26,7 +26,7 @@ guard allows newer state.db rows to merge in.
 state replay, so the advance is falsy-gated and never touches ``0.0``.
 """
 import api.sessions.store as models
-import api.streaming as streaming
+from api.runs import transcript, turn_context
 
 
 def _rows(*specs):
@@ -53,7 +53,7 @@ def test_advance_helper_advances_positive_watermark():
     newest user message timestamp — NOT cleared to None."""
     s = _FakeSession(100.0)  # stale, from a prior retry/undo/edit
     s.messages = _rows(("user", "new turn", 200))
-    streaming._advance_truncation_watermark_after_commit(s)
+    turn_context._advance_truncation_watermark_after_commit(s)
     assert s.truncation_watermark == 200.0
 
 
@@ -62,13 +62,13 @@ def test_advance_helper_leaves_zero_watermark_untouched():
     falsy guard must leave it alone so #2914 replay-blocking is preserved."""
     s = _FakeSession(0.0)
     s.messages = _rows(("user", "new turn", 200))
-    streaming._advance_truncation_watermark_after_commit(s)
+    turn_context._advance_truncation_watermark_after_commit(s)
     assert s.truncation_watermark == 0.0
 
 
 def test_advance_helper_noop_when_unset():
     s = _FakeSession(None)
-    streaming._advance_truncation_watermark_after_commit(s)
+    turn_context._advance_truncation_watermark_after_commit(s)
     assert s.truncation_watermark is None
 
 
@@ -77,7 +77,7 @@ def test_advance_helper_uses_current_time_when_no_timestamp():
     time.time()."""
     s = _FakeSession(100.0)
     s.messages = _rows(("user", "new turn", None))
-    streaming._advance_truncation_watermark_after_commit(s)
+    turn_context._advance_truncation_watermark_after_commit(s)
     assert s.truncation_watermark is not None
     assert s.truncation_watermark > 100.0  # advanced past the old watermark
 
@@ -91,7 +91,7 @@ def test_advance_helper_picks_newest_user_timestamp():
         ("user", "second", 200),
         ("assistant", "reply2", 201),
     )
-    streaming._advance_truncation_watermark_after_commit(s)
+    turn_context._advance_truncation_watermark_after_commit(s)
     assert s.truncation_watermark == 200.0
 
 
@@ -180,7 +180,7 @@ def test_error_path_materialize_advances_positive_watermark():
     path advances a stale positive watermark to the recovered timestamp."""
     s = _FakeSession(100.0)  # stale, from a prior retry/undo/edit
     s.pending_user_message = "new turn after edit"
-    appended = streaming._materialize_pending_user_turn_before_error(s)
+    appended = transcript._materialize_pending_user_turn_before_error(s)
     assert appended is True
     assert s.truncation_watermark is not None
     assert s.truncation_watermark >= 100.0  # advanced past old watermark
@@ -192,7 +192,7 @@ def test_error_path_materialize_preserves_zero_sentinel():
     truncate-to-empty sentinel (#2914) is preserved, not cleared."""
     s = _FakeSession(0.0)
     s.pending_user_message = "new turn"
-    streaming._materialize_pending_user_turn_before_error(s)
+    transcript._materialize_pending_user_turn_before_error(s)
     assert s.truncation_watermark == 0.0
 
 

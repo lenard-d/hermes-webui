@@ -21,11 +21,7 @@ import pytest
 
 from tests.frontend_asset_contract import family_source
 
-from api.streaming import (
-    _TOOL_ARG_CONTENT_CAP,
-    _TOOL_ARG_CONTENT_KEYS,
-    _truncate_tool_args,
-)
+from api.runs.tool_events import _TOOL_ARG_CONTENT_CAP, _TOOL_ARG_CONTENT_KEYS, _truncate_tool_args
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"

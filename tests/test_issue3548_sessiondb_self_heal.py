@@ -9,7 +9,7 @@ import types
 from unittest import mock
 
 def test_session_db_helper_uses_request_state_db_path():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     calls = {}
 
@@ -25,10 +25,10 @@ def test_session_db_helper_uses_request_state_db_path():
 
     with (
         mock.patch.dict(sys.modules, {"hermes_state": fake_state}),
-        mock.patch.object(streaming.time, "sleep") as sleep,
+        mock.patch.object(agent_cache.time, "sleep") as sleep,
     ):
         state_db_path = Path("/tmp/profile") / "state.db"
-        db = streaming._build_session_db_for_stream(state_db_path)
+        db = agent_cache._build_session_db_for_stream(state_db_path)
 
     assert db is not None
     assert calls["db_path"] == state_db_path
@@ -37,7 +37,7 @@ def test_session_db_helper_uses_request_state_db_path():
 
 
 def test_session_db_helper_retries_transient_constructor_failure():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     state_db_path = Path("/tmp/profile/state.db")
     created = mock.Mock(name="session_db")
@@ -54,10 +54,10 @@ def test_session_db_helper_retries_transient_constructor_failure():
 
     with (
         mock.patch.dict(sys.modules, {"hermes_state": fake_state}),
-        mock.patch.object(streaming, "random", fake_random, create=True),
-        mock.patch.object(streaming.time, "sleep") as sleep,
+        mock.patch.object(agent_cache, "random", fake_random, create=True),
+        mock.patch.object(agent_cache.time, "sleep") as sleep,
     ):
-        db = streaming._build_session_db_for_stream(state_db_path)
+        db = agent_cache._build_session_db_for_stream(state_db_path)
 
     assert db is created
     assert fake_state.SessionDB.call_args_list == [
@@ -69,7 +69,7 @@ def test_session_db_helper_retries_transient_constructor_failure():
 
 
 def test_session_db_helper_returns_none_after_exhausted_retries():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     state_db_path = Path("/tmp/profile/state.db")
     fake_state = types.ModuleType("hermes_state")
@@ -81,10 +81,10 @@ def test_session_db_helper_returns_none_after_exhausted_retries():
 
     with (
         mock.patch.dict(sys.modules, {"hermes_state": fake_state}),
-        mock.patch.object(streaming, "random", fake_random, create=True),
-        mock.patch.object(streaming.time, "sleep") as sleep,
+        mock.patch.object(agent_cache, "random", fake_random, create=True),
+        mock.patch.object(agent_cache.time, "sleep") as sleep,
     ):
-        db = streaming._build_session_db_for_stream(state_db_path)
+        db = agent_cache._build_session_db_for_stream(state_db_path)
 
     assert db is None
     assert fake_state.SessionDB.call_args_list == [
@@ -96,7 +96,7 @@ def test_session_db_helper_returns_none_after_exhausted_retries():
 
 
 def test_session_db_helper_does_not_retry_permanent_constructor_failure():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     state_db_path = Path("/tmp/profile/state.db")
     permanent_error = TypeError("unsupported SessionDB argument")
@@ -105,10 +105,10 @@ def test_session_db_helper_does_not_retry_permanent_constructor_failure():
 
     with (
         mock.patch.dict(sys.modules, {"hermes_state": fake_state}),
-        mock.patch.object(streaming, "random", mock.Mock(), create=True) as random,
-        mock.patch.object(streaming.time, "sleep") as sleep,
+        mock.patch.object(agent_cache, "random", mock.Mock(), create=True) as random,
+        mock.patch.object(agent_cache.time, "sleep") as sleep,
     ):
-        db = streaming._build_session_db_for_stream(state_db_path)
+        db = agent_cache._build_session_db_for_stream(state_db_path)
 
     assert db is None
     fake_state.SessionDB.assert_called_once_with(db_path=state_db_path)
@@ -117,7 +117,7 @@ def test_session_db_helper_does_not_retry_permanent_constructor_failure():
 
 
 def test_session_db_helper_does_not_retry_noncontention_operational_error():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     state_db_path = Path("/tmp/profile/state.db")
     permanent_error = sqlite3.OperationalError("locking protocol")
@@ -126,10 +126,10 @@ def test_session_db_helper_does_not_retry_noncontention_operational_error():
 
     with (
         mock.patch.dict(sys.modules, {"hermes_state": fake_state}),
-        mock.patch.object(streaming, "random", mock.Mock(), create=True) as random,
-        mock.patch.object(streaming.time, "sleep") as sleep,
+        mock.patch.object(agent_cache, "random", mock.Mock(), create=True) as random,
+        mock.patch.object(agent_cache.time, "sleep") as sleep,
     ):
-        db = streaming._build_session_db_for_stream(state_db_path)
+        db = agent_cache._build_session_db_for_stream(state_db_path)
 
     assert db is None
     fake_state.SessionDB.assert_called_once_with(db_path=state_db_path)
@@ -138,7 +138,7 @@ def test_session_db_helper_does_not_retry_noncontention_operational_error():
 
 
 def test_self_heal_session_db_handle_is_replaced_safely():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     class FakeDb:
         def __init__(self, label):
@@ -150,10 +150,10 @@ def test_self_heal_session_db_handle_is_replaced_safely():
     old_db = FakeDb("old")
     new_db = FakeDb("new")
     with mock.patch.object(
-        streaming, "_build_session_db_for_stream", return_value=new_db
+        agent_cache, "_build_session_db_for_stream", return_value=new_db
     ) as build_db:
         kwargs = {"session_db": old_db}
-        assigned_db = streaming._replace_session_db_in_kwargs(kwargs, Path("/tmp/profile/state.db"))
+        assigned_db = agent_cache._replace_session_db_in_kwargs(kwargs, Path("/tmp/profile/state.db"))
 
     assert assigned_db is new_db
     assert kwargs["session_db"] is new_db
@@ -163,13 +163,13 @@ def test_self_heal_session_db_handle_is_replaced_safely():
 
 
 def test_session_db_handle_not_double_closed_when_rebuilt_to_same_instance():
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     db = mock.Mock(name="session_db")
 
-    with mock.patch.object(streaming, "_build_session_db_for_stream", return_value=db):
+    with mock.patch.object(agent_cache, "_build_session_db_for_stream", return_value=db):
         kwargs = {"session_db": db}
-        returned_db = streaming._replace_session_db_in_kwargs(kwargs, Path("/tmp/profile/state.db"))
+        returned_db = agent_cache._replace_session_db_in_kwargs(kwargs, Path("/tmp/profile/state.db"))
 
     assert returned_db is db
     assert kwargs["session_db"] is db

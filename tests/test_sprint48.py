@@ -27,7 +27,7 @@ class TestXmlToolCallStrip:
 
     def _load_fn(self):
         """Use the public streaming facade, independent of implementation file."""
-        from api.streaming import _strip_xml_tool_calls
+        from api.runs.thinking_content import _strip_xml_tool_calls
 
         return _strip_xml_tool_calls
 

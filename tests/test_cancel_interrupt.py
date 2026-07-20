@@ -7,7 +7,7 @@ import threading
 from contextlib import contextmanager
 from unittest.mock import Mock
 
-from api.streaming import cancel_stream
+from api.streaming.live_controls import cancel_stream
 from api.config import AGENT_INSTANCES, STREAMS, CANCEL_FLAGS, ACTIVE_RUNS, SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
 
 
@@ -137,7 +137,7 @@ class TestCancelInterrupt:
             SESSION_AGENT_CACHE[session_id] = (mock_agent, "sig")
 
         with patch(
-            "api.streaming.edit_session",
+            "api.streaming.live_controls.edit_session",
             _edit_mock_session(mock_session),
         ):
             result = cancel_stream(stream_id)
@@ -233,7 +233,7 @@ class TestCancelInterrupt:
         mock_session.save = Mock()
 
         with patch(
-            "api.streaming.edit_session",
+            "api.streaming.live_controls.edit_session",
             _edit_mock_session(mock_session),
         ):
             result = cancel_stream(stream_id)
@@ -298,8 +298,8 @@ class TestCancelInterrupt:
         mock_session.messages = []
         mock_session.save = Mock()
 
-        with patch("api.streaming.edit_session", _edit_mock_session(mock_session)), \
-                patch("api.streaming._cached_agent_matches_session", return_value=True):
+        with patch("api.streaming.live_controls.edit_session", _edit_mock_session(mock_session)), \
+                patch("api.streaming.live_controls._cached_agent_matches_session", return_value=True):
             result = cancel_stream(stream_id)
 
         assert result is True

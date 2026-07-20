@@ -244,7 +244,7 @@ def test_cancel_marker_flagged_as_error_to_skip_in_api_history():
 def test_sanitize_strips_error_flagged_assistant_messages():
     """_sanitize_messages_for_api() must drop messages with _error: True —
     this is the invariant the cancel marker's _error flag relies on."""
-    from api.streaming import _sanitize_messages_for_api
+    from api.runs.message_sanitization import _sanitize_messages_for_api
     messages = [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},

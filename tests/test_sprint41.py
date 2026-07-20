@@ -12,17 +12,20 @@ import pathlib
 import re
 import unittest
 
-from api.streaming import _generate_llm_session_title_for_agent, _sanitize_generated_title
+from api.runs.thinking_content import _sanitize_generated_title
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 CSS = family_source("style")
 HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
+STREAMING_PY = (
+    REPO_ROOT / "api" / "runs" / "title_generation.py"
+).read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
     REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 TITLE_GENERATION_PY = (
-    REPO_ROOT / "api" / "streaming" / "title_generation.py"
+    REPO_ROOT / "api" / "runs" / "title_generation.py"
 ).read_text(encoding="utf-8")
 
 
@@ -69,9 +72,10 @@ class TestIssue495TitleStreaming(unittest.TestCase):
     """Regression checks for issue #495 title SSE behavior."""
 
     def test_streaming_has_llm_title_helper(self):
-        self.assertTrue(
-            callable(_generate_llm_session_title_for_agent),
-            "the public streaming package should expose its agent-backed title helper",
+        self.assertIn(
+            "def _generate_llm_session_title_for_agent(",
+            STREAMING_PY,
+            "the run title owner should define its agent-backed title helper",
         )
 
     def test_streaming_rejects_generic_completion_titles(self):
@@ -152,7 +156,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_title_snippet_uses_visible_assistant_reply_after_tools(self):
         """Tool-heavy opening turns should use the final visible assistant reply."""
-        from api.streaming import _first_exchange_snippets
+        from api.runs.title_generation import _first_exchange_snippets
 
         user_msg = {
             "role": "user",
@@ -190,7 +194,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_title_snippet_keeps_short_substantive_assistant_reply(self):
         """Short but real assistant answers should still be eligible for titles."""
-        from api.streaming import _first_exchange_snippets
+        from api.runs.title_generation import _first_exchange_snippets
 
         messages = [
             {"role": "user", "content": "Can you help me rename this session?"},
@@ -204,7 +208,8 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_provisional_title_detection_ignores_whitespace_noise(self):
         """Temporary first-message titles should still match with whitespace normalization."""
-        from api.streaming import _is_provisional_title, title_from
+        from api.runs.title_generation import _is_provisional_title
+        from api.sessions.projects import title_from
 
         messages = [
             {
@@ -226,7 +231,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         """An assistant row with tool_calls AND a substantive answer text
         must still be used as the first-exchange snippet — it's not a
         preamble, it's an agentic first-turn plan."""
-        from api.streaming import _first_exchange_snippets
+        from api.runs.title_generation import _first_exchange_snippets
 
         user_msg = {
             "role": "user",
@@ -258,7 +263,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
 
     def test_fallback_title_preserves_unicode_letters(self):
         """Local fallback title generation must not strip German umlauts."""
-        from api.streaming import _fallback_title_from_exchange
+        from api.runs.title_generation import _fallback_title_from_exchange
 
         title = _fallback_title_from_exchange(
             "Bitte führe ein Selbst-Audit durch. Wo ist überall noch Gemini-2.5-flash als Modell im Einsatz? Sei gründlich",
@@ -273,7 +278,7 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         """Tool-call rows whose content is empty or meta-reasoning preamble
         ('Let me check my memory first.') must still be skipped — those are
         orchestration scaffolding, not title material."""
-        from api.streaming import _first_exchange_snippets
+        from api.runs.title_generation import _first_exchange_snippets
 
         user_msg = {
             "role": "user",

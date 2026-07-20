@@ -742,29 +742,27 @@ class TestENVLock:
         narrow-lock pattern in profile_env_for_background_worker() rather
         than relying on reentrance.
         """
-        from api.streaming import _ENV_LOCK
+        from api.config import environment_mutation_lock
 
-        assert hasattr(_ENV_LOCK, "acquire"), "_ENV_LOCK must expose acquire()"
-        assert hasattr(_ENV_LOCK, "release"), "_ENV_LOCK must expose release()"
-        assert hasattr(_ENV_LOCK, "__enter__"), "_ENV_LOCK must support context manager use"
-        assert hasattr(_ENV_LOCK, "__exit__"), "_ENV_LOCK must support context manager use"
+        assert hasattr(environment_mutation_lock, "acquire")
+        assert hasattr(environment_mutation_lock, "release")
+        assert hasattr(environment_mutation_lock, "__enter__")
+        assert hasattr(environment_mutation_lock, "__exit__")
 
         # Verify non-reentrance: a same-thread second acquire(blocking=False)
         # while the lock is held must fail. This invariant matters because
         # it catches a class of deadlock bugs early.
-        with _ENV_LOCK:
-            acquired_again = _ENV_LOCK.acquire(False)
+        with environment_mutation_lock:
+            acquired_again = environment_mutation_lock.acquire(False)
             assert not acquired_again, (
                 "_ENV_LOCK must be non-reentrant (threading.Lock, not RLock). "
                 "See QA test_env_lock_is_non_reentrant for the architectural reason."
             )
 
     def test_env_lock_importable_in_routes(self):
-        """api.routes must be able to import _ENV_LOCK from api.streaming."""
-        # If routes.py fails to import, this will raise ImportError
-        import importlib
+        """api.routes must import without relying on a streaming-owned env lock."""
         import api.routes  # noqa: F401 -- just checking import works
-        # No error means the circular import is OK
+        # No error means the ownership seam remains importable.
 
 
 # ── Fixture ────────────────────────────────────────────────────────────────

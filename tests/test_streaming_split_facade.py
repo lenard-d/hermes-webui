@@ -1,4 +1,4 @@
-"""Architecture and public-contract guards for the streaming package."""
+"""Ownership guards for run execution and live stream transport."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ import inspect
 from pathlib import Path
 
 from api import streaming
-from api.runs import local
-from api.streaming import payloads
+from api.runs import local, local_entrypoint, payloads
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,8 +23,8 @@ class _Session:
         return {"session_id": "session-1", "message_count": 99}
 
 
-def test_public_payload_contract_keeps_full_transcript():
-    result = streaming._session_payload_with_full_messages(
+def test_run_payload_contract_keeps_full_transcript():
+    result = payloads._session_payload_with_full_messages(
         _Session(),
         tool_calls=[{"id": "tool-1"}],
     )
@@ -40,7 +39,7 @@ def test_public_payload_contract_keeps_full_transcript():
 
 def test_cancel_payload_public_shape_is_unchanged():
     session = {"session_id": "session-1", "messages": []}
-    assert streaming._cancel_event_payload("Stopped", session=session) == {
+    assert payloads._cancel_event_payload("Stopped", session=session) == {
         "message": "Stopped",
         "type": "cancelled",
         "status": "cancelled",
@@ -50,12 +49,17 @@ def test_cancel_payload_public_shape_is_unchanged():
 
 
 def test_helpers_have_real_module_owners():
-    assert payloads._session_payload_with_full_messages.__module__ == "api.streaming.payloads"
-    assert streaming._session_payload_with_full_messages is payloads._session_payload_with_full_messages
+    assert payloads._session_payload_with_full_messages.__module__ == "api.runs.payloads"
     assert local.run_agent_streaming.__module__ == "api.runs.local"
 
 
-def test_streaming_package_modules_import_independently():
+def test_streaming_interface_stays_transport_focused():
+    assert streaming.__all__ == ("cancel_stream",)
+    assert not hasattr(streaming, "_session_payload_with_full_messages")
+    assert not hasattr(streaming, "_sanitize_messages_for_api")
+
+
+def test_streaming_transport_modules_import_independently():
     module_names = [
         f"api.streaming.{path.stem}"
         for path in STREAMING_ROOT.glob("*.py")
@@ -111,7 +115,7 @@ def test_local_run_composition_is_narrow_and_explicit():
     }
 
 
-def test_public_run_wrapper_delegates_to_local_owner(monkeypatch):
+def test_run_entrypoint_delegates_to_local_owner(monkeypatch):
     calls = []
 
     def fake_run(*args, **kwargs):
@@ -119,7 +123,7 @@ def test_public_run_wrapper_delegates_to_local_owner(monkeypatch):
         return "finished"
 
     monkeypatch.setattr(local, "run_agent_streaming", fake_run)
-    result = streaming._run_agent_streaming(
+    result = local_entrypoint.run_agent_streaming(
         "session-1",
         "hello",
         "model-1",

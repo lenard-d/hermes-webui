@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def test_prefill_json_file_keeps_valid_roles_and_drops_invalid_items(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     prefill = tmp_path / "prefill.json"
     prefill.write_text(
@@ -36,7 +36,7 @@ def test_prefill_json_file_keeps_valid_roles_and_drops_invalid_items(tmp_path):
 
 
 def test_prefill_script_config_is_not_used_without_webui_opt_in(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     script = tmp_path / "recall.py"
     script.write_text("raise SystemExit('should not run')\n", encoding="utf-8")
@@ -53,7 +53,7 @@ def test_prefill_script_config_is_not_used_without_webui_opt_in(tmp_path):
 
 
 def test_webui_prefill_script_loads_json_messages(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     script = tmp_path / "recall.py"
     script.write_text(
@@ -72,7 +72,7 @@ def test_webui_prefill_script_loads_json_messages(tmp_path):
 
 
 def test_webui_prefill_script_wraps_plain_text_as_user_context(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     script = tmp_path / "obsidian_recall.py"
     script.write_text("print('Obsidian project note context')\n", encoding="utf-8")
@@ -85,7 +85,7 @@ def test_webui_prefill_script_wraps_plain_text_as_user_context(tmp_path):
 
 
 def test_webui_prefill_script_errors_are_redacted(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     script = tmp_path / "bad_recall.py"
     script.write_text("import sys; print('token=redaction-test-placeholder', file=sys.stderr); raise SystemExit(2)\n", encoding="utf-8")
@@ -99,7 +99,7 @@ def test_webui_prefill_script_errors_are_redacted(tmp_path):
 
 
 def test_webui_prefill_script_takes_precedence_over_static_file(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     prefill = tmp_path / "prefill.json"
     prefill.write_text(json.dumps([{"role": "system", "content": "static"}]), encoding="utf-8")
@@ -116,7 +116,7 @@ def test_webui_prefill_script_takes_precedence_over_static_file(tmp_path):
 
 
 def test_webui_prefill_script_error_falls_back_to_static_router_file(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     prefill = tmp_path / "prefill.json"
     prefill.write_text(json.dumps([{"role": "system", "content": "Joplin router fallback"}]), encoding="utf-8")
@@ -135,7 +135,7 @@ def test_webui_prefill_script_error_falls_back_to_static_router_file(tmp_path):
 
 
 def test_webui_prefill_script_timeout_returns_redacted_error(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     script = tmp_path / "slow_recall.py"
     script.write_text("import time\ntime.sleep(1)\nprint('too late')\n", encoding="utf-8")
@@ -153,7 +153,7 @@ def test_webui_prefill_script_timeout_returns_redacted_error(tmp_path):
 
 
 def test_webui_prefill_script_rejects_oversized_stdout(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     script = tmp_path / "large_recall.py"
     script.write_text("print('x' * 262145)\n", encoding="utf-8")
@@ -168,7 +168,7 @@ def test_webui_prefill_script_rejects_oversized_stdout(tmp_path):
 
 
 def test_webui_prefill_script_over_budget_uses_static_file_fallback(tmp_path):
-    from api.streaming import _load_webui_prefill_context, _public_prefill_context_status
+    from api.runs.webui_prefill import _load_webui_prefill_context, _public_prefill_context_status
 
     prefill = tmp_path / "router.json"
     prefill.write_text(json.dumps([{"role": "user", "content": "Compact router context"}]), encoding="utf-8")
@@ -196,7 +196,7 @@ def test_webui_prefill_script_over_budget_uses_static_file_fallback(tmp_path):
 
 
 def test_webui_prefill_file_over_budget_compacts_without_leaking_body(tmp_path):
-    from api.streaming import _load_webui_prefill_context, _public_prefill_context_status
+    from api.runs.webui_prefill import _load_webui_prefill_context, _public_prefill_context_status
 
     prefill = tmp_path / "huge.json"
     prefill.write_text(json.dumps([{"role": "user", "content": "secret project note " * 20}]), encoding="utf-8")
@@ -224,7 +224,7 @@ def test_webui_prefill_file_over_budget_compacts_without_leaking_body(tmp_path):
 
 
 def test_webui_prefill_context_budget_can_be_disabled(tmp_path):
-    from api.streaming import _load_webui_prefill_context
+    from api.runs.webui_prefill import _load_webui_prefill_context
 
     prefill = tmp_path / "huge.json"
     prefill.write_text(json.dumps([{"role": "user", "content": "x" * 80}]), encoding="utf-8")
@@ -242,7 +242,7 @@ def test_webui_prefill_context_budget_can_be_disabled(tmp_path):
 
 
 def test_public_prefill_status_strips_message_bodies():
-    from api.streaming import _public_prefill_context_status
+    from api.runs.webui_prefill import _public_prefill_context_status
 
     public = _public_prefill_context_status(
         {
@@ -271,10 +271,8 @@ def test_webui_session_context_adds_gateway_like_metadata(monkeypatch, tmp_path)
     # _webui_ephemeral_system_prompt instead. The invariants preserved here:
     # paused platforms excluded, connected platforms shown, home-channel name
     # shown, and the chat_id never leaks.
-    from api.streaming import (
-        _prefill_messages_with_webui_context,
-        _webui_ephemeral_system_prompt,
-    )
+    from api.runs.webui_prefill import _prefill_messages_with_webui_context
+    from api.runs.prompts import _webui_ephemeral_system_prompt
 
     gateway_state = tmp_path / "gateway_state.json"
     gateway_state.write_text(
@@ -334,7 +332,7 @@ def test_webui_session_context_adds_gateway_like_metadata(monkeypatch, tmp_path)
 
 
 def test_prefill_status_redactor_handles_secret_shaped_text():
-    from api.streaming import _redact_prefill_status_text
+    from api.runs.webui_prefill import _redact_prefill_status_text
 
     redacted = _redact_prefill_status_text("api_key=redaction-test-placeholder leaked")
 

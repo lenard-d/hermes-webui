@@ -60,7 +60,7 @@ def test_cached_agent_reuse_uses_adopt_helper():
 
 
 def test_adopt_and_is_open_helpers_exist():
-    src = (REPO / "api" / "streaming" / "agent_cache.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "runs" / "agent_cache.py").read_text(encoding="utf-8")
     assert "def _session_db_is_open(" in src
     assert "def _adopt_session_db_for_cached_agent(" in src
     # self-heal path must also refuse to close a still-open handle
@@ -94,7 +94,7 @@ def test_lru_eviction_closes_evicted_agent_session_db():
     subagents are expected to still be writing into that agent.)
     """
     run_src = (REPO / "api" / "runs" / "local_agent_cache.py").read_text(encoding="utf-8")
-    src = (REPO / "api" / "streaming" / "agent_cache.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "runs" / "agent_cache.py").read_text(encoding="utf-8")
 
     eviction_idx = run_src.find("for evicted_session_id, entry in evicted:")
     assert eviction_idx != -1, "LRU eviction close loop missing"
@@ -177,12 +177,9 @@ def _import_adopt_helpers():
     Source-level pins above still catch reverts without importing streaming.
     """
     try:
-        from api.streaming import (  # type: ignore
-            _adopt_session_db_for_cached_agent,
-            _session_db_is_open,
-        )
+        from api.runs.agent_cache import _adopt_session_db_for_cached_agent, _session_db_is_open
     except Exception as exc:
-        pytest.skip(f"api.streaming helpers not importable: {exc}")
+        pytest.skip(f"api.runs.agent_cache helpers not importable: {exc}")
     return _session_db_is_open, _adopt_session_db_for_cached_agent
 
 
@@ -288,9 +285,9 @@ def test_lru_eviction_closes_evicted_session_db():
 def _import_replace_helper():
     """Import the real credential-self-heal SessionDB replacer."""
     try:
-        from api.streaming import _replace_session_db_in_kwargs  # type: ignore
+        from api.runs.agent_cache import _replace_session_db_in_kwargs  # type: ignore
     except Exception as exc:
-        pytest.skip(f"api.streaming not importable: {exc}")
+        pytest.skip(f"api.runs.agent_cache not importable: {exc}")
     return _replace_session_db_in_kwargs
 
 
@@ -304,10 +301,10 @@ def test_replace_degrades_to_none_when_rebuild_fails_and_old_is_closed(monkeypat
     makes every persist/search fail with
     ``'NoneType' object has no attribute 'execute'`` while the chat continues.
     """
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     _replace = _import_replace_helper()
-    monkeypatch.setattr(streaming, "_build_session_db_for_stream", lambda _p: None)
+    monkeypatch.setattr(agent_cache, "_build_session_db_for_stream", lambda _p: None)
 
     old_db = _MockSessionDB("old", open_=False)  # already closed
     kwargs = {"session_db": old_db}
@@ -320,10 +317,10 @@ def test_replace_degrades_to_none_when_rebuild_fails_and_old_is_closed(monkeypat
 def test_replace_keeps_open_handle_when_rebuild_fails(monkeypatch):
     """Inverse: a still-OPEN prior handle (held by live subagents) is retained
     when the rebuild fails — do not orphan a live shared connection."""
-    import api.streaming as streaming
+    from api.runs import agent_cache
 
     _replace = _import_replace_helper()
-    monkeypatch.setattr(streaming, "_build_session_db_for_stream", lambda _p: None)
+    monkeypatch.setattr(agent_cache, "_build_session_db_for_stream", lambda _p: None)
 
     old_db = _MockSessionDB("old", open_=True)  # still live (subagents hold it)
     kwargs = {"session_db": old_db}

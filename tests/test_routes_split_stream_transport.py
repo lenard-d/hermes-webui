@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from api import routes
+from api.http.routes import workspace_queries
 from api.routes_parts import stream_transport
 
 
@@ -35,11 +36,12 @@ def test_stream_transport_owner_imports_without_routes():
 def test_stream_transport_owner_is_file_backed_and_facade_dispatches_to_it():
     owner_source = Path(stream_transport.__file__).read_text(encoding="utf-8")
     facade_source = Path(routes.__file__).read_text(encoding="utf-8")
+    route_owner_source = Path(workspace_queries.__file__).read_text(encoding="utf-8")
 
     assert "def _replay_run_journal(" in owner_source
     assert "def _handle_sse_stream(" in owner_source
     assert "def _handle_gateway_sse_stream(" in owner_source
     assert "def _handle_session_events_stream(" in owner_source
     assert "def _handle_sse_stream(" not in facade_source
-    assert "_handle_sse_stream(handler, parsed)" in facade_source
+    assert "_handle_sse_stream(handler, parsed)" in route_owner_source
     assert "exec(" not in owner_source

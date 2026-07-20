@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from api.runs.local_agent_config import build_local_agent_configuration
-from api.streaming import _classify_provider_error
+from api.runs.provider_errors import _classify_provider_error
 
 LOCAL_AGENT_CACHE = (
     Path(__file__).resolve().parents[1] / "api" / "runs" / "local_agent_cache.py"

@@ -16,13 +16,10 @@ from, and carries it forward across turns. These tests prove:
 4. the aligner resolves an otherwise-ambiguous boundary via id alone.
 """
 
-from api.streaming import (
-    _assign_stable_message_ids,
-    _restore_reasoning_metadata,
-    _deduplicate_context_messages,
-    _dedupe_replayed_context_messages,
-    _merge_display_messages_after_agent_result,
-)
+from api.runs.message_sanitization import _assign_stable_message_ids, _deduplicate_context_messages
+from api.runs.post_compression_context import _restore_reasoning_metadata
+from api.runs.context_replay import _dedupe_replayed_context_messages
+from api.runs.transcript import _merge_display_messages_after_agent_result
 from api.sessions.operations import truncate_context_for_display_keep
 
 

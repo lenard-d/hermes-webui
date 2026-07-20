@@ -6,11 +6,8 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from api.streaming import (
-    _restore_reasoning_metadata,
-    _sanitize_messages_for_api,
-    _strip_oob_blocks,
-)
+from api.runs.post_compression_context import _restore_reasoning_metadata
+from api.runs.message_sanitization import _sanitize_messages_for_api, _strip_oob_blocks
 
 
 OOB_BLOCK = (

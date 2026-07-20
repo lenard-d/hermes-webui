@@ -16,11 +16,8 @@ Three shapes must be covered:
 """
 from __future__ import annotations
 
-from api.streaming import (
-    _sanitize_messages_for_api,
-    _api_safe_message_positions,
-    _materialize_pending_user_turn_before_error,
-)
+from api.runs.message_sanitization import _sanitize_messages_for_api, _api_safe_message_positions
+from api.runs.transcript import _materialize_pending_user_turn_before_error
 
 
 # ── Shape 1: pure cancel — recovered user stripped ─────────────────────────
@@ -363,7 +360,7 @@ def test_no_recovered_marker_in_output():
         assert "_recovered" not in msg, f"_recovered leaked into sanitized output: {msg}"
 
     # Also verify the positions path strips the marker (#4393 review note).
-    from api.streaming import _api_safe_message_positions
+    from api.runs.message_sanitization import _api_safe_message_positions
     pos_result = _api_safe_message_positions(messages)
     for idx, msg in pos_result:
         assert "_recovered" not in msg, f"_recovered leaked into positions output: {msg}"

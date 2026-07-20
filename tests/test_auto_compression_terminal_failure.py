@@ -12,10 +12,7 @@ from pathlib import Path
 from api import config, streaming
 from api.sessions import records
 from api.sessions.records import Session
-from api.streaming import (
-    _agent_result_terminal_failure,
-    _session_lacks_final_assistant_answer,
-)
+from api.runs.transcript import _agent_result_terminal_failure, _session_lacks_final_assistant_answer
 
 ROOT = Path(__file__).resolve().parents[1]
 

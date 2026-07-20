@@ -6,7 +6,7 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
-from api.streaming import _extract_tool_calls_from_messages, _tool_result_snippet
+from api.runs.tool_events import _extract_tool_calls_from_messages, _tool_result_snippet
 
 
 def test_extract_tool_calls_from_openai_message_linkage():

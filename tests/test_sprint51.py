@@ -17,7 +17,7 @@ import threading
 from contextlib import contextmanager
 from unittest.mock import Mock, patch, MagicMock
 
-from api.streaming import cancel_stream
+from api.streaming.live_controls import cancel_stream
 from api.config import AGENT_INSTANCES, STREAMS, STREAMS_LOCK, CANCEL_FLAGS
 
 
@@ -108,7 +108,7 @@ class TestCancelStreamEagerRelease:
         AGENT_INSTANCES[stream_id] = mock_agent
 
         with patch(
-            'api.streaming.edit_session',
+            'api.streaming.live_controls.edit_session',
             _edit_mock_session(mock_session),
         ):
             cancel_stream(stream_id)
@@ -190,7 +190,7 @@ class TestCancelStreamEagerRelease:
         CANCEL_FLAGS[stream_id] = threading.Event()
         AGENT_INSTANCES[stream_id] = mock_agent
 
-        with patch('api.streaming.edit_session', side_effect=KeyError("Session not found")):
+        with patch('api.streaming.live_controls.edit_session', side_effect=KeyError("Session not found")):
             # Should not raise
             result = cancel_stream(stream_id)
 

@@ -23,10 +23,9 @@ import pytest
 
 import api.config as config
 import api.sessions.store as models
-import api.streaming as streaming
 from api.sessions.store import Session
 from api.run_journal import append_run_event
-from api.streaming import cancel_stream
+from api.streaming.live_controls import cancel_stream
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 
@@ -369,7 +368,7 @@ def test_stream_error_materializes_pending_user_turn_before_clearing_runtime_sta
     durable user message before the error marker is saved. Otherwise reload/server
     reconcile makes the user's just-submitted prompt disappear.
     """
-    from api.streaming import _materialize_pending_user_turn_before_error
+    from api.runs.transcript import _materialize_pending_user_turn_before_error
 
     sid = "test_pending_error_d1"
     s = _make_session(
@@ -394,7 +393,7 @@ def test_stream_error_pending_materialization_does_not_duplicate_eager_checkpoin
     """Eager session-save mode may already have checkpointed the current user turn;
     the error materializer must not append the same user message again.
     """
-    from api.streaming import _materialize_pending_user_turn_before_error
+    from api.runs.transcript import _materialize_pending_user_turn_before_error
 
     sid = "test_pending_error_d2"
     s = _make_session(
@@ -520,7 +519,7 @@ def test_materialize_helper_called_immediately_before_error_path_clears():
         'api', 'runs', 'local.py'
     ).read_text(encoding='utf-8')
     live_controls_src = Path(__file__).parent.parent.joinpath(
-        'api', 'streaming_parts', 'live_controls.py'
+        'api', 'streaming', 'live_controls.py'
     ).read_text(encoding='utf-8')
     lines = local_run_src.splitlines()
 
@@ -553,16 +552,16 @@ def test_materialize_helper_called_immediately_before_error_path_clears():
 
 def test_cancel_copy_uses_configured_bot_name(monkeypatch):
     """Cancellation copy should use the configured assistant display name."""
-    import api.streaming as streaming
+    from api.runs import provider_errors, terminal_copy, terminal_outcomes
 
-    monkeypatch.setattr(streaming, 'load_settings', lambda: {'bot_name': 'Obryn'})
+    monkeypatch.setattr(terminal_copy, 'load_settings', lambda: {'bot_name': 'Obryn'})
 
-    assert streaming._cancelled_turn_hint() == (
+    assert terminal_copy._cancelled_turn_hint() == (
         'The run was cancelled by the user before Obryn finished. '
         'No provider failure occurred.'
     )
-    assert 'before Obryn finished' in streaming._cancelled_turn_content()
-    assert streaming._classify_provider_error('Task cancelled by user')['hint'] == (
+    assert 'before Obryn finished' in terminal_outcomes._cancelled_turn_content()
+    assert provider_errors._classify_provider_error('Task cancelled by user')['hint'] == (
         'The run was cancelled by the user before Obryn finished. '
         'No provider failure occurred.'
     )
@@ -570,23 +569,23 @@ def test_cancel_copy_uses_configured_bot_name(monkeypatch):
 
 def test_cancel_copy_uses_profile_name_for_non_default_profile(monkeypatch):
     """Persisted cancellation copy should use profile names outside literal default."""
-    import api.streaming as streaming
+    from api.runs import terminal_copy, terminal_outcomes
 
-    monkeypatch.setattr(streaming, 'load_settings', lambda: {'bot_name': 'Obryn'})
+    monkeypatch.setattr(terminal_copy, 'load_settings', lambda: {'bot_name': 'Obryn'})
 
     session = type('Session', (), {'profile': 'research'})()
-    name = streaming._preferred_agent_display_name_for_session(session)
+    name = terminal_copy._preferred_agent_display_name_for_session(session)
     assert name == 'Research'
-    assert 'before Research finished' in streaming._cancelled_turn_content(agent_name=name)
+    assert 'before Research finished' in terminal_outcomes._cancelled_turn_content(agent_name=name)
 
 
 def test_cancel_copy_falls_back_to_hermes_for_blank_bot_name(monkeypatch):
     """Blank or missing bot_name should not leak old persona copy."""
-    import api.streaming as streaming
+    from api.runs import terminal_copy
 
-    monkeypatch.setattr(streaming, 'load_settings', lambda: {'bot_name': '   '})
+    monkeypatch.setattr(terminal_copy, 'load_settings', lambda: {'bot_name': '   '})
 
-    assert streaming._cancelled_turn_hint() == (
+    assert terminal_copy._cancelled_turn_hint() == (
         'The run was cancelled by the user before Hermes finished. '
         'No provider failure occurred.'
     )

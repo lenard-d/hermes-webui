@@ -159,7 +159,7 @@ def test_streaming_send_path_preserves_custom_namespace_models():
     'gemini_cli/...' starts with 'gemini' and was clobbered to the profile default on
     send (the #4278 collision on the send path, distinct from the session-load path).
     The loop is now gated to un-namespaced model ids."""
-    from api.streaming import _apply_profile_provider_context_to_streaming_model as apply_ctx
+    from api.runs.runtime_resolution import _apply_profile_provider_context_to_streaming_model as apply_ctx
 
     # Custom-namespace models must survive the send path untouched.
     for model in (

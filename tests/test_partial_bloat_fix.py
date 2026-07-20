@@ -16,9 +16,7 @@ markup was stripped, leaving content='') accumulated exponentially because:
    messages in previous_display, so identical empty partials survived across
    turn merges.
 """
-import pytest
-
-import api.streaming as streaming
+from api.runs import context_replay, message_sanitization, transcript
 
 
 # ── Fix 2: _message_identity for empty _partial messages ─────────────────
@@ -34,7 +32,7 @@ class TestMessageIdentityForEmptyPartial:
             '_partial': True,
             'reasoning': 'Step 1: analyze the problem',
         }
-        identity = streaming._message_identity(msg)
+        identity = context_replay._message_identity(msg)
         assert identity is not None, (
             "Empty _partial message must have a stable identity for merge dedup"
         )
@@ -57,7 +55,7 @@ class TestMessageIdentityForEmptyPartial:
             '_partial': True,
             'reasoning': 'Step 1: consider alternatives',
         }
-        assert streaming._message_identity(msg_a) != streaming._message_identity(msg_b), (
+        assert context_replay._message_identity(msg_a) != context_replay._message_identity(msg_b), (
             "Different reasoning text must produce different identities"
         )
 
@@ -75,7 +73,7 @@ class TestMessageIdentityForEmptyPartial:
             '_partial': True,
             'reasoning': 'Step 1: analyze the problem',
         }
-        assert streaming._message_identity(msg_a) == streaming._message_identity(msg_b), (
+        assert context_replay._message_identity(msg_a) == context_replay._message_identity(msg_b), (
             "Same reasoning text must produce identical identities for dedup"
         )
 
@@ -86,7 +84,7 @@ class TestMessageIdentityForEmptyPartial:
             'content': '',
             '_partial': True,
         }
-        identity = streaming._message_identity(msg)
+        identity = context_replay._message_identity(msg)
         assert identity is not None, (
             "Empty _partial with no reasoning must still have a stable identity"
         )
@@ -97,7 +95,7 @@ class TestMessageIdentityForEmptyPartial:
             'role': 'assistant',
             'content': '',
         }
-        assert streaming._message_identity(msg) is None, (
+        assert context_replay._message_identity(msg) is None, (
             "Non-_partial empty messages should still return None identity"
         )
 
@@ -108,7 +106,7 @@ class TestMessageIdentityForEmptyPartial:
             'content': 'Python is a high-level',
             '_partial': True,
         }
-        identity = streaming._message_identity(msg)
+        identity = context_replay._message_identity(msg)
         assert identity is not None
         assert '__partial__' not in identity[3], (
             "Non-empty _partial should use normal identity, not __partial__ path"
@@ -127,8 +125,7 @@ class TestSanitizeSkipsEmptyPartial:
             {'role': 'assistant', 'content': '', '_partial': True, 'reasoning': 'thinking...'},
             {'role': 'user', 'content': 'Continue'},
         ]
-        clean = streaming._sanitize_messages_for_api(messages)
-        contents = [m.get('content', '') for m in clean]
+        clean = message_sanitization._sanitize_messages_for_api(messages)
         # The empty _partial must be gone
         assert not any(m.get('_partial') and not str(m.get('content', '')).strip()
                        for m in clean), (
@@ -142,7 +139,7 @@ class TestSanitizeSkipsEmptyPartial:
             {'role': 'user', 'content': 'Tell me about Python'},
             {'role': 'assistant', 'content': 'Python is a high-level', '_partial': True},
         ]
-        clean = streaming._sanitize_messages_for_api(messages)
+        clean = message_sanitization._sanitize_messages_for_api(messages)
         contents = [m.get('content', '') for m in clean]
         assert any('Python is a high-level' in c for c in contents), (
             "Non-empty _partial must be kept in API context (#893)"
@@ -154,7 +151,7 @@ class TestSanitizeSkipsEmptyPartial:
             {'role': 'user', 'content': 'Hello'},
             {'role': 'assistant', 'content': '   \n  ', '_partial': True},
         ]
-        clean = streaming._sanitize_messages_for_api(messages)
+        clean = message_sanitization._sanitize_messages_for_api(messages)
         assert not any(m.get('_partial') for m in clean), (
             "Whitespace-only _partial must be excluded from sanitized messages"
         )
@@ -171,7 +168,7 @@ class TestApiSafePositionsSkipsEmptyPartial:
             {'role': 'assistant', 'content': '', '_partial': True},
             {'role': 'user', 'content': 'Continue'},
         ]
-        positions = streaming._api_safe_message_positions(messages)
+        positions = message_sanitization._api_safe_message_positions(messages)
         # The empty _partial at index 1 must not be in positions
         indices = [idx for idx, _ in positions]
         assert 1 not in indices, (
@@ -185,7 +182,7 @@ class TestApiSafePositionsSkipsEmptyPartial:
             {'role': 'assistant', 'content': 'Partial text here', '_partial': True},
             {'role': 'user', 'content': 'Continue'},
         ]
-        positions = streaming._api_safe_message_positions(messages)
+        positions = message_sanitization._api_safe_message_positions(messages)
         indices = [idx for idx, _ in positions]
         assert 1 in indices, (
             "Non-empty _partial must be in API-safe positions"
@@ -215,7 +212,7 @@ class TestMergeDisplayDedupPartials:
             {'role': 'user', 'content': 'Hello'},
         ]
 
-        merged = streaming._merge_display_messages_after_agent_result(
+        merged = transcript._merge_display_messages_after_agent_result(
             previous_display, previous_context, result_messages, 'Hello'
         )
         # Count how many empty _partial messages survived
@@ -241,7 +238,7 @@ class TestMergeDisplayDedupPartials:
             {'role': 'user', 'content': 'Hello'},
         ]
 
-        merged = streaming._merge_display_messages_after_agent_result(
+        merged = transcript._merge_display_messages_after_agent_result(
             previous_display, previous_context, result_messages, 'Hello'
         )
         empty_partials = [m for m in merged
@@ -267,7 +264,7 @@ class TestMergeDisplayDedupPartials:
             {'role': 'user', 'content': 'Hello'},
         ]
 
-        merged = streaming._merge_display_messages_after_agent_result(
+        merged = transcript._merge_display_messages_after_agent_result(
             previous_display, previous_context, result_messages, 'Hello'
         )
         nonempty_partials = [m for m in merged
@@ -295,7 +292,7 @@ class TestMergeDisplayDedupPartials:
             {'role': 'user', 'content': 'Hello'},
         ]
 
-        merged = streaming._merge_display_messages_after_agent_result(
+        merged = transcript._merge_display_messages_after_agent_result(
             previous_display, previous_context, result_messages, 'Hello'
         )
         empty_partials = [m for m in merged

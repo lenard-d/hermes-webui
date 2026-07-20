@@ -7,7 +7,7 @@ seeing the same message twice in conversation_history.
 
 
 def test_deduplicate_context_messages_removes_duplicates():
-    from api.streaming import _deduplicate_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     messages = [
         {"role": "user", "content": "hello"},
@@ -23,7 +23,7 @@ def test_deduplicate_context_messages_removes_duplicates():
 
 
 def test_deduplicate_context_messages_preserves_different_content():
-    from api.streaming import _deduplicate_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     messages = [
         {"role": "user", "content": "first question"},
@@ -38,7 +38,7 @@ def test_deduplicate_context_messages_preserves_different_content():
 
 def test_deduplicate_context_messages_preserves_identical_answers_in_different_turns():
     """Identical assistant answers in separate user turns should be preserved."""
-    from api.streaming import _deduplicate_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     messages = [
         {"role": "user", "content": "what is 2+2?"},
@@ -57,14 +57,14 @@ def test_deduplicate_context_messages_preserves_identical_answers_in_different_t
 
 
 def test_deduplicate_context_messages_empty_input():
-    from api.streaming import _deduplicate_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     assert _deduplicate_context_messages([]) == []
     assert _deduplicate_context_messages(None) is None
 
 
 def test_deduplicate_context_messages_with_tool_calls():
-    from api.streaming import _deduplicate_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     messages = [
         {"role": "assistant", "content": "", "tool_calls": [{"id": "abc", "function": {"name": "echo"}, "type": "function"}]},
@@ -78,7 +78,7 @@ def test_deduplicate_context_messages_with_tool_calls():
 
 def test_deduplicate_context_messages_different_timestamps_same_content():
     """Messages with same content but different timestamps should be deduped."""
-    from api.streaming import _deduplicate_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     messages = [
         {"role": "user", "content": "hello", "timestamp": 1779348286},
@@ -93,7 +93,7 @@ def test_deduplicate_context_messages_different_timestamps_same_content():
 
 def test_message_identity_strips_workspace_prefix():
     """_message_identity should strip [Workspace::v1: ...] prefix from user messages."""
-    from api.streaming import _message_identity
+    from api.runs.context_replay import _message_identity
 
     msg1 = {"role": "user", "content": "hello"}
     msg2 = {"role": "user", "content": "[Workspace::v1: /workspace]\nhello"}
@@ -103,7 +103,7 @@ def test_message_identity_strips_workspace_prefix():
 
 def test_message_identity_different_roles_not_duplicates():
     """Messages with same content but different roles should not be considered duplicates."""
-    from api.streaming import _message_identity
+    from api.runs.context_replay import _message_identity
 
     user_msg = {"role": "user", "content": "hello"}
     assistant_msg = {"role": "assistant", "content": "hello"}
@@ -114,7 +114,7 @@ def test_message_identity_different_roles_not_duplicates():
 def test_merge_display_messages_dedup_via_prefix():
     """_merge_display_messages_after_agent_result dedups via prefix stripping,
     not by general seen check — identical content in different turns is preserved."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     # Agent returns full history (includes previous messages) — prefix-based
     # dedup should strip the replayed tail, not the general seen check.
@@ -148,7 +148,7 @@ def test_merge_display_messages_dedup_via_prefix():
 
 def test_merge_display_messages_preserves_current_user_turn():
     """The current user turn replacement logic should still work."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "hello"},
@@ -187,7 +187,7 @@ def test_merge_display_backfill_preserves_visible_head_ordering():
         current visible tail
         new current turn
     """
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "visible head user turn"},
@@ -234,7 +234,7 @@ def test_merge_display_backfills_context_only_turns_missing_from_display():
     A subsequent append-only merge skips over the shared context prefix, so
     without backfill those turns remain permanently invisible in the WebUI.
     """
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "visible head user turn"},
@@ -288,7 +288,7 @@ def test_merge_display_backfills_context_only_turns_missing_from_display():
 def test_merge_display_backfill_does_not_reintroduce_compression_markers():
     """Context compression markers in previous_context that were intentionally
     removed from previous_display must NOT be restored by the backfill logic."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "first question"},

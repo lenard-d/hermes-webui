@@ -435,11 +435,9 @@ def test_streaming_finalize_preserves_new_turns_after_edit(monkeypatch, tmp_path
     """
     import api.sessions.store as models
     from api.sessions.store import Session
-    from api.streaming import (
-        _restore_reasoning_metadata,
-        _dedupe_replayed_context_messages,
-        _deduplicate_context_messages,
-    )
+    from api.runs.post_compression_context import _restore_reasoning_metadata
+    from api.runs.context_replay import _dedupe_replayed_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -527,11 +525,9 @@ def test_streaming_finalize_does_not_leak_original_after_edit(monkeypatch, tmp_p
     """
     import api.sessions.store as models
     from api.sessions.store import Session
-    from api.streaming import (
-        _restore_reasoning_metadata,
-        _dedupe_replayed_context_messages,
-        _deduplicate_context_messages,
-    )
+    from api.runs.post_compression_context import _restore_reasoning_metadata
+    from api.runs.context_replay import _dedupe_replayed_context_messages
+    from api.runs.message_sanitization import _deduplicate_context_messages
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)

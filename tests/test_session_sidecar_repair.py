@@ -20,8 +20,7 @@ from api.sessions.store import (
 )
 import api.config as config
 import api.sessions.records as session_records
-import api.streaming.agent_cache as streaming_agent_cache
-import api.streaming as streaming
+from api.runs import agent_cache, message_sanitization, turn_context
 import api.profiles as profiles
 from api.run_journal import append_run_event
 
@@ -476,7 +475,7 @@ class TestCancelInProgressGuard:
         # Record message count before
         msg_count_before = len(s.messages)
 
-        streaming._last_resort_sync_from_core(s, "cancel_stream", agent_lock)
+        agent_cache._last_resort_sync_from_core(s, "cancel_stream", agent_lock)
 
         # Should NOT have appended any messages
         assert len(s.messages) == msg_count_before, (
@@ -499,7 +498,7 @@ class TestCancelInProgressGuard:
         agent_lock = config._get_session_agent_lock(s.session_id)
         _register_active_stream("normal_stream")
 
-        streaming._last_resort_sync_from_core(s, "normal_stream", agent_lock)
+        agent_cache._last_resort_sync_from_core(s, "normal_stream", agent_lock)
 
         # Should have performed repair (appended messages)
         assert len(s.messages) > 0, "Should have appended messages"
@@ -513,7 +512,7 @@ class TestCancelInProgressGuard:
         agent_lock = config._get_session_agent_lock(s.session_id)
         _register_active_stream("no_flag_stream")
 
-        streaming._last_resort_sync_from_core(s, "no_flag_stream", agent_lock)
+        agent_cache._last_resort_sync_from_core(s, "no_flag_stream", agent_lock)
 
         assert len(s.messages) > 0
 
@@ -675,7 +674,7 @@ class TestNonEmptyMessagesPendingCleared:
         agent_lock = config._get_session_agent_lock(s.session_id)
         _register_active_stream("stale_stream")
 
-        streaming._last_resort_sync_from_core(s, "stale_stream", agent_lock)
+        agent_cache._last_resort_sync_from_core(s, "stale_stream", agent_lock)
 
         # Existing messages preserved untouched, pending turn recovered, error marker appended
         assert len(s.messages) == 3, (
@@ -801,7 +800,7 @@ class TestNonEmptyMessagesPendingCleared:
         assert len(error_msgs) == 1
         assert error_msgs[0].get("_pending_journal_recovery") is not True
         assert "partial output above was recovered" in error_msgs[0]["content"]
-        provider_history = streaming._sanitize_messages_for_api(s.messages)
+        provider_history = message_sanitization._sanitize_messages_for_api(s.messages)
         assert "private scratchpad text" not in json.dumps(provider_history)
 
     def test_journal_recovery_keeps_consecutive_tools_on_one_anchor(self, hermes_home, monkeypatch):
@@ -918,7 +917,7 @@ class TestNonEmptyMessagesPendingCleared:
         s.pending_user_message = None
         s.pending_attachments = []
 
-        assert streaming._stream_writeback_can_supersede_recovery_marker(s, "deploy")
+        assert turn_context._stream_writeback_can_supersede_recovery_marker(s, "deploy")
 
     def test_finished_worker_does_not_supersede_after_newer_turn_appended(self):
         """Once a follow-up turn changes the visible tail, stale writeback stays
@@ -935,7 +934,7 @@ class TestNonEmptyMessagesPendingCleared:
         s.pending_user_message = None
         s.pending_attachments = []
 
-        assert not streaming._stream_writeback_can_supersede_recovery_marker(s, "deploy")
+        assert not turn_context._stream_writeback_can_supersede_recovery_marker(s, "deploy")
 
     def test_finished_worker_does_not_supersede_different_user_turn(self):
         """The supersede path is tied to the pending prompt that was repaired."""
@@ -949,7 +948,7 @@ class TestNonEmptyMessagesPendingCleared:
         s.pending_user_message = None
         s.pending_attachments = []
 
-        assert not streaming._stream_writeback_can_supersede_recovery_marker(s, "ship it")
+        assert not turn_context._stream_writeback_can_supersede_recovery_marker(s, "ship it")
 
     def test_core_sync_branch_does_not_duplicate_journal_output_already_in_core(
         self, hermes_home, monkeypatch
@@ -1029,15 +1028,15 @@ class TestLastResortSyncDelegation:
 
         # Patch _get_profile_home to verify it's called
         called = []
-        original_get_profile_home = streaming_agent_cache.get_profile_home
+        original_get_profile_home = agent_cache.get_profile_home
 
         def tracking_get_profile_home(profile):
             called.append(profile)
             return original_get_profile_home(profile)
 
-        with patch.object(streaming_agent_cache, "get_profile_home", tracking_get_profile_home):
+        with patch.object(agent_cache, "get_profile_home", tracking_get_profile_home):
             _register_active_stream("stream_1")
-            streaming_agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
+            agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
 
         assert len(called) == 1, "_get_profile_home should have been called once"
         assert called[0] == s.profile
@@ -1052,19 +1051,19 @@ class TestLastResortSyncDelegation:
 
         # Patch _apply_core_sync_or_error_marker to verify it's called
         called = []
-        original_fn = streaming_agent_cache.apply_core_sync_or_error_marker
+        original_fn = agent_cache.apply_core_sync_or_error_marker
 
         def tracking_fn(session, core_path, stream_id_for_recheck=None, **kwargs):
             called.append((session.session_id, stream_id_for_recheck, kwargs))
             return original_fn(session, core_path, stream_id_for_recheck, **kwargs)
 
         with patch.object(
-            streaming_agent_cache,
+            agent_cache,
             "apply_core_sync_or_error_marker",
             tracking_fn,
         ):
             _register_active_stream("stream_1")
-            streaming_agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
+            agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
 
         assert len(called) == 1, "_apply_core_sync_or_error_marker should have been called"
         assert called[0][0] == s.session_id
@@ -1087,7 +1086,7 @@ class TestLastResortSyncDelegation:
         agent_lock = config._get_session_agent_lock(s.session_id)
         _register_active_stream("stream_1")
 
-        streaming._last_resort_sync_from_core(s, "stream_1", agent_lock)
+        agent_cache._last_resort_sync_from_core(s, "stream_1", agent_lock)
 
         assert len(s.messages) == 2
         assert s.messages[0]["content"] == "My question"

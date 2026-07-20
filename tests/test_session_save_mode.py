@@ -9,7 +9,7 @@ import api.sessions.store as models
 import api.sessions.pending_recovery as session_pending_recovery
 import api.sessions.records as session_records
 import api.sessions.recovery as session_recovery
-import api.streaming as streaming
+from api.runs import compression_anchors, transcript, turn_context
 from api.runs import admission as turn_admission
 import api.turn_journal as turn_journal
 from api.sessions.store import Session, new_session
@@ -553,7 +553,7 @@ def test_eager_wal_repair_does_not_duplicate_checkpointed_user_message(_isolate_
 
 
 def test_eager_checkpointed_user_is_removed_from_model_context():
-    context = streaming._drop_checkpointed_current_user_from_context(
+    context = compression_anchors._drop_checkpointed_current_user_from_context(
         [
             {"role": "user", "content": "older"},
             {"role": "assistant", "content": "prior"},
@@ -589,13 +589,13 @@ def test_active_pending_current_user_is_removed_from_model_context():
         pending_user_message="current prompt",
     )
 
-    context = streaming._context_messages_for_new_turn(session, "current prompt")
+    context = turn_context._context_messages_for_new_turn(session, "current prompt")
 
     assert [m["content"] for m in context] == ["older", "prior"]
 
 
 def test_eager_checkpointed_user_is_not_duplicated_after_agent_result():
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display=[{"role": "user", "content": "repeat me"}],
         previous_context=[],
         result_messages=[
@@ -608,7 +608,7 @@ def test_eager_checkpointed_user_is_not_duplicated_after_agent_result():
 
 
 def test_deferred_turn_is_materialized_when_agent_returns_assistant_only_delta():
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display=[
             {"role": "user", "content": "older prompt"},
             {"role": "assistant", "content": "older answer"},
@@ -647,7 +647,7 @@ def test_duplicate_assistant_delta_is_not_persisted_twice():
         {"role": "assistant", "content": "current answer"},
     ]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display=previous_display,
         previous_context=previous_context,
         result_messages=result_messages,
@@ -682,7 +682,7 @@ def test_same_assistant_text_across_different_turns_is_preserved():
         {"role": "assistant", "content": "same answer"},
     ]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display=previous_display,
         previous_context=previous_context,
         result_messages=result_messages,

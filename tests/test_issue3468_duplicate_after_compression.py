@@ -18,10 +18,8 @@ integration level (``_merge_display_messages_after_agent_result``).
 
 from __future__ import annotations
 
-from api.streaming import (
-    _find_current_user_turn,
-    _merge_display_messages_after_agent_result,
-)
+from api.runs.compression_anchors import _find_current_user_turn
+from api.runs.transcript import _merge_display_messages_after_agent_result
 
 
 def test_find_current_user_turn_returns_last_matching_turn():
@@ -155,7 +153,7 @@ def test_merge_no_duplicate_replay_on_repeated_question_after_compression():
     # The merged transcript must not balloon: no message identity appears twice
     # except the deliberately-repeated user question (which legitimately occurs
     # in both turn 1 and turn 3).
-    from api.streaming import _message_identity
+    from api.runs.context_replay import _message_identity
 
     identities = [_message_identity(m) for m in merged]
     repeated_user_key = _message_identity({"role": "user", "content": "recommend a stock"})

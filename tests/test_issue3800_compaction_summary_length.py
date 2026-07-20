@@ -6,7 +6,7 @@ import sys
 import types
 
 from api.routes import _handle_session_compress, get_session
-from api.streaming import _compact_summary_text
+from api.runs.compression_anchors import _compact_summary_text
 from tests.test_sprint46 import (
     _FakeAgent,
     _FakeHandler,

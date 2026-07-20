@@ -2,10 +2,7 @@ from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
-from api.streaming import (
-    _extract_inline_thinking_from_content,
-    _split_thinking_from_content,
-)
+from api.runs.thinking_content import _extract_inline_thinking_from_content, _split_thinking_from_content
 
 
 REPO = Path(__file__).resolve().parents[1]

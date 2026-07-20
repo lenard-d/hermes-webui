@@ -68,7 +68,7 @@ def test_context_indicator_uses_post_compression_estimate():
 
 
 def test_post_compression_estimate_uses_pruned_request_and_preserves_last_prompt(monkeypatch):
-    from api.streaming import _estimate_post_compression_context_tokens
+    from api.runs.post_compression_context import _estimate_post_compression_context_tokens
 
     calls = []
 
@@ -85,7 +85,7 @@ def test_post_compression_estimate_uses_pruned_request_and_preserves_last_prompt
 
 
 def test_post_compression_estimate_falls_back_when_request_estimator_is_unavailable(monkeypatch):
-    from api.streaming import _estimate_post_compression_context_tokens
+    from api.runs.post_compression_context import _estimate_post_compression_context_tokens
 
     calls = []
 
@@ -108,7 +108,7 @@ def test_post_compression_estimate_falls_back_when_request_estimator_is_unavaila
 def test_post_compression_estimate_uses_compressor_budget_counter_without_metadata_estimators(monkeypatch):
     import pytest
 
-    from api.streaming import _estimate_post_compression_context_tokens
+    from api.runs.post_compression_context import _estimate_post_compression_context_tokens
 
     context_compressor = pytest.importorskip("agent.context_compressor")
 

@@ -6,16 +6,10 @@ from types import SimpleNamespace
 
 from api.sessions.store import Session, reconciled_state_db_messages_for_session, state_db_delta_after_context
 
-from api.streaming import (
-    _assistant_reply_added_after_current_turn,
-    _context_messages_for_new_turn,
-    _dedupe_replayed_active_context,
-    _dedupe_replayed_context_messages,
-    _merge_display_messages_after_agent_result,
-    _new_turn_context_from_messages,
-    _sanitize_messages_for_api,
-    _session_context_messages,
-)
+from api.runs.transcript import _assistant_reply_added_after_current_turn, _merge_display_messages_after_agent_result
+from api.runs.turn_context import _context_messages_for_new_turn, _new_turn_context_from_messages
+from api.runs.context_replay import _dedupe_replayed_active_context, _dedupe_replayed_context_messages, _session_context_messages
+from api.runs.message_sanitization import _sanitize_messages_for_api
 
 
 def test_session_persists_model_context_separately_from_display_transcript(tmp_path, monkeypatch):

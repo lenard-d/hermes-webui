@@ -5,7 +5,7 @@ Regression coverage for shared compression-anchor visibility helpers (#2028).
 from pathlib import Path
 
 from api.compression_anchor import is_context_compression_marker, visible_messages_for_anchor
-from api.streaming import _compression_summary_from_messages, _is_context_compression_marker
+from api.runs.compression_anchors import _compression_summary_from_messages, _is_context_compression_marker
 
 
 def test_legacy_duplicate_anchor_helpers_are_removed():

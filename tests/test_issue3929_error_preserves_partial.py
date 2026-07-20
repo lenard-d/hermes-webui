@@ -10,7 +10,7 @@ from unittest import mock
 
 import api.config as config
 import api.sessions.store as models
-import api.streaming as streaming
+from api.runs import local_entrypoint
 from api.sessions.store import Session
 
 
@@ -127,16 +127,16 @@ def test_silent_failure_preserves_partials(tmp_path):
             }
 
     fake_queue = queue.Queue()
-    streaming.STREAMS["test_stream_silent"] = fake_queue
+    config.STREAMS["test_stream_silent"] = fake_queue
     config.STREAM_PARTIAL_TEXT["test_stream_silent"] = ""
 
-    with mock.patch.object(streaming, "get_session", return_value=fake_session), \
-         mock.patch.object(streaming, "_get_ai_agent", return_value=SilentFailureAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "get_session", return_value=fake_session), \
+         mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=SilentFailureAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config.get_config", return_value={}), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
         
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text="What is python?",
             model="test-model",
@@ -178,16 +178,16 @@ def test_exception_preserves_partials(tmp_path):
             raise RuntimeError("Fake provider crash!")
 
     fake_queue = queue.Queue()
-    streaming.STREAMS["test_stream_exc"] = fake_queue
+    config.STREAMS["test_stream_exc"] = fake_queue
     config.STREAM_PARTIAL_TEXT["test_stream_exc"] = ""
 
-    with mock.patch.object(streaming, "get_session", return_value=fake_session), \
-         mock.patch.object(streaming, "_get_ai_agent", return_value=ExceptionAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "get_session", return_value=fake_session), \
+         mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=ExceptionAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config.get_config", return_value={}), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
         
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text="Exception test",
             model="test-model",
@@ -220,16 +220,16 @@ def test_empty_partials_do_not_create_spurious_messages(tmp_path):
             raise RuntimeError("Fake provider crash immediately!")
 
     fake_queue = queue.Queue()
-    streaming.STREAMS["test_stream_empty"] = fake_queue
+    config.STREAMS["test_stream_empty"] = fake_queue
     config.STREAM_PARTIAL_TEXT["test_stream_empty"] = ""
 
-    with mock.patch.object(streaming, "get_session", return_value=fake_session), \
-         mock.patch.object(streaming, "_get_ai_agent", return_value=ExceptionAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "get_session", return_value=fake_session), \
+         mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=ExceptionAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config.get_config", return_value={}), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
         
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text="Empty test",
             model="test-model",

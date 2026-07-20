@@ -13,7 +13,7 @@ from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 
-from api.streaming import _classify_provider_error
+from api.runs.provider_errors import _classify_provider_error
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 

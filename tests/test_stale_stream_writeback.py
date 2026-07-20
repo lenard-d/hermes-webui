@@ -8,7 +8,8 @@ import pytest
 
 import api.config as config
 import api.sessions.store as models
-import api.streaming as streaming
+from api.runs import turn_context
+from api.streaming import cancel_stream
 from api.sessions.store import Session
 
 
@@ -19,7 +20,6 @@ def _isolate_sessions(tmp_path, monkeypatch):
     index_file = session_dir / "_index.json"
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", index_file, raising=False)
     models.SESSIONS.clear()
     config.STREAMS.clear()
@@ -40,13 +40,13 @@ def test_stream_writeback_requires_active_stream_ownership():
     s = Session(session_id="ownership", messages=[])
     s.active_stream_id = "current-stream"
 
-    assert streaming._stream_writeback_is_current(s, "current-stream") is True
+    assert turn_context._stream_writeback_is_current(s, "current-stream") is True
 
     s.active_stream_id = None
-    assert streaming._stream_writeback_is_current(s, "current-stream") is False
+    assert turn_context._stream_writeback_is_current(s, "current-stream") is False
 
     s.active_stream_id = "newer-stream"
-    assert streaming._stream_writeback_is_current(s, "current-stream") is False
+    assert turn_context._stream_writeback_is_current(s, "current-stream") is False
 
 
 def test_cancel_stream_does_not_append_marker_after_stream_ownership_rotated():
@@ -70,7 +70,7 @@ def test_cancel_stream_does_not_append_marker_after_stream_ownership_rotated():
     mock_agent.interrupt = Mock()
     config.AGENT_INSTANCES[old_stream] = mock_agent
 
-    assert streaming.cancel_stream(old_stream) is True
+    assert cancel_stream(old_stream) is True
 
     assert s.active_stream_id == "newer-stream"
     assert s.pending_user_message == "newer prompt"

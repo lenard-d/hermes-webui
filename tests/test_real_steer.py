@@ -103,7 +103,7 @@ class TestHandleChatSteerHappyPath:
     """Endpoint accepts text and calls agent.steer() when all gates pass."""
 
     def test_accepts_when_agent_cached_and_running(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK, STREAMS, STREAMS_LOCK
         sid, stream_id = "sid_happy", "stream_happy"
         agent = MagicMock()
@@ -116,7 +116,7 @@ class TestHandleChatSteerHappyPath:
 
         sess = MagicMock()
         sess.active_stream_id = stream_id
-        with patch("api.streaming.get_session", return_value=sess):
+        with patch("api.streaming.live_controls.get_session", return_value=sess):
             handler = _make_handler()
             _handle_chat_steer(handler, {"session_id": sid, "text": "Use Python instead"})
 
@@ -129,7 +129,7 @@ class TestHandleChatSteerFallbacks:
     """Each gate that fails returns a structured fallback the frontend can branch on."""
 
     def test_no_cached_agent(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         handler = _make_handler()
         _handle_chat_steer(handler, {"session_id": "sid_x", "text": "hint"})
         body = _captured_response(handler)
@@ -137,7 +137,7 @@ class TestHandleChatSteerFallbacks:
         assert body["fallback"] == "no_cached_agent"
 
     def test_gateway_owned_stream_without_cached_agent_queues_fallback(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import ACTIVE_RUNS, ACTIVE_RUNS_LOCK, STREAMS, STREAMS_LOCK
         import queue as _q
 
@@ -149,7 +149,7 @@ class TestHandleChatSteerFallbacks:
 
         sess = MagicMock()
         sess.active_stream_id = stream_id
-        with patch("api.streaming.get_session", return_value=sess):
+        with patch("api.streaming.live_controls.get_session", return_value=sess):
             handler = _make_handler()
             _handle_chat_steer(handler, {"session_id": sid, "text": "preserve this"})
 
@@ -161,7 +161,7 @@ class TestHandleChatSteerFallbacks:
         }
 
     def test_agent_lacks_steer_method(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
         sid = "sid_old"
         # Older agent without steer() — use spec to suppress MagicMock auto-create
@@ -175,14 +175,14 @@ class TestHandleChatSteerFallbacks:
         assert body["fallback"] == "agent_lacks_steer"
 
     def test_session_not_found(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
         sid = "sid_missing"
         agent = MagicMock()
         agent.steer = MagicMock(return_value=True)
         with SESSION_AGENT_CACHE_LOCK:
             SESSION_AGENT_CACHE[sid] = (agent, "sig")
-        with patch("api.streaming.get_session", side_effect=KeyError(sid)):
+        with patch("api.streaming.live_controls.get_session", side_effect=KeyError(sid)):
             handler = _make_handler()
             _handle_chat_steer(handler, {"session_id": sid, "text": "hint"})
         body = _captured_response(handler)
@@ -191,7 +191,7 @@ class TestHandleChatSteerFallbacks:
         agent.steer.assert_not_called()  # never reached the steer call
 
     def test_session_not_running(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
         sid = "sid_idle"
         agent = MagicMock()
@@ -200,7 +200,7 @@ class TestHandleChatSteerFallbacks:
             SESSION_AGENT_CACHE[sid] = (agent, "sig")
         sess = MagicMock()
         sess.active_stream_id = None  # idle session
-        with patch("api.streaming.get_session", return_value=sess):
+        with patch("api.streaming.live_controls.get_session", return_value=sess):
             handler = _make_handler()
             _handle_chat_steer(handler, {"session_id": sid, "text": "hint"})
         body = _captured_response(handler)
@@ -210,7 +210,7 @@ class TestHandleChatSteerFallbacks:
 
     def test_stream_dead(self, _clear_caches):
         """Session has active_stream_id but the stream is gone from STREAMS (e.g. crashed)."""
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
         sid = "sid_zombie"
         agent = MagicMock()
@@ -219,7 +219,7 @@ class TestHandleChatSteerFallbacks:
             SESSION_AGENT_CACHE[sid] = (agent, "sig")
         sess = MagicMock()
         sess.active_stream_id = "stream_zombie"
-        with patch("api.streaming.get_session", return_value=sess):
+        with patch("api.streaming.live_controls.get_session", return_value=sess):
             handler = _make_handler()
             _handle_chat_steer(handler, {"session_id": sid, "text": "hint"})
         body = _captured_response(handler)
@@ -229,7 +229,7 @@ class TestHandleChatSteerFallbacks:
 
     def test_steer_raises(self, _clear_caches):
         """If agent.steer() raises, return steer_error rather than 500."""
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         from api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK, STREAMS, STREAMS_LOCK
         sid, stream_id = "sid_throws", "stream_throws"
         agent = MagicMock()
@@ -241,7 +241,7 @@ class TestHandleChatSteerFallbacks:
             STREAMS[stream_id] = _q.Queue()
         sess = MagicMock()
         sess.active_stream_id = stream_id
-        with patch("api.streaming.get_session", return_value=sess):
+        with patch("api.streaming.live_controls.get_session", return_value=sess):
             handler = _make_handler()
             _handle_chat_steer(handler, {"session_id": sid, "text": "hint"})
         body = _captured_response(handler)
@@ -253,19 +253,19 @@ class TestHandleChatSteerInputValidation:
     """Bad input → 400 Bad Request, not silent acceptance."""
 
     def test_missing_session_id(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         handler = _make_handler()
         _handle_chat_steer(handler, {"text": "hint"})
         assert _captured_status(handler) == 400
 
     def test_missing_text(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         handler = _make_handler()
         _handle_chat_steer(handler, {"session_id": "sid"})
         assert _captured_status(handler) == 400
 
     def test_empty_text_after_strip(self, _clear_caches):
-        from api.streaming import _handle_chat_steer
+        from api.streaming.live_controls import _handle_chat_steer
         handler = _make_handler()
         _handle_chat_steer(handler, {"session_id": "sid", "text": "   \n\t  "})
         assert _captured_status(handler) == 400
@@ -277,7 +277,8 @@ class TestRouting:
     """The POST handler must dispatch /api/chat/steer to _handle_chat_steer."""
 
     def test_route_registered(self, monkeypatch):
-        from api import routes, streaming
+        from api import routes
+        from api.streaming import live_controls
 
         sentinel = object()
         body = {"session_id": "sid", "text": "continue"}
@@ -285,7 +286,7 @@ class TestRouting:
         monkeypatch.setattr(routes, "_handle_extension_sidecar_proxy", lambda *_args, **_kwargs: False)
         monkeypatch.setattr(routes, "_guard_request_session_visibility", lambda *_args, **_kwargs: True)
         monkeypatch.setattr(routes, "read_body", lambda _handler: body)
-        monkeypatch.setattr(streaming, "_handle_chat_steer", lambda handler, payload: sentinel)
+        monkeypatch.setattr(live_controls, "_handle_chat_steer", lambda handler, payload: sentinel)
 
         result = routes.handle_post(
             object(), SimpleNamespace(path="/api/chat/steer", query="")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -28,7 +27,7 @@ class _Session(SimpleNamespace):
 
 def _install_title_worker_seams(monkeypatch, *, initial_title: str):
     import api.profiles as profiles
-    import api.streaming as streaming
+    import api.runs.title_generation as title_generation
 
     sid = "title-race"
     durable: dict[str, object] = {}
@@ -70,21 +69,18 @@ def _install_title_worker_seams(monkeypatch, *, initial_title: str):
         finally:
             edit_held = False
 
-    monkeypatch.setattr(streaming, "get_session", lambda _sid: cached[_sid])
-    monkeypatch.setattr(streaming, "SESSIONS", cached)
-    monkeypatch.setattr(streaming, "LOCK", threading.Lock())
-    monkeypatch.setattr(streaming, "_get_session_agent_lock", lambda _sid: threading.Lock())
-    monkeypatch.setattr(streaming, "edit_session", authoritative_edit)
-    monkeypatch.setattr(streaming, "_aux_title_configured", lambda: True)
+    monkeypatch.setattr(title_generation, "get_session", lambda _sid: cached[_sid])
+    monkeypatch.setattr(title_generation, "edit_session", authoritative_edit)
+    monkeypatch.setattr(title_generation, "_aux_title_configured", lambda: True)
     monkeypatch.setattr(profiles, "profile_env_for_background_worker", profile_env)
 
-    return streaming, sid, initial, durable, cached, lambda: edit_held
+    return title_generation, sid, initial, durable, cached, lambda: edit_held
 
 
-def _run_worker(streaming, worker: str, sid: str, current_title: str, events: list[tuple]):
+def _run_worker(title_generation, worker: str, sid: str, current_title: str, events: list[tuple]):
     put = lambda name, payload: events.append((name, payload))
     if worker == "update":
-        streaming._run_background_title_update(
+        title_generation._run_background_title_update(
             sid,
             "user",
             "assistant",
@@ -92,7 +88,7 @@ def _run_worker(streaming, worker: str, sid: str, current_title: str, events: li
             put,
         )
     else:
-        streaming._run_background_title_refresh(
+        title_generation._run_background_title_refresh(
             sid,
             "user",
             "assistant",
@@ -110,7 +106,7 @@ def test_background_title_writeback_does_not_resurrect_deleted_session(
     worker,
     initial_title,
 ):
-    streaming, sid, _initial, durable, cached, edit_is_held = _install_title_worker_seams(
+    title_generation, sid, _initial, durable, cached, edit_is_held = _install_title_worker_seams(
         monkeypatch,
         initial_title=initial_title,
     )
@@ -121,10 +117,10 @@ def test_background_title_writeback_does_not_resurrect_deleted_session(
         cached.pop(sid)
         return "Generated after delete", "llm_aux", "raw"
 
-    monkeypatch.setattr(streaming, "_generate_llm_session_title_via_aux", generate)
+    monkeypatch.setattr(title_generation, "_generate_llm_session_title_via_aux", generate)
     events = []
 
-    _run_worker(streaming, worker, sid, initial_title, events)
+    _run_worker(title_generation, worker, sid, initial_title, events)
 
     assert sid not in durable
     assert not any(name == "title" for name, _payload in events)
@@ -139,7 +135,7 @@ def test_background_title_writeback_preserves_newer_authoritative_session(
     worker,
     initial_title,
 ):
-    streaming, sid, initial, durable, _cached, edit_is_held = _install_title_worker_seams(
+    title_generation, sid, initial, durable, _cached, edit_is_held = _install_title_worker_seams(
         monkeypatch,
         initial_title=initial_title,
     )
@@ -158,10 +154,10 @@ def test_background_title_writeback_preserves_newer_authoritative_session(
         durable[sid] = newer
         return "Stale generated title", "llm_aux", "raw"
 
-    monkeypatch.setattr(streaming, "_generate_llm_session_title_via_aux", generate)
+    monkeypatch.setattr(title_generation, "_generate_llm_session_title_via_aux", generate)
     events = []
 
-    _run_worker(streaming, worker, sid, initial_title, events)
+    _run_worker(title_generation, worker, sid, initial_title, events)
 
     assert durable[sid] is newer
     assert newer.title == "Newer authoritative title"

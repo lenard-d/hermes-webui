@@ -21,7 +21,7 @@ def _tool_partial(reasoning="same reasoning", args=None, *, timestamp=123):
 
 
 def test_tool_only_partial_dedupe_uses_reasoning_and_tool_signature():
-    from api.streaming import _partial_marker_already_present
+    from api.runs.tool_events import _partial_marker_already_present
 
     existing = [
         {"role": "user", "content": "run this"},
@@ -38,7 +38,7 @@ def test_tool_only_partial_dedupe_uses_reasoning_and_tool_signature():
 
 
 def test_tool_only_partial_dedupe_is_scoped_to_current_user_turn():
-    from api.streaming import _partial_marker_already_present
+    from api.runs.tool_events import _partial_marker_already_present
 
     existing = [
         {"role": "user", "content": "first run"},

@@ -72,7 +72,7 @@ class TestCancelStreamPreservesPartial:
         """cancel_stream() persists accumulated partial text as an assistant message."""
         import queue
         from api.sessions.store import Session
-        from api.streaming import cancel_stream
+        from api.streaming.live_controls import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
@@ -135,7 +135,7 @@ class TestCancelStreamPreservesPartial:
         """If no tokens were streamed before cancel, only the cancel marker is saved."""
         import queue
         from api.sessions.store import Session
-        from api.streaming import cancel_stream
+        from api.streaming.live_controls import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
@@ -179,7 +179,7 @@ class TestCancelStreamPreservesPartial:
         """Thinking blocks in partial text are stripped before saving."""
         import queue
         from api.sessions.store import Session
-        from api.streaming import cancel_stream
+        from api.streaming.live_controls import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
@@ -225,7 +225,7 @@ class TestCancelStreamPreservesPartial:
         """The common cancel-mid-reasoning case: <think> block without a closing tag."""
         import queue
         from api.sessions.store import Session
-        from api.streaming import cancel_stream
+        from api.streaming.live_controls import cancel_stream
 
         session_dir = tmp_path / 'sessions'
         session_dir.mkdir()
@@ -275,7 +275,7 @@ class TestPartialMessageInContext:
 
     def test_partial_message_included_in_api_sanitization(self):
         """Partial messages (_partial=True) are included in API history (model should see them)."""
-        from api.streaming import _sanitize_messages_for_api
+        from api.runs.message_sanitization import _sanitize_messages_for_api
 
         messages = [
             {'role': 'user', 'content': 'Tell me about Python'},

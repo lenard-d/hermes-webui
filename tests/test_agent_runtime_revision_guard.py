@@ -59,12 +59,12 @@ for _m in ("run_agent", "hermes_state", "agent", "tools"):
 from pathlib import Path
 import subprocess
 
-import api.streaming as streaming
+from api.runs import agent_loader
 from api.runs import agent_runtime
 
 agent_dir = Path(__file__).parent / "hermes-agent"
 assert agent_runtime._AGENT_DIR == agent_dir.resolve()
-assert streaming._get_ai_agent().revision == "before"
+assert agent_loader._get_ai_agent().revision == "before"
 
 (agent_dir / "run_agent.py").write_text(
     "class AIAgent:\\n    revision = 'after'\\n",
@@ -81,7 +81,7 @@ subprocess.run(
 )
 
 try:
-    streaming._get_ai_agent()
+    agent_loader._get_ai_agent()
 except RuntimeError as exc:
     message = str(exc)
     assert "Hermes Agent was updated" in message

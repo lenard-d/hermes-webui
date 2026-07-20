@@ -12,8 +12,8 @@ from api.sessions.store import (
     _apply_core_sync_or_error_marker,
 )
 from api.run_journal import append_run_event
-import api.streaming as streaming
-from api.streaming import _sanitize_messages_for_api
+from api.runs import turn_context as streaming
+from api.runs.message_sanitization import _sanitize_messages_for_api
 
 
 @pytest.fixture(autouse=True)

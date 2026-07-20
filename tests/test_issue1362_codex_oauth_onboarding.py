@@ -512,7 +512,7 @@ def test_anthropic_link_clears_env_and_writes_secret_free_marker(monkeypatch, tm
 def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path):
     from api.auth import oauth
     import api.providers as providers
-    from api.streaming.diagnostics import _ENV_LOCK
+    from api.config import environment_mutation_lock
 
     monkeypatch.setenv("ANTHROPIC_TOKEN", "old-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "old-key")
@@ -535,7 +535,7 @@ def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path)
         finally:
             done.set()
 
-    with _ENV_LOCK:
+    with environment_mutation_lock:
         worker = threading.Thread(target=_onboarding_clear)
         worker.start()
         assert started.wait(timeout=1)

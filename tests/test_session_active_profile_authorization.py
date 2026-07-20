@@ -549,7 +549,7 @@ def test_stream_owner_unregistered_on_worker_early_return(monkeypatch):
     owner entry must be released on that early-return path or STREAM_SESSION_OWNERS leaks.
     """
     from api import config
-    import api.streaming as streaming
+    from api.runs import local_entrypoint
 
     with config.STREAM_SESSION_OWNERS_LOCK:
         previous = dict(config.STREAM_SESSION_OWNERS)
@@ -560,7 +560,7 @@ def test_stream_owner_unregistered_on_worker_early_return(monkeypatch):
     try:
         with config.STREAMS_LOCK:
             config.STREAMS.pop("leak-stream", None)
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             "some_session", "hi", "m", "/tmp", "leak-stream",
         )
         with config.STREAM_SESSION_OWNERS_LOCK:

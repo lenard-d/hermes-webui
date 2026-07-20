@@ -1,7 +1,4 @@
-from api.streaming import (
-    _live_usage_session_snapshot,
-    live_usage_prompt_estimate_after_tool_delta,
-)
+from api.runs.tool_events import _live_usage_session_snapshot, live_usage_prompt_estimate_after_tool_delta
 
 
 def test_live_usage_estimate_caps_tool_delta_against_previous_prompt():

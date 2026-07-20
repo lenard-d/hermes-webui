@@ -1,5 +1,6 @@
 import importlib
 import io
+import os
 import queue
 from pathlib import Path
 
@@ -261,8 +262,8 @@ def test_legacy_journal_adapter_queue_and_goal_return_bounded_statuses():
 
 
 def test_chat_cancel_route_uses_adapter_only_when_flag_enabled():
-    routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    workspace_queries = importlib.import_module("api.http.routes.workspace_queries")
+    src = Path(workspace_queries.__file__).read_text(encoding="utf-8")
     cancel_idx = src.index('if parsed.path == "/api/chat/cancel":')
     cancel_body = src[cancel_idx:src.index('if parsed.path == "/api/chat/stream":', cancel_idx)]
 
@@ -746,7 +747,7 @@ def test_runner_runtime_adapter_passes_explicit_start_payload_without_env_mutati
     assert captured[0].toolsets == ["terminal", "file"]
     assert result.run_id == "runner-1"
     assert result.active_controls == ["cancel", "approval", "clarify", "goal"]
-    assert runtime.os.environ["TERMINAL_CWD"] == before_terminal_cwd
+    assert os.environ["TERMINAL_CWD"] == before_terminal_cwd
 
 
 def test_runner_runtime_adapter_observe_and_get_survive_adapter_recreation():

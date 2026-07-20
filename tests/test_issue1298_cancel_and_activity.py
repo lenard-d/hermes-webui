@@ -22,7 +22,7 @@ import pytest
 import api.config as config
 import api.sessions.store as models
 from api.sessions.store import Session
-from api.streaming import cancel_stream
+from api.streaming.live_controls import cancel_stream
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 

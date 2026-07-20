@@ -4,17 +4,11 @@ from pathlib import Path
 
 from api.compression_anchor import visible_messages_for_anchor
 from api.sessions.store import Session
-from api.streaming import (
-    _POST_COMPRESSION_TOOL_RESULT_SUMMARY_FLAG,
-    _compressed_context_tool_result_summary,
-    _is_agent_compression_start_status,
-    _is_fallback_lifecycle_message,
-    _merge_display_messages_after_agent_result,
-    _message_text,
-    _prune_context_tool_results_after_compression,
-    _restore_reasoning_metadata,
-    _sanitize_messages_for_api,
-)
+from api.runs.post_compression_context import _POST_COMPRESSION_TOOL_RESULT_SUMMARY_FLAG, _compressed_context_tool_result_summary, _prune_context_tool_results_after_compression, _restore_reasoning_metadata
+from api.runs.runtime_resolution import _is_agent_compression_start_status, _is_fallback_lifecycle_message
+from api.runs.transcript import _merge_display_messages_after_agent_result
+from api.runs.thinking_content import _message_text
+from api.runs.message_sanitization import _sanitize_messages_for_api
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -11,7 +11,7 @@ import pytest
 
 import api.config as config
 import api.sessions.store as models
-import api.streaming as streaming
+from api.runs import local_entrypoint, provider_errors, thinking_content
 from api.sessions.store import Session
 
 
@@ -71,7 +71,7 @@ def _neutralize_credential_self_heal(monkeypatch):
     unrecoverable-failure path; the one test that intentionally verifies a
     successful retry patches this symbol explicitly inside its own body.
     """
-    monkeypatch.setattr(streaming, "_attempt_credential_self_heal", lambda *a, **k: None)
+    monkeypatch.setattr(local_entrypoint, "_attempt_credential_self_heal", lambda *a, **k: None)
     yield
 
 
@@ -242,15 +242,15 @@ def _build_auth_failure_agent(*, token_text: str | None, success_text: str = "Re
 
 def _run_stream(monkeypatch, session, stream_id, agent_cls, *, workspace):
     fake_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = fake_queue
+    config.STREAMS[stream_id] = fake_queue
     config.STREAM_PARTIAL_TEXT[stream_id] = ""
 
-    with mock.patch.object(streaming, "get_session", return_value=session), \
-         mock.patch.object(streaming, "_get_ai_agent", return_value=agent_cls), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "get_session", return_value=session), \
+         mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=agent_cls), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config.get_config", return_value={}), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -336,7 +336,7 @@ def test_auth_401_classification_receives_stringified_probe_text(tmp_path, monke
     session = _prepare_session("auth_probe_text", "stream_auth_probe_text", pending_user_message="Please fail")
     agent_cls = _build_auth_failure_agent(token_text=None)
     observed = {}
-    real_classify = streaming._classify_provider_error
+    real_classify = provider_errors._classify_provider_error
 
     def _spy_classify_provider_error(err_str, exc=None, *, silent_failure=False):
         observed["err_str"] = err_str
@@ -344,7 +344,7 @@ def test_auth_401_classification_receives_stringified_probe_text(tmp_path, monke
         observed["silent_failure"] = silent_failure
         return real_classify(err_str, exc, silent_failure=silent_failure)
 
-    with mock.patch.object(streaming, "_classify_provider_error", side_effect=_spy_classify_provider_error):
+    with mock.patch.object(local_entrypoint, "_classify_provider_error", side_effect=_spy_classify_provider_error):
         _run_stream(monkeypatch, session, "stream_auth_probe_text", agent_cls, workspace=str(tmp_path))
 
     assert observed["err_str"] == str(_auth_failure_error_payload())
@@ -440,16 +440,16 @@ def test_auth_retry_success_does_not_append_error_turn(tmp_path, monkeypatch):
     }
 
     fake_queue = queue.Queue()
-    streaming.STREAMS["stream_auth_retry"] = fake_queue
+    config.STREAMS["stream_auth_retry"] = fake_queue
     config.STREAM_PARTIAL_TEXT["stream_auth_retry"] = ""
 
-    with mock.patch.object(streaming, "get_session", return_value=session), \
-         mock.patch.object(streaming, "_get_ai_agent", return_value=agent_cls), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "get_session", return_value=session), \
+         mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=agent_cls), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config.get_config", return_value={}), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]), \
-         mock.patch.object(streaming, "_attempt_credential_self_heal", return_value=heal_rt):
-        streaming._run_agent_streaming(
+         mock.patch.object(local_entrypoint, "_attempt_credential_self_heal", return_value=heal_rt):
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -722,7 +722,7 @@ def test_long_tool_turn_with_completed_answer_never_appends_no_response(
     assert not any(event == "apperror" for event, _ in events)
     assert saved.messages[-1]["role"] == "assistant"
     assert saved.messages[-1]["content"] == final_content
-    assert streaming._message_text(saved.messages[-1]["content"]) == "Complete answer after tools."
+    assert thinking_content._message_text(saved.messages[-1]["content"]) == "Complete answer after tools."
     assert not any(msg.get("_error") for msg in saved.messages)
 
 

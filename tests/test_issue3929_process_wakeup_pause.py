@@ -15,13 +15,13 @@ import pytest
 
 import api.config as config
 from api.runs import gateway as gateway_chat
+from api.runs import local_entrypoint
 import api.sessions.store as models
 import api.sessions.records as session_records
 import api.sessions.process_wakeup as process_wakeup
 import api.profiles as profiles
 import api.providers.credentials as providers
 import api.routes as routes
-import api.streaming as streaming
 from api.runs import execution as turn_execution
 from api.sessions.store import PROCESS_WAKEUP_PAUSE_ERROR, Session
 
@@ -192,13 +192,13 @@ def _install_fake_agent_credential_pool(monkeypatch, pool_data):
 def _run_failing_process_wakeup(session: Session, tmp_path, *, stream_id=None):
     stream_id = str(stream_id or session.active_stream_id)
     fake_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = fake_queue
+    config.STREAMS[stream_id] = fake_queue
     config.STREAM_PARTIAL_TEXT[stream_id] = ""
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_CredentialPoolEmptyAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_CredentialPoolEmptyAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -223,22 +223,17 @@ def _run_failing_process_wakeup_route(
 ):
     stream_id = str(stream_id or session.active_stream_id)
     fake_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = fake_queue
+    config.STREAMS[stream_id] = fake_queue
     config.STREAM_PARTIAL_TEXT[stream_id] = ""
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_CredentialPoolEmptyAgent), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_CredentialPoolEmptyAgent), \
          mock.patch.object(
-             streaming,
+             local_entrypoint,
              "resolve_model_provider",
              return_value=(resolved_model, resolved_provider, resolved_base_url),
          ), \
-         mock.patch.object(
-             streaming,
-             "resolve_custom_provider_connection",
-             return_value=custom_connection,
-         ), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model=route_model,
@@ -334,7 +329,7 @@ def test_cancelled_stale_process_wakeup_credential_failure_records_pause(tmp_pat
     session.save()
     models.SESSIONS[session.session_id] = session
     fake_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = fake_queue
+    config.STREAMS[stream_id] = fake_queue
     config.STREAM_PARTIAL_TEXT[stream_id] = ""
 
     class _CancelledStaleCredentialPoolEmptyAgent(_MockAgent):
@@ -347,10 +342,10 @@ def test_cancelled_stale_process_wakeup_credential_failure_records_pause(tmp_pat
             stale_session.save(touch_updated_at=False)
             raise RuntimeError("All 0 credential(s) exhausted for test-provider")
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_CancelledStaleCredentialPoolEmptyAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_CancelledStaleCredentialPoolEmptyAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -907,10 +902,10 @@ def test_streaming_success_pause_clear_serializes_against_concurrent_suppression
 
     monkeypatch.setattr(Session, "save", _save_and_race_suppression)
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_SuccessfulAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_SuccessfulAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -965,7 +960,7 @@ def test_streaming_success_pause_clear_preserves_concurrent_session_update(tmp_p
     models.SESSIONS[session_id] = session
 
     original_save = Session.save
-    original_get_session = streaming.get_session
+    original_get_session = local_entrypoint.get_session
     state = {"success_saved": False, "renamed": False}
 
     def _save_and_mark_success_snapshot(self, *args, **kwargs):
@@ -993,12 +988,12 @@ def test_streaming_success_pause_clear_preserves_concurrent_session_update(tmp_p
         return original_get_session(sid, *args, **kwargs)
 
     monkeypatch.setattr(Session, "save", _save_and_mark_success_snapshot)
-    monkeypatch.setattr(streaming, "get_session", _get_session_after_concurrent_rename)
+    monkeypatch.setattr(local_entrypoint, "get_session", _get_session_after_concurrent_rename)
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_SuccessfulAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_SuccessfulAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -2238,7 +2233,7 @@ def test_gateway_post_save_cancel_after_success_commit_emits_done(tmp_path, monk
     session.save()
     models.SESSIONS[session_id] = session
 
-    original_payload = streaming._session_payload_with_full_messages
+    original_payload = gateway_chat._session_payload_with_full_messages
     payload_calls = {"count": 0}
 
     def _payload_and_cancel_after_success_commit(*args, **kwargs):
@@ -2246,7 +2241,7 @@ def test_gateway_post_save_cancel_after_success_commit_emits_done(tmp_path, monk
         config.CANCEL_FLAGS[stream_id].set()
         return original_payload(*args, **kwargs)
 
-    monkeypatch.setattr(streaming, "_session_payload_with_full_messages", _payload_and_cancel_after_success_commit)
+    monkeypatch.setattr(gateway_chat, "_session_payload_with_full_messages", _payload_and_cancel_after_success_commit)
 
     gateway_chat._run_gateway_chat_streaming(
         session_id,
@@ -2317,10 +2312,10 @@ def test_streaming_late_cancel_after_pause_clear_save_persists_restored_pause(tm
 
     monkeypatch.setattr(Session, "save", _save_and_cancel_after_pause_clear)
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_SuccessfulAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_SuccessfulAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -2372,7 +2367,7 @@ def test_streaming_post_save_cancel_after_success_commit_emits_done(tmp_path, mo
     session.save()
     models.SESSIONS[session_id] = session
 
-    original_payload = streaming._session_payload_with_full_messages
+    original_payload = local_entrypoint._session_payload_with_full_messages
     payload_calls = {"count": 0}
 
     def _payload_and_cancel_after_success_commit(*args, **kwargs):
@@ -2380,12 +2375,12 @@ def test_streaming_post_save_cancel_after_success_commit_emits_done(tmp_path, mo
         config.CANCEL_FLAGS[stream_id].set()
         return original_payload(*args, **kwargs)
 
-    monkeypatch.setattr(streaming, "_session_payload_with_full_messages", _payload_and_cancel_after_success_commit)
+    monkeypatch.setattr(local_entrypoint, "_session_payload_with_full_messages", _payload_and_cancel_after_success_commit)
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_SuccessfulAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_SuccessfulAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -2424,7 +2419,7 @@ def test_streaming_no_pause_post_save_cancel_after_success_commit_emits_done(tmp
     session.save()
     models.SESSIONS[session_id] = session
 
-    original_payload = streaming._session_payload_with_full_messages
+    original_payload = local_entrypoint._session_payload_with_full_messages
     payload_calls = {"count": 0}
 
     def _payload_and_cancel_after_success_commit(*args, **kwargs):
@@ -2432,12 +2427,12 @@ def test_streaming_no_pause_post_save_cancel_after_success_commit_emits_done(tmp
         config.CANCEL_FLAGS[stream_id].set()
         return original_payload(*args, **kwargs)
 
-    monkeypatch.setattr(streaming, "_session_payload_with_full_messages", _payload_and_cancel_after_success_commit)
+    monkeypatch.setattr(local_entrypoint, "_session_payload_with_full_messages", _payload_and_cancel_after_success_commit)
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_SuccessfulAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_SuccessfulAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",
@@ -2481,13 +2476,13 @@ def test_stale_credential_empty_process_wakeup_still_records_pause(tmp_path):
     models.SESSIONS[session.session_id] = session
     stream_id = str(session.active_stream_id)
     fake_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = fake_queue
+    config.STREAMS[stream_id] = fake_queue
     config.STREAM_PARTIAL_TEXT[stream_id] = ""
 
-    with mock.patch.object(streaming, "_get_ai_agent", return_value=_StaleCredentialPoolEmptyAgent), \
-         mock.patch.object(streaming, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
+    with mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=_StaleCredentialPoolEmptyAgent), \
+         mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("test-model", "test-provider", None)), \
          mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=session.pending_user_message,
             model="test-model",

@@ -7,7 +7,7 @@ pass in _sanitize_messages_for_api and _api_safe_message_positions removes
 those dangling entries.
 """
 
-from api.streaming import _sanitize_messages_for_api, _api_safe_message_positions
+from api.runs.message_sanitization import _sanitize_messages_for_api, _api_safe_message_positions
 
 
 # ---------------------------------------------------------------------------

@@ -136,7 +136,7 @@ def test_server_turn_no_session_channel_is_noop(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_sse_write_deadline_helper_sets_socket_timeout():
-    from api.streaming import _sse_set_write_deadline, SSE_WRITE_DEADLINE_SECONDS
+    from api.streaming.transport import _sse_set_write_deadline, SSE_WRITE_DEADLINE_SECONDS
 
     recorded = {}
 
@@ -157,7 +157,7 @@ def test_sse_write_deadline_helper_sets_socket_timeout():
 
 def test_sse_write_deadline_helper_never_raises():
     """A handler without a usable connection must not blow up the SSE setup."""
-    from api.streaming import _sse_set_write_deadline
+    from api.streaming.transport import _sse_set_write_deadline
 
     class _NoConn:
         connection = None

@@ -1,10 +1,7 @@
 import logging
 
-from api.streaming import (
-    _normalize_prefill_messages_before_user_turn,
-    _prefill_messages_with_webui_context,
-    _webui_ephemeral_system_prompt,
-)
+from api.runs.webui_prefill import _normalize_prefill_messages_before_user_turn, _prefill_messages_with_webui_context
+from api.runs.prompts import _webui_ephemeral_system_prompt
 
 
 def test_webui_ephemeral_prompt_includes_browser_surface_context():

@@ -37,7 +37,7 @@ def _text(value):
 
 def test_detect_stale_user_merge_matches_polluted_pair():
     """Detector must flag the polluted merge as a stale-prefixed current turn."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     polluted_msg = {"role": "user", "content": POLLUTED}
     assert _detect_stale_user_merge(polluted_msg, CURRENT_TURN, PRIOR_TAIL) is True
@@ -45,7 +45,7 @@ def test_detect_stale_user_merge_matches_polluted_pair():
 
 def test_detect_stale_user_merge_does_not_match_clean_current():
     """A clean current turn that happens to mention the prior phrase stays intact."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     clean_msg = {"role": "user", "content": CURRENT_TURN}
     assert _detect_stale_user_merge(clean_msg, CURRENT_TURN, PRIOR_TAIL) is False
@@ -53,7 +53,7 @@ def test_detect_stale_user_merge_does_not_match_clean_current():
 
 def test_detect_stale_user_merge_does_not_match_when_tail_differs():
     """If the prior tail is different, the merge is not the repair pattern."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     other_msg = {"role": "user", "content": f"other stale\n\n{CURRENT_TURN}"}
     assert _detect_stale_user_merge(other_msg, CURRENT_TURN, PRIOR_TAIL) is False
@@ -61,7 +61,7 @@ def test_detect_stale_user_merge_does_not_match_when_tail_differs():
 
 def test_detect_stale_user_merge_prefers_context_over_mismatched_tail_fallback():
     """When previous_context is supplied, a stale row must be supported by that context."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     polluted_msg = {"role": "user", "content": POLLUTED}
     previous_context = [{"role": "user", "content": "different prior context"}]
@@ -76,7 +76,7 @@ def test_detect_stale_user_merge_prefers_context_over_mismatched_tail_fallback()
 
 def test_detect_stale_user_merge_matches_multihop_chain_with_context_history():
     """Multi-hop stale merges match when historical user context is contiguous."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     previous_context = [
         {"role": "user", "content": CHAIN_TAIL_A},
@@ -95,7 +95,7 @@ def test_detect_stale_user_merge_matches_multihop_chain_with_context_history():
 
 def test_detect_stale_user_merge_rejects_multihop_chain_without_matching_history():
     """A matching current row is not enough when stale segments do not align."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     previous_context = [
         {"role": "user", "content": "different first tail"},
@@ -114,7 +114,7 @@ def test_detect_stale_user_merge_rejects_multihop_chain_without_matching_history
 
 def test_detect_stale_user_merge_preserves_legitimate_multisection_current_turn():
     """A user-authored multi-section current prompt is not the stale repair shape."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     previous_context = [
         {"role": "user", "content": CHAIN_TAIL_A},
@@ -134,7 +134,7 @@ def test_detect_stale_user_merge_preserves_legitimate_multisection_current_turn(
 
 def test_detect_stale_user_merge_handles_single_hop_current_turn_with_paragraphs():
     """One-hop stale repair still matches when the submitted turn has paragraphs."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     current_prompt = "summarize this first\n\nthen list the risks"
     polluted_msg = {"role": "user", "content": f"{PRIOR_TAIL}\n\n{current_prompt}"}
@@ -148,7 +148,7 @@ def test_detect_stale_user_merge_handles_single_hop_current_turn_with_paragraphs
 
 def test_detect_stale_user_merge_handles_multihop_current_turn_with_paragraphs():
     """Multi-hop stale repair uses the full current-turn suffix, not the last paragraph."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     previous_context = [
         {"role": "user", "content": CHAIN_TAIL_A},
@@ -171,7 +171,7 @@ def test_detect_stale_user_merge_handles_multihop_current_turn_with_paragraphs()
 
 def test_detect_stale_user_merge_handles_replayed_prefix_from_old_polluted_row():
     """Already-contaminated sessions can replay an old prefix after newer clean turns."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     stable_prefix = f"{CHAIN_TAIL_A}\n\n{CHAIN_TAIL_B}"
     previous_context = [
@@ -193,7 +193,7 @@ def test_detect_stale_user_merge_handles_replayed_prefix_from_old_polluted_row()
 
 def test_detect_stale_user_merge_handles_segments_replayed_from_multiple_old_rows():
     """Stale paragraphs can be assembled from earlier polluted rows, not only one row."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     old_correction = "remove the reassurance sentence"
     attachment_request = "send that with the attached image"
@@ -225,7 +225,7 @@ def test_detect_stale_user_merge_handles_segments_replayed_from_multiple_old_row
 
 def test_detect_stale_user_merge_rejects_replayed_segments_in_wrong_order():
     """Prior user substrings must explain stale paragraphs in chronological order."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     first = "first stale paragraph"
     second = "second stale paragraph"
@@ -247,7 +247,7 @@ def test_detect_stale_user_merge_rejects_replayed_segments_in_wrong_order():
 
 def test_detect_stale_user_merge_handles_prior_row_starting_with_stale_prefix():
     """A stable stale prefix may be a leading subset of one older polluted row."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     stable_prefix = f"{CHAIN_TAIL_A}\n\n{CHAIN_TAIL_B}"
     current_turn = "latest question that should stand alone"
@@ -268,7 +268,7 @@ def test_detect_stale_user_merge_handles_prior_row_starting_with_stale_prefix():
 
 def test_detect_stale_user_merge_ignores_non_user_roles():
     """Only user rows are candidates for the repair-merge pattern."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     assistant_msg = {"role": "assistant", "content": POLLUTED}
     assert _detect_stale_user_merge(assistant_msg, CURRENT_TURN, PRIOR_TAIL) is False
@@ -276,7 +276,7 @@ def test_detect_stale_user_merge_ignores_non_user_roles():
 
 def test_detect_stale_user_merge_handles_workspace_prefixed_row():
     """Workspace-prefixed model rows still match when stripped."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     prefixed = {
         "role": "user",
@@ -287,7 +287,7 @@ def test_detect_stale_user_merge_handles_workspace_prefixed_row():
 
 def test_detect_stale_user_merge_handles_workspace_prefix_on_both_halves():
     """Repair can concatenate two separately workspace-prefixed user rows."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     prefixed_both = {
         "role": "user",
@@ -301,7 +301,7 @@ def test_detect_stale_user_merge_handles_workspace_prefix_on_both_halves():
 
 def test_detect_stale_user_merge_does_not_match_single_newline_joined():
     """A single-\\n separator is not the repair shape and must not be flagged."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     single_nl = {"role": "user", "content": f"{PRIOR_TAIL}\n{CURRENT_TURN}"}
     assert _detect_stale_user_merge(single_nl, CURRENT_TURN, PRIOR_TAIL) is False
@@ -309,7 +309,7 @@ def test_detect_stale_user_merge_does_not_match_single_newline_joined():
 
 def test_detect_stale_user_merge_does_not_match_space_joined():
     """A space-only separator is not the repair shape and must not be flagged."""
-    from api.streaming import _detect_stale_user_merge
+    from api.runs.stale_user_context import _detect_stale_user_merge
 
     space_joined = {"role": "user", "content": f"{PRIOR_TAIL} {CURRENT_TURN}"}
     assert _detect_stale_user_merge(space_joined, CURRENT_TURN, PRIOR_TAIL) is False
@@ -317,7 +317,7 @@ def test_detect_stale_user_merge_does_not_match_space_joined():
 
 def test_strip_stale_user_merge_from_messages_replaces_polluted_row():
     """Normalizer replaces a polluted current row with a clean copy of msg_text."""
-    from api.streaming import _strip_stale_user_merge_from_messages
+    from api.runs.stale_user_context import _strip_stale_user_merge_from_messages
 
     messages = [
         {"role": "user", "content": POLLUTED},
@@ -333,7 +333,7 @@ def test_strip_stale_user_merge_from_messages_replaces_polluted_row():
 
 def test_strip_stale_user_merge_handles_list_content_row():
     """Normalizer also handles OpenAI-style list content payloads."""
-    from api.streaming import _strip_stale_user_merge_from_messages
+    from api.runs.stale_user_context import _strip_stale_user_merge_from_messages
 
     messages = [
         {
@@ -351,7 +351,7 @@ def test_strip_stale_user_merge_handles_list_content_row():
 
 def test_strip_stale_user_merge_from_messages_replaces_multihop_polluted_row():
     """Cleaner should replace a multi-hop polluted row with the clean current text."""
-    from api.streaming import _strip_stale_user_merge_from_messages
+    from api.runs.stale_user_context import _strip_stale_user_merge_from_messages
 
     previous_context = [
         {"role": "user", "content": CHAIN_TAIL_A},
@@ -376,7 +376,7 @@ def test_strip_stale_user_merge_from_messages_replaces_multihop_polluted_row():
 
 def test_strip_stale_user_merge_does_not_touch_clean_rows():
     """Clean rows, assistant rows, and tool rows must pass through untouched."""
-    from api.streaming import _strip_stale_user_merge_from_messages
+    from api.runs.stale_user_context import _strip_stale_user_merge_from_messages
 
     messages = [
         {"role": "user", "content": PRIOR_TAIL},
@@ -402,10 +402,8 @@ def test_deduplicate_context_messages_cleans_polluted_current_user_in_result():
     `context_messages` must contain a clean current user turn, not the
     stale-merged pair.
     """
-    from api.streaming import (
-        _deduplicate_context_messages,
-        _dedupe_replayed_context_messages,
-    )
+    from api.runs.message_sanitization import _deduplicate_context_messages
+    from api.runs.context_replay import _dedupe_replayed_context_messages
 
     previous_context = [
         {"role": "user", "content": "are we ready?"},
@@ -458,7 +456,7 @@ def test_dedupe_replayed_context_handles_repair_replaced_tail_user_row():
     position. WebUI should preserve the old tail and append the clean current
     turn, never persist the polluted joined content.
     """
-    from api.streaming import _dedupe_replayed_context_messages
+    from api.runs.context_replay import _dedupe_replayed_context_messages
 
     previous_context = [
         {"role": "user", "content": "are we ready?"},
@@ -493,7 +491,7 @@ def test_dedupe_replayed_context_handles_repair_replaced_tail_user_row():
 
 def test_dedupe_replayed_context_handles_multihop_repair_replaced_tail_row():
     """When repair replaces last tail row with a multi-hop merge, history is preserved."""
-    from api.streaming import _dedupe_replayed_context_messages
+    from api.runs.context_replay import _dedupe_replayed_context_messages
 
     previous_context = [
         {"role": "user", "content": CHAIN_TAIL_A},
@@ -532,7 +530,7 @@ def test_merge_display_drops_polluted_current_when_eager_checkpoint_clean():
     The visible transcript should keep exactly one clean current user row and
     append only the assistant response — not produce two adjacent user rows.
     """
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "are we ready?"},
@@ -578,7 +576,7 @@ def test_merge_display_drops_polluted_current_when_eager_checkpoint_clean():
 
 def test_merge_display_drops_multihop_polluted_current_when_eager_checkpoint_clean():
     """Multi-hop stale shape is normalized before eager checkpoint dedupe logic."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": CHAIN_TAIL_A},
@@ -618,7 +616,7 @@ def test_merge_display_drops_multihop_polluted_current_when_eager_checkpoint_cle
 
 def test_merge_display_drops_replayed_old_prefix_after_newer_clean_turn():
     """Visible transcript drops stale prefixes replayed from older polluted rows."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     stable_prefix = f"{CHAIN_TAIL_A}\n\n{CHAIN_TAIL_B}"
     newer_clean = "newer clean question after the polluted row"
@@ -666,7 +664,7 @@ def test_merge_display_drops_replayed_old_prefix_after_newer_clean_turn():
 
 def test_merge_display_does_not_overstrip_when_current_already_clean():
     """A legitimately new current turn that mentions the prior phrase stays intact."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "are we ready?"},
@@ -706,7 +704,7 @@ def test_merge_display_does_not_overstrip_when_current_already_clean():
 
 def test_merge_display_passes_through_when_prior_tail_text_differs():
     """Detector skips when the prior-tail text does not match PRIOR_TAIL — no over-strip."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "first question"},
@@ -748,7 +746,7 @@ def test_merge_display_passes_through_when_prior_tail_text_differs():
 
 def test_merge_display_workspace_prefixed_polluted_row_is_cleaned():
     """The polluted row may arrive with a workspace sentinel; cleaning still works."""
-    from api.streaming import _merge_display_messages_after_agent_result
+    from api.runs.transcript import _merge_display_messages_after_agent_result
 
     previous_display = [
         {"role": "user", "content": "are we ready?"},
@@ -796,7 +794,7 @@ def test_dedupe_replayed_context_preserves_historical_row_with_merge_shape():
     stale-merge pattern, _dedupe_replayed_context_messages must not rewrite it:
     only the new-turn boundary/candidate slice is eligible for stale-merge cleanup.
     """
-    from api.streaming import _dedupe_replayed_context_messages
+    from api.runs.context_replay import _dedupe_replayed_context_messages
 
     HISTORICAL_SHAPE = f"{PRIOR_TAIL}\n\n{CURRENT_TURN}"
 
@@ -835,7 +833,7 @@ def test_dedupe_replayed_context_preserves_historical_row_with_merge_shape():
 
 def test_stale_tail_candidate_returns_normalized_text():
     """_stale_user_tail_candidate normalizes whitespace and strips workspace prefix."""
-    from api.streaming import _stale_user_tail_candidate
+    from api.runs.stale_user_context import _stale_user_tail_candidate
 
     msg = {
         "role": "user",
@@ -852,7 +850,7 @@ def test_stale_tail_candidate_returns_normalized_text():
 
 def test_last_user_row_returns_trailing_user_message():
     """_last_user_row returns the most recent user message in the list."""
-    from api.streaming import _last_user_row
+    from api.runs.stale_user_context import _last_user_row
 
     messages = [
         {"role": "user", "content": "first"},
@@ -869,7 +867,7 @@ def test_last_user_row_returns_trailing_user_message():
 
 def _stale_tail_for(messages):
     """Re-derive the normalized prior-tail text used by the production call sites."""
-    from api.streaming import _last_user_row, _stale_user_tail_candidate
+    from api.runs.stale_user_context import _last_user_row, _stale_user_tail_candidate
 
     return _stale_user_tail_candidate(_last_user_row(messages))
 

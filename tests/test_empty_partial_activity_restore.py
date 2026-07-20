@@ -1,4 +1,4 @@
-from api.streaming import _restore_display_reasoning_metadata
+from api.runs.post_compression_context import _restore_display_reasoning_metadata
 
 
 def test_restore_display_reasoning_skips_empty_partial_activity_rows():

@@ -2,7 +2,7 @@
 
 import re
 
-from api.streaming import _WEBUI_PROGRESS_PROMPT, _webui_ephemeral_system_prompt
+from api.runs.prompts import _WEBUI_PROGRESS_PROMPT, _webui_ephemeral_system_prompt
 
 
 def _redaction_guidance() -> str:

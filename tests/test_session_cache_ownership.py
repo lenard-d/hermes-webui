@@ -81,7 +81,7 @@ def test_compression_cache_migration_never_moves_unverified_cached_object_to_new
 
 
 def test_cached_agent_session_identity_matches_requested_sid():
-    from api.streaming.agent_cache import (
+    from api.runs.agent_cache import (
         _cached_agent_matches_session,
         _cached_agent_session_identity,
     )

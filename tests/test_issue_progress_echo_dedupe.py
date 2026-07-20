@@ -17,7 +17,8 @@ def test_visible_progress_token_reasoning_and_interim_are_deduped(cleanup_test_s
     reasoning echo, and mark interim_assistant as already_streamed so the client and
     journal recovery do not append the same paragraph again.
     """
-    import api.streaming as streaming
+    import api.config as config
+    from api.runs import local_entrypoint
 
     progress = "Gefunden: der Skill-Tab lädt `/api/skill-html?slug=...`."
 
@@ -147,13 +148,13 @@ def test_visible_progress_token_reasoning_and_interim_are_deduped(cleanup_test_s
     saved = {k: sys.modules.get(k, _MISSING) for k in injected}
     sys.modules.update(injected)
     try:
-        with mock.patch.object(streaming, "get_session", return_value=fake_session), \
-             mock.patch.object(streaming, "_get_ai_agent", return_value=EchoAgent), \
-             mock.patch.object(streaming, "resolve_model_provider", return_value=("gpt-test", "openai", None)), \
+        with mock.patch.object(local_entrypoint, "get_session", return_value=fake_session), \
+             mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=EchoAgent), \
+             mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("gpt-test", "openai", None)), \
              mock.patch("api.config.get_config", return_value={}), \
              mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-            streaming.STREAMS[fake_stream_id] = fake_queue
-            streaming._run_agent_streaming(
+            config.STREAMS[fake_stream_id] = fake_queue
+            local_entrypoint.run_agent_streaming(
                 session_id=fake_session.session_id,
                 msg_text="scan",
                 model="gpt-test",
@@ -161,7 +162,7 @@ def test_visible_progress_token_reasoning_and_interim_are_deduped(cleanup_test_s
                 stream_id=fake_stream_id,
             )
     finally:
-        streaming.STREAMS.pop(fake_stream_id, None)
+        config.STREAMS.pop(fake_stream_id, None)
         for k, prev in saved.items():
             if prev is _MISSING:
                 sys.modules.pop(k, None)
@@ -185,7 +186,8 @@ def test_reasoning_then_interim_progress_marks_reasoning_echo(cleanup_test_sessi
     reasoning SSE may already be in the browser/journal, so the bridge must mark
     the interim event and strip the durable reasoning tail before settlement.
     """
-    import api.streaming as streaming
+    import api.config as config
+    from api.runs import local_entrypoint
 
     progress = "我先检查当前仓库状态，然后定位重复渲染路径。"
 
@@ -311,13 +313,13 @@ def test_reasoning_then_interim_progress_marks_reasoning_echo(cleanup_test_sessi
     saved = {k: sys.modules.get(k, _MISSING) for k in injected}
     sys.modules.update(injected)
     try:
-        with mock.patch.object(streaming, "get_session", return_value=fake_session), \
-             mock.patch.object(streaming, "_get_ai_agent", return_value=ReasoningThenInterimAgent), \
-             mock.patch.object(streaming, "resolve_model_provider", return_value=("gpt-test", "openai", None)), \
+        with mock.patch.object(local_entrypoint, "get_session", return_value=fake_session), \
+             mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=ReasoningThenInterimAgent), \
+             mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("gpt-test", "openai", None)), \
              mock.patch("api.config.get_config", return_value={}), \
              mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-            streaming.STREAMS[fake_stream_id] = fake_queue
-            streaming._run_agent_streaming(
+            config.STREAMS[fake_stream_id] = fake_queue
+            local_entrypoint.run_agent_streaming(
                 session_id=fake_session.session_id,
                 msg_text="scan",
                 model="gpt-test",
@@ -325,7 +327,7 @@ def test_reasoning_then_interim_progress_marks_reasoning_echo(cleanup_test_sessi
                 stream_id=fake_stream_id,
             )
     finally:
-        streaming.STREAMS.pop(fake_stream_id, None)
+        config.STREAMS.pop(fake_stream_id, None)
         for k, prev in saved.items():
             if prev is _MISSING:
                 sys.modules.pop(k, None)
@@ -354,7 +356,8 @@ def test_final_answer_prefix_reasoning_echo_is_not_journaled_or_merged(cleanup_t
     regression covers the live stream and run-journal replay boundary together;
     the done payload covers final session merge/reload state.
     """
-    import api.streaming as streaming
+    import api.config as config
+    from api.runs import local_entrypoint
     from api.run_journal import read_run_events
 
     final_answer = (
@@ -496,13 +499,13 @@ def test_final_answer_prefix_reasoning_echo_is_not_journaled_or_merged(cleanup_t
     saved = {k: sys.modules.get(k, _MISSING) for k in injected}
     sys.modules.update(injected)
     try:
-        with mock.patch.object(streaming, "get_session", return_value=fake_session), \
-             mock.patch.object(streaming, "_get_ai_agent", return_value=FinalEchoAgent), \
-             mock.patch.object(streaming, "resolve_model_provider", return_value=("gpt-test", "openai", None)), \
+        with mock.patch.object(local_entrypoint, "get_session", return_value=fake_session), \
+             mock.patch.object(local_entrypoint, "_get_ai_agent", return_value=FinalEchoAgent), \
+             mock.patch.object(local_entrypoint, "resolve_model_provider", return_value=("gpt-test", "openai", None)), \
              mock.patch("api.config.get_config", return_value={}), \
              mock.patch("api.config._resolve_cli_toolsets", return_value=[]):
-            streaming.STREAMS[fake_stream_id] = fake_queue
-            streaming._run_agent_streaming(
+            config.STREAMS[fake_stream_id] = fake_queue
+            local_entrypoint.run_agent_streaming(
                 session_id=fake_session.session_id,
                 msg_text="ship it",
                 model="gpt-test",
@@ -510,7 +513,7 @@ def test_final_answer_prefix_reasoning_echo_is_not_journaled_or_merged(cleanup_t
                 stream_id=fake_stream_id,
             )
     finally:
-        streaming.STREAMS.pop(fake_stream_id, None)
+        config.STREAMS.pop(fake_stream_id, None)
         for k, prev in saved.items():
             if prev is _MISSING:
                 sys.modules.pop(k, None)

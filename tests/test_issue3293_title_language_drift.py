@@ -26,7 +26,7 @@ if str(REPO) not in sys.path:
 # ── _dominant_script ────────────────────────────────────────────────────────
 
 def test_dominant_script_basic_buckets():
-    from api.streaming import _dominant_script
+    from api.runs.title_generation import _dominant_script
 
     assert _dominant_script("How do I fix this bug") == "latin"
     assert _dominant_script("如何修复这个错误问题") == "cjk"
@@ -35,7 +35,7 @@ def test_dominant_script_basic_buckets():
 
 
 def test_dominant_script_undecidable_returns_empty():
-    from api.streaming import _dominant_script
+    from api.runs.title_generation import _dominant_script
 
     # No meaningful alphabetic signal.
     assert _dominant_script("") == ""
@@ -50,7 +50,7 @@ def test_dominant_script_undecidable_returns_empty():
 def test_english_start_chinese_title_is_rejected():
     """The reporter's exact class: English conversation, Chinese title (even
     with a borrowed Latin technical term embedded)."""
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "How do I fix this Python bug in my code?", "修复 Python 代码错误"
@@ -58,7 +58,7 @@ def test_english_start_chinese_title_is_rejected():
 
 
 def test_english_start_cyrillic_title_is_rejected():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "What time does the meeting start tomorrow?", "Встреча Завтра Утром"
@@ -66,7 +66,7 @@ def test_english_start_cyrillic_title_is_rejected():
 
 
 def test_cjk_start_english_title_is_rejected():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch("如何修复这个错误问题", "Fixing the Bug") is True
 
@@ -74,7 +74,7 @@ def test_cjk_start_english_title_is_rejected():
 # ── regression guards: legitimate same-script titles must NOT be rejected ───
 
 def test_english_start_english_title_allowed():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "Why are old images not displayed here?", "Old Image Display Issue"
@@ -84,7 +84,7 @@ def test_english_start_english_title_allowed():
 def test_english_start_spanish_title_allowed():
     """Same (latin) script — language differs but the script check must not flag
     it; only a clearly different script is a mismatch signal."""
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "How do I fix this Python bug in my code?", "Arreglar error de Python"
@@ -94,7 +94,7 @@ def test_english_start_spanish_title_allowed():
 def test_english_title_with_one_foreign_placename_allowed():
     """An otherwise-English title containing a single CJK place name stays below
     the proportion threshold and is not flagged."""
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "What is the best dataset for model training?", "Using 北京 Dataset Notes"
@@ -102,14 +102,14 @@ def test_english_title_with_one_foreign_placename_allowed():
 
 
 def test_same_cjk_script_title_allowed():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch("如何修复这个错误问题", "代码错误修复") is False
     assert _title_language_mismatch("日本語で質問があります", "日本語のチャット") is False
 
 
 def test_empty_title_is_not_a_mismatch():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch("Hello there my friend", "") is False
     assert _title_language_mismatch("Hello there", "   ") is False
@@ -117,7 +117,7 @@ def test_empty_title_is_not_a_mismatch():
 
 def test_tiny_start_without_script_signal_allows_title():
     """A start too short to establish a dominant script must not gate the title."""
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch("hi", "Quick Chat") is False
 
@@ -125,7 +125,7 @@ def test_tiny_start_without_script_signal_allows_title():
 # ── legacy German→English heuristic preserved ───────────────────────────────
 
 def test_legacy_german_start_english_title_still_rejected():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "Warum werden alte Bilder hier nicht mehr angezeigt?",
@@ -134,7 +134,7 @@ def test_legacy_german_start_english_title_still_rejected():
 
 
 def test_legacy_german_start_german_title_allowed():
-    from api.streaming import _title_language_mismatch
+    from api.runs.title_generation import _title_language_mismatch
 
     assert _title_language_mismatch(
         "Warum werden alte Bilder angezeigt?", "Alte Bilder Anzeige"

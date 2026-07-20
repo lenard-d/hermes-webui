@@ -13,12 +13,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from api.streaming import (
-    _attachment_name,
-    _build_native_multimodal_message,
-    _NATIVE_IMAGE_MAX_BYTES,
-    _sanitize_messages_for_api,
-)
+from api.runs.attachments import _attachment_name, _build_native_multimodal_message, _NATIVE_IMAGE_MAX_BYTES
+from api.runs.message_sanitization import _sanitize_messages_for_api
 from api.routes import _normalize_chat_attachments
 
 
@@ -383,7 +379,7 @@ class TestBuildNativeMultimodalMessage:
 
 # ── _is_valid_image magic-byte checks ────────────────────────────────────────
 
-from api.streaming import _is_valid_image
+from api.runs.attachments import _is_valid_image
 
 
 class TestIsValidImage:

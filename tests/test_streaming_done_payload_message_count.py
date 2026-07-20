@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from api.streaming import _session_payload_with_full_messages
+from api.runs.payloads import _session_payload_with_full_messages
 
 
 LOCAL_RUN_SOURCE = Path("api/runs/local.py").read_text(encoding="utf-8")

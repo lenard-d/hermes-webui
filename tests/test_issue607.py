@@ -10,7 +10,7 @@ from tests.frontend_asset_contract import family_source
 # _strip_thinking_markup tests
 # ---------------------------------------------------------------------------
 
-from api.streaming import _strip_thinking_markup, _looks_invalid_generated_title
+from api.runs.thinking_content import _strip_thinking_markup, _looks_invalid_generated_title
 
 
 class TestGemma4ThinkingTokenStrip:

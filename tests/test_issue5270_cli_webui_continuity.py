@@ -78,7 +78,7 @@ def _install_cli_continuity_env(monkeypatch, tmp_path):
     import api.sessions.store as models
     import api.profiles as profiles
     import api.routes as routes
-    import api.streaming as streaming
+    from api.runs import local_entrypoint
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
@@ -91,7 +91,6 @@ def _install_cli_continuity_env(monkeypatch, tmp_path):
     monkeypatch.setattr(models, "_active_state_db_path", lambda: state_db, raising=False)
     monkeypatch.setattr(config, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", index_file, raising=False)
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path, raising=False)
     monkeypatch.setattr(routes, "SESSION_INDEX_FILE", index_file, raising=False)
 
@@ -99,17 +98,14 @@ def _install_cli_continuity_env(monkeypatch, tmp_path):
     config.CANCEL_FLAGS.clear()
     config.AGENT_INSTANCES.clear()
     config.SESSION_AGENT_LOCKS.clear()
-    streaming.STREAMS.clear()
-    streaming.CANCEL_FLAGS.clear()
-    streaming.AGENT_INSTANCES.clear()
-    streaming.STREAM_PARTIAL_TEXT.clear()
-    streaming.STREAM_REASONING_TEXT.clear()
-    streaming.STREAM_LIVE_TOOL_CALLS.clear()
+    config.STREAM_PARTIAL_TEXT.clear()
+    config.STREAM_REASONING_TEXT.clear()
+    config.STREAM_LIVE_TOOL_CALLS.clear()
 
-    return config, models, routes, streaming, state_db
+    return config, models, routes, local_entrypoint, state_db
 
 
-def _capture_streaming_history(monkeypatch, config, streaming, session, *, stream_id: str, tmp_path: Path):
+def _capture_streaming_history(monkeypatch, config, local_entrypoint, session, *, stream_id: str, tmp_path: Path):
     captured: dict[str, list] = {}
 
     class FakeAgent:
@@ -139,9 +135,8 @@ def _capture_streaming_history(monkeypatch, config, streaming, session, *, strea
         def interrupt(self, _message):
             return None
 
-    monkeypatch.setattr(streaming, "_get_ai_agent", lambda: FakeAgent)
-    monkeypatch.setattr(streaming, "resolve_model_provider", lambda *args, **kwargs: ("test-model", None, None))
-    monkeypatch.setattr(streaming, "get_config", lambda: {})
+    monkeypatch.setattr(local_entrypoint, "_get_ai_agent", lambda: FakeAgent)
+    monkeypatch.setattr(local_entrypoint, "resolve_model_provider", lambda *args, **kwargs: ("test-model", None, None))
     monkeypatch.setattr(config, "get_config", lambda: {})
     monkeypatch.setattr(config, "_resolve_cli_toolsets", lambda *args, **kwargs: [])
 
@@ -151,7 +146,7 @@ def _capture_streaming_history(monkeypatch, config, streaming, session, *, strea
     session.save(touch_updated_at=False)
     config.STREAMS[stream_id] = queue.Queue()
     try:
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session.session_id,
             msg_text=WEBUI_FOLLOWUP,
             model="test-model",
@@ -169,7 +164,7 @@ def _history_contents(history):
 
 
 def test_first_webui_followup_receives_immediate_cli_assistant_context(monkeypatch, tmp_path):
-    config, models, routes, streaming, state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
+    config, models, routes, local_entrypoint, state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
     sid = "issue5270_cli_child_fresh"
     _make_cli_continuation_state_db(
         state_db,
@@ -189,7 +184,7 @@ def test_first_webui_followup_receives_immediate_cli_assistant_context(monkeypat
     history = _capture_streaming_history(
         monkeypatch,
         config,
-        streaming,
+        local_entrypoint,
         session,
         stream_id="stream-issue5270-fresh",
         tmp_path=tmp_path,
@@ -199,7 +194,7 @@ def test_first_webui_followup_receives_immediate_cli_assistant_context(monkeypat
 
 
 def test_already_claimed_cli_sidecar_still_sees_cli_prior_assistant_on_first_webui_turn(monkeypatch, tmp_path):
-    config, models, routes, streaming, state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
+    config, models, routes, local_entrypoint, state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
     sid = "issue5270_cli_child_claimed"
     _make_cli_continuation_state_db(
         state_db,
@@ -233,7 +228,7 @@ def test_already_claimed_cli_sidecar_still_sees_cli_prior_assistant_on_first_web
     history = _capture_streaming_history(
         monkeypatch,
         config,
-        streaming,
+        local_entrypoint,
         session,
         stream_id="stream-issue5270-claimed",
         tmp_path=tmp_path,
@@ -243,7 +238,7 @@ def test_already_claimed_cli_sidecar_still_sees_cli_prior_assistant_on_first_web
 
 
 def test_chat_start_refreshes_cli_messages_before_first_webui_turn(monkeypatch, tmp_path):
-    _config, models, routes, _streaming, _state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
+    _config, models, routes, _local_entrypoint, _state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
 
     session = models.Session(
         session_id="issue5270_cli_child_chat_start",
@@ -298,7 +293,7 @@ def test_chat_start_refreshes_cli_messages_before_first_webui_turn(monkeypatch, 
 
 
 def test_regular_cli_sessions_remain_writable_after_fix(monkeypatch, tmp_path):
-    _config, _models, routes, _streaming, state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
+    _config, _models, routes, _local_entrypoint, state_db = _install_cli_continuity_env(monkeypatch, tmp_path)
     sid = "issue5270_cli_child_writable"
     _make_cli_continuation_state_db(
         state_db,

@@ -5,8 +5,10 @@ import sys
 import types
 from unittest import mock
 
+import api.config as config
 from api.auth import oauth
-import api.streaming as streaming
+from api.runs import local as local_run
+from api.runs import local_entrypoint
 
 
 class FakeSession:
@@ -120,10 +122,10 @@ def _install_streaming_harness(monkeypatch, fake_session):
         "resolve_runtime_provider_with_anthropic_env_lock",
         fake_runtime_lock,
     )
-    monkeypatch.setattr(streaming, "get_session", lambda _session_id: fake_session)
-    monkeypatch.setattr(streaming, "_get_ai_agent", lambda: CapturingAgent)
+    monkeypatch.setattr(local_entrypoint, "get_session", lambda _session_id: fake_session)
+    monkeypatch.setattr(local_entrypoint, "_get_ai_agent", lambda: CapturingAgent)
     monkeypatch.setattr(
-        streaming,
+        local_entrypoint,
         "resolve_model_provider",
         lambda *_args, **_kwargs: ("haiku-4-5", "anthropic", None),
     )
@@ -146,8 +148,8 @@ def _run_streaming_turn(
     fake_session.active_stream_id = stream_id
     fake_queue = queue.Queue()
     try:
-        streaming.STREAMS[stream_id] = fake_queue
-        streaming._run_agent_streaming(
+        config.STREAMS[stream_id] = fake_queue
+        local_entrypoint.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text="background wakeup turn",
             model=dispatch_model,
@@ -156,8 +158,8 @@ def _run_streaming_turn(
             stream_id=stream_id,
         )
     finally:
-        streaming.STREAMS.pop(stream_id, None)
-        streaming.AGENT_INSTANCES.pop(stream_id, None)
+        config.STREAMS.pop(stream_id, None)
+        config.AGENT_INSTANCES.pop(stream_id, None)
 
 
 def test_dispatch_stamp_does_not_clobber_newer_picker_model(monkeypatch):
@@ -216,7 +218,7 @@ def test_profile_repair_skips_persistence_when_newer_picker_choice_already_won(m
     fake_session = FakeSession(model="opus-4-8", model_provider="openrouter")
     fake_session.profile = "worker-profile"
     monkeypatch.setattr(
-        streaming,
+        local_run,
         "_apply_profile_home_context_to_streaming_model",
         lambda **_kwargs: ("claude-profile-default", "anthropic", True),
     )
@@ -247,7 +249,7 @@ def test_dispatch_stamp_snapshots_provider_under_agent_lock(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(streaming, "_get_session_agent_lock", lambda _session_id: PickerUpdateLock())
+    monkeypatch.setattr(local_entrypoint, "_get_session_agent_lock", lambda _session_id: PickerUpdateLock())
 
     _run_streaming_turn(
         monkeypatch,

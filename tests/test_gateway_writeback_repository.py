@@ -6,7 +6,6 @@ import pytest
 import api.config as config
 from api.runs import gateway as gateway_chat
 import api.sessions.store as models
-import api.streaming as streaming
 
 
 _RUNTIME_STREAM_MAPS = (
@@ -44,7 +43,7 @@ def isolated_gateway_state(tmp_path, monkeypatch):
     monkeypatch.delenv("HERMES_WEBUI_GATEWAY_USE_RUNS_API", raising=False)
     monkeypatch.setattr(config, "get_config", lambda: {})
     monkeypatch.setattr(
-        streaming,
+        gateway_chat,
         "_load_webui_prefill_context",
         lambda _cfg: {
             "status": "not_configured",
@@ -55,7 +54,7 @@ def isolated_gateway_state(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        streaming,
+        gateway_chat,
         "_prefill_messages_with_webui_context",
         lambda _context, _cfg: [],
     )

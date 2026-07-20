@@ -360,7 +360,7 @@ class TestStreamingWorkerEnrichment:
     """Tests for profile-aware provider/model enrichment in the streaming worker."""
 
     def test_streaming_enrichment_skips_non_profile_session(self, tmp_path):
-        from api.streaming import _apply_profile_home_context_to_streaming_model
+        from api.runs.runtime_resolution import _apply_profile_home_context_to_streaming_model
 
         # Even if the default home has a model provider configured, a session
         # without an explicit profile must not inherit that provider context.
@@ -604,7 +604,7 @@ class TestStreamingSlashQualifiedRepair:
 
     def test_streaming_repairs_openai_slash_model_under_openai_codex(self):
         """openai/... under an openai-codex profile repairs to the profile default."""
-        from api.streaming import _apply_profile_provider_context_to_streaming_model
+        from api.runs.runtime_resolution import _apply_profile_provider_context_to_streaming_model
 
         model, provider_context, changed = (
             _apply_profile_provider_context_to_streaming_model(

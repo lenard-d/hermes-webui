@@ -10,7 +10,7 @@ that historical assistant messages don't mask a silent provider failure.
 
 import pytest
 
-from api.streaming import _has_new_assistant_reply
+from api.runs.transcript import _has_new_assistant_reply
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

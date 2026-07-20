@@ -144,7 +144,7 @@ def test_cancel_stream_upgrades_cached_metadata_projection(temp_session_dir, mon
 
     import api.config as config
     import api.sessions.store as models
-    import api.streaming as streaming
+    from api.streaming import live_controls as streaming
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=1000, with_active_stream=True)
     stream_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -184,7 +184,6 @@ def test_cancel_stream_does_not_resurrect_session_deleted_before_edit(
 
     import api.config as config
     import api.sessions.store as models
-    import api.streaming as streaming
     import api.streaming.live_controls as live_controls
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=4, with_active_stream=True)
@@ -209,7 +208,7 @@ def test_cancel_stream_does_not_resurrect_session_deleted_before_edit(
     config.AGENT_INSTANCES[stream_id] = agent
     monkeypatch.setattr(live_controls, "get_session", lambda _sid: stale_seed)
 
-    assert streaming.cancel_stream(stream_id) is True
+    assert live_controls.cancel_stream(stream_id) is True
     assert not (temp_session_dir / f"{sid}.json").exists()
 
 

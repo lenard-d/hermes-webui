@@ -1,11 +1,8 @@
 import unittest
 from pathlib import Path
 
-from api.streaming import (
-    _fallback_title_from_exchange,
-    _first_exchange_snippets,
-    _sanitize_generated_title,
-)
+from api.runs.title_generation import _fallback_title_from_exchange, _first_exchange_snippets
+from api.runs.thinking_content import _sanitize_generated_title
 
 
 class TestGeneratedTitleSanitization(unittest.TestCase):

@@ -1,8 +1,6 @@
-from api.streaming import (
-    _deduplicate_context_messages,
-    _is_context_compression_marker,
-    _merge_display_messages_after_agent_result,
-)
+from api.runs.message_sanitization import _deduplicate_context_messages
+from api.runs.compression_anchors import _is_context_compression_marker
+from api.runs.transcript import _merge_display_messages_after_agent_result
 
 
 MARKER = "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted."

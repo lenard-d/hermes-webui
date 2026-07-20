@@ -33,7 +33,7 @@ def test_next_webui_turn_context_includes_state_db_external_messages(monkeypatch
     import api.config as config
     import api.sessions.store as models
     import api.profiles as profiles
-    import api.streaming as streaming
+    from api.runs import local_entrypoint
     from api.sessions.store import Session
 
     session_dir = tmp_path / "sessions"
@@ -44,7 +44,6 @@ def test_next_webui_turn_context_includes_state_db_external_messages(monkeypatch
     monkeypatch.setattr(models, "SESSIONS", OrderedDict(), raising=False)
     monkeypatch.setattr(config, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", index_file, raising=False)
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path, raising=False)
     monkeypatch.setattr(models, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     config.STREAMS.clear()
@@ -102,16 +101,15 @@ def test_next_webui_turn_context_includes_state_db_external_messages(monkeypatch
                 ],
             }
 
-    monkeypatch.setattr(streaming, "_get_ai_agent", lambda: FakeAgent)
-    monkeypatch.setattr(streaming, "resolve_model_provider", lambda *args, **kwargs: ("test-model", None, None))
-    monkeypatch.setattr(streaming, "get_config", lambda: {})
+    monkeypatch.setattr(local_entrypoint, "_get_ai_agent", lambda: FakeAgent)
+    monkeypatch.setattr(local_entrypoint, "resolve_model_provider", lambda *args, **kwargs: ("test-model", None, None))
     monkeypatch.setattr(config, "get_config", lambda: {})
     monkeypatch.setattr(config, "_resolve_cli_toolsets", lambda *args, **kwargs: [])
 
     stream_id = "stream-context-reconcile"
     config.STREAMS[stream_id] = queue.Queue()
     try:
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=sid,
             msg_text="new webui turn",
             model="test-model",
@@ -199,7 +197,7 @@ def test_state_db_delta_after_context_does_not_promote_unrelated_prefix_as_recov
 def test_webui_streaming_normalizes_trailing_prefill_user_before_current_turn(monkeypatch, tmp_path):
     import api.config as config
     import api.sessions.store as models
-    import api.streaming as streaming
+    from api.runs import local_entrypoint
     from api.sessions.store import new_session
 
     session_dir = tmp_path / "sessions"
@@ -210,7 +208,6 @@ def test_webui_streaming_normalizes_trailing_prefill_user_before_current_turn(mo
     monkeypatch.setattr(models, "SESSIONS", OrderedDict(), raising=False)
     monkeypatch.setattr(config, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", index_file, raising=False)
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(models, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     config.STREAMS.clear()
     config.CANCEL_FLAGS.clear()
@@ -235,12 +232,11 @@ def test_webui_streaming_normalizes_trailing_prefill_user_before_current_turn(mo
                 ],
             }
 
-    monkeypatch.setattr(streaming, "_get_ai_agent", lambda: FakeAgent)
-    monkeypatch.setattr(streaming, "resolve_model_provider", lambda *args, **kwargs: ("test-model", None, None))
-    monkeypatch.setattr(streaming, "get_config", lambda: {})
+    monkeypatch.setattr(local_entrypoint, "_get_ai_agent", lambda: FakeAgent)
+    monkeypatch.setattr(local_entrypoint, "resolve_model_provider", lambda *args, **kwargs: ("test-model", None, None))
     monkeypatch.setattr(config, "get_config", lambda: {})
     monkeypatch.setattr(config, "_resolve_cli_toolsets", lambda *args, **kwargs: [])
-    monkeypatch.setattr(streaming, "_load_webui_prefill_context", lambda cfg: {
+    monkeypatch.setattr(local_entrypoint, "_load_webui_prefill_context", lambda cfg: {
         "status": "loaded",
         "source": "test",
         "label": "test",
@@ -261,7 +257,7 @@ def test_webui_streaming_normalizes_trailing_prefill_user_before_current_turn(mo
 
     config.STREAMS[stream_id] = queue.Queue()
     try:
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=s.session_id,
             msg_text="new webui turn",
             model="test-model",

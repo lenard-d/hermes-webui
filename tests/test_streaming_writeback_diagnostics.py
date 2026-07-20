@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from api import streaming
+from api.runs import diagnostics as streaming
 
 
 class _FakeLog:

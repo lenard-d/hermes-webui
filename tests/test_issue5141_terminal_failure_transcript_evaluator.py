@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-import api.streaming as streaming
+from api.runs import post_compression_context, transcript
 
 
 def test_turn_evaluator_matches_merged_wrapper_without_replay_filter():
@@ -15,21 +15,21 @@ def test_turn_evaluator_matches_merged_wrapper_without_replay_filter():
     ]
     msg_text = "follow up"
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
-        streaming._restore_reasoning_metadata(previous_display, result_messages),
+        post_compression_context._restore_reasoning_metadata(previous_display, result_messages),
         msg_text,
         source="webui",
     )
-    direct = streaming._turn_transcript_lacks_final_assistant_answer(
+    direct = transcript._turn_transcript_lacks_final_assistant_answer(
         merged,
         previous_display,
         msg_text,
         source="webui",
         drop_replayed_assistant=False,
     )
-    wrapped = streaming._merged_transcript_lacks_final_assistant_answer(
+    wrapped = transcript._merged_transcript_lacks_final_assistant_answer(
         previous_display,
         previous_context,
         result_messages,
@@ -50,21 +50,21 @@ def test_turn_evaluator_matches_merged_wrapper_with_final_answer():
     ]
     msg_text = "follow up"
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
-        streaming._restore_reasoning_metadata(previous_display, result_messages),
+        post_compression_context._restore_reasoning_metadata(previous_display, result_messages),
         msg_text,
         source="webui",
     )
-    direct = streaming._turn_transcript_lacks_final_assistant_answer(
+    direct = transcript._turn_transcript_lacks_final_assistant_answer(
         merged,
         previous_display,
         msg_text,
         source="webui",
         drop_replayed_assistant=False,
     )
-    wrapped = streaming._merged_transcript_lacks_final_assistant_answer(
+    wrapped = transcript._merged_transcript_lacks_final_assistant_answer(
         previous_display,
         previous_context,
         result_messages,
@@ -81,7 +81,7 @@ def test_turn_evaluator_materializes_pending_user_after_display_boundary():
     merged = list(previous_display)
     msg_text = "new prompt"
 
-    assert streaming._turn_transcript_lacks_final_assistant_answer(
+    assert transcript._turn_transcript_lacks_final_assistant_answer(
         merged,
         previous_display,
         msg_text,
@@ -107,11 +107,11 @@ def test_merged_wrapper_delegates_to_turn_evaluator():
 
     previous_display = [{"role": "user", "content": "hello"}]
     with mock.patch.object(
-        streaming,
+        transcript,
         "_turn_transcript_lacks_final_assistant_answer",
         side_effect=_fake_evaluator,
     ):
-        result = streaming._merged_transcript_lacks_final_assistant_answer(
+        result = transcript._merged_transcript_lacks_final_assistant_answer(
             previous_display,
             previous_display,
             previous_display,

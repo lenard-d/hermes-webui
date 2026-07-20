@@ -457,7 +457,7 @@ def test_gateway_runs_api_streaming_preserves_multimodal_input():
 
     try:
         with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
-             patch("api.streaming._build_native_multimodal_message", return_value=multimodal_content):
+             patch("api.runs.gateway._build_native_multimodal_message", return_value=multimodal_content):
             _run_gateway_runs_api_streaming(
                 session_id="sess-mm",
                 msg_text="describe this",

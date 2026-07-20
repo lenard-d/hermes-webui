@@ -1,4 +1,4 @@
-from api.streaming import _stamp_missing_message_timestamps
+from api.runs.transcript import _stamp_missing_message_timestamps
 
 
 def test_stamp_missing_message_timestamps_uses_subsecond_sequence():

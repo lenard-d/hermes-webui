@@ -1,7 +1,6 @@
 """Regression coverage for preserving manually named sessions (#3230)."""
 import contextlib
 import json
-import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +9,7 @@ import pytest
 import api.config as config
 import api.sessions.store as models
 import api.profiles as profiles_api
-import api.streaming as streaming
+import api.runs.title_generation as title_generation
 from api.sessions.store import Session
 from api.sessions.operations import apply_session_title_rename, mark_session_title_generated
 
@@ -109,9 +108,9 @@ def test_adaptive_refresh_skips_manual_title_even_at_configured_interval():
         manual_title=True,
     )
 
-    with patch("api.streaming._get_title_refresh_interval", return_value=5), \
+    with patch("api.runs.title_generation._get_title_refresh_interval", return_value=5), \
          patch("threading.Thread") as thread_cls:
-        streaming._maybe_schedule_title_refresh(session, lambda *_args: None, agent=None)
+        title_generation._maybe_schedule_title_refresh(session, lambda *_args: None, agent=None)
 
     assert thread_cls.called is False
 
@@ -125,11 +124,11 @@ def test_adaptive_refresh_still_schedules_for_generated_titles_without_manual_lo
         manual_title=False,
     )
 
-    with patch("api.streaming._get_title_refresh_interval", return_value=5), \
+    with patch("api.runs.title_generation._get_title_refresh_interval", return_value=5), \
          patch("threading.Thread") as thread_cls:
         thread = MagicMock()
         thread_cls.return_value = thread
-        streaming._maybe_schedule_title_refresh(session, lambda *_args: None, agent=None)
+        title_generation._maybe_schedule_title_refresh(session, lambda *_args: None, agent=None)
 
     assert thread_cls.called is True
     assert thread.start.called is True
@@ -160,9 +159,7 @@ def test_cleared_title_allows_initial_auto_generation(monkeypatch):
     session.save = MagicMock()
     events = []
 
-    monkeypatch.setattr(streaming, "get_session", lambda _sid: session)
-    monkeypatch.setattr(streaming, "SESSIONS", {session.session_id: session})
-    monkeypatch.setattr(streaming, "LOCK", threading.Lock())
+    monkeypatch.setattr(title_generation, "get_session", lambda _sid: session)
 
     @contextlib.contextmanager
     def edit_loaded(_sid, *, touch_updated_at=True, save_when=None, **_kwargs):
@@ -171,10 +168,10 @@ def test_cleared_title_allows_initial_auto_generation(monkeypatch):
             kwargs = {} if touch_updated_at else {"touch_updated_at": False}
             session.save(**kwargs)
 
-    monkeypatch.setattr(streaming, "edit_session", edit_loaded)
-    monkeypatch.setattr(streaming, "_aux_title_configured", lambda: True)
+    monkeypatch.setattr(title_generation, "edit_session", edit_loaded)
+    monkeypatch.setattr(title_generation, "_aux_title_configured", lambda: True)
     monkeypatch.setattr(
-        streaming,
+        title_generation,
         "_generate_llm_session_title_via_aux",
         lambda *_args, **_kwargs: ("Generated Follow-up Title", "llm_ok", "raw"),
     )
@@ -184,7 +181,7 @@ def test_cleared_title_allows_initial_auto_generation(monkeypatch):
         lambda *_args, **_kwargs: contextlib.nullcontext(),
     )
 
-    streaming._run_background_title_update(
+    title_generation._run_background_title_update(
         session.session_id,
         "question",
         "answer",

@@ -13,7 +13,8 @@ from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 
-from api.streaming import _restore_reasoning_metadata, _sanitize_messages_for_api
+from api.runs.post_compression_context import _restore_reasoning_metadata
+from api.runs.message_sanitization import _sanitize_messages_for_api
 
 
 REPO = pathlib.Path(__file__).parent.parent

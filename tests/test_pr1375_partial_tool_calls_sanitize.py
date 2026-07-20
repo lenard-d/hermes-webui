@@ -29,7 +29,7 @@ sys.path.insert(0, str(REPO_ROOT))
 def test_partial_tool_calls_field_not_forwarded_to_llm():
     """The `_partial_tool_calls` field must not survive _sanitize_messages_for_api.
     Otherwise the malformed entries get sent to the LLM and cause 400 errors."""
-    from api.streaming import _sanitize_messages_for_api
+    from api.runs.message_sanitization import _sanitize_messages_for_api
 
     messages = [
         {"role": "user", "content": "do a search"},
@@ -69,7 +69,7 @@ def test_legitimate_tool_calls_are_preserved_for_completed_turns():
     """Completed assistant turns with REAL tool_calls (with id + function envelope)
     must still pass through sanitize unchanged. The rename only affects
     cancel-partial messages, not normal completed turns."""
-    from api.streaming import _sanitize_messages_for_api
+    from api.runs.message_sanitization import _sanitize_messages_for_api
 
     messages = [
         {"role": "user", "content": "search"},

@@ -9,11 +9,11 @@ from unittest import mock
 import api.config
 import api.auth as auth_interface
 from api.auth import oauth
-import api.streaming as streaming
+from api.runs import agent_cache, local_entrypoint, runtime_resolution
 
 
 def test_runtime_preferred_base_url_uses_runtime_value_for_pooled_provider():
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "opencode-go", "base_url": "https://opencode.example.com/api"},
         "opencode-go",
         "https://opencode.example.com/api/v1",
@@ -21,7 +21,7 @@ def test_runtime_preferred_base_url_uses_runtime_value_for_pooled_provider():
 
 
 def test_runtime_preferred_base_url_keeps_custom_config_base_url():
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "custom:opencode-proxy", "base_url": "https://runtime.example.com"},
         "custom:opencode-proxy",
         "https://config.example.com/v1",
@@ -29,7 +29,7 @@ def test_runtime_preferred_base_url_keeps_custom_config_base_url():
 
 
 def test_runtime_preferred_base_url_uses_runtime_for_custom_provider_without_config():
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "custom:opencode-proxy", "base_url": "https://runtime.example.com"},
         "custom:opencode-proxy",
         None,
@@ -41,13 +41,13 @@ def test_runtime_preferred_base_url_preserves_different_endpoint_config_override
     at a DIFFERENT host/port must NOT be clobbered by the runtime default. Only a
     same-endpoint runtime URL (the #3895 /v1-dedup case) should win."""
     # LM Studio pinned at a LAN IP — must be preserved over the runtime localhost default.
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "lmstudio", "base_url": "http://localhost:1234/v1"},
         "lmstudio",
         "http://10.0.0.5:1234/v1",
     ) == "http://10.0.0.5:1234/v1"
     # OpenRouter mirror override preserved over the runtime canonical host.
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1"},
         "openrouter",
         "https://my-mirror.example.com/api/v1",
@@ -57,13 +57,13 @@ def test_runtime_preferred_base_url_preserves_different_endpoint_config_override
 def test_runtime_preferred_base_url_prefers_runtime_for_same_endpoint_path_normalization():
     """The #3895 case: same scheme+host+port, runtime just strips a duplicated
     path segment — runtime (corrected) form wins."""
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "opencode-go", "base_url": "https://opencode.example.com/zen/go"},
         "opencode-go",
         "https://opencode.example.com/zen/go/v1",
     ) == "https://opencode.example.com/zen/go"
     # Same host different port = different endpoint → configured wins.
-    assert streaming._runtime_preferred_base_url(
+    assert runtime_resolution._runtime_preferred_base_url(
         {"provider": "someprov", "base_url": "https://host.example.com:8080/v1"},
         "someprov",
         "https://host.example.com:9090/v1",
@@ -185,10 +185,10 @@ def test_streaming_passes_target_model_and_prefers_runtime_base_url(monkeypatch)
         "resolve_runtime_provider_with_anthropic_env_lock",
         fake_runtime_lock,
     )
-    monkeypatch.setattr(streaming, "get_session", lambda _session_id: fake_session)
-    monkeypatch.setattr(streaming, "_get_ai_agent", lambda: CapturingAgent)
+    monkeypatch.setattr(local_entrypoint, "get_session", lambda _session_id: fake_session)
+    monkeypatch.setattr(local_entrypoint, "_get_ai_agent", lambda: CapturingAgent)
     monkeypatch.setattr(
-        streaming,
+        local_entrypoint,
         "resolve_model_provider",
         lambda *_args, **_kwargs: (
             "glm-5.1",
@@ -203,8 +203,8 @@ def test_streaming_passes_target_model_and_prefers_runtime_base_url(monkeypatch)
     monkeypatch.setitem(sys.modules, "hermes_state", fake_hermes_state)
 
     try:
-        streaming.STREAMS[fake_stream_id] = fake_queue
-        streaming._run_agent_streaming(
+        api.config.STREAMS[fake_stream_id] = fake_queue
+        local_entrypoint.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text="hello from picker",
             model="glm-5.1",
@@ -212,8 +212,8 @@ def test_streaming_passes_target_model_and_prefers_runtime_base_url(monkeypatch)
             stream_id=fake_stream_id,
         )
     finally:
-        streaming.STREAMS.pop(fake_stream_id, None)
-        streaming.AGENT_INSTANCES.pop(fake_stream_id, None)
+        api.config.STREAMS.pop(fake_stream_id, None)
+        api.config.AGENT_INSTANCES.pop(fake_stream_id, None)
 
     resolve_runtime_provider.assert_called_once_with(
         requested="opencode-go",
@@ -277,13 +277,13 @@ def test_attempt_credential_self_heal_passes_target_model(monkeypatch):
     monkeypatch.setattr(api.config, "SESSION_AGENT_CACHE_LOCK", threading.Lock())
     monkeypatch.setattr(api.config, "invalidate_credential_pool_cache", lambda provider_id: calls.setdefault("invalidated", []).append(provider_id))
     monkeypatch.setattr(
-        streaming,
+        agent_cache,
         "_close_cached_agent_entry_at_session_boundary",
         lambda session_id, entry: closed.append((session_id, entry)),
     )
     monkeypatch.setitem(sys.modules, "hermes_cli.runtime_provider", fake_runtime_module)
 
-    result = streaming._attempt_credential_self_heal(
+    result = agent_cache._attempt_credential_self_heal(
         "opencode-go",
         "sess-3895",
         None,

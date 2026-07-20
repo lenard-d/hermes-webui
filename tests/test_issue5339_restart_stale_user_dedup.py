@@ -141,7 +141,7 @@ def test_content_key_strips_workspace_prefix_for_user_turns():
     identity must produce the same key for the same human turn.
     """
     from api.sessions.store import _session_message_content_key
-    from api.streaming import _message_identity
+    from api.runs.context_replay import _message_identity
 
     prefixed = {"role": "user", "content": WORKSPACE_PREFIX + "Hello world"}
     bare = {"role": "user", "content": "Hello world"}

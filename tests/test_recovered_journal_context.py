@@ -17,7 +17,7 @@ from api.sessions.store import (
     _append_recovered_pending_turn,
 )
 from api.run_journal import append_run_event
-from api.streaming import _context_messages_for_new_turn
+from api.runs.turn_context import _context_messages_for_new_turn
 
 
 @pytest.fixture

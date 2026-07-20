@@ -179,7 +179,7 @@ def test_think_only_message(driver):
 
 class TestBackendThinkSplitParity:
     def _sp(self, raw, existing=""):
-        from api.streaming import _split_thinking_from_content
+        from api.runs.thinking_content import _split_thinking_from_content
         return _split_thinking_from_content(raw, existing)
 
     def test_plain_untouched(self):
