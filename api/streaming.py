@@ -76,6 +76,8 @@ from api.process_event_utils import (
     requeue_async_delegation_event,
     schedule_async_delegation_claim_retry,
 )
+from api.streaming_parts import payloads as _streaming_payloads
+from api.streaming_parts.bindings import streaming_api as _streaming_api
 
 
 def _session_payload_with_full_messages(session, *, tool_calls=None):
@@ -86,45 +88,35 @@ def _session_payload_with_full_messages(session, *, tool_calls=None):
     must report the count of that embedded transcript, otherwise completion and
     reconcile paths can mistake a complete payload for a stale short window.
     """
-    messages = list(getattr(session, 'messages', None) or [])
-    raw = session.compact() | {
-        'messages': messages,
-        'message_count': len(messages),
-    }
-    attach_todo_state(raw, messages)
-    if tool_calls is not None:
-        raw['tool_calls'] = tool_calls
-    return raw
+    return _streaming_payloads.session_payload_with_full_messages(
+        _streaming_api(),
+        session,
+        tool_calls=tool_calls,
+    )
 
 
 def _compact_for_echo_compare(value: str) -> str:
     """Normalize visible stream text for duplicate echo detection."""
-    return re.sub(r'\s+', '', str(value or ''))
+    return _streaming_payloads.compact_for_echo_compare(value)
 
 
 def _strip_compact_echo_suffix(value: str, suffix: str, *, search_window: int = 4096) -> tuple[str, bool]:
     """Remove ``suffix`` from ``value`` when they match after whitespace folding."""
-    raw = str(value or '')
-    candidate = _compact_for_echo_compare(suffix)
-    if not raw or not candidate:
-        return raw, False
-    tail = raw[-max(len(str(suffix or '')) * 3, search_window):]
-    offset = len(raw) - len(tail)
-    for idx in range(len(tail) + 1):
-        if _compact_for_echo_compare(tail[idx:]) == candidate:
-            return raw[: offset + idx].rstrip(), True
-    return raw, False
+    return _streaming_payloads.strip_compact_echo_suffix(
+        _streaming_api(),
+        value,
+        suffix,
+        search_window=search_window,
+    )
 
 
 def _redacted_session_payload_with_full_messages(session, *, tool_calls=None) -> dict | None:
     """Best-effort terminal SSE session payload for already-persisted state."""
-    try:
-        return redact_session_data(
-            _session_payload_with_full_messages(session, tool_calls=tool_calls)
-        )
-    except Exception:
-        logger.debug("Failed to build redacted session payload", exc_info=True)
-        return None
+    return _streaming_payloads.redacted_session_payload_with_full_messages(
+        _streaming_api(),
+        session,
+        tool_calls=tool_calls,
+    )
 
 
 def _cancel_event_payload(
@@ -133,15 +125,7 @@ def _cancel_event_payload(
     session: dict | None = None,
 ) -> dict:
     """Return base cancel terminal event metadata."""
-    payload = {
-        'message': message,
-        'type': 'cancelled',
-        'status': 'cancelled',
-    }
-    if session:
-        payload['session'] = session
-        payload['session_id'] = session.get('session_id')
-    return payload
+    return _streaming_payloads.cancel_event_payload(message, session=session)
 
 
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
