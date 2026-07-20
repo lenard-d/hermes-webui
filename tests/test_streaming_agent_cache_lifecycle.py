@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 
 def test_evicted_agent_lifecycle_commits_unregisters_and_shutdowns(monkeypatch):
-    import api.streaming as streaming
+    from api.streaming import agent_cache
 
     events = []
 
@@ -17,16 +17,17 @@ def test_evicted_agent_lifecycle_commits_unregisters_and_shutdowns(monkeypatch):
     def fake_unregister(session_id):
         events.append(("unregister", session_id))
 
-    monkeypatch.setattr(streaming, "_lifecycle_commit_session_memory", fake_commit)
-    monkeypatch.setattr(streaming, "_lifecycle_has_uncommitted_work", fake_has_uncommitted_work)
-    monkeypatch.setattr(streaming, "_lifecycle_unregister_agent", fake_unregister)
+    monkeypatch.setattr(agent_cache, "_lifecycle_commit_session_memory", fake_commit)
+    monkeypatch.setattr(agent_cache, "_lifecycle_has_uncommitted_work", fake_has_uncommitted_work)
+    monkeypatch.setattr(agent_cache, "_lifecycle_unregister_agent", fake_unregister)
+    monkeypatch.setattr(agent_cache, "_lifecycle_discard_session", lambda _session_id: True)
 
     session_db = MagicMock()
     agent = MagicMock()
     agent._session_db = session_db
     agent._session_messages = [{"role": "user", "content": "hello"}]
 
-    streaming._close_evicted_agent_at_session_boundary("old-session", agent)
+    agent_cache._close_evicted_agent_at_session_boundary("old-session", agent)
 
     assert ("commit", "old-session", agent, True) in events
     assert ("has_uncommitted", "old-session") in events
@@ -36,39 +37,40 @@ def test_evicted_agent_lifecycle_commits_unregisters_and_shutdowns(monkeypatch):
 
 
 def test_evicted_agent_lifecycle_shutdown_uses_empty_messages_when_missing(monkeypatch):
-    import api.streaming as streaming
+    from api.streaming import agent_cache
 
-    monkeypatch.setattr(streaming, "_lifecycle_commit_session_memory", lambda *a, **kw: True)
-    monkeypatch.setattr(streaming, "_lifecycle_has_uncommitted_work", lambda session_id: False)
-    monkeypatch.setattr(streaming, "_lifecycle_unregister_agent", MagicMock())
+    monkeypatch.setattr(agent_cache, "_lifecycle_commit_session_memory", lambda *a, **kw: True)
+    monkeypatch.setattr(agent_cache, "_lifecycle_has_uncommitted_work", lambda session_id: False)
+    monkeypatch.setattr(agent_cache, "_lifecycle_unregister_agent", MagicMock())
+    monkeypatch.setattr(agent_cache, "_lifecycle_discard_session", lambda _session_id: True)
 
     agent = MagicMock()
     agent._session_db = MagicMock()
 
-    streaming._close_evicted_agent_at_session_boundary("old-session", agent)
+    agent_cache._close_evicted_agent_at_session_boundary("old-session", agent)
 
     agent.shutdown_memory_provider.assert_called_once_with([])
     agent._session_db.close.assert_called_once()
 
 
 def test_cached_agent_entry_lifecycle_extracts_agent_from_cache_tuple(monkeypatch):
-    import api.streaming as streaming
+    from api.streaming import agent_cache
 
     closed = []
     monkeypatch.setattr(
-        streaming,
+        agent_cache,
         "_close_evicted_agent_at_session_boundary",
         lambda session_id, agent: closed.append((session_id, agent)) or True,
     )
 
     agent = MagicMock()
 
-    assert streaming._close_cached_agent_entry_at_session_boundary("old-session", (agent, "sig")) is True
+    assert agent_cache._close_cached_agent_entry_at_session_boundary("old-session", (agent, "sig")) is True
     assert closed == [("old-session", agent)]
 
 
 def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(monkeypatch):
-    import api.streaming as streaming
+    from api.streaming import agent_cache
 
     def fake_commit(session_id, *, agent=None, wait=False):
         return True
@@ -76,14 +78,14 @@ def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(mo
     def fake_has_uncommitted_work(session_id):
         return True
 
-    monkeypatch.setattr(streaming, "_lifecycle_commit_session_memory", fake_commit)
-    monkeypatch.setattr(streaming, "_lifecycle_has_uncommitted_work", fake_has_uncommitted_work)
-    monkeypatch.setattr(streaming, "_lifecycle_unregister_agent", MagicMock())
+    monkeypatch.setattr(agent_cache, "_lifecycle_commit_session_memory", fake_commit)
+    monkeypatch.setattr(agent_cache, "_lifecycle_has_uncommitted_work", fake_has_uncommitted_work)
+    monkeypatch.setattr(agent_cache, "_lifecycle_unregister_agent", MagicMock())
 
     agent = MagicMock()
     agent._session_db = MagicMock()
 
-    streaming._close_evicted_agent_at_session_boundary("dirty-session", agent)
+    agent_cache._close_evicted_agent_at_session_boundary("dirty-session", agent)
 
     agent.shutdown_memory_provider.assert_not_called()
     agent._session_db.close.assert_not_called()
@@ -91,10 +93,10 @@ def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(mo
 
 def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     sources = [
-        open("api/streaming.py", encoding="utf-8").read(),
         open("api/runs/local.py", encoding="utf-8").read(),
         open("api/runs/local_agent_cache.py", encoding="utf-8").read(),
-        open("api/streaming_parts/live_controls.py", encoding="utf-8").read(),
+        open("api/streaming/live_controls.py", encoding="utf-8").read(),
+        open("api/streaming/agent_cache.py", encoding="utf-8").read(),
     ]
 
     expected_markers = [
@@ -107,19 +109,19 @@ def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     for marker in expected_markers:
         assert any(marker in source for source in sources)
 
-    cache_owner = sources[2]
+    cache_owner = sources[1]
     for variable in ("identity_mismatch", "stale"):
         pop_idx = cache_owner.index(
             f"{variable} = SESSION_AGENT_CACHE.pop(session_id, None)"
         )
         close_idx = cache_owner.index(
-            "api._close_cached_agent_entry_at_session_boundary(", pop_idx
+            "_close_cached_agent_entry_at_session_boundary(", pop_idx
         )
         assert pop_idx < close_idx
 
     close_markers = [
         "_close_cached_agent_entry_at_session_boundary(old_sid, _skipped_agent_migration_entry)",
-        "close_cached_agent_entry(sid, evicted_cached_entry)",
+        "_close_cached_agent_entry_at_session_boundary(sid, evicted_cached_entry)",
         "_close_cached_agent_entry_at_session_boundary(session_id, _evicted_entry)",
     ]
     for marker in close_markers:

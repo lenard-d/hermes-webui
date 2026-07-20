@@ -20,9 +20,7 @@ STREAMING = (
     / "runs"
     / "local.py"
 )
-STREAMING_FACADE = pathlib.Path(__file__).resolve().parents[1] / "api" / "streaming.py"
 streaming_src = STREAMING.read_text(encoding="utf-8")
-streaming_facade_src = STREAMING_FACADE.read_text(encoding="utf-8")
 
 
 # ── Structural checks ────────────────────────────────────────────────────────
@@ -47,10 +45,13 @@ class TestNoRenameDuringCompression:
         )
 
     def test_old_session_preservation_logic_exists(self):
-        """There must be logic to preserve the pre-compression session file."""
-        assert "Preserved pre-compression session" in streaming_facade_src, (
-            "Pre-compression session preservation logging not found (#2223)"
+        """The public streaming interface exposes the snapshot-preservation owner."""
+        from api.streaming import _preserve_pre_compression_snapshot
+        from api.streaming.compression_snapshot import (
+            _preserve_pre_compression_snapshot as owner,
         )
+
+        assert _preserve_pre_compression_snapshot is owner
 
 
     def test_parent_session_id_stamped_unconditionally(self):

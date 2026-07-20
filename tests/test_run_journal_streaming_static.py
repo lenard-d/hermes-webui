@@ -5,12 +5,14 @@ from api.streaming import _compact_for_echo_compare
 
 def test_streaming_delegates_worker_journal_event_to_turn_execution():
     src = Path("api/runs/local.py").read_text(encoding="utf-8")
-    facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    from api.runs import TurnExecution
+    from api.streaming import TurnExecution as StreamingTurnExecution
+
     execution_idx = src.index("execution = TurnExecution.start(")
     sink_idx = src.index("event_sink = execution.event_sink", execution_idx)
 
-    assert "from api.runs import TurnExecution" in facade_src
-    assert "TurnExecution = api.TurnExecution" in src
+    assert StreamingTurnExecution is TurnExecution
+    assert "from .execution import TurnExecution" in src
     assert "record_worker_started=not ephemeral" in src[execution_idx:sink_idx]
     assert '"event": "worker_started"' not in src[execution_idx:sink_idx]
 

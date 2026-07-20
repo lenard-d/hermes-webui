@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-import api.sessions.store as models
-from api.sessions.store import Session
+import api.sessions.records as models
+from api.sessions.records import Session
 
 
 @pytest.fixture(autouse=True)
@@ -201,7 +201,6 @@ class TestPeriodicCheckpoint:
 
     def test_checkpoint_stops_on_signal(self):
         """Checkpoint thread exits cleanly when stop event is set."""
-        s = _make_session("ckpt3")
         stop_event = threading.Event()
         iterations = [0]
 
@@ -459,15 +458,7 @@ class TestIssue765FollowupHardening:
     def test_cancel_stream_uses_repository_edit_owner(self):
         """Cancel cleanup must serialize and persist through the repository."""
         repo = Path(__file__).parent.parent
-        facade_src = (repo / "api" / "streaming.py").read_text(
-            encoding="utf-8"
-        )
-        facade_idx = facade_src.find("def cancel_stream(")
-        assert facade_idx != -1, "cancel_stream facade not found"
-        facade_block = facade_src[facade_idx:]
-        assert "_streaming_live_controls.cancel_stream(_streaming_api(), stream_id)" in facade_block
-
-        owner_src = (repo / "api" / "streaming_parts" / "live_controls.py").read_text(
+        owner_src = (repo / "api" / "streaming" / "live_controls.py").read_text(
             encoding="utf-8"
         )
         cancel_idx = owner_src.find("def cancel_stream(")

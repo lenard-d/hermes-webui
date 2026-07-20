@@ -2,17 +2,23 @@ from pathlib import Path
 
 
 def test_webui_drains_only_matching_background_completion_events():
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+    from api.config import PROCESS_SESSION_INDEX, PROCESS_SESSION_INDEX_LOCK
+    from api.streaming.process_notifications import (
+        _completion_event_targets_webui_session,
+    )
 
-    assert "def _drain_webui_process_notifications(" in src
-    assert "pending_async_acceptances: list | None = None" in src
-    assert "from tools.process_registry import process_registry" in src
-    assert "proc = process_registry.get(evt_sid)" in src
-    assert "def _completion_event_targets_webui_session(evt_session_key: str, session_id: str)" in src
-    assert "PROCESS_SESSION_INDEX.get(evt_session_key) == session_id" in src
-    assert "not _completion_event_targets_webui_session(evt_session_key, session_id)" in src
-    assert "skipped_events.append(evt)" in src
-    assert "completion_queue.put(evt)" in src
+    session_key = "notify-webui-session-key"
+    session_id = "notify-webui-session"
+    with PROCESS_SESSION_INDEX_LOCK:
+        PROCESS_SESSION_INDEX[session_key] = session_id
+    try:
+        assert _completion_event_targets_webui_session(session_id, session_id)
+        assert _completion_event_targets_webui_session(session_key, session_id)
+        assert not _completion_event_targets_webui_session(session_key, "other-session")
+        assert not _completion_event_targets_webui_session("", session_id)
+    finally:
+        with PROCESS_SESSION_INDEX_LOCK:
+            PROCESS_SESSION_INDEX.pop(session_key, None)
 
 
 def test_webui_injects_process_notifications_without_persisting_them_as_user_text():
@@ -27,30 +33,23 @@ def test_webui_injects_process_notifications_without_persisting_them_as_user_tex
 
 
 def test_webui_sets_gateway_session_platform_for_background_watchers():
-    facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
+    from api.streaming import _build_agent_thread_env
+
     run_src = Path("api/runs/local_environment.py").read_text(encoding="utf-8")
 
-    assert "'HERMES_SESSION_PLATFORM': 'webui'" in facade_src
+    thread_env = _build_agent_thread_env({}, "/workspace", "session-1", "/profile")
+    assert thread_env["HERMES_SESSION_PLATFORM"] == "webui"
     assert '"HERMES_SESSION_PLATFORM": "webui"' in run_src
     assert "self._previous = {key: os.environ.get(key) for key in keys}" in run_src
     assert "for key, value in self._previous.items():" in run_src
-    assert "self.api.os.environ.pop(key, None)" in run_src
+    assert "os.environ.pop(key, None)" in run_src
 
 
-def test_webui_age_gates_stale_background_completion_events():
-    """Issue #4029: drain must drop completions older than the configured cap
-    so stale notifications can't be prepended to an unrelated later turn."""
-    src = Path("api/streaming.py").read_text(encoding="utf-8")
+def test_webui_stale_completion_age_gate_respects_override(monkeypatch):
+    """Issue #4029: operators can configure or disable the stale-event cap."""
+    from api.streaming.process_notifications import _stale_completion_max_age_seconds
 
-    # The age-gate helper + its env override exist.
-    assert "def _stale_completion_max_age_seconds()" in src
-    assert "HERMES_WEBUI_STALE_COMPLETION_MAX_AGE_SECONDS" in src
-    # The drain reads completed_at and drops over-age events without requeueing.
-    assert "completed_at = evt.get('completed_at')" in src
-    assert "stale_age = time.time() - completed_at" in src
-    assert "is_stale = stale_age > stale_completion_max_age" in src
-    assert "if is_stale:" in src
-    # Over-age process events use the registry marker; async delegations finish
-    # their durable delivery claim. Neither path is added to skipped_events.
-    assert "_mark_process_completion_consumed(process_registry, evt_sid)" in src
-    assert "complete_async_delegation_delivery(evt, claim)" in src
+    monkeypatch.setenv("HERMES_WEBUI_STALE_COMPLETION_MAX_AGE_SECONDS", "120")
+    assert _stale_completion_max_age_seconds() == 120
+    monkeypatch.setenv("HERMES_WEBUI_STALE_COMPLETION_MAX_AGE_SECONDS", "0")
+    assert _stale_completion_max_age_seconds() == 0

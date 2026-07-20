@@ -32,7 +32,7 @@ def test_config_exports_pending_goal_continuation():
 
 
 # ---------------------------------------------------------------------------
-# Test 3: streaming.py gates evaluate_goal_after_turn on STREAM_GOAL_RELATED
+# Test 3: the local run owner gates evaluate_goal_after_turn on goal state
 # ---------------------------------------------------------------------------
 
 def test_streaming_source_code_gates_on_stream_goal_related():
@@ -48,7 +48,7 @@ def test_streaming_source_code_gates_on_stream_goal_related():
 
     # Must import STREAM_GOAL_RELATED
     assert "STREAM_GOAL_RELATED" in streaming_py, (
-        "streaming.py must import STREAM_GOAL_RELATED from api.config"
+        "the local run owner must consume STREAM_GOAL_RELATED"
     )
 
     # Must check it before calling evaluate_goal_after_turn
@@ -61,11 +61,11 @@ def test_streaming_source_code_gates_on_stream_goal_related():
 
 
 # ---------------------------------------------------------------------------
-# Test 4: streaming.py sets PENDING_GOAL_CONTINUATION on goal_continue
+# Test 4: the local run owner sets PENDING_GOAL_CONTINUATION on goal_continue
 # ---------------------------------------------------------------------------
 
 def test_streaming_sets_pending_goal_continuation_on_goal_continue():
-    """When goal_continue is emitted, streaming.py must set
+    """When goal_continue is emitted, the local run owner must set
     PENDING_GOAL_CONTINUATION so the next /chat/start marks the stream."""
     from pathlib import Path
     streaming_py = (
@@ -76,7 +76,7 @@ def test_streaming_sets_pending_goal_continuation_on_goal_continue():
     ).read_text()
 
     assert "PENDING_GOAL_CONTINUATION" in streaming_py, (
-        "streaming.py must reference PENDING_GOAL_CONTINUATION"
+        "the local run owner must reference PENDING_GOAL_CONTINUATION"
     )
 
     # The PENDING_GOAL_CONTINUATION set must happen near goal_continue
@@ -146,18 +146,13 @@ def test_turn_admission_marks_continuation_and_explicit_goal_streams(
 def test_run_agent_streaming_uses_goal_related():
     """_run_agent_streaming must accept goal_related kwarg and use it to
     gate the goal evaluation hook."""
-    from pathlib import Path
-    streaming_py = (Path(__file__).resolve().parents[1] / "api" / "streaming.py").read_text()
+    import inspect
 
-    # Function must accept goal_related parameter
-    func_def_idx = streaming_py.find("def _run_agent_streaming")
-    assert func_def_idx != -1
+    from api.streaming import _run_agent_streaming
 
-    # The function signature area (within ~200 chars) should contain goal_related
-    sig_area = streaming_py[func_def_idx:func_def_idx + 500]
-    assert "goal_related" in sig_area, (
-        "_run_agent_streaming must accept a goal_related parameter"
-    )
+    signature = inspect.signature(_run_agent_streaming)
+    assert "goal_related" in signature.parameters
+    assert signature.parameters["goal_related"].default is False
 
 
 # ---------------------------------------------------------------------------

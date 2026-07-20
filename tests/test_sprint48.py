@@ -22,7 +22,7 @@ def read(rel):
 # ── Bug #702 — XML tool-call leak on DeepSeek ────────────────────────────────
 
 class TestXmlToolCallStrip:
-    """_strip_xml_tool_calls() is defined in api/streaming.py and must remove
+    """The public _strip_xml_tool_calls() helper must remove
     <function_calls>...</function_calls> blocks from assistant content."""
 
     def _load_fn(self):
@@ -78,20 +78,16 @@ class TestXmlToolCallStrip:
         assert 'Answer' in result
         assert 'still streaming' in result
 
-    def test_function_defined_in_streaming_py(self):
-        src = read('api/streaming.py')
-        assert 'def _strip_xml_tool_calls(' in src, (
-            "_strip_xml_tool_calls must be defined in api/streaming.py"
-        )
+    def test_public_interface_exports_sanitizer_owner(self):
+        from api.streaming import _strip_xml_tool_calls
+        from api.streaming.thinking_content import _strip_xml_tool_calls as owner
+
+        assert _strip_xml_tool_calls is owner
 
     def test_strip_applied_to_assistant_messages(self):
         """Verify the strip call is applied to assistant message content after
         the agent run completes (server-side persistence fix)."""
-        facade_src = read('api/streaming.py')
         run_src = read('api/runs/local.py')
-        assert '_strip_xml_tool_calls' in facade_src, (
-            "_strip_xml_tool_calls must be referenced in api/streaming.py"
-        )
         # Confirm the run owner calls the facade helper on message content.
         assert '_strip_xml_tool_calls' in run_src, (
             "_strip_xml_tool_calls must be called by the local run owner"

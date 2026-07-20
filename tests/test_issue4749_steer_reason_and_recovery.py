@@ -17,8 +17,7 @@ from pathlib import Path
 REPO = Path(__file__).parent.parent
 I18N_JS = REPO / "static" / "i18n.js"
 COMMANDS_JS = family_source("commands")
-STREAMING_PY = REPO / "api" / "streaming.py"
-LIVE_CONTROLS_PY = REPO / "api" / "streaming_parts" / "live_controls.py"
+LIVE_CONTROLS_PY = REPO / "api" / "streaming" / "live_controls.py"
 
 EXPECTED_I18N_KEYS = [
     "steer_fail_no_cached_agent",
@@ -127,17 +126,15 @@ def test_reason_map_contract():
 
 def test_backend_parity():
     """Frontend reason map covers all backend fallback codes from _handle_chat_steer."""
-    streaming_text = STREAMING_PY.read_text(encoding="utf-8")
-    facade_match = re.search(r"def _handle_chat_steer\b.*?(?=\ndef |\Z)", streaming_text, re.DOTALL)
-    assert facade_match, "Could not find _handle_chat_steer facade in streaming.py"
-    facade_body = facade_match.group(0)
-    assert "_streaming_live_controls.handle_chat_steer(" in facade_body
-    assert "_streaming_api()" in facade_body
+    from api.streaming import _handle_chat_steer
+    from api.streaming.live_controls import _handle_chat_steer as owner
+
+    assert _handle_chat_steer is owner
 
     controls_text = LIVE_CONTROLS_PY.read_text(encoding="utf-8")
     # Extract fallback codes from the actual handle_chat_steer owner only.
-    fn_match = re.search(r"def handle_chat_steer\b.*?(?=\ndef |\Z)", controls_text, re.DOTALL)
-    assert fn_match, "Could not find handle_chat_steer in live_controls.py"
+    fn_match = re.search(r"def _handle_chat_steer\b.*?(?=\ndef |\Z)", controls_text, re.DOTALL)
+    assert fn_match, "Could not find _handle_chat_steer in live_controls.py"
     fn_body = fn_match.group(0)
     # Exclude placeholder strings like "<reason>" that appear in docstrings
     found_codes = set(
