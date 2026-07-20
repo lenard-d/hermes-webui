@@ -1,6 +1,14 @@
+import copy
 import json
+import queue
+import threading
+from collections import OrderedDict
+from contextlib import contextmanager
+from types import SimpleNamespace
 import urllib.error
 import urllib.request
+
+import pytest
 
 from tests._pytest_port import BASE
 
@@ -226,3 +234,387 @@ def test_share_create_uses_messaging_display_transcript_when_sidecar_has_no_mess
         post("/api/session/delete", {"session_id": sid})
         _remove_test_sessions(conn, sid)
         conn.close()
+
+
+@pytest.fixture
+def isolated_share_route_session_store(tmp_path, monkeypatch):
+    """Keep direct route race tests out of the shared HTTP server state."""
+    from api import models
+
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "sessions-index.json")
+    monkeypatch.setattr(models, "SESSIONS", OrderedDict())
+    return session_dir
+
+
+@pytest.mark.parametrize("operation", ["create", "revoke"])
+def test_share_metadata_commit_preserves_concurrent_transcript_write(
+    isolated_share_route_session_store,
+    monkeypatch,
+    operation,
+):
+    """Share metadata must not save the stale session resolved before share I/O."""
+    from api import models, routes
+
+    sid = f"share_{operation}_concurrent_transcript"
+    session = models.Session(
+        session_id=sid,
+        title="Concurrent share",
+        messages=[{"role": "user", "content": "original"}],
+        share_token="existing-share-token" if operation == "revoke" else None,
+        share_created_at=1.0 if operation == "revoke" else None,
+    )
+    session.save(skip_index=True)
+    stale_snapshot = models.Session.load(sid)
+    assert stale_snapshot is not None
+
+    captured = {}
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(
+        routes,
+        "read_body",
+        lambda _handler: {"session_id": sid},
+    )
+    monkeypatch.setattr(routes, "_publish_session_list_changed", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: captured.update(
+            payload=payload,
+            status=status,
+        )
+        or True,
+    )
+
+    def commit_newer_transcript():
+        newer = models.Session.load(sid)
+        assert newer is not None
+        newer.messages.append({"role": "assistant", "content": "concurrent newer reply"})
+        newer.save(skip_index=True)
+        models.cache_full_session(sid, newer)
+
+    def resolve_after_concurrent_transcript(_sid, _handler):
+        commit_newer_transcript()
+        return stale_snapshot, stale_snapshot, {}
+
+    monkeypatch.setattr(
+        routes,
+        "_resolve_share_session_pair",
+        resolve_after_concurrent_transcript,
+    )
+
+    if operation == "create":
+        def create_share(_snapshot):
+            return {
+                "share_token": "new-share-token",
+                "share_title": "Concurrent share",
+                "share_message_count": 1,
+                "share_created_at": 2.0,
+                "share_updated_at": 2.0,
+            }
+
+        monkeypatch.setattr(routes, "create_or_refresh_share", create_share)
+    else:
+        def revoke_existing_share(_session):
+            return True
+
+        monkeypatch.setattr(routes, "revoke_share", revoke_existing_share)
+
+    assert routes.handle_post(
+        object(),
+        SimpleNamespace(path=f"/api/share/{operation}", query=""),
+    ) is True
+    assert captured["status"] == 200
+
+    persisted = models.Session.load(sid)
+    assert persisted is not None
+    assert [message["content"] for message in persisted.messages] == [
+        "original",
+        "concurrent newer reply",
+    ]
+    if operation == "create":
+        assert persisted.share_token == "new-share-token"
+        assert persisted.share_created_at == 2.0
+    else:
+        assert persisted.share_token is None
+        assert persisted.share_created_at is None
+
+
+@pytest.mark.parametrize("operation", ["create", "revoke"])
+def test_share_metadata_failure_is_reported_and_publication_fails_closed(
+    monkeypatch,
+    operation,
+):
+    """A partial share/session commit must not be reported as full success."""
+    from api import models, routes
+
+    sid = f"share_{operation}_metadata_failure"
+    token = "new-share-token" if operation == "create" else "existing-share-token"
+    snapshot = models.Session(
+        session_id=sid,
+        title="Share failure",
+        messages=[{"role": "user", "content": "share me"}],
+        share_token=None if operation == "create" else token,
+        share_created_at=None if operation == "create" else 1.0,
+    )
+    captured = {}
+    revoked_tokens = []
+
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "read_body", lambda _handler: {"session_id": sid})
+    monkeypatch.setattr(
+        routes,
+        "_resolve_share_session_pair",
+        lambda _sid, _handler: (snapshot, snapshot, {}),
+    )
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: captured.update(
+            payload=payload,
+            status=status,
+        )
+        or True,
+    )
+    monkeypatch.setattr(
+        routes,
+        "bad",
+        lambda _handler, message, status=400: captured.update(
+            payload={"error": message},
+            status=status,
+        )
+        or True,
+    )
+
+    @contextmanager
+    def failing_edit_session(*_args, **_kwargs):
+        yield snapshot
+        raise OSError("session metadata disk full")
+
+    def record_revoke(session):
+        revoked_tokens.append(session.share_token)
+        return True
+
+    monkeypatch.setattr(routes, "edit_session", failing_edit_session)
+    monkeypatch.setattr(routes, "revoke_share", record_revoke)
+    if operation == "create":
+        monkeypatch.setattr(
+            routes,
+            "create_or_refresh_share",
+            lambda _snapshot: {
+                "share_token": token,
+                "share_title": "Share failure",
+                "share_message_count": 1,
+                "share_created_at": 2.0,
+                "share_updated_at": 2.0,
+            },
+        )
+
+    assert routes.handle_post(
+        object(),
+        SimpleNamespace(path=f"/api/share/{operation}", query=""),
+    ) is True
+    assert captured["status"] == 500
+    assert "session metadata" in captured["payload"]["error"].lower()
+    assert revoked_tokens == [token]
+
+
+@pytest.mark.parametrize("operation", ["create", "revoke"])
+def test_share_mutation_does_not_resurrect_session_deleted_after_resolution(
+    isolated_share_route_session_store,
+    monkeypatch,
+    operation,
+):
+    """Only genuinely external sessions may seed a missing local sidecar."""
+    from api import models, routes
+
+    sid = f"share_{operation}_deleted_before_owner"
+    session = models.Session(
+        session_id=sid,
+        title="Delete won",
+        messages=[{"role": "user", "content": "do not resurrect"}],
+        share_token="existing-share-token" if operation == "revoke" else None,
+        share_created_at=1.0 if operation == "revoke" else None,
+    )
+    session.save(skip_index=True)
+    stale_snapshot = models.Session.load(sid)
+    assert stale_snapshot is not None
+    share_io_calls = []
+    captured = {}
+
+    def resolve_then_delete(_sid, _handler):
+        (isolated_share_route_session_store / f"{sid}.json").unlink()
+        with models.LOCK:
+            models.SESSIONS.pop(sid, None)
+        return stale_snapshot, stale_snapshot, {}
+
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "read_body", lambda _handler: {"session_id": sid})
+    monkeypatch.setattr(routes, "_resolve_share_session_pair", resolve_then_delete)
+    monkeypatch.setattr(
+        routes,
+        "create_or_refresh_share",
+        lambda _snapshot: share_io_calls.append("create") or {
+            "share_token": "new-share-token",
+            "share_title": "Delete won",
+            "share_message_count": 1,
+            "share_created_at": 2.0,
+            "share_updated_at": 2.0,
+        },
+    )
+    monkeypatch.setattr(
+        routes,
+        "revoke_share",
+        lambda _session: share_io_calls.append("revoke") or True,
+    )
+    monkeypatch.setattr(
+        routes,
+        "bad",
+        lambda _handler, message, status=400: captured.update(
+            payload={"error": message},
+            status=status,
+        )
+        or True,
+    )
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, status=200, **_kwargs: captured.update(
+            payload=payload,
+            status=status,
+        )
+        or True,
+    )
+
+    assert routes.handle_post(
+        object(),
+        SimpleNamespace(path=f"/api/share/{operation}", query=""),
+    ) is True
+    assert captured["status"] == 404
+    assert share_io_calls == []
+    assert not (isolated_share_route_session_store / f"{sid}.json").exists()
+
+
+def test_create_and_revoke_share_file_io_is_serialized_by_session_owner(
+    isolated_share_route_session_store,
+    monkeypatch,
+):
+    """A racing revoke must observe and revoke the create that committed first."""
+    from api import config, models, routes
+
+    sid = "share_create_revoke_owner_interleave"
+    session = models.Session(
+        session_id=sid,
+        title="Serialized share",
+        messages=[{"role": "user", "content": "share me safely"}],
+    )
+    session.save(skip_index=True)
+
+    first_interleave = queue.Queue()
+    create_file_entered = threading.Event()
+    allow_create_file_return = threading.Event()
+    live_share_tokens = {}
+    thread_errors = []
+
+    class TrackingLock:
+        def __init__(self):
+            self._lock = threading.Lock()
+
+        def __enter__(self):
+            if not self._lock.acquire(blocking=False):
+                first_interleave.put("blocked_on_session_owner")
+                self._lock.acquire()
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb):
+            self._lock.release()
+
+    owner_lock = TrackingLock()
+    monkeypatch.setattr(config, "_get_session_agent_lock", lambda _sid: owner_lock)
+
+    def resolve_current(_sid, _handler):
+        current = models.get_session(sid)
+        current = routes.get_full_session(sid, session=current)
+        snapshot = copy.copy(current)
+        snapshot.messages = list(current.messages)
+        return snapshot, current, {}
+
+    def create_share(_snapshot):
+        token = "interleaved-new-token"
+        live_share_tokens[token] = True
+        create_file_entered.set()
+        assert allow_create_file_return.wait(timeout=5)
+        return {
+            "share_token": token,
+            "share_title": "Serialized share",
+            "share_message_count": 1,
+            "share_created_at": 2.0,
+            "share_updated_at": 2.0,
+        }
+
+    def revoke_current_share(current):
+        first_interleave.put("revoke_share_io")
+        token = str(current.share_token or "")
+        if token:
+            live_share_tokens[token] = False
+        return bool(token)
+
+    def capture_json(handler, payload, status=200, **_kwargs):
+        handler.result = (payload, status)
+        return True
+
+    def capture_bad(handler, message, status=400):
+        handler.result = ({"error": message}, status)
+        return True
+
+    monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
+    monkeypatch.setattr(routes, "read_body", lambda handler: handler.body)
+    monkeypatch.setattr(routes, "_resolve_share_session_pair", resolve_current)
+    monkeypatch.setattr(routes, "create_or_refresh_share", create_share)
+    monkeypatch.setattr(routes, "revoke_share", revoke_current_share)
+    monkeypatch.setattr(routes, "_publish_session_list_changed", lambda *args, **kwargs: None)
+    monkeypatch.setattr(routes, "j", capture_json)
+    monkeypatch.setattr(routes, "bad", capture_bad)
+
+    create_handler = SimpleNamespace(body={"session_id": sid}, result=None)
+    revoke_handler = SimpleNamespace(body={"session_id": sid}, result=None)
+
+    def call_route(handler, operation):
+        try:
+            routes.handle_post(
+                handler,
+                SimpleNamespace(path=f"/api/share/{operation}", query=""),
+            )
+        except BaseException as exc:
+            thread_errors.append(exc)
+
+    create_thread = threading.Thread(
+        target=call_route,
+        args=(create_handler, "create"),
+    )
+    revoke_thread = threading.Thread(
+        target=call_route,
+        args=(revoke_handler, "revoke"),
+    )
+    create_thread.start()
+    assert create_file_entered.wait(timeout=5)
+    revoke_thread.start()
+    observed_interleave = first_interleave.get(timeout=5)
+    allow_create_file_return.set()
+    create_thread.join(timeout=5)
+    revoke_thread.join(timeout=5)
+
+    assert not create_thread.is_alive()
+    assert not revoke_thread.is_alive()
+    assert thread_errors == []
+    assert observed_interleave == "blocked_on_session_owner"
+    assert create_handler.result[1] == 200
+    assert revoke_handler.result[1] == 200
+
+    persisted = models.Session.load(sid)
+    assert persisted is not None
+    assert persisted.share_token is None
+    assert persisted.share_created_at is None
+    assert live_share_tokens == {"interleaved-new-token": False}

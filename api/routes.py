@@ -13867,20 +13867,61 @@ def handle_post(handler, parsed) -> bool:
             snapshot_session, stored_session, cli_meta = _resolve_share_session_pair(sid, handler)
         except KeyError:
             return bad(handler, "Session not found", 404)
-        try:
-            share_meta = create_or_refresh_share(snapshot_session)
-        except ValueError as exc:
-            return bad(handler, str(exc), 400)
-        persisted_session = stored_session
-        if persisted_session is None:
-            persisted_session = _build_share_metadata_sidecar(
+        # A pre-resolved WebUI session is never a missing-record seed: delete
+        # may have won after resolution but before this owner is acquired. Only
+        # a genuinely external session may materialize its first local sidecar.
+        share_metadata_seed = None
+        if stored_session is None:
+            share_metadata_seed = _build_share_metadata_sidecar(
                 sid,
                 snapshot_session,
                 cli_meta=cli_meta,
             )
-        persisted_session.share_token = share_meta["share_token"]
-        persisted_session.share_created_at = share_meta["share_created_at"]
-        persisted_session.save(touch_updated_at=False)
+        share_meta = None
+        had_existing_share = False
+        try:
+            with edit_session(
+                sid,
+                session=share_metadata_seed,
+                touch_updated_at=False,
+            ) as persisted_session:
+                # Keep transcript preparation outside the owner, but resolve
+                # the token and commit the public file under the same owner as
+                # its session metadata. Create and revoke can no longer pass
+                # each other between share-file I/O and sidecar persistence.
+                share_snapshot = copy.copy(snapshot_session)
+                share_snapshot.share_token = persisted_session.share_token
+                had_existing_share = bool(
+                    str(persisted_session.share_token or "").strip()
+                )
+                share_meta = create_or_refresh_share(share_snapshot)
+                persisted_session.share_token = share_meta["share_token"]
+                persisted_session.share_created_at = share_meta["share_created_at"]
+        except KeyError:
+            return bad(handler, "Session not found", 404)
+        except ValueError as exc:
+            return bad(handler, str(exc), 400)
+        except Exception:
+            logger.exception("share metadata persistence failed for session %s", sid)
+            if share_meta is not None and not had_existing_share:
+                # The public snapshot was committed first so its sanitized I/O
+                # completed under the owner before its matching sidecar save.
+                # If that save fails, fail closed instead of leaving an
+                # untracked public conversation.
+                compensation_session = copy.copy(snapshot_session)
+                compensation_session.share_token = share_meta["share_token"]
+                try:
+                    revoke_share(compensation_session)
+                except Exception:
+                    logger.exception(
+                        "failed to compensate unpersisted share for session %s",
+                        sid,
+                    )
+            return bad(
+                handler,
+                "Failed to persist session metadata for shared conversation",
+                500,
+            )
         _publish_session_list_changed(
             "session_share_create",
             profile=getattr(persisted_session, "profile", None),
@@ -13912,22 +13953,51 @@ def handle_post(handler, parsed) -> bool:
             snapshot_session, stored_session, cli_meta = _resolve_share_session_pair(sid, handler)
         except KeyError:
             return bad(handler, "Session not found", 404)
-        target_session = stored_session
-        if target_session is None:
+        share_metadata_seed = None
+        if stored_session is None:
             token = str(getattr(snapshot_session, "share_token", "") or "").strip()
             if not token:
                 return bad(handler, "Session not found", 404)
-            target_session = _build_share_metadata_sidecar(
+            share_metadata_seed = _build_share_metadata_sidecar(
                 sid,
                 snapshot_session,
                 cli_meta=cli_meta,
             )
-            target_session.share_token = token
-            target_session.share_created_at = getattr(snapshot_session, "share_created_at", None)
-        revoke_share(target_session)
-        target_session.share_token = None
-        target_session.share_created_at = None
-        target_session.save(touch_updated_at=False)
+            share_metadata_seed.share_token = token
+            share_metadata_seed.share_created_at = getattr(
+                snapshot_session,
+                "share_created_at",
+                None,
+            )
+        share_revocation_completed = False
+        try:
+            with edit_session(
+                sid,
+                session=share_metadata_seed,
+                touch_updated_at=False,
+            ) as target_session:
+                revoke_share(target_session)
+                share_revocation_completed = True
+                target_session.share_token = None
+                target_session.share_created_at = None
+        except KeyError:
+            return bad(handler, "Session not found", 404)
+        except Exception:
+            if not share_revocation_completed:
+                logger.exception("share revocation failed for session %s", sid)
+                return bad(handler, "Failed to revoke shared conversation", 500)
+            # The public file was revoked atomically before __exit__ attempted
+            # the sidecar save. Report that partial state truthfully; a retry
+            # can clear the remaining local token without republishing it.
+            logger.exception(
+                "revoked share metadata cleanup failed for session %s",
+                sid,
+            )
+            return bad(
+                handler,
+                "Share was revoked, but session metadata could not be updated",
+                500,
+            )
         _publish_session_list_changed(
             "session_share_revoke",
             profile=getattr(target_session, "profile", None),
