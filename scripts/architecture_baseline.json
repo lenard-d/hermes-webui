@@ -1,0 +1,318 @@
+{
+  "version": 1,
+  "description": "Exact legacy exceptions for the dependency architecture guard.",
+  "allowed_violations": [
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config",
+      "target": "api.profiles",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config_parts.config_io",
+      "target": "api.profiles",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config_parts.model_catalog",
+      "target": "api.profiles",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config_parts.model_catalog",
+      "target": "api.providers._provider_has_key",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config_parts.models_cache",
+      "target": "api.profiles",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config_parts.models_cache",
+      "target": "api.profiles._is_root_profile",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "config-foundation-depends-upward",
+      "source": "api.config_parts.models_cache",
+      "target": "api.providers",
+      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+    },
+    {
+      "rule": "domain-depends-on-http",
+      "source": "api.background_process_parts.deferred_wakeups",
+      "target": "api.routes",
+      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+    },
+    {
+      "rule": "domain-depends-on-http",
+      "source": "api.streaming_parts.local_run",
+      "target": "api.routes._context_length_lookup_inputs_for_model",
+      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+    },
+    {
+      "rule": "domain-depends-on-http",
+      "source": "api.streaming_parts.local_run",
+      "target": "api.routes._should_accept_session_context_length_refresh",
+      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+    },
+    {
+      "rule": "domain-depends-on-http",
+      "source": "api.streaming_parts.runtime_resolution",
+      "target": "api.routes._normalize_provider_id",
+      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.background_process_parts.bindings",
+      "target": "bind_background_process_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.config",
+      "target": "bind_config_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.config",
+      "target": "sys.modules[__name__]",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.config_parts._binding",
+      "target": "_bind_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.config_parts._binding",
+      "target": "install_config_part",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.config_parts.facade",
+      "target": "bind_config_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.extensions",
+      "target": "bind_extensions_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.extensions",
+      "target": "sys.modules[__name__]",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.extensions_parts.facade",
+      "target": "bind_extensions_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.profiles",
+      "target": "bind_profile_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.profiles",
+      "target": "bind_profiles_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.profiles",
+      "target": "sys.modules[__name__]",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.profiles_parts.facade",
+      "target": "bind_profile_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.profiles_parts.facade",
+      "target": "bind_profiles_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.provider_parts._binding",
+      "target": "_bind_class",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.provider_parts._binding",
+      "target": "_bind_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.provider_parts._binding",
+      "target": "install_provider_part",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.providers",
+      "target": "install_provider_part",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.routes_parts._binding",
+      "target": "_bind_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.routes_parts._binding",
+      "target": "install_routes_part",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_policy",
+      "target": "facade_attr",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_repository",
+      "target": "facade_attr",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_runtime",
+      "target": "bind_update_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_runtime",
+      "target": "bind_updates_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_runtime",
+      "target": "facade_attr",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_transaction",
+      "target": "bind_update_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.update_transaction",
+      "target": "facade_attr",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.updates",
+      "target": "bind_update_function",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.updates",
+      "target": "bind_updates_api",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "facade-binder-debt",
+      "source": "api.updates",
+      "target": "sys.modules[__name__]",
+      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/background_process_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/config_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/extensions_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/models_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/profiles_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/provider_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/routes_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/streaming_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/workspace_git_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "parts-package-debt",
+      "source": "api/workspace_parts",
+      "target": "package-pattern",
+      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
+    },
+    {
+      "rule": "persistence-depends-on-transport",
+      "source": "api.provider_parts.credential_store",
+      "target": "api.streaming._ENV_LOCK",
+      "reason": "Legacy persistence owner reaches streaming state; move that state to a lower-level owner."
+    }
+  ]
+}
