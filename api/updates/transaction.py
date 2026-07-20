@@ -112,6 +112,7 @@ def apply_clear_lock(target: str) -> dict:
             return dict(recovery.response)
         if not recovery.retry:
             return {"ok": False, "message": "Lock recovery could not be verified"}
+        transaction_state.invalidate_status_cache()
         result = _apply_update_inner(target, channel)
         result = dict(result)
         result["lock_recovery"] = dict(recovery.annotation or {})
