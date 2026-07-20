@@ -24,6 +24,8 @@ import json
 import subprocess
 import types
 import functools
+from collections import defaultdict
+from urllib.parse import parse_qs
 
 import pytest
 from api.updates import policy, repository, transaction
@@ -1607,19 +1609,43 @@ class TestAgentUpdateRequiresGatewayRestart:
         assert result['restart_scheduled'] is True
 
 
-# ── api/routes.py ─────────────────────────────────────────────────────────────
+# ── HTTP update routes ────────────────────────────────────────────────────────
 
 class TestForceUpdateRoute:
-    """#813 — /api/updates/force route must exist in routes.py."""
+    """#813 — /api/updates/force must dispatch to the update owner."""
 
-    def test_force_route_exists(self):
-        src = read('api/routes.py')
-        assert '"/api/updates/force"' in src, (
-            "routes.py must handle POST /api/updates/force"
+    def test_force_route_exists(self, monkeypatch):
+        import api.updates as updates
+        from api.http.routes import update_mutations
+
+        captured = {}
+
+        def fake_apply_force_update(target, channel):
+            captured["call"] = (target, channel)
+            return {"ok": True, "target": target, "channel": channel}
+
+        monkeypatch.setattr(updates, "apply_force_update", fake_apply_force_update)
+        ctx = defaultdict(
+            lambda: None,
+            {
+                "j": lambda _handler, payload: captured.setdefault("payload", payload),
+            },
         )
-        assert 'apply_force_update' in src, (
-            "routes.py must import and call apply_force_update"
+
+        result = update_mutations.handle_post(
+            object(),
+            types.SimpleNamespace(path="/api/updates/force"),
+            {"target": "webui", "channel": "experimental"},
+            None,
+            ctx,
         )
+
+        assert captured["call"] == ("webui", "experimental")
+        assert result == {
+            "ok": True,
+            "target": "webui",
+            "channel": "experimental",
+        }
 
 
 class TestHealthRouteContract:
@@ -1641,14 +1667,14 @@ class TestUpdateSummaryRouteModelSelection:
     """Update summaries should use a known text auxiliary model before main model fallback."""
 
     def test_summary_route_prefers_documented_compression_auxiliary_model(self):
-        src = read('api/routes.py')
+        owner = read('api/http/routes/update_mutations.py')
 
-        assert 'get_text_auxiliary_client' in src
-        assert '"compression"' in src
-        assert '"update_summary"' not in src
-        assert 'main_runtime=main_runtime' in src
-        assert 'update summary auxiliary model failed; falling back to main model' in src
-        assert 'require_ai_agent_class()' in src
+        assert 'get_text_auxiliary_client' in owner
+        assert '"compression"' in owner
+        assert '"update_summary"' not in owner
+        assert 'main_runtime=main_runtime' in owner
+        assert 'update summary auxiliary model failed; falling back to main model' in owner
+        assert 'require_ai_agent_class()' in owner
 
     def test_summary_route_auxiliary_model_uses_active_profile_env(self, monkeypatch, tmp_path):
         import api.config as cfg
@@ -2617,11 +2643,35 @@ class TestSequentialUpdateRestartCoordination:
 
 class TestUpdateCompareSource:
     def test_simulated_update_check_payload_includes_both_safe_compare_urls(self):
-        src = read('api/routes.py')
-        assert '"repo_url": "https://github.com/nesquena/hermes-webui"' in src
-        assert '"compare_url": "https://github.com/nesquena/hermes-webui/compare/abc1234...def5678"' in src
-        assert '"repo_url": "https://github.com/NousResearch/hermes-agent"' in src
-        assert '"compare_url": "https://github.com/NousResearch/hermes-agent/compare/aaa0001...bbb0002"' in src
+        from api.http.routes import workspace_queries
+
+        handler = types.SimpleNamespace(client_address=("127.0.0.1", 12345))
+        ctx = defaultdict(
+            lambda: None,
+            {
+                "j": lambda _handler, payload: payload,
+                "load_settings": lambda: {
+                    "check_for_updates": True,
+                    "ignore_agent_updates": False,
+                },
+                "parse_qs": parse_qs,
+            },
+        )
+
+        result = workspace_queries.handle_get(
+            handler,
+            types.SimpleNamespace(path="/api/updates/check", query="simulate=1"),
+            ctx,
+        )
+
+        assert result["webui"]["repo_url"] == "https://github.com/nesquena/hermes-webui"
+        assert result["webui"]["compare_url"] == (
+            "https://github.com/nesquena/hermes-webui/compare/abc1234...def5678"
+        )
+        assert result["agent"]["repo_url"] == "https://github.com/NousResearch/hermes-agent"
+        assert result["agent"]["compare_url"] == (
+            "https://github.com/NousResearch/hermes-agent/compare/aaa0001...bbb0002"
+        )
 
     def test_update_banner_html_uses_multi_target_links_container(self):
         src = read('static/index.html')
@@ -2896,18 +2946,65 @@ if(!window._whatsNewGeneratedSummaries || !window._whatsNewGeneratedSummaries.we
 """.strip()
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
-    def test_summary_endpoint_and_prompt_are_human_readable_not_technical(self):
-        routes = read('api/routes.py')
-        updates = read('api/updates/__init__.py')
-        update_summary = read('api/updates/summary.py')
-        assert '"/api/updates/summary"' in routes
-        assert 'summarize_update_payload' in routes
-        assert 'def summarize_update_payload' in updates
-        assert 'human-readable' in update_summary
-        assert 'avoid technical jargon' in update_summary
-        assert 'regular diff links' in update_summary
-        assert 'Return only prefixed bullets' in update_summary
-        assert 'def _format_update_summary_sections' in update_summary
+    def test_summary_endpoint_and_prompt_are_human_readable_not_technical(self, monkeypatch):
+        import api.updates as updates
+        from api.http.routes import update_mutations
+
+        captured = {}
+        real_summarize = updates.summarize_update_payload
+
+        def summarize_through_public_contract(payload, llm_callback=None, *, target=None):
+            def recording_callback(system_prompt, user_prompt):
+                captured["system_prompt"] = system_prompt
+                captured["user_prompt"] = user_prompt
+                return "Notice: Update controls are easier to understand."
+
+            return real_summarize(
+                payload,
+                llm_callback=recording_callback,
+                target=target,
+                use_cache=False,
+            )
+
+        monkeypatch.setattr(
+            updates,
+            "summarize_update_payload",
+            summarize_through_public_contract,
+        )
+        ctx = defaultdict(
+            lambda: None,
+            {"j": lambda _handler, payload: payload},
+        )
+        compare_url = "https://example.test/compare/abc...def"
+
+        result = update_mutations.handle_post(
+            object(),
+            types.SimpleNamespace(path="/api/updates/summary"),
+            {
+                "target": "webui",
+                "updates": {
+                    "webui": {
+                        "behind": 1,
+                        "current_sha": "abc",
+                        "latest_sha": "def",
+                        "compare_url": compare_url,
+                    }
+                },
+            },
+            None,
+            ctx,
+        )
+
+        assert "human-readable" in captured["system_prompt"]
+        assert "avoid technical jargon" in captured["system_prompt"]
+        assert "Return only prefixed bullets" in captured["user_prompt"]
+        assert result["summary_sections"] == [
+            {
+                "title": "What you'll notice",
+                "items": ["Update controls are easier to understand."],
+            }
+        ]
+        assert result["targets"][0]["compare_url"] == compare_url
 
     def test_update_summary_formats_llm_text_into_stable_sections(self):
         from api.updates import summarize_update_payload
