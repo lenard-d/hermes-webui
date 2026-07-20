@@ -282,3 +282,59 @@ def test_context_replay_public_helpers_keep_streaming_module_identity():
     )
 
     assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_stale_user_tail_observes_facade_normalizers(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_raw_message_text",
+        lambda content: seen.append(("raw", content)) or " raw tail ",
+    )
+    monkeypatch.setattr(
+        streaming,
+        "_normalize_user_text",
+        lambda text: seen.append(("normalize", text)) or "patched tail",
+    )
+
+    assert streaming._stale_user_tail_candidate(
+        {"role": "user", "content": "ignored"},
+    ) == "patched tail"
+    assert seen == [("raw", "ignored"), ("normalize", " raw tail ")]
+
+
+def test_stale_user_cleaner_observes_facade_detector(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "_detect_stale_user_merge",
+        lambda message, text, tail, previous_context=None: message.get("polluted") is True,
+    )
+    polluted = {"role": "user", "content": "stale", "polluted": True}
+    clean = {"role": "assistant", "content": "answer"}
+
+    result = streaming._strip_stale_user_merge_from_messages(
+        [polluted, clean],
+        "current",
+        "prior",
+    )
+
+    assert result == [
+        {"role": "user", "content": "current", "polluted": True},
+        clean,
+    ]
+    assert result[0] is not polluted
+
+
+def test_stale_user_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._strip_workspace_prefixes_for_compare,
+        streaming._normalize_user_text,
+        streaming._raw_message_text,
+        streaming._stale_user_tail_candidate,
+        streaming._last_user_row,
+        streaming._stale_prefix_matches_prior_user_context,
+        streaming._detect_stale_user_merge,
+        streaming._strip_stale_user_merge_from_messages,
+    )
+
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
