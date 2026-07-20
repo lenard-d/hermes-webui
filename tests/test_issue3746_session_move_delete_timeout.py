@@ -19,13 +19,10 @@ import json
 import threading
 from contextlib import contextmanager
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from tests.test_sessions_split_support import SESSIONS_SOURCE
-
-ROUTES_SRC = (Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
 
 
 # ── A) Behavioral: the bounded lock acquire actually returns instead of blocking ──
@@ -137,46 +134,143 @@ def test_move_releases_lock_in_finally():
     lock.release()
 
 
-# ── B) Structural: project delete skips streaming sessions + guards each save ──
-
-def _delete_block():
-    idx = ROUTES_SRC.find('"/api/projects/delete"')
-    assert idx > 0, "projects/delete handler not found"
-    end = ROUTES_SRC.find('"/api/session/import"', idx)
-    return ROUTES_SRC[idx:end]
+# ── B) Observable project-delete behavior ──
 
 
-def test_delete_clears_project_id_on_streaming_sessions_in_cache():
-    block = _delete_block()
-    assert "_active_stream_ids()" in block, (
-        "projects/delete must compute the active stream set to special-case streaming sessions (#3746)"
+def _project_delete_context(index_file, **overrides):
+    import api.routes as route_facade
+
+    ctx = dict(vars(route_facade))
+    ctx.update(
+        SESSION_INDEX_FILE=index_file,
+        LOCK=threading.Lock(),
+        SESSIONS={},
+        _active_stream_ids=lambda: set(),
+        load_projects=lambda: [
+            {"project_id": "project-1", "profile": "default", "name": "Project"}
+        ],
+        save_projects=lambda _projects: None,
+        get_active_profile_name=lambda: "default",
+        _profiles_match=lambda left, right: left == right,
+        j=lambda _handler, payload, status=200, **_kwargs: {
+            "payload": payload,
+            "status": status,
+        },
     )
-    assert 'entry.get("active_stream_id") in active_ids' in block, (
-        "projects/delete must detect sessions whose active_stream_id is currently streaming (#3746)"
-    )
-    # The streaming session's project_id must be cleared on the LIVE CACHED object
-    # (so the streaming thread persists it) — NOT left dangling, and NOT given a
-    # competing s.save() that races the streaming writer.
-    assert "cached.project_id = None" in block, (
-        "projects/delete must clear project_id on the live cached streaming session so the "
-        "streaming thread persists the unlink — not leave a dangling pointer to a deleted project (#3746)"
-    )
-    assert "with LOCK:" in block, (
-        "the cached-object mutation must happen under the session cache LOCK (#3746)"
+    ctx.update(overrides)
+    return ctx
+
+
+def _delete_project(ctx):
+    from api.http.routes import session_organization_mutations
+
+    return session_organization_mutations.handle_post(
+        object(),
+        SimpleNamespace(path="/api/projects/delete"),
+        {"project_id": "project-1"},
+        None,
+        ctx,
     )
 
 
-def test_delete_guards_each_session_save():
-    block = _delete_block()
-    # Each per-session update stays wrapped in try/except so one slow/failing
-    # session can't abort the whole delete.
-    assert "try:" in block and "except Exception:" in block, (
-        "projects/delete must guard each per-session update (#3746)"
+def test_delete_clears_project_id_on_streaming_sessions_in_cache(tmp_path):
+    index_file = tmp_path / "_index.json"
+    index_file.write_text(
+        json.dumps(
+            [
+                {
+                    "session_id": "streaming-session",
+                    "project_id": "project-1",
+                    "active_stream_id": "stream-1",
+                }
+            ]
+        ),
+        encoding="utf-8",
     )
-    # The active-profile ownership guard (#1614) must remain intact.
-    assert '_profiles_match(proj.get("profile"), active_profile)' in block, (
-        "projects/delete must keep its cross-profile ownership guard (#1614)"
+    cached = SimpleNamespace(project_id="project-1")
+    saved_projects = []
+    loaded_sessions = []
+
+    def unexpected_load(session_id):
+        loaded_sessions.append(session_id)
+        raise AssertionError("a cached streaming session must not be loaded and saved separately")
+
+    ctx = _project_delete_context(
+        index_file,
+        SESSIONS={"streaming-session": cached},
+        _active_stream_ids=lambda: {"stream-1"},
+        get_session=unexpected_load,
+        save_projects=lambda projects: saved_projects.append(projects),
     )
+
+    response = _delete_project(ctx)
+
+    assert response == {"payload": {"ok": True}, "status": 200}
+    assert cached.project_id is None
+    assert loaded_sessions == []
+    assert saved_projects == [[]]
+
+
+def test_delete_continues_after_one_session_save_fails(tmp_path):
+    index_file = tmp_path / "_index.json"
+    index_file.write_text(
+        json.dumps(
+            [
+                {"session_id": "save-fails", "project_id": "project-1"},
+                {"session_id": "save-succeeds", "project_id": "project-1"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    attempts = []
+
+    class SessionStub:
+        def __init__(self, session_id, *, fail=False):
+            self.session_id = session_id
+            self.project_id = "project-1"
+            self.fail = fail
+
+        def save(self):
+            attempts.append((self.session_id, self.project_id))
+            if self.fail:
+                raise OSError("simulated slow-storage failure")
+
+    sessions = {
+        "save-fails": SessionStub("save-fails", fail=True),
+        "save-succeeds": SessionStub("save-succeeds"),
+    }
+    ctx = _project_delete_context(
+        index_file,
+        get_session=lambda session_id: sessions[session_id],
+    )
+
+    response = _delete_project(ctx)
+
+    assert response == {"payload": {"ok": True}, "status": 200}
+    assert attempts == [("save-fails", None), ("save-succeeds", None)]
+
+
+def test_delete_rejects_a_project_owned_by_another_profile(tmp_path):
+    index_file = tmp_path / "_index.json"
+    index_file.write_text("[]", encoding="utf-8")
+    mutations = []
+    ctx = _project_delete_context(
+        index_file,
+        load_projects=lambda: [
+            {"project_id": "project-1", "profile": "profile-a", "name": "Project"}
+        ],
+        get_active_profile_name=lambda: "profile-b",
+        save_projects=lambda projects: mutations.append(projects),
+        bad=lambda _handler, message, status=400: {
+            "payload": {"error": message},
+            "status": status,
+        },
+    )
+
+    response = _delete_project(ctx)
+
+    assert response == {"payload": {"error": "Project not found"}, "status": 404}
+    assert mutations == []
 
 
 # ── Frontend: the '+ New project and move' shortcut guards the new 503 ──

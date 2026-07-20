@@ -9,14 +9,35 @@ def _src(name: str) -> str:
         return f.read()
 
 
-ROUTES = open("api/routes.py", encoding="utf-8").read()
 WORKSPACE_FILES = open("api/routes_parts/workspace_files.py", encoding="utf-8").read()
 
 
 class TestIssue3402WorkspaceTreeMoveApi:
     def test_file_move_route_registered(self):
-        assert 'parsed.path == "/api/file/move"' in ROUTES
-        assert "return _handle_file_move(handler, body)" in ROUTES
+        from types import SimpleNamespace
+
+        import api.routes as route_facade
+        from api.http.routes import automation_mutations
+
+        handler = object()
+        body = {"session_id": "session-1", "path": "a.txt", "dest_dir": "dest"}
+        seen = {}
+        expected = object()
+        ctx = dict(vars(route_facade))
+        ctx["_handle_file_move"] = lambda actual_handler, actual_body: (
+            seen.update(handler=actual_handler, body=actual_body) or expected
+        )
+
+        result = automation_mutations.handle_post(
+            handler,
+            SimpleNamespace(path="/api/file/move"),
+            body,
+            None,
+            ctx,
+        )
+
+        assert result is expected
+        assert seen == {"handler": handler, "body": body}
 
     def test_file_move_handler_requires_dest_dir(self):
         block = WORKSPACE_FILES[

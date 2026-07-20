@@ -3,18 +3,15 @@
 from tests.frontend_asset_contract import family_source
 
 from contextlib import contextmanager, nullcontext
-from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 import api.commands as commands
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = family_source("commands")
 MESSAGES_JS = family_source("messages")
-ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
 
 def _install_fake_skill_bundles(monkeypatch, *, bundles=None, resolver=None, builder=None):
@@ -34,11 +31,45 @@ def _install_fake_skill_bundles(monkeypatch, *, bundles=None, resolver=None, bui
     monkeypatch.setitem(sys.modules, "agent.skill_bundles", skill_bundles)
 
 
-def test_bundle_routes_are_wired_through_dedicated_endpoints():
-    assert 'if parsed.path == "/api/commands/bundles":' in ROUTES_PY
-    assert 'if parsed.path == "/api/commands/bundles/resolve":' in ROUTES_PY
-    assert 'return j(handler, {"bundles": list_command_bundles()})' in ROUTES_PY
-    assert 'return j(handler, resolve_bundle_command(command))' in ROUTES_PY
+def test_bundle_routes_are_wired_through_dedicated_endpoints(monkeypatch):
+    import api.routes as route_facade
+    from api.http.routes import automation_mutations, workspace_queries
+
+    bundle_metadata = [{"name": "incident-review", "source": "bundle"}]
+    resolved = {
+        "name": "incident-review",
+        "source": "bundle",
+        "message": "$incident-review check alerts",
+    }
+    resolved_commands = []
+    monkeypatch.setattr(commands, "list_command_bundles", lambda: bundle_metadata)
+    monkeypatch.setattr(
+        commands,
+        "resolve_bundle_command",
+        lambda command: resolved_commands.append(command) or resolved,
+    )
+    ctx = dict(vars(route_facade))
+    ctx["j"] = lambda _handler, payload, status=200, **_kwargs: {
+        "payload": payload,
+        "status": status,
+    }
+
+    listed = workspace_queries.handle_get(
+        object(),
+        SimpleNamespace(path="/api/commands/bundles", query=""),
+        ctx,
+    )
+    resolved_response = automation_mutations.handle_post(
+        object(),
+        SimpleNamespace(path="/api/commands/bundles/resolve"),
+        {"command": "/incident-review check alerts"},
+        None,
+        ctx,
+    )
+
+    assert listed == {"payload": {"bundles": bundle_metadata}, "status": 200}
+    assert resolved_response == {"payload": resolved, "status": 200}
+    assert resolved_commands == ["/incident-review check alerts"]
 
 
 def test_frontend_bundle_dispatch_uses_dedicated_metadata_and_resolve_calls():
