@@ -52,14 +52,21 @@ def test_sse_heartbeat_constant_below_kernel_keepalive_window():
 
 
 def test_no_sse_handler_uses_30s_or_higher_timeout():
-    """No SSE/long-poll handler in routes.py should still be using the old
+    """No SSE/long-poll handler should still be using the old
     30s/25s timeout. Every queue.get(timeout=...) call inside an SSE handler
     must reference the named constant, not a hard-coded number."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    sources = [
+        (REPO / "api" / "routes.py").read_text(encoding="utf-8"),
+        (REPO / "api" / "routes_parts" / "terminal.py").read_text(encoding="utf-8"),
+    ]
 
     import re
     # Catch q.get(timeout=30), subscriber.get(timeout=30), term.output.get(timeout=25), etc.
-    bad = re.findall(r"\.get\(timeout=3[05]\)", src)
+    bad = [
+        match
+        for source in sources
+        for match in re.findall(r"\.get\(timeout=3[05]\)", source)
+    ]
     assert not bad, (
         f"Found {len(bad)} SSE handler call(s) still using a 25/30s timeout: {bad}. "
         "All should use _SSE_HEARTBEAT_INTERVAL_SECONDS (#1623)."
@@ -68,21 +75,27 @@ def test_no_sse_handler_uses_30s_or_higher_timeout():
 
 def test_each_named_sse_handler_uses_constant():
     """Each known SSE handler queue-poll site must reference the constant."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    route_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    terminal_src = (REPO / "api" / "routes_parts" / "terminal.py").read_text(
+        encoding="utf-8"
+    )
 
     expected_callers = [
-        "subscriber.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)",     # main agent SSE
-        "term.output.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)",   # terminal SSE
+        (route_src, "subscriber.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)"),
+        (terminal_src, "term.output.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)"),
     ]
-    for caller in expected_callers:
-        assert caller in src, (
+    for source, caller in expected_callers:
+        assert caller in source, (
             f"Expected SSE handler to call {caller!r} (#1623). "
             "If this assertion fails, the SSE heartbeat misalignment may have regressed."
         )
 
     # Also: at least 3 sites should be using the constant overall (main agent,
     # terminal, plus the gateway watcher and approval/clarify pollers).
-    n_uses = src.count("get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)")
+    n_uses = sum(
+        source.count("get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)")
+        for source in (route_src, terminal_src)
+    )
     assert n_uses >= 4, (
         f"Expected at least 4 SSE/long-poll sites using the named constant; found {n_uses}. "
         "Every long-lived idle queue poll must align below the kernel keepalive window."
