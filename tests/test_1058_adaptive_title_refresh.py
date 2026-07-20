@@ -12,6 +12,7 @@ import os
 import threading
 import types
 import unittest
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -42,6 +43,22 @@ def _restore_auth_sessions():
     yield
     _auth._sessions.clear()
     _auth._sessions.update(snapshot)
+
+
+@pytest.fixture(autouse=True)
+def _route_title_writes_through_loaded_test_session(monkeypatch):
+    """Keep the background-title unit tests on their injected session seam."""
+    import api.streaming as streaming
+
+    @contextmanager
+    def edit_loaded(sid, *, touch_updated_at=True, save_when=None, **_kwargs):
+        session = streaming.get_session(sid)
+        yield session
+        if save_when is None or save_when(session):
+            kwargs = {} if touch_updated_at else {"touch_updated_at": False}
+            session.save(**kwargs)
+
+    monkeypatch.setattr(streaming, "edit_session", edit_loaded)
 
 
 # ---------------------------------------------------------------------------

@@ -456,31 +456,6 @@ class TestIssue765FollowupHardening:
             "to prevent race conditions with other session-mutating endpoints"
         )
 
-    def test_background_title_update_rebinds_to_canonical_session_instance(self):
-        """Guard against stale Session object mutation after LLM round-trip.
-
-        _run_background_title_update must re-bind `s` to SESSIONS.get(session_id,
-        s) under LOCK before deciding whether a manual rename should block the
-        generated title write.
-        """
-        src = (Path(__file__).parent.parent / "api" / "streaming.py").read_text(
-            encoding="utf-8"
-        )
-        fn_idx = src.find("def _run_background_title_update(")
-        assert fn_idx != -1, "_run_background_title_update not found"
-        fn_block = src[fn_idx:fn_idx + 4200]
-        assert "with LOCK:" in fn_block, (
-            "_run_background_title_update must acquire LOCK before rebinding "
-            "to canonical cached session instance"
-        )
-        assert "cached_session = SESSIONS.get(session_id)" in fn_block, (
-            "_run_background_title_update must read the cached session under LOCK"
-        )
-        assert "getattr(cached_session, 'session_id', None) == session_id" in fn_block, (
-            "_run_background_title_update must only rebind to a canonical cached "
-            "session instance whose id matches the requested session"
-        )
-
     def test_cancel_stream_uses_repository_edit_owner(self):
         """Cancel cleanup must serialize and persist through the repository."""
         src = (Path(__file__).parent.parent / "api" / "streaming.py").read_text(

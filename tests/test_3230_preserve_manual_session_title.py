@@ -162,6 +162,15 @@ def test_cleared_title_allows_initial_auto_generation(monkeypatch):
     monkeypatch.setattr(streaming, "get_session", lambda _sid: session)
     monkeypatch.setattr(streaming, "SESSIONS", {session.session_id: session})
     monkeypatch.setattr(streaming, "LOCK", threading.Lock())
+
+    @contextlib.contextmanager
+    def edit_loaded(_sid, *, touch_updated_at=True, save_when=None, **_kwargs):
+        yield session
+        if save_when is None or save_when(session):
+            kwargs = {} if touch_updated_at else {"touch_updated_at": False}
+            session.save(**kwargs)
+
+    monkeypatch.setattr(streaming, "edit_session", edit_loaded)
     monkeypatch.setattr(streaming, "_aux_title_configured", lambda: True)
     monkeypatch.setattr(
         streaming,

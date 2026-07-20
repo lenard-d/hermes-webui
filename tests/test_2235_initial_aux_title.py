@@ -14,7 +14,10 @@ import sys
 import threading
 import types
 import unittest
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Stub agent.auxiliary_client so it is importable in the test environment
 # (the real package lives in hermes-agent, which is not installed here).
@@ -23,6 +26,22 @@ _aux_stub = types.ModuleType('agent.auxiliary_client')
 sys.modules.setdefault('agent', _agent_stub)
 sys.modules.setdefault('agent.auxiliary_client', _aux_stub)
 _agent_stub.auxiliary_client = _aux_stub
+
+
+@pytest.fixture(autouse=True)
+def _route_title_writes_through_loaded_test_session(monkeypatch):
+    """Keep these focused unit tests on their injected session seam."""
+    import api.streaming as streaming
+
+    @contextmanager
+    def edit_loaded(sid, *, touch_updated_at=True, save_when=None, **_kwargs):
+        session = streaming.get_session(sid)
+        yield session
+        if save_when is None or save_when(session):
+            kwargs = {} if touch_updated_at else {"touch_updated_at": False}
+            session.save(**kwargs)
+
+    monkeypatch.setattr(streaming, "edit_session", edit_loaded)
 
 
 def _patch_tg_config(config_dict):

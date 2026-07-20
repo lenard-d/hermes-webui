@@ -3776,30 +3776,35 @@ def _run_background_title_update(session_id: str, user_text: str, assistant_text
         wrote_title = False
         effective_title = current
         if next_title:
-            with _get_session_agent_lock(session_id):
-                with LOCK:
-                    cached_session = SESSIONS.get(session_id)
-                    if cached_session is not None and getattr(cached_session, 'session_id', None) == session_id:
-                        s = cached_session
-                    effective_title = str(s.title or '').strip()
-                    manual_title = session_has_manual_title(s)
-                    invalid_existing_now = _looks_invalid_generated_title(s.title)
+            skip_for_newer_title = False
+            try:
+                with edit_session(
+                    session_id,
+                    touch_updated_at=False,
+                    save_when=lambda _session: wrote_title,
+                ) as current_session:
+                    effective_title = str(current_session.title or '').strip()
+                    manual_title = session_has_manual_title(current_session)
+                    invalid_existing_now = _looks_invalid_generated_title(current_session.title)
                     still_auto = (
                         effective_title == placeholder_title
                         or effective_title in ('Untitled', 'New Chat', '')
-                        or _is_provisional_title(effective_title, s.messages)
+                        or _is_provisional_title(effective_title, current_session.messages)
                         or invalid_existing_now
                     )
-                if manual_title or not still_auto:
-                    _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
-                    return
-                if next_title != effective_title:
-                    s.title = next_title
-                    mark_session_title_generated(s)
-                    # Keep chronological ordering stable in the sidebar.
-                    s.save(touch_updated_at=False)
-                    effective_title = s.title
-                    wrote_title = True
+                    if manual_title or not still_auto:
+                        skip_for_newer_title = True
+                    elif next_title != effective_title:
+                        current_session.title = next_title
+                        mark_session_title_generated(current_session)
+                        effective_title = current_session.title
+                        wrote_title = True
+            except KeyError:
+                _put_title_status(put_event, session_id, 'skipped', 'missing_session')
+                return
+            if skip_for_newer_title:
+                _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
+                return
 
         if wrote_title:
             if source == 'fallback':
@@ -3857,23 +3862,29 @@ def _run_background_title_refresh(session_id: str, user_text: str, assistant_tex
         if normalized_current == normalized_new:
             _put_title_status(put_event, session_id, 'refresh_skipped', 'same_title', effective, raw_preview)
             return
-        with _get_session_agent_lock(session_id):
-            with LOCK:
-                cached_session = SESSIONS.get(session_id)
-                if cached_session is not None and getattr(cached_session, 'session_id', None) == session_id:
-                    s = cached_session
-                # Re-check: user may have renamed while we were generating
-                if session_has_manual_title(s) or str(s.title or '').strip() != current_title:
-                    _put_title_status(put_event, session_id, 'skipped', 'manual_title', str(s.title or '').strip())
-                    return
-                s.title = next_title
-                mark_session_title_generated(s)
-                effective_title = s.title
-            # Session.save() calls _write_session_index(), which acquires LOCK.
-            # Keep the per-session agent lock for mutation serialization, but
-            # release the global session LOCK before persisting to avoid a
-            # self-deadlock in the background title-refresh thread.
-            s.save(touch_updated_at=False)
+        wrote_title = False
+        skip_for_newer_title = False
+        try:
+            with edit_session(
+                session_id,
+                touch_updated_at=False,
+                save_when=lambda _session: wrote_title,
+            ) as current_session:
+                effective_title = str(current_session.title or '').strip()
+                # Re-check under the session owner lock: a user rename or a
+                # newer automatic publication must win over this slow worker.
+                if session_has_manual_title(current_session) or effective_title != current_title:
+                    skip_for_newer_title = True
+                else:
+                    current_session.title = next_title
+                    mark_session_title_generated(current_session)
+                    effective_title = current_session.title
+                    wrote_title = True
+        except KeyError:
+            return
+        if skip_for_newer_title:
+            _put_title_status(put_event, session_id, 'skipped', 'manual_title', effective_title)
+            return
         _put_title_status(put_event, session_id, 'refreshed', llm_status, effective_title, raw_preview)
         put_event('title', {'session_id': session_id, 'title': effective_title})
         logger.info("Adaptive title refresh: session=%s new_title=%r", session_id, effective_title)
