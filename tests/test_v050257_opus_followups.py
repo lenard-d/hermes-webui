@@ -50,7 +50,7 @@ def test_oauth_write_auth_json_uses_chmod_0600_before_rename(monkeypatch, tmp_pa
     world-readable. The previous implementation used `tmp.replace()` which
     preserves the temp file's umask-derived mode."""
     sys.path.insert(0, str(REPO))
-    import api.oauth as oauth
+    from api.auth import oauth
 
     # Point AUTH_JSON_PATH at a tmp dir
     fake_path = tmp_path / "auth.json"
@@ -80,7 +80,7 @@ def test_oauth_write_auth_json_source_calls_chmod():
     """Source-level pin: any future change to _write_auth_json that drops the
     chmod call must be caught even if the runtime test above is skipped on
     a filesystem that doesn't support POSIX modes."""
-    src = (REPO / "api" / "oauth.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "auth" / "oauth.py").read_text(encoding="utf-8")
     assert "tmp.chmod(0o600)" in src, (
         "_write_auth_json must call tmp.chmod(0o600) before tmp.replace() — "
         "without it, OAuth tokens land world-readable on shared systems."

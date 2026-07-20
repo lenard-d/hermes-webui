@@ -38,7 +38,7 @@ def test_onboarding_codex_oauth_routes_use_post_start_cancel_and_get_poll():
 
 
 def test_onboarding_oauth_rejects_unsupported_providers(monkeypatch):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     for provider in ("nous", "qwen-oauth", "copilot", "bogus"):
         with pytest.raises(ValueError):
@@ -46,7 +46,7 @@ def test_onboarding_oauth_rejects_unsupported_providers(monkeypatch):
 
 
 def test_start_payload_does_not_leak_provider_device_secrets(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     monkeypatch.setattr(oauth, "_get_active_hermes_home", lambda: tmp_path)
@@ -77,7 +77,7 @@ def test_start_payload_does_not_leak_provider_device_secrets(monkeypatch, tmp_pa
 
 
 def test_poll_returns_high_level_status_only(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     flow_id = "flow-test"
@@ -102,7 +102,7 @@ def test_poll_returns_high_level_status_only(monkeypatch, tmp_path):
 
 
 def test_cancel_marks_flow_cancelled_and_poll_stops(tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     flow_id = "flow-cancel"
@@ -128,7 +128,7 @@ def test_cancel_during_token_exchange_does_not_persist_credentials(monkeypatch, 
     "success" — silently storing tokens the user explicitly aborted.
     """
     import threading
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
 
@@ -175,7 +175,7 @@ def test_cancel_during_token_exchange_does_not_persist_credentials(monkeypatch, 
 
 
 def test_expired_flow_reports_expired_and_drops_sensitive_lifecycle(tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     flow_id = "flow-expired"
@@ -195,7 +195,7 @@ def test_expired_flow_reports_expired_and_drops_sensitive_lifecycle(tmp_path):
 
 
 def test_codex_credentials_written_to_active_profile_auth_json(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
     from api.onboarding import _provider_oauth_authenticated
 
     active_home = tmp_path / "active-profile"
@@ -248,7 +248,7 @@ def test_unsupported_note_mentions_codex_and_claude_as_in_app():
 
 
 def test_claude_provider_aliases_normalize_to_anthropic(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     monkeypatch.setattr(oauth, "_get_active_hermes_home", lambda: tmp_path)
@@ -263,7 +263,7 @@ def test_claude_provider_aliases_normalize_to_anthropic(monkeypatch, tmp_path):
 
 
 def test_anthropic_immediate_success_when_credentials_exist(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     monkeypatch.setattr(oauth, "_get_active_hermes_home", lambda: tmp_path)
@@ -286,7 +286,7 @@ def test_anthropic_immediate_success_when_credentials_exist(monkeypatch, tmp_pat
 
 
 def test_anthropic_pending_payload_is_action_only_and_secret_free(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     monkeypatch.setattr(oauth, "_get_active_hermes_home", lambda: tmp_path)
@@ -310,7 +310,7 @@ def test_anthropic_pending_payload_is_action_only_and_secret_free(monkeypatch, t
 
 
 def test_anthropic_poll_and_cancel_return_high_level_status(tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     flow_id = "claude-flow-test"
@@ -338,7 +338,7 @@ def test_anthropic_poll_and_cancel_return_high_level_status(tmp_path):
 
 def test_anthropic_worker_detects_credentials_and_cancel_wins(monkeypatch, tmp_path):
     import threading
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     started = threading.Event()
@@ -376,7 +376,7 @@ def test_anthropic_worker_detects_credentials_and_cancel_wins(monkeypatch, tmp_p
 
 def test_anthropic_cancel_during_link_keeps_flow_cancelled(monkeypatch, tmp_path):
     import threading
-    import api.oauth as oauth
+    from api.auth import oauth
     from api.onboarding import _provider_oauth_authenticated
 
     oauth._OAUTH_FLOWS.clear()
@@ -414,7 +414,7 @@ def test_anthropic_cancel_during_link_keeps_flow_cancelled(monkeypatch, tmp_path
 
 
 def test_anthropic_cancel_missing_flow_keeps_requested_provider():
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
 
@@ -427,7 +427,7 @@ def test_anthropic_cancel_missing_flow_keeps_requested_provider():
 
 
 def test_anthropic_worker_expires_flow(tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     flow_id = "claude-expired-worker-flow"
@@ -447,7 +447,7 @@ def test_anthropic_worker_expires_flow(tmp_path):
 
 
 def test_anthropic_worker_reports_link_errors(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     oauth._OAUTH_FLOWS.clear()
     monkeypatch.setattr(oauth.time, "sleep", lambda _seconds: None)
@@ -483,7 +483,7 @@ def test_anthropic_worker_reports_link_errors(monkeypatch, tmp_path):
 
 
 def test_anthropic_link_clears_env_and_writes_secret_free_marker(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
     from api.onboarding import _provider_oauth_authenticated
 
     env_path = tmp_path / ".env"
@@ -510,7 +510,7 @@ def test_anthropic_link_clears_env_and_writes_secret_free_marker(monkeypatch, tm
 
 
 def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path):
-    import api.oauth as oauth
+    from api.auth import oauth
     import api.providers as providers
     from api.streaming import _ENV_LOCK
 

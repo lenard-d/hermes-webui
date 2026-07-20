@@ -433,7 +433,7 @@ def _handle_session_compress(handler, body):
 
         ensure_agent_runtime_current()
         import api.config as _cfg
-        from api.oauth import resolve_runtime_provider_with_anthropic_env_lock
+        from api.auth import resolve_runtime_provider_with_anthropic_env_lock
         import hermes_cli.runtime_provider as _runtime_provider
         AIAgent = require_ai_agent_class()
 

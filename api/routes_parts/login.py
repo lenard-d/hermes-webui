@@ -283,7 +283,7 @@ def _request_base_url(handler) -> str:
 
 def _oidc_login_html(parsed) -> str:
     try:
-        from api.auth_oidc import is_oidc_enabled
+        from api.auth import is_oidc_enabled
     except Exception:
         return ""
     if not is_oidc_enabled():

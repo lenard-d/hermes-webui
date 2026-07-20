@@ -3,7 +3,7 @@ import os
 import stat
 import time
 
-from api import auth
+from api.auth import cookies_password as auth
 
 
 def test_login_attempts_persist_failed_attempts(tmp_path, monkeypatch):

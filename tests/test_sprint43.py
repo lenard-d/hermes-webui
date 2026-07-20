@@ -25,7 +25,7 @@ CONFIG_PY = (REPO_ROOT / "api" / "config_parts" / "model_catalog.py").read_text(
 BOOTSTRAP_PY = (REPO_ROOT / "bootstrap.py").read_text(encoding="utf-8")
 SERVER_PY = (REPO_ROOT / "server.py").read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-AUTH_PY = (REPO_ROOT / "api" / "auth.py").read_text(encoding="utf-8")
+AUTH_PY = (REPO_ROOT / "api" / "auth" / "cookies_password.py").read_text(encoding="utf-8")
 PROFILES_PY = (REPO_ROOT / "api" / "profiles.py").read_text(encoding="utf-8")
 PROFILES_RUNTIME_PY = (REPO_ROOT / "api" / "profiles_parts" / "runtime_scope.py").read_text(
     encoding="utf-8"
@@ -118,7 +118,7 @@ class TestBareExceptLogging(unittest.TestCase):
     """B110: bare except/pass blocks must be replaced with logger.debug()."""
 
     MODULES_REQUIRING_LOGGER = [
-        ("api/auth.py", AUTH_PY),
+        ("api/auth/cookies_password.py", AUTH_PY),
         ("api/config_parts/model_catalog.py", CONFIG_PY),
         ("api/gateway_watcher.py", GATEWAY_WATCHER_PY),
         ("api/profiles.py", PROFILES_PY),

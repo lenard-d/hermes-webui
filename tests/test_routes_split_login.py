@@ -44,7 +44,7 @@ def test_login_function_exports_remain_owned_by_routes_facade():
 
 def test_oidc_login_html_resolves_facade_redirect_guard_at_call_time(monkeypatch):
     seen = []
-    monkeypatch.setattr("api.auth_oidc.is_oidc_enabled", lambda: True)
+    monkeypatch.setattr("api.auth.is_oidc_enabled", lambda: True)
     monkeypatch.setattr(
         routes,
         "_safe_login_redirect_path",

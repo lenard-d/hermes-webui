@@ -2,6 +2,8 @@ from __future__ import annotations
 from tests.frontend_asset_contract import family_source
 
 import io
+import hashlib
+import hmac
 import json
 import shutil
 import subprocess
@@ -12,6 +14,8 @@ from types import SimpleNamespace
 import pytest
 
 import api.auth as auth
+from api.auth import authorization as authz
+from api.auth import cookies_password as password_auth
 import api.routes as routes
 import api.profiles as profiles
 from tests.js_source_extract import extract_function
@@ -57,17 +61,17 @@ class _Handler:
 
 @pytest.fixture(autouse=True)
 def isolated_auth_state(monkeypatch, tmp_path):
-    monkeypatch.setattr(auth, "STATE_DIR", tmp_path)
-    monkeypatch.setattr(auth, "_SESSIONS_FILE", tmp_path / ".sessions.json")
-    monkeypatch.setattr(auth, "is_password_auth_enabled", lambda: False)
-    monkeypatch.setattr(auth, "are_passkeys_enabled", lambda: False)
-    monkeypatch.setattr(auth, "is_oidc_auth_enabled", lambda: False)
-    auth._sessions.clear()
-    auth._TRUSTED_AUTH_WARNINGS_EMITTED.clear()
+    monkeypatch.setattr(password_auth, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(password_auth, "_SESSIONS_FILE", tmp_path / ".sessions.json")
+    monkeypatch.setattr(authz, "is_password_auth_enabled", lambda: False)
+    monkeypatch.setattr(authz, "are_passkeys_enabled", lambda: False)
+    monkeypatch.setattr(authz, "is_oidc_auth_enabled", lambda: False)
+    password_auth._sessions.clear()
+    authz._TRUSTED_AUTH_WARNINGS_EMITTED.clear()
     profiles.clear_request_profile()
     yield
-    auth._sessions.clear()
-    auth._TRUSTED_AUTH_WARNINGS_EMITTED.clear()
+    password_auth._sessions.clear()
+    authz._TRUSTED_AUTH_WARNINGS_EMITTED.clear()
     profiles.clear_request_profile()
 
 
@@ -364,7 +368,7 @@ def test_auth_status_reports_trusted_session_fields(monkeypatch):
     )
     handler = _Handler(headers={"Cookie": f"hermes_session={cookie}", "Remote-User": "alice", "Remote-Groups": "hermes_devops"})
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: False)
-    monkeypatch.setattr("api.passkeys.registered_credentials", lambda: [])
+    monkeypatch.setattr("api.auth.registered_credentials", lambda: [])
 
     routes.handle_get(handler, SimpleNamespace(path="/api/auth/status", query=""))
 
@@ -389,7 +393,7 @@ def test_auth_status_rejects_trusted_cookie_when_proxy_cidr_is_malformed(monkeyp
         client_address=("10.0.0.5", 12345),
     )
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: False)
-    monkeypatch.setattr("api.passkeys.registered_credentials", lambda: [])
+    monkeypatch.setattr("api.auth.registered_credentials", lambda: [])
 
     routes.handle_get(handler, SimpleNamespace(path="/api/auth/status", query=""))
 
@@ -479,7 +483,7 @@ def test_reset_clears_pending_cookies_across_keepalive_requests(monkeypatch):
     handler = _Handler()
 
     # Request N queues an auth cookie but the response is never flushed.
-    auth._queue_pending_cookie(handler, "hermes_session=stale-value; Path=/")
+    authz._queue_pending_cookie(handler, "hermes_session=stale-value; Path=/")
     assert handler._pending_set_cookies == ["hermes_session=stale-value; Path=/"]
 
     # Request N+1 begins on the same reused handler.
@@ -511,7 +515,7 @@ def test_auth_status_reports_reconciled_trusted_identity(monkeypatch):
         }
     )
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: False)
-    monkeypatch.setattr("api.passkeys.registered_credentials", lambda: [])
+    monkeypatch.setattr("api.auth.registered_credentials", lambda: [])
 
     routes.handle_get(handler, SimpleNamespace(path="/api/auth/status", query=""))
 
@@ -551,7 +555,7 @@ def test_untrusted_existing_trusted_session_is_rejected_by_all_consumers(monkeyp
         client_address=("10.0.0.5", 12345),
     )
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: False)
-    monkeypatch.setattr("api.passkeys.registered_credentials", lambda: [])
+    monkeypatch.setattr("api.auth.registered_credentials", lambda: [])
     routes.handle_get(status, SimpleNamespace(path="/api/auth/status", query=""))
     assert status.json_body()["logged_in"] is False
     assert auth.verify_session(status_cookie) is False
@@ -701,11 +705,11 @@ def test_trusted_auth_owner_contract(monkeypatch):
     assert auth.is_trusted_auth_enabled() is True
 
     token = "deadbeef" * 8
-    auth._sessions[token] = time.time() + 3600
-    legacy_sig = auth.hmac.new(
-        auth._signing_key(),
+    password_auth._sessions[token] = time.time() + 3600
+    legacy_sig = hmac.new(
+        password_auth._signing_key(),
         token.encode(),
-        auth.hashlib.sha256,
+        hashlib.sha256,
     ).hexdigest()
     legacy_cookie = f"{token}.{legacy_sig}"
     legacy_info = auth.get_session_info(legacy_cookie)
@@ -753,7 +757,7 @@ def test_consumers_route_through_auth_owner(monkeypatch):
     monkeypatch.setattr(auth, "verify_session", lambda _cookie: True)
     monkeypatch.setattr(auth, "is_auth_enabled", lambda: True)
     monkeypatch.setattr(auth, "_passkey_feature_flag_enabled", lambda: False)
-    monkeypatch.setattr("api.passkeys.registered_credentials", lambda: [])
+    monkeypatch.setattr("api.auth.registered_credentials", lambda: [])
     monkeypatch.setattr("api.profiles.get_active_profile_name", lambda: "devops")
     monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
     monkeypatch.setattr(routes, "read_body", lambda _handler: {"name": "devops"})

@@ -42,7 +42,7 @@ class RouteFakeHandler:
 def _ec_jwk(private_key, *, kid="key-1", alg="ES256"):
     numbers = private_key.public_key().public_numbers()
     size = (numbers.curve.key_size + 7) // 8
-    import api.auth_oidc as auth_oidc
+    import api.auth.oidc as auth_oidc
 
     return {
         "kid": kid,
@@ -54,7 +54,7 @@ def _ec_jwk(private_key, *, kid="key-1", alg="ES256"):
     }
 
 def _signed_es256_jwt(private_key, header, claims):
-    import api.auth_oidc as auth_oidc
+    import api.auth.oidc as auth_oidc
 
     header_b64 = auth_oidc._b64u(json.dumps(header, separators=(",", ":")).encode("utf-8"))
     claims_b64 = auth_oidc._b64u(json.dumps(claims, separators=(",", ":")).encode("utf-8"))
@@ -86,7 +86,7 @@ def test_oidc_start_redirects_with_pkce_state_and_nonce(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "api.auth_oidc.build_authorization_redirect",
+        "api.auth.build_authorization_redirect",
         fake_build_authorization_redirect,
     )
 
@@ -123,7 +123,7 @@ def test_oidc_callback_exchanges_code_and_sets_existing_session_cookie(monkeypat
         return {"next_path": "/chat/123"}
 
     monkeypatch.setattr(
-        "api.auth_oidc.complete_authorization_code_flow",
+        "api.auth.complete_authorization_code_flow",
         fake_complete_authorization_code_flow,
     )
     monkeypatch.setattr(auth, "create_session", lambda: "session-token.signature")
@@ -152,10 +152,10 @@ def test_oidc_callback_exchanges_code_and_sets_existing_session_cookie(monkeypat
 
 def test_oidc_callback_rejects_invalid_state_without_setting_session_cookie(monkeypatch):
     import api.routes as routes
-    from api.auth_oidc import OIDCAuthError
+    from api.auth.oidc import OIDCAuthError
 
     monkeypatch.setattr(
-        "api.auth_oidc.complete_authorization_code_flow",
+        "api.auth.complete_authorization_code_flow",
         lambda *_args: (_ for _ in ()).throw(OIDCAuthError("Invalid OIDC state", status_code=401)),
     )
 
@@ -175,10 +175,10 @@ def test_oidc_callback_rejects_invalid_state_without_setting_session_cookie(monk
 
 def test_oidc_callback_rejects_allowlist_failure_without_setting_session_cookie(monkeypatch):
     import api.routes as routes
-    from api.auth_oidc import OIDCAuthError
+    from api.auth.oidc import OIDCAuthError
 
     monkeypatch.setattr(
-        "api.auth_oidc.complete_authorization_code_flow",
+        "api.auth.complete_authorization_code_flow",
         lambda *_args: (_ for _ in ()).throw(OIDCAuthError("OIDC identity is not allowed", status_code=403)),
     )
 
@@ -198,7 +198,6 @@ def test_oidc_callback_rejects_allowlist_failure_without_setting_session_cookie(
 
 def test_auth_status_reports_oidc_capability_without_regressing_passkey_fields(monkeypatch):
     import api.auth as auth
-    import api.passkeys as passkeys
     import api.routes as routes
 
     monkeypatch.setattr(auth, "is_auth_enabled", lambda: True)
@@ -211,7 +210,7 @@ def test_auth_status_reports_oidc_capability_without_regressing_passkey_fields(m
         "verify_session",
         lambda _cookie: (_ for _ in ()).throw(AssertionError("verify_session should not run without a cookie")),
     )
-    monkeypatch.setattr(passkeys, "registered_credentials", lambda: [])
+    monkeypatch.setattr(auth, "registered_credentials", lambda: [])
 
     handler = RouteFakeHandler()
     routes.handle_get(handler, urlparse("http://example.com/api/auth/status"))
@@ -235,7 +234,7 @@ def test_login_page_renders_absolute_oidc_href_when_enabled(monkeypatch):
 
     captured = {}
 
-    monkeypatch.setattr("api.auth_oidc.is_oidc_enabled", lambda: True)
+    monkeypatch.setattr("api.auth.is_oidc_enabled", lambda: True)
     monkeypatch.setattr(
         routes,
         "t",
@@ -255,7 +254,7 @@ def test_login_page_renders_absolute_oidc_href_when_enabled(monkeypatch):
 
 
 def test_oidc_enablement_requires_explicit_allowlist(monkeypatch):
-    import api.auth_oidc as auth_oidc
+    import api.auth.oidc as auth_oidc
 
     monkeypatch.delenv("HERMES_WEBUI_OIDC_ISSUER", raising=False)
     monkeypatch.delenv("HERMES_WEBUI_OIDC_CLIENT_ID", raising=False)
@@ -276,9 +275,10 @@ def test_oidc_enablement_requires_explicit_allowlist(monkeypatch):
 
 def test_oidc_startup_warning_flags_partial_config(monkeypatch):
     import api.auth as auth
+    from api.auth import authorization
 
     monkeypatch.setattr(
-        auth,
+        authorization,
         "get_config",
         lambda: {
             "webui_oidc": {
@@ -295,9 +295,10 @@ def test_oidc_startup_warning_flags_partial_config(monkeypatch):
 
 def test_oidc_startup_warning_ignores_complete_config(monkeypatch):
     import api.auth as auth
+    from api.auth import authorization
 
     monkeypatch.setattr(
-        auth,
+        authorization,
         "get_config",
         lambda: {
             "webui_oidc": {
@@ -312,8 +313,8 @@ def test_oidc_startup_warning_ignores_complete_config(monkeypatch):
     assert auth.get_oidc_startup_warning() is None
 
 def test_validate_id_token_rejects_mismatched_jwk_key_family(monkeypatch):
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     monkeypatch.setattr(
         auth_oidc,
@@ -357,7 +358,7 @@ def test_validate_id_token_rejects_mismatched_jwk_key_family(monkeypatch):
         )
 
 def test_validate_id_token_accepts_real_es256_jose_signature(monkeypatch):
-    import api.auth_oidc as auth_oidc
+    import api.auth.oidc as auth_oidc
 
     private_key = ec.generate_private_key(ec.SECP256R1())
     token = _signed_es256_jwt(
@@ -388,8 +389,8 @@ def test_validate_id_token_accepts_real_es256_jose_signature(monkeypatch):
     assert claims["sub"] == "user-123"
 
 def test_complete_authorization_pins_discovery_to_configured_issuer(monkeypatch):
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     monkeypatch.setattr(
         auth_oidc,
@@ -429,7 +430,7 @@ def test_complete_authorization_pins_discovery_to_configured_issuer(monkeypatch)
         )
 
 def test_validate_id_token_refetches_jwks_once_on_key_miss(monkeypatch):
-    import api.auth_oidc as auth_oidc
+    import api.auth.oidc as auth_oidc
 
     old_key = ec.generate_private_key(ec.SECP256R1())
     new_key = ec.generate_private_key(ec.SECP256R1())
@@ -470,7 +471,7 @@ def test_validate_id_token_refetches_jwks_once_on_key_miss(monkeypatch):
     assert fetches == [jwks_uri]
 
 def test_pending_oidc_flows_are_bounded(monkeypatch):
-    import api.auth_oidc as auth_oidc
+    import api.auth.oidc as auth_oidc
 
     monkeypatch.setattr(auth_oidc, "_MAX_PENDING_FLOWS", 2)
     auth_oidc._pending_flows.clear()
@@ -490,16 +491,16 @@ def test_pending_oidc_flows_are_bounded(monkeypatch):
     ],
 )
 def test_fetch_json_rejects_unsafe_oidc_urls(url, message):
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     with pytest.raises(OIDCAuthError, match=message):
         auth_oidc._fetch_json(url)
 
 
 def test_fetch_json_rejects_dns_resolved_private_hosts(monkeypatch):
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     monkeypatch.setattr(
         auth_oidc.socket,
@@ -514,8 +515,8 @@ def test_fetch_json_rejects_dns_resolved_private_hosts(monkeypatch):
 
 
 def test_select_public_key_rejects_wrong_ec_curve_for_alg():
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     private_key = ec.generate_private_key(ec.SECP256R1())
     jwks = {"keys": [_ec_jwk(private_key, alg="ES384")]}
@@ -526,8 +527,8 @@ def test_select_public_key_rejects_wrong_ec_curve_for_alg():
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 def test_parse_jwt_rejects_non_finite_numeric_claims(value):
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     header = auth_oidc._b64u(b'{"alg":"RS256"}')
     claims = auth_oidc._b64u(
@@ -542,8 +543,8 @@ def test_parse_jwt_rejects_non_finite_numeric_claims(value):
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 def test_coerce_numeric_claim_rejects_non_finite_values(value):
-    import api.auth_oidc as auth_oidc
-    from api.auth_oidc import OIDCAuthError
+    import api.auth.oidc as auth_oidc
+    from api.auth.oidc import OIDCAuthError
 
     with pytest.raises(OIDCAuthError, match="claim exp was not numeric"):
         auth_oidc._coerce_numeric_claim({"exp": value}, "exp")
@@ -553,7 +554,7 @@ def test_normalize_allow_values_and_scopes_use_separate_delimiters():
     """#6244: allowlist values are comma/newline-delimited (multi-word group names
     like "Hermes Users" stay intact), while OAuth scopes stay space-delimited
     (RFC 6749 §3.3). The two parsers must NOT share whitespace-splitting."""
-    from api import auth_oidc
+    from api.auth import oidc as auth_oidc
 
     # Allowlist: multi-word group name stays ONE entry; commas/newlines split.
     assert auth_oidc._normalize_allow_values("Hermes Users") == ["Hermes Users"]

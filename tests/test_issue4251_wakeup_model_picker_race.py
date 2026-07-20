@@ -5,7 +5,7 @@ import sys
 import types
 from unittest import mock
 
-import api.oauth
+from api.auth import oauth
 import api.streaming as streaming
 
 
@@ -116,7 +116,7 @@ def _install_streaming_harness(monkeypatch, fake_session):
         return resolver(**kwargs)
 
     monkeypatch.setattr(
-        api.oauth,
+        oauth,
         "resolve_runtime_provider_with_anthropic_env_lock",
         fake_runtime_lock,
     )

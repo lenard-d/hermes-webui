@@ -3,7 +3,7 @@ from pathlib import Path
 import threading
 import time
 
-import api.oauth as oauth
+from api.auth import oauth
 
 
 def setup_function():

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import importlib
 
 # Force re-import of auth module so it picks up our TEST_STATE_DIR
-auth = importlib.import_module("api.auth")
+auth = importlib.import_module("api.auth.cookies_password")
 
 
 class TestSessionPruning(unittest.TestCase):
@@ -96,7 +96,7 @@ class TestSessionPruning(unittest.TestCase):
         # The _sessions dict stores token -> expiry_time
         # We can check the expiry is approximately SESSION_TTL seconds from now
         # by looking up the raw entry via the token
-        from api.auth import _sessions, SESSION_TTL
+        _sessions, SESSION_TTL = auth._sessions, auth.SESSION_TTL
         # find our entry
         for t, exp in _sessions.items():
             if t == token_hex:
@@ -236,15 +236,14 @@ class TestSessionTtlResolution(unittest.TestCase):
         """settings.json session_ttl_seconds path works when env is unset."""
         os.environ.pop("HERMES_WEBUI_SESSION_TTL", None)
         auth.load_settings = lambda: {"session_ttl_seconds": 7200}
-        from api.auth import _resolve_session_ttl
-        self.assertEqual(_resolve_session_ttl(), 7200)
+        self.assertEqual(auth._resolve_session_ttl(), 7200)
 
     def test_session_uses_dynamic_ttl(self):
         """Newly created sessions should honor the resolved TTL."""
         auth._sessions.clear()
         os.environ["HERMES_WEBUI_SESSION_TTL"] = "3600"
         token_hex = auth.create_session().split(".")[0]
-        from api.auth import _sessions
+        _sessions = auth._sessions
         for t, exp in _sessions.items():
             if t == token_hex:
                 # The resolved env-var value (3600s) should be applied, not

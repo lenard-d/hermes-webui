@@ -13,6 +13,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from api.auth import _ip_in_networks, _raw_peer_is_trusted_proxy, _request_client_ip, _trusted_proxy_networks
+
 if TYPE_CHECKING:
     from api.helpers import MAX_BODY_BYTES, _security_headers, bad, j
     from api.routes import logger
@@ -485,16 +487,6 @@ def _truthy_env(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _request_client_ip(handler) -> str:
-    try:
-        address = getattr(handler, "client_address", None)
-        if address:
-            return str(address[0] or "")
-    except Exception:
-        pass
-    return ""
-
-
 def _ip_is_loopback_or_private(raw: str):
     """Parse an IP string; return (parsed_ok, is_loopback_or_private).
 
@@ -510,78 +502,6 @@ def _ip_is_loopback_or_private(raw: str):
     except ValueError:
         return (False, False)
     return (True, bool(addr.is_loopback or addr.is_private))
-
-
-def _trusted_proxy_networks():
-    """Networks whose socket peer is allowed to assert a forwarded client IP.
-
-    Loopback is ALWAYS trusted implicitly (the common same-host reverse-proxy
-    deployment). Operators fronting the WebUI with a LAN/remote proxy add its
-    address(es) via HERMES_WEBUI_TRUSTED_PROXY_CIDRS (comma-separated CIDRs or
-    bare IPs). Malformed entries are skipped, never widening trust.
-    """
-    import ipaddress
-
-    nets = [
-        ipaddress.ip_network("127.0.0.0/8"),
-        ipaddress.ip_network("::1/128"),
-        ipaddress.ip_network("::ffff:127.0.0.0/104"),
-    ]
-    raw = os.getenv("HERMES_WEBUI_TRUSTED_PROXY_CIDRS", "") or ""
-    for token in raw.replace(";", ",").split(","):
-        token = token.strip()
-        if not token:
-            continue
-        try:
-            nets.append(ipaddress.ip_network(token, strict=False))
-        except ValueError:
-            # Invalid CIDR/IP → skip (fail closed: never widens trust).
-            continue
-    return nets
-
-
-def _ip_in_networks(addr, networks) -> bool:
-    """Family-aware membership test.
-
-    Checks the parsed address against each network, and — for an IPv4-mapped
-    IPv6 address (e.g. ``::ffff:10.9.9.9``) — ALSO checks its embedded IPv4 form
-    against IPv4 networks. Without this, a mapped-IPv6 proxy peer would never
-    match an IPv4 CIDR allowlist: the trusted proxy would be treated as
-    untrusted (locking out legitimate clients behind it) and, inside an XFF
-    chain, a mapped trusted hop would be mis-returned as the client (admitting a
-    public client that preceded it). See #5764.
-    """
-    candidates = [addr]
-    mapped = getattr(addr, "ipv4_mapped", None)
-    if mapped is not None:
-        candidates.append(mapped)
-    for cand in candidates:
-        for net in networks:
-            try:
-                if cand in net:
-                    return True
-            except TypeError:
-                # IPv4/IPv6 family mismatch between candidate and net → skip.
-                continue
-    return False
-
-
-def _raw_peer_is_trusted_proxy(handler) -> bool:
-    """True when the immediate socket peer is loopback or an allowlisted proxy.
-
-    Only such a peer is allowed to assert a forwarded client IP. Judged on the
-    RAW socket address (never a header), so it cannot be spoofed.
-    """
-    import ipaddress
-
-    raw = _request_client_ip(handler)
-    if not raw:
-        return False
-    try:
-        addr = ipaddress.ip_address(raw)
-    except ValueError:
-        return False
-    return _ip_in_networks(addr, _trusted_proxy_networks())
 
 
 def _forwarded_client_ip_from_trusted_proxy(handler):

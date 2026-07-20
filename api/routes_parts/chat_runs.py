@@ -1356,7 +1356,7 @@ def _handle_chat_sync(handler, body):
             # Resolve API key via Hermes runtime provider (matches gateway behaviour)
             _api_key = None
             try:
-                from api.oauth import resolve_runtime_provider_with_anthropic_env_lock
+                from api.auth import resolve_runtime_provider_with_anthropic_env_lock
                 from hermes_cli.runtime_provider import resolve_runtime_provider
 
                 _rt = resolve_runtime_provider_with_anthropic_env_lock(

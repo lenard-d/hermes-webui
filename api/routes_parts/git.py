@@ -238,7 +238,7 @@ def _llm_git_commit_message(system_prompt: str, user_prompt: str, session=None) 
         _main_model, _main_provider, _main_base_url = resolve_model_provider(model_for_resolution)
         _main_api_key = None
         try:
-            from api.oauth import resolve_runtime_provider_with_anthropic_env_lock
+            from api.auth import resolve_runtime_provider_with_anthropic_env_lock
             from hermes_cli.runtime_provider import resolve_runtime_provider
 
             _rt = resolve_runtime_provider_with_anthropic_env_lock(

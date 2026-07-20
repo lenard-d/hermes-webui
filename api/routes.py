@@ -2569,7 +2569,7 @@ from api.onboarding import (
     complete_onboarding,
     probe_provider_endpoint,
 )
-from api.oauth import (
+from api.auth import (
     cancel_onboarding_oauth_flow,
     poll_onboarding_oauth_flow,
     start_onboarding_oauth_flow,
@@ -3760,7 +3760,7 @@ def handle_get(handler, parsed) -> bool:
         return t(handler, _page, content_type="text/html; charset=utf-8")
 
     if parsed.path == "/api/auth/oidc/start":
-        from api.auth_oidc import OIDCAuthError, OIDCConfigError, build_authorization_redirect
+        from api.auth import OIDCAuthError, OIDCConfigError, build_authorization_redirect
 
         next_path = _safe_login_redirect_path(
             parse_qs(parsed.query or "").get("next", [""])[0]
@@ -3783,7 +3783,7 @@ def handle_get(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/oidc/callback":
         from api.auth import create_session, set_auth_cookie
-        from api.auth_oidc import OIDCAuthError, OIDCConfigError, complete_authorization_code_flow
+        from api.auth import OIDCAuthError, OIDCConfigError, complete_authorization_code_flow
 
         query = parse_qs(parsed.query or "")
         error = str(query.get("error", [""])[0] or "").strip()
@@ -3824,7 +3824,7 @@ def handle_get(handler, parsed) -> bool:
             is_oidc_auth_enabled,
             is_trusted_auth_enabled,
         )
-        from api.passkeys import registered_credentials
+        from api.auth import registered_credentials
 
         logged_in = False
         session_info = None
@@ -4064,7 +4064,7 @@ def handle_get(handler, parsed) -> bool:
         settings["password_auth_enabled"] = get_password_hash() is not None
         try:
             from api.auth import _passkey_feature_flag_enabled as _pffe
-            from api.passkeys import registered_credentials as _rc
+            from api.auth import registered_credentials as _rc
             if _pffe():
                 settings["passkeys_enabled"] = bool(_rc())
                 settings["passwordless_enabled"] = bool(_rc()) and not settings["password_auth_enabled"]
@@ -7308,14 +7308,14 @@ def handle_post(handler, parsed) -> bool:
 
         if requested_passwordless:
             from api.auth import _passkey_feature_flag_enabled
-            from api.passkeys import registered_credentials
+            from api.auth import registered_credentials
 
             if not _passkey_feature_flag_enabled():
                 return bad(handler, "Passkey support is disabled. Enable HERMES_WEBUI_PASSKEY before going passwordless.", 409)
             if not registered_credentials():
                 return bad(handler, "Register a passkey before going passwordless.", 409)
         elif requested_clear_password:
-            from api.passkeys import clear_credentials
+            from api.auth import clear_credentials
 
             clear_credentials()
 
@@ -7381,7 +7381,7 @@ def handle_post(handler, parsed) -> bool:
         saved["auth_just_enabled"] = auth_just_enabled
         try:
             from api.auth import _passkey_feature_flag_enabled as _pffe
-            from api.passkeys import registered_credentials as _rc
+            from api.auth import registered_credentials as _rc
             if _pffe():
                 saved["passkeys_enabled"] = bool(_rc())
                 saved["passwordless_enabled"] = bool(_rc()) and not saved["password_auth_enabled"]
@@ -7860,7 +7860,7 @@ def handle_post(handler, parsed) -> bool:
                 _main_model, _main_provider, _main_base_url = resolve_model_provider(get_effective_default_model())
                 _main_api_key = None
                 try:
-                    from api.oauth import resolve_runtime_provider_with_anthropic_env_lock
+                    from api.auth import resolve_runtime_provider_with_anthropic_env_lock
                     from hermes_cli.runtime_provider import resolve_runtime_provider
 
                     _rt = resolve_runtime_provider_with_anthropic_env_lock(
@@ -7973,7 +7973,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkey/options":
         from api.auth import _passkey_feature_flag_enabled, is_auth_enabled
-        from api.passkeys import PasskeyError, PasskeyRateLimitError, authentication_options
+        from api.auth import PasskeyError, PasskeyRateLimitError, authentication_options
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled. Set HERMES_WEBUI_PASSKEY=1 or webui_passkey_enabled: true to enable."}, status=404)
@@ -7989,7 +7989,7 @@ def handle_post(handler, parsed) -> bool:
     if parsed.path == "/api/auth/passkey/login":
         from api.auth import _passkey_feature_flag_enabled, create_session, is_auth_enabled, set_auth_cookie
         from api.auth import _check_login_rate, _record_login_attempt
-        from api.passkeys import PasskeyError, finish_login
+        from api.auth import PasskeyError, finish_login
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled."}, status=404)
@@ -8017,7 +8017,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkey/register/options":
         from api.auth import _passkey_feature_flag_enabled
-        from api.passkeys import PasskeyError, PasskeyRateLimitError, registration_options
+        from api.auth import PasskeyError, PasskeyRateLimitError, registration_options
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled."}, status=404)
@@ -8033,7 +8033,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkey/register":
         from api.auth import _passkey_feature_flag_enabled
-        from api.passkeys import PasskeyError, finish_registration, registered_credentials
+        from api.auth import PasskeyError, finish_registration, registered_credentials
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled."}, status=404)
@@ -8049,7 +8049,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkey/delete":
         from api.auth import _passkey_feature_flag_enabled, get_password_hash
-        from api.passkeys import PasskeyError, delete_credential, registered_credentials
+        from api.auth import PasskeyError, delete_credential, registered_credentials
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"error": "Passkey support is disabled."}, status=404)
@@ -8064,7 +8064,7 @@ def handle_post(handler, parsed) -> bool:
 
     if parsed.path == "/api/auth/passkeys":
         from api.auth import _passkey_feature_flag_enabled
-        from api.passkeys import registered_credentials
+        from api.auth import registered_credentials
 
         if not _passkey_feature_flag_enabled():
             return j(handler, {"credentials": [], "disabled": True})

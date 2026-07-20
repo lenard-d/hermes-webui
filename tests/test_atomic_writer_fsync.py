@@ -82,7 +82,7 @@ def test_session_discoverability_failed_write_leaves_no_debris(tmp_path, monkeyp
 
 
 def test_passkeys_writer_fsyncs_and_keeps_0600(tmp_path, monkeypatch):
-    import api.passkeys as passkeys
+    from api.auth import passkeys
 
     calls = _spy_fsync(monkeypatch, passkeys)
     path = tmp_path / "passkeys.json"
@@ -94,7 +94,7 @@ def test_passkeys_writer_fsyncs_and_keeps_0600(tmp_path, monkeypatch):
 
 
 def test_oauth_writer_fsyncs_and_keeps_0600(tmp_path, monkeypatch):
-    import api.oauth as oauth
+    from api.auth import oauth
 
     calls = _spy_fsync(monkeypatch, oauth)
     path = tmp_path / "auth.json"

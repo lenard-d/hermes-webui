@@ -39,9 +39,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # at import time, but api.config is already in sys.modules — Python just
 # rebinds the names from the existing module, keeping the conftest STATE_DIR
 # untouched.
-import api.auth
-importlib.reload(api.auth)
-auth = api.auth
+from api.auth import cookies_password as auth
+importlib.reload(auth)
+import api.auth as auth_interface
+from api.auth import authorization as authz
+importlib.reload(authz)
+importlib.reload(auth_interface)
 
 import api.config as config
 
@@ -286,10 +289,10 @@ class TestPasswordCacheInvalidation(unittest.TestCase):
 
     def test_clear_password_takes_effect_without_restart(self):
         config.save_settings({"_set_password": "secret"})
-        self.assertTrue(auth.is_auth_enabled())
+        self.assertTrue(auth.is_password_auth_enabled())
 
         config.save_settings({"_clear_password": True})
-        self.assertFalse(auth.is_auth_enabled(),
+        self.assertFalse(auth.is_password_auth_enabled(),
                          "auth still enabled after clear")
         self.assertFalse(auth.verify_password("secret"))
 

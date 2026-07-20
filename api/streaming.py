@@ -3672,7 +3672,7 @@ def _attempt_credential_self_heal(
        re-invoke ``run_conversation`` with these).
     """
     try:
-        from api.oauth import (
+        from api.auth import (
             read_auth_json,
             resolve_runtime_provider_with_anthropic_env_lock,
         )

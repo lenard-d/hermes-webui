@@ -21,7 +21,7 @@ os.environ["HERMES_WEBUI_STATE_DIR"] = str(_TEST_STATE)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import api.auth as auth
+from api.auth import cookies_password as auth
 
 
 class TestSessionPersistence(unittest.TestCase):
@@ -75,6 +75,10 @@ class TestSessionPersistence(unittest.TestCase):
         _config.STATE_DIR = _TEST_STATE
         try:
             importlib.reload(auth)
+            import api.auth as auth_interface
+            from api.auth import authorization as authz
+            importlib.reload(authz)
+            importlib.reload(auth_interface)
         finally:
             _config.STATE_DIR = saved_state_dir
 

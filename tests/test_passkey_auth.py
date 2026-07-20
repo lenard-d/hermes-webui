@@ -58,7 +58,7 @@ class FakeHandler:
 
 
 def _set_paths(monkeypatch, tmp_path):
-    import api.passkeys as passkeys
+    from api.auth import passkeys
     monkeypatch.setattr(passkeys, "_CREDENTIALS_FILE", tmp_path / "passkeys.json")
     monkeypatch.setattr(passkeys, "_CHALLENGES_FILE", tmp_path / ".passkey_challenges.json")
     return passkeys
@@ -187,7 +187,7 @@ class RouteFakeHandler:
 
 def test_passkey_options_rate_limit_errors_return_429(monkeypatch):
     import api.auth as auth
-    import api.passkeys as passkeys
+    from api.auth import passkeys
     import api.routes as routes
 
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
@@ -197,7 +197,7 @@ def test_passkey_options_rate_limit_errors_return_429(monkeypatch):
     def raise_rate_limit(_handler):
         raise passkeys.PasskeyRateLimitError("too many")
 
-    monkeypatch.setattr(passkeys, "authentication_options", raise_rate_limit)
+    monkeypatch.setattr(auth, "authentication_options", raise_rate_limit)
     handler = RouteFakeHandler()
 
     routes.handle_post(handler, SimpleNamespace(path="/api/auth/passkey/options"))
@@ -208,7 +208,7 @@ def test_passkey_options_rate_limit_errors_return_429(monkeypatch):
 
 def test_passkey_register_options_handles_base_passkey_errors(monkeypatch):
     import api.auth as auth
-    import api.passkeys as passkeys
+    from api.auth import passkeys
     import api.routes as routes
 
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
@@ -220,7 +220,7 @@ def test_passkey_register_options_handles_base_passkey_errors(monkeypatch):
     def raise_passkey_error(_handler):
         raise passkeys.PasskeyError("plain passkey error")
 
-    monkeypatch.setattr(passkeys, "registration_options", raise_passkey_error)
+    monkeypatch.setattr(auth, "registration_options", raise_passkey_error)
     handler = RouteFakeHandler()
 
     routes.handle_post(handler, SimpleNamespace(path="/api/auth/passkey/register/options"))
@@ -264,14 +264,13 @@ def test_first_passkey_registration_rejects_remote_bootstrap(monkeypatch, tmp_pa
 
 def test_first_passkey_registration_options_allows_local_bootstrap(monkeypatch, tmp_path):
     import api.auth as auth
-    import api.passkeys as passkeys
     import api.routes as routes
 
     _set_paths(monkeypatch, tmp_path)
     monkeypatch.setenv("HERMES_WEBUI_PASSKEY", "1")
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
     monkeypatch.setattr(auth, "get_password_hash", lambda: None)
-    monkeypatch.setattr(passkeys, "registration_options", lambda handler: {"challenge": "local-bootstrap"})
+    monkeypatch.setattr(auth, "registration_options", lambda handler: {"challenge": "local-bootstrap"})
 
     handler = RouteFakeHandler()
     routes.handle_post(handler, SimpleNamespace(path="/api/auth/passkey/register/options"))
@@ -282,15 +281,14 @@ def test_first_passkey_registration_options_allows_local_bootstrap(monkeypatch, 
 
 def test_first_passkey_registration_allows_local_bootstrap(monkeypatch, tmp_path):
     import api.auth as auth
-    import api.passkeys as passkeys
     import api.routes as routes
 
     _set_paths(monkeypatch, tmp_path)
     monkeypatch.setenv("HERMES_WEBUI_PASSKEY", "1")
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
     monkeypatch.setattr(auth, "get_password_hash", lambda: None)
-    monkeypatch.setattr(passkeys, "finish_registration", lambda body, handler: {"ok": True})
-    monkeypatch.setattr(passkeys, "registered_credentials", lambda: [{"id": "local-bootstrap"}])
+    monkeypatch.setattr(auth, "finish_registration", lambda body, handler: {"ok": True})
+    monkeypatch.setattr(auth, "registered_credentials", lambda: [{"id": "local-bootstrap"}])
 
     handler = RouteFakeHandler()
     routes.handle_post(handler, SimpleNamespace(path="/api/auth/passkey/register"))
@@ -301,7 +299,6 @@ def test_first_passkey_registration_allows_local_bootstrap(monkeypatch, tmp_path
 
 def test_passkey_registration_requires_valid_session_when_auth_is_enabled(monkeypatch):
     import api.auth as auth
-    import api.passkeys as passkeys
     import api.routes as routes
 
     monkeypatch.setattr(routes, "_check_csrf", lambda handler: True)
@@ -314,12 +311,12 @@ def test_passkey_registration_requires_valid_session_when_auth_is_enabled(monkey
         lambda cookie: (_ for _ in ()).throw(AssertionError("verify_session should not be called without a cookie")),
     )
     monkeypatch.setattr(
-        passkeys,
+        auth,
         "registration_options",
         lambda handler: (_ for _ in ()).throw(AssertionError("registration_options should not be reached")),
     )
     monkeypatch.setattr(
-        passkeys,
+        auth,
         "finish_registration",
         lambda body, handler: (_ for _ in ()).throw(AssertionError("finish_registration should not be reached")),
     )

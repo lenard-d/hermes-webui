@@ -7,7 +7,8 @@ import types
 from unittest import mock
 
 import api.config
-import api.oauth
+import api.auth as auth_interface
+from api.auth import oauth
 import api.streaming as streaming
 
 
@@ -180,7 +181,7 @@ def test_streaming_passes_target_model_and_prefers_runtime_base_url(monkeypatch)
         return resolver(**kwargs)
 
     monkeypatch.setattr(
-        api.oauth,
+        oauth,
         "resolve_runtime_provider_with_anthropic_env_lock",
         fake_runtime_lock,
     )
@@ -230,7 +231,7 @@ def test_runtime_provider_lock_wrapper_forwards_target_model():
         calls["kwargs"] = kwargs
         return {"provider": kwargs.get("requested"), "base_url": None, "api_key": None}
 
-    result = api.oauth.resolve_runtime_provider_with_anthropic_env_lock(
+    result = oauth.resolve_runtime_provider_with_anthropic_env_lock(
         fake_resolver,
         requested="opencode-go",
         target_model="glm-5.1",
@@ -262,9 +263,9 @@ def test_attempt_credential_self_heal_passes_target_model(monkeypatch):
         return resolver(**kwargs)
 
     closed = []
-    monkeypatch.setattr(api.oauth, "read_auth_json", lambda: {"providers": {"opencode-go": {}}})
+    monkeypatch.setattr(auth_interface, "read_auth_json", lambda: {"providers": {"opencode-go": {}}})
     monkeypatch.setattr(
-        api.oauth,
+        auth_interface,
         "resolve_runtime_provider_with_anthropic_env_lock",
         fake_runtime_lock,
     )

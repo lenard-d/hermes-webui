@@ -121,7 +121,7 @@ class TestServerCheckAuthGuard:
         # so the server-side page-redirect loop never reached
         # _safe_login_redirect_path(). check_auth() must itself refuse to wrap a
         # login-shaped path into a fresh next=.
-        AUTH_PY = (ROOT / "api" / "auth.py").read_text(encoding="utf-8")
+        AUTH_PY = (ROOT / "api" / "auth" / "authorization.py").read_text(encoding="utf-8")
         assert "endswith('/login')" in AUTH_PY or "_login_path.endswith('/login')" in AUTH_PY, (
             "check_auth() must detect a login-shaped path and skip the next= wrap"
         )
@@ -131,7 +131,7 @@ class TestServerCheckAuthGuard:
         # resolves BACK to /session/login (not public, not the /login route) and
         # loops forever. Must use '../login' so it lands on the real public
         # /login route (and <mount>/login under a subpath mount).
-        AUTH_PY = (ROOT / "api" / "auth.py").read_text(encoding="utf-8")
+        AUTH_PY = (ROOT / "api" / "auth" / "authorization.py").read_text(encoding="utf-8")
         assert "'../login'" in AUTH_PY, (
             "check_auth() must redirect a session-scoped login path to ../login "
             "(the real public /login), not a bare relative login that loops"

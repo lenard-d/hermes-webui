@@ -30,7 +30,7 @@ def test_ui_401_redirect_helper_uses_relative_login_path():
 
 
 def test_server_auth_redirect_uses_relative_login_path_with_encoded_next():
-    src = read("api/auth.py")
+    src = read("api/auth/authorization.py")
     assert "handler.send_header('Location', 'login?next=' + _next)" in src
     assert "handler.send_header('Location', '/login?next='" not in src
     assert "safe='/'" in src, "the relative redirect must keep the existing next= encoding fix"
