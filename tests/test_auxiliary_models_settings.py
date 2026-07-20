@@ -448,7 +448,9 @@ class TestAuxiliaryModelsBackend:
     """WebUI backend must expose /api/model/auxiliary and /api/model/set."""
 
     ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-    CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
+    MODEL_SETTINGS_PY = (
+        ROOT / "api" / "config_parts" / "model_settings.py"
+    ).read_text(encoding="utf-8")
 
     def test_model_auxiliary_route_exists(self):
         """/api/model/auxiliary route must be registered in routes.py."""
@@ -512,15 +514,15 @@ class TestAuxiliaryModelsBackend:
         ]
 
     def test_get_auxiliary_models_function_exists(self):
-        """get_auxiliary_models() must exist in api/config.py."""
-        assert "def get_auxiliary_models" in self.CONFIG_PY, (
-            "Missing get_auxiliary_models() in api/config.py"
+        """get_auxiliary_models() must exist in the model-settings owner."""
+        assert "def get_auxiliary_models" in self.MODEL_SETTINGS_PY, (
+            "Missing get_auxiliary_models() in api/config_parts/model_settings.py"
         )
 
     def test_backend_aux_task_slots_include_agent_defaults(self):
         """Backend allow-list must include newer Hermes auxiliary slots."""
         for key in ("kanban_decomposer", "profile_describer", "triage_specifier"):
-            assert f'"{key}"' in self.CONFIG_PY
+            assert f'"{key}"' in self.MODEL_SETTINGS_PY
 
     def test_backend_surfaces_advanced_fields_without_api_key_value(self, monkeypatch):
         """Advanced fields should be visible, but API keys remain write-only."""
@@ -673,15 +675,15 @@ class TestAuxiliaryModelsBackend:
         assert "api_key" not in main
 
     def test_set_auxiliary_model_function_exists(self):
-        """set_auxiliary_model() must exist in api/config.py."""
-        assert "def set_auxiliary_model" in self.CONFIG_PY, (
-            "Missing set_auxiliary_model() in api/config.py"
+        """set_auxiliary_model() must exist in the model-settings owner."""
+        assert "def set_auxiliary_model" in self.MODEL_SETTINGS_PY, (
+            "Missing set_auxiliary_model() in api/config_parts/model_settings.py"
         )
 
     def test_aux_task_slots_constant_exists(self):
-        """AUX_TASK_SLOTS must be defined in api/config.py."""
-        assert "AUX_TASK_SLOTS" in self.CONFIG_PY, (
-            "Missing AUX_TASK_SLOTS constant in api/config.py"
+        """AUX_TASK_SLOTS must be defined in the model-settings owner."""
+        assert "AUX_TASK_SLOTS" in self.MODEL_SETTINGS_PY, (
+            "Missing AUX_TASK_SLOTS constant in api/config_parts/model_settings.py"
         )
 
     def test_js_uses_models_endpoint_not_options(self):

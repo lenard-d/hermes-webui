@@ -60,7 +60,9 @@ actions. The topbar remains focused on conversation context and the workspace/fi
     api/
       __init__.py          Package marker
       auth.py              Optional password authentication, signed cookies, passkeys/WebAuthn
-      config.py            Discovery, globals, model detection, reloadable config
+      config.py            Compatibility facade, globals, model discovery/cache, reloadable config
+      config_parts/        Importable config domains behind a late-bound facade
+        model_settings.py  Advanced/default/auxiliary model settings policy and persistence
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       insights.py          Usage aggregation across WebUI index and Hermes state.db
       model_catalog.py     Static provider names, aliases, and fallback models

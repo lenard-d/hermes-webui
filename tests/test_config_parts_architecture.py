@@ -1,14 +1,34 @@
 """Architecture contract for the importable ``api.config_parts`` slices."""
 
+import subprocess
+import sys
+
 import api.config as config
 from api.config_parts import (
     config_io,
+    model_settings,
     model_reasoning,
     path_env,
     provider_discovery,
     provider_routing,
     settings_persistence,
 )
+
+
+def test_model_settings_imports_without_importing_config_facade():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import api.config_parts.model_settings; "
+            "assert 'api.config' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_config_reexports_config_domain_implementations():
@@ -37,6 +57,35 @@ def test_config_reexports_config_domain_implementations():
         model_reasoning.coerce_reasoning_effort_for_model
     )
     assert config.get_reasoning_status is model_reasoning.get_reasoning_status
+    model_settings_exports = (
+        "_parse_positive_int_config_value",
+        "get_max_tokens_status",
+        "set_max_tokens",
+        "set_reasoning_display",
+        "set_reasoning_effort",
+        "_public_advanced_model_options",
+        "_is_openai_family_provider",
+        "_normalize_openai_family_model_id",
+        "_legacy_openai_service_tier_overrides",
+        "_resolve_main_model_fast_mode_overrides",
+        "_main_model_supports_service_tier",
+        "_model_supports_fast_tier_for_provider",
+        "_annotate_fast_tier_model_groups",
+        "_public_main_service_tier",
+        "_main_model_request_overrides",
+        "_apply_advanced_model_options",
+        "set_hermes_default_model",
+        "AUXILIARY_TASK_CATALOG",
+        "AUX_TASK_SLOTS",
+        "RETIRED_AUX_TASK_SLOTS",
+        "_aux_task_payload",
+        "_iter_auxiliary_task_rows",
+        "get_auxiliary_models",
+        "_coerce_optional_positive_int",
+        "set_auxiliary_model",
+    )
+    for name in model_settings_exports:
+        assert getattr(config, name) is getattr(model_settings, name)
 
 
 def test_config_io_resolves_patched_env_reader_at_call_time(monkeypatch):
@@ -117,3 +166,36 @@ def test_model_reasoning_resolves_patched_impl_at_call_time(monkeypatch):
         "low",
         "high",
     ]
+
+
+def test_model_settings_resolves_patched_facade_helpers_at_call_time(monkeypatch):
+    monkeypatch.setattr(config, "_resolve_provider_alias", lambda _provider: "openai")
+    monkeypatch.setattr(
+        config,
+        "_resolve_main_model_fast_mode_overrides",
+        lambda _model, _provider=None: {"service_tier": "priority"},
+    )
+
+    assert config._is_openai_family_provider("patched-provider") is True
+    assert config._main_model_supports_service_tier(
+        "patched-model", "patched-provider"
+    ) is True
+
+
+def test_model_settings_does_not_own_persistent_or_catalog_cache_state():
+    facade_owned_state = {
+        "cfg",
+        "_available_models_cache",
+        "_available_models_cache_ts",
+        "_available_models_live_rebuild_ts",
+        "_available_models_cache_source_fingerprint",
+        "_available_models_cache_lock",
+        "_cache_build_cv",
+        "_cache_build_in_progress",
+        "_models_cache_build_generation",
+        "_active_models_cache_build_generation",
+    }
+
+    assert facade_owned_state <= vars(config).keys()
+    assert facade_owned_state.isdisjoint(vars(model_settings))
+    assert callable(config.get_available_models)
