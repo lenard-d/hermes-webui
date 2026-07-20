@@ -342,10 +342,12 @@ def test_auth_status_reports_passkey_availability_source_contract():
 
 
 def test_login_page_has_default_hidden_passkey_button_and_script_wiring():
-    routes = open("api/routes.py", encoding="utf-8").read()
+    from api import routes
+
+    login_page = routes._LOGIN_PAGE_HTML
     login_js = open("static/login.js", encoding="utf-8").read()
-    assert 'id="passkey-login"' in routes
-    assert 'style="display:none"' in routes
+    assert 'id="passkey-login"' in login_page
+    assert 'style="display:none"' in login_page
     assert "api/auth/passkey/options" in login_js
     assert "navigator.credentials.get" in login_js
 
