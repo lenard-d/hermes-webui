@@ -486,16 +486,28 @@ def test_kanban_events_payload_matches_polling_shape(monkeypatch):
     assert {"id", "task_id", "run_id", "kind", "payload", "created_at"} <= set(events["events"][0])
 
 
-def test_routes_dispatches_api_kanban_get_to_bridge():
+def test_routes_dispatches_api_kanban_get_to_package():
     src = open("api/routes.py", encoding="utf-8").read()
     assert 'parsed.path.startswith("/api/kanban/")' in src
+    assert "from api.kanban import handle_kanban_get" in src
     assert "handle_kanban_get(handler, parsed)" in src
 
 
-def test_routes_dispatches_api_kanban_post_to_bridge():
+def test_routes_dispatches_api_kanban_post_to_package():
     src = open("api/routes.py", encoding="utf-8").read()
     assert 'parsed.path.startswith("/api/kanban/")' in src
+    assert "from api.kanban import handle_kanban_post" in src
     assert "handle_kanban_post(handler, parsed, body)" in src
+
+
+def test_legacy_bridge_reexports_package_handlers_without_owning_dispatch():
+    import api.kanban as kanban
+    import api.kanban_bridge as legacy
+
+    assert legacy.handle_kanban_get is kanban.handle_kanban_get
+    assert legacy.handle_kanban_post is kanban.handle_kanban_post
+    assert legacy.handle_kanban_patch is kanban.handle_kanban_patch
+    assert legacy.handle_kanban_delete is kanban.handle_kanban_delete
 
 
 
@@ -613,9 +625,10 @@ def test_handle_kanban_get_returns_503_when_hermes_cli_missing(monkeypatch):
     the toast cleanly only when the bridge gives a structured error.
     """
     bridge = _load_bridge(monkeypatch)
+    from api.kanban import queries as kanban_queries
     # Force _kb() to raise ImportError as if hermes_cli was uninstalled
     monkeypatch.setattr(
-        bridge, "_kb",
+        kanban_queries, "_kb",
         lambda: (_ for _ in ()).throw(ImportError("No module named 'hermes_cli'")),
     )
 
@@ -634,7 +647,7 @@ def test_handle_kanban_get_returns_503_when_hermes_cli_missing(monkeypatch):
         captured["status"] = status
         return True
 
-    monkeypatch.setattr(bridge, "bad", fake_bad)
+    monkeypatch.setattr("api.kanban.http.bad", fake_bad)
     parsed = _parsed(path="/api/kanban/board")
     result = bridge.handle_kanban_get(h, parsed)
     assert result is True
@@ -645,8 +658,9 @@ def test_handle_kanban_get_returns_503_when_hermes_cli_missing(monkeypatch):
 def test_handle_kanban_post_returns_503_when_hermes_cli_missing(monkeypatch):
     """Same fallback contract for POST verb."""
     bridge = _load_bridge(monkeypatch)
+    from api.kanban import tasks as kanban_tasks
     monkeypatch.setattr(
-        bridge, "_kb",
+        kanban_tasks, "_kb",
         lambda: (_ for _ in ()).throw(ImportError("hermes_cli missing")),
     )
     captured = {}
@@ -656,7 +670,7 @@ def test_handle_kanban_post_returns_503_when_hermes_cli_missing(monkeypatch):
         captured["status"] = status
         return True
 
-    monkeypatch.setattr(bridge, "bad", fake_bad)
+    monkeypatch.setattr("api.kanban.http.bad", fake_bad)
 
     class FakeHandler:
         pass
@@ -670,8 +684,9 @@ def test_handle_kanban_post_returns_503_when_hermes_cli_missing(monkeypatch):
 def test_handle_kanban_patch_returns_503_when_hermes_cli_missing(monkeypatch):
     """Same fallback contract for PATCH verb."""
     bridge = _load_bridge(monkeypatch)
+    from api.kanban import tasks as kanban_tasks
     monkeypatch.setattr(
-        bridge, "_kb",
+        kanban_tasks, "_kb",
         lambda: (_ for _ in ()).throw(ImportError("hermes_cli missing")),
     )
     captured = {}
@@ -681,7 +696,7 @@ def test_handle_kanban_patch_returns_503_when_hermes_cli_missing(monkeypatch):
         captured["status"] = status
         return True
 
-    monkeypatch.setattr(bridge, "bad", fake_bad)
+    monkeypatch.setattr("api.kanban.http.bad", fake_bad)
 
     class FakeHandler:
         pass
@@ -930,7 +945,7 @@ def test_handle_kanban_get_routes_boards_endpoint(monkeypatch):
         captured["payload"] = payload
         return True
 
-    monkeypatch.setattr(bridge, "j", fake_j)
+    monkeypatch.setattr("api.kanban.http.j", fake_j)
     parsed = _parsed(path="/api/kanban/boards")
     result = bridge.handle_kanban_get(FakeHandler(), parsed)
     assert result is True
@@ -950,7 +965,7 @@ def test_handle_kanban_post_routes_create_board_and_switch(monkeypatch):
         captured.append(payload)
         return True
 
-    monkeypatch.setattr(bridge, "j", fake_j)
+    monkeypatch.setattr("api.kanban.http.j", fake_j)
     # Create
     bridge.handle_kanban_post(
         FakeHandler(), _parsed(path="/api/kanban/boards"),
@@ -977,7 +992,7 @@ def test_handle_kanban_delete_routes_archive_board(monkeypatch):
         captured.append(payload)
         return True
 
-    monkeypatch.setattr(bridge, "j", fake_j)
+    monkeypatch.setattr("api.kanban.http.j", fake_j)
     bridge._create_board_payload({"slug": "experiments", "name": "x"})
     bridge.handle_kanban_delete(
         FakeHandler(), _parsed(path="/api/kanban/boards/experiments"), {}
@@ -998,7 +1013,7 @@ def test_handle_kanban_patch_routes_update_board(monkeypatch):
         captured.append(payload)
         return True
 
-    monkeypatch.setattr(bridge, "j", fake_j)
+    monkeypatch.setattr("api.kanban.http.j", fake_j)
     bridge._create_board_payload({"slug": "experiments", "name": "x"})
     bridge.handle_kanban_patch(
         FakeHandler(), _parsed(path="/api/kanban/boards/experiments"),
@@ -1080,8 +1095,8 @@ def test_sse_handler_runs_in_thread_and_streams_event(monkeypatch):
 
     bridge = _load_bridge(monkeypatch)
     # Speed up the SSE poll cycle and heartbeat for the test
-    monkeypatch.setattr(bridge, "_KANBAN_SSE_POLL_SECONDS", 0.05)
-    monkeypatch.setattr(bridge, "_KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
+    monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
+    monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
 
     class FakeWriter(io.BytesIO):
         def flush(self):
@@ -1164,7 +1179,7 @@ def test_handle_kanban_patch_routes_boards_slug_before_board_query_param(monkeyp
         captured.append(payload)
         return True
 
-    monkeypatch.setattr(bridge, "j", fake_j)
+    monkeypatch.setattr("api.kanban.http.j", fake_j)
     # Ghost board does NOT exist; query param should be ignored on a /boards path.
     parsed = _parsed(path="/api/kanban/boards/experiments", query="board=ghost")
     result = bridge.handle_kanban_patch(FakeHandler(), parsed, {"name": "Renamed"})
@@ -1187,7 +1202,7 @@ def test_handle_kanban_delete_routes_boards_slug_before_board_query_param(monkey
         captured.append(payload)
         return True
 
-    monkeypatch.setattr(bridge, "j", fake_j)
+    monkeypatch.setattr("api.kanban.http.j", fake_j)
     parsed = _parsed(path="/api/kanban/boards/experiments", query="board=ghost")
     result = bridge.handle_kanban_delete(FakeHandler(), parsed, {})
     assert result is True
@@ -1204,8 +1219,8 @@ def test_sse_emits_id_lines_so_browser_can_resume_via_last_event_id(monkeypatch)
     import io
 
     bridge = _load_bridge(monkeypatch)
-    monkeypatch.setattr(bridge, "_KANBAN_SSE_POLL_SECONDS", 0.05)
-    monkeypatch.setattr(bridge, "_KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
+    monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
+    monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
 
     class FakeHandler:
         def __init__(self):
@@ -1252,8 +1267,8 @@ def test_sse_honours_last_event_id_header_when_since_absent(monkeypatch):
     import io
 
     bridge = _load_bridge(monkeypatch)
-    monkeypatch.setattr(bridge, "_KANBAN_SSE_POLL_SECONDS", 0.05)
-    monkeypatch.setattr(bridge, "_KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
+    monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
+    monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
 
     captured_cursor = []
 
@@ -1261,7 +1276,7 @@ def test_sse_honours_last_event_id_header_when_since_absent(monkeypatch):
         captured_cursor.append(cursor)
         return cursor, []
 
-    monkeypatch.setattr(bridge, "_kanban_sse_fetch_new", spying_fetch)
+    monkeypatch.setattr("api.kanban.streaming._kanban_sse_fetch_new", spying_fetch)
 
     class FakeHandler:
         def __init__(self):

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 I18N_JS = family_source("i18n")
-KANBAN_BRIDGE = (ROOT / "api" / "kanban_bridge.py").read_text(encoding="utf-8")
+KANBAN_BRIDGE = (ROOT / "api" / "kanban" / "tasks.py").read_text(encoding="utf-8")
 
 NODE = shutil.which("node")
 

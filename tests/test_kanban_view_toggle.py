@@ -129,7 +129,7 @@ def test_kanban_config_patch_validation_returns_clean_400(monkeypatch):
         captured["status"] = status
         return True
 
-    monkeypatch.setattr(bridge, "bad", fake_bad)
+    monkeypatch.setattr("api.kanban.http.bad", fake_bad)
 
     result = bridge.handle_kanban_patch(
         object(),

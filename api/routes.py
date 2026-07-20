@@ -2964,10 +2964,10 @@ def _handle_project_os_dashboard(handler, parsed) -> bool:
     selected_board_meta = None
     if requested_board:
         try:
-            from api.kanban_bridge import _kb, _board_meta_dict
-            kb = _kb()
+            from api.kanban import get_backend, serialize_board_metadata
+            kb = get_backend()
             for meta in kb.list_boards(include_archived=True) or []:
-                board = _board_meta_dict(meta)
+                board = serialize_board_metadata(meta)
                 if str(board.get("slug") or "") == requested_board:
                     selected_board_meta = board
                     workdir = str(board.get("default_workdir") or "").strip()
@@ -3919,7 +3919,7 @@ def handle_get(handler, parsed) -> bool:
         return _handle_project_os_dashboard(handler, parsed)
 
     if parsed.path.startswith("/api/kanban/"):
-        from api.kanban_bridge import handle_kanban_get
+        from api.kanban import handle_kanban_get
 
         # Only treat an explicit False as "no route matched". None means the
         # bridge already sent a response via bad()/j() — emitting our own 404
@@ -5716,7 +5716,7 @@ def handle_post(handler, parsed) -> bool:
         return j(handler, result, status=200 if result.get("clean") else 409)
 
     if parsed.path.startswith("/api/kanban/"):
-        from api.kanban_bridge import handle_kanban_post
+        from api.kanban import handle_kanban_post
 
         result = handle_kanban_post(handler, parsed, body)
         if result is False:
@@ -8132,7 +8132,7 @@ def handle_patch(handler, parsed) -> bool:
         name = parsed.path[len("/api/mcp/servers/"):]
         return _handle_mcp_server_toggle(handler, name, body)
     if parsed.path.startswith("/api/kanban/"):
-        from api.kanban_bridge import handle_kanban_patch
+        from api.kanban import handle_kanban_patch
 
         result = handle_kanban_patch(handler, parsed, body)
         if result is False:
@@ -8168,7 +8168,7 @@ def handle_delete(handler, parsed) -> bool:
         return j(handler, {"ok": True})
 
     if parsed.path.startswith("/api/kanban/"):
-        from api.kanban_bridge import handle_kanban_delete
+        from api.kanban import handle_kanban_delete
 
         result = handle_kanban_delete(handler, parsed, body)
         if result is False:

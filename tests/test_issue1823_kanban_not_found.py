@@ -88,12 +88,12 @@ def test_inner_handler_bad_response_does_not_emit_double_404(
     404 body on the wire. Only an explicit `False` from the bridge means the
     path was unmatched.
     """
-    from api import kanban_bridge
+    from api.kanban import http as kanban_http
 
     # Force one kanban payload helper to hit bad() and return None, so the
     # wrapper path should not append _kanban_unknown_endpoint.
     monkeypatch.setattr(
-        kanban_bridge, payload_attr, lambda *a, **kw: (_ for _ in ()).throw(LookupError(payload_error))
+        kanban_http, payload_attr, lambda *a, **kw: (_ for _ in ()).throw(LookupError(payload_error))
     )
 
     handler = _FakeHandler()

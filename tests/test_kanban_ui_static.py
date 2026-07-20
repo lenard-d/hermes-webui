@@ -220,7 +220,7 @@ def test_kanban_task_detail_has_edit_button_and_modal_supports_edit_mode():
     assignee, tenant, or priority of a task once created.
 
     Backend supports it (PATCH /api/kanban/tasks/<id> with title/body/assignee/
-    tenant/priority — see _patch_task in api/kanban_bridge.py); this regression
+    tenant/priority — see _patch_task in api/kanban/tasks.py); this regression
     pins the UI surface.
     """
     # 1. _kanbanRenderTaskDetail emits an Edit button wired to openKanbanEdit.

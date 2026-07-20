@@ -171,12 +171,13 @@ class TestAPIIntegration:
         assert "await loadKanbanTask(taskId)" in PANELS_JS
 
 
-def test_no_backend_modifications_required():
-    """Verify that backend kanban_bridge.py already has the routes we're using."""
-    kanban_bridge = (ROOT / "api" / "kanban_bridge.py").read_text(encoding="utf-8")
+def test_kanban_backend_supports_dependency_fields():
+    """Verify the Kanban owners support the dependency fields used by the UI."""
+    kanban_tasks = (ROOT / "api" / "kanban" / "tasks.py").read_text(encoding="utf-8")
+    kanban_http = (ROOT / "api" / "kanban" / "http.py").read_text(encoding="utf-8")
     # Routes for links must exist and accept workspace_kind, workspace_path
-    assert "/api/kanban/links" in kanban_bridge
-    assert "/api/kanban/links/delete" in kanban_bridge
+    assert "/api/kanban/links" in kanban_http
+    assert "/api/kanban/links/delete" in kanban_http
     # workspace_kind and workspace_path must be accepted in payload
-    assert "workspace_kind" in kanban_bridge
-    assert "workspace_path" in kanban_bridge
+    assert "workspace_kind" in kanban_tasks
+    assert "workspace_path" in kanban_tasks
