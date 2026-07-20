@@ -83,6 +83,7 @@ def test_settings_persistence_resolves_patched_raw_reader_at_call_time(monkeypat
 
 
 def test_settings_write_publication_state_is_owned_by_config_facade():
+    assert "_SETTINGS_DEFAULTS" not in vars(settings_persistence)
     assert "_SETTINGS_WRITE_VERSION" not in vars(settings_persistence)
     assert "_SETTINGS_WRITE_LOCK" not in vars(settings_persistence)
     assert isinstance(config._SETTINGS_WRITE_VERSION, int)

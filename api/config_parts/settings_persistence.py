@@ -111,9 +111,9 @@ def _build_settings_defaults(default_workspace: Path | str) -> dict:
 
 
 # Schema template used to derive static allowlists without resolving the facade
-# during import. The facade rebuilds its authoritative copy with the current
-# workspace on every import/reload; persistence functions read that copy later.
-_SETTINGS_DEFAULTS = _build_settings_defaults("")
+# during import. The facade owns the authoritative mutable defaults dictionary,
+# rebuilt with the current workspace on every import/reload.
+_SETTINGS_SCHEMA_DEFAULTS = _build_settings_defaults("")
 _SETTINGS_SPEECH_KEYS = {
     "tts_enabled",
     "tts_auto_read",
@@ -135,7 +135,7 @@ _SETTINGS_LEGACY_DROP_KEYS = {
     "simplified_tool_calling",
 }
 _COMPOSER_CONTROL_ORDER_KEYS = {
-    key for key in _SETTINGS_DEFAULTS if key.startswith("hide_composer_")
+    key for key in _SETTINGS_SCHEMA_DEFAULTS if key.startswith("hide_composer_")
 }
 _SETTINGS_THEME_VALUES = {"light", "dark", "system"}
 _SETTINGS_SKIN_VALUES = {
@@ -316,7 +316,7 @@ def load_settings() -> dict:
     return settings
 
 
-_SETTINGS_ALLOWED_KEYS = set(_SETTINGS_DEFAULTS.keys()) - {
+_SETTINGS_ALLOWED_KEYS = set(_SETTINGS_SCHEMA_DEFAULTS.keys()) - {
     "password_hash",
     "default_model",
     "simplified_tool_calling",
