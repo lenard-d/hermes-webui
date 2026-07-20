@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+from tests.frontend_asset_contract import family_source
+
 REPO = Path(__file__).resolve().parent.parent
 
 
@@ -662,8 +664,8 @@ def _extract_function_body(src: str, signature: str) -> str:
 
 
 def test_populate_model_dropdown_accepts_session_visit_freshness_and_guards_stale_responses():
-    body = _extract_function_body(_read_static("ui.js"), "async function populateModelDropdown(")
-    live_tail = _extract_function_body(_read_static("ui.js"), "async function _fetchLiveModels(")
+    body = _extract_function_body(family_source("ui"), "async function populateModelDropdown(")
+    live_tail = _extract_function_body(family_source("ui"), "async function _fetchLiveModels(")
 
     assert "modelsUrl.searchParams.set('freshness',opts.freshness)" in body
     assert "const requestSeq=++_modelDropdownRequestSeq" in body
@@ -673,10 +675,12 @@ def test_populate_model_dropdown_accepts_session_visit_freshness_and_guards_stal
 
 
 def test_load_session_invalidates_picker_catalog_without_fetching_models():
-    body = _extract_function_body(_read_static("sessions.js"), "async function loadSession(")
+    sessions = family_source("sessions")
+    body = _extract_function_body(sessions, "async function loadSession(")
+    restore_body = _extract_function_body(sessions, "async function _restoreLoadedSession(")
 
     assign_idx = body.index("S.session=data.session")
-    message_load_idx = body.index("await _ensureMessagesLoaded(sid", assign_idx)
+    message_load_idx = body.index("await _restoreLoadedSession", assign_idx)
     model_block_idx = body.index("if(typeof window!=='undefined')", assign_idx)
     invalidate_idx = body.index("window._modelDropdownReady=null", model_block_idx)
 
@@ -684,10 +688,11 @@ def test_load_session_invalidates_picker_catalog_without_fetching_models():
     assert "populateModelDropdown({freshness:'session_visit'})" not in body
     assert "const modelRefreshPromise=_deferSessionSideEffect" not in body
     assert "window._startBootModelDropdown()" in body
+    assert restore_body.count("await _ensureMessagesLoaded(sid") == 2
 
 
 def test_session_visit_model_refresh_runs_when_picker_opens():
-    ui = _read_static("ui.js")
+    ui = family_source("ui")
     boot = _read_static("boot.js")
     toggle_body = _extract_function_body(ui, "async function toggleModelDropdown(")
 

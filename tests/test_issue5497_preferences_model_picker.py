@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+STYLE_CSS = family_source("style")
+UI_JS = family_source("ui")
 
 
 def _function_body(src: str, name: str) -> str:

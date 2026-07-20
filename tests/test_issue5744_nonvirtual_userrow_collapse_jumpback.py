@@ -33,6 +33,8 @@ Three coordinated pieces fix it, each covered below:
 Each behavioral test is written to FAIL on the known-buggy version and PASS only
 on the fixed version (mutation notes inline).
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -155,7 +157,7 @@ def test_estimate_weights_cjk_as_double_width():
     Mutation: revert the per-char width weighting (count `columns += 1` for all)
     and the CJK estimate drops to the latin value, failing the >1.7x assertion.
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + r"""
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
 // Equal CHARACTER counts; the CJK one has ~2x the visual columns.
@@ -175,7 +177,7 @@ console.log(JSON.stringify({
 
 def test_estimate_short_row_still_floors_at_96():
     """No regression: a short row must never reserve less than today's 96px."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + r"""
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
 console.log(JSON.stringify({
@@ -201,7 +203,7 @@ def test_apply_reserves_max_of_remembered_and_estimate():
     "remembered if >0 else estimate" and this fails (the small remembered value is
     used even though the estimate is larger).
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _dom_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -228,7 +230,7 @@ def test_apply_still_prefers_a_taller_remembered_full_measurement():
     """The max() must not regress the #5638 case: when a full measurement (taller
     than the estimate) was remembered, the rebuild still reserves that real height.
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _dom_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -259,7 +261,7 @@ def test_remember_persists_only_in_viewport_rows():
     Mutation: drop the `if(!inView) continue;` guard and the off-screen row's bogus
     height gets persisted, failing the assertion that its key stays unset.
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _dom_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -300,7 +302,7 @@ def test_remember_floors_persisted_height_at_estimate():
     Mutation: remove the `Math.max(measured, estimate)` floor in the capture and
     the small 500 partial paint gets stored, failing the assertion.
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _dom_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -334,7 +336,7 @@ def test_rendermessages_calls_prewipe_capture_before_wipe():
     `_rememberRenderedUserRowIntrinsicHeights()` call must appear before the first
     `inner.innerHTML=''`. Mutation: move the call after the wipe and this fails.
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + r"""
 eval(extractFunc('renderMessages'));
 const body = renderMessages.toString();

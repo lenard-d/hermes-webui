@@ -5,11 +5,13 @@ These tests stay source-level so they can verify the declared CSS contract
 without needing a browser or rendered layout.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 
 

@@ -19,6 +19,8 @@ Every behavioral test below is designed to FAIL on the pre-guard code and PASS o
 the guard. Node-harness pattern (extractFunc + mock DOM) shared with the sibling scroll
 regression suites.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -86,7 +88,7 @@ function extractFunc(name) {
 def _realign_harness(*, anchor_extra: str, cur_scroll_height: int, rect_top: int,
                      top_offset: int, active_intent: bool = False,
                      touch_like: bool = True) -> str:
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     intent_js = "true" if active_intent else "false"
     touch_js = "true" if touch_like else "false"
     return _extract_func_script(js) + f"""
@@ -191,7 +193,7 @@ def _fallback_harness(*, snapshot_scroll_height, cur_scroll_height, snapshot_top
       nothing (genuinely-gone anchor -> topPad-delta or raw).
     top_pad_now: current virtual top-spacer height (for the genuinely-gone topPad-delta path).
     """
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     intent_js = "true" if active_intent else "false"
     touch_js = "true" if touch_like else "false"
     sh = "null" if snapshot_scroll_height is None else str(snapshot_scroll_height)
@@ -435,7 +437,7 @@ def _predicate_harness(*, pointer_coarse, computed_overflow_anchor, has_matchmed
     that _restoreMessageViewportAnchor writes on #messages mid-realign — the value the
     computed probe would transiently read. `ua`/`platform`/`max_touch_points` drive the
     _isIOSWebKit branch (default: an Android touch device that is NOT iOS)."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     mm = "true" if pointer_coarse else "false"
     has_mm = "true" if has_matchmedia else "false"
     return _extract_func_script(js) + f"""

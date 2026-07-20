@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import json
 import subprocess
 import sys
@@ -21,7 +23,7 @@ def _install_model_metadata(monkeypatch, **estimators):
 
 
 def _run_context_indicator(usage):
-    source = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    source = family_source("ui")
     start = source.index("function _syncCtxIndicator")
     end = source.index("// ── Touch support: toggle context tooltip on tap", start)
     indicator = source[start:end]
@@ -176,15 +178,14 @@ def test_context_indicator_without_estimate_preserves_current_behavior():
 
 def test_reload_hydration_passes_post_compression_estimate_to_context_indicator():
     expected = "post_compression_context_tokens_estimate"
-    for path, expected_calls in ((ROOT / "static" / "boot.js", 1), (ROOT / "static" / "sessions.js", 3)):
-        source = path.read_text(encoding="utf-8")
+    boot = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
+    for source, expected_calls in ((boot, 1), (family_source("sessions"), 3)):
         calls = source.split("_syncCtxIndicator({")[1:]
 
         assert len(calls) == expected_calls
         for call in calls:
             assert expected in call.split("});", 1)[0]
 
-    boot = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-    sessions = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    sessions = family_source("sessions")
     assert "S.session.post_compression_context_tokens_estimate=data.session.post_compression_context_tokens_estimate||null;" in boot
     assert "S.session.post_compression_context_tokens_estimate=data.session.post_compression_context_tokens_estimate||null;" in sessions

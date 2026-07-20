@@ -19,6 +19,8 @@ DOM parentage, i.e. that the dropdown is NOT a descendant of the footer while
 open on a phone (so no container-type ancestor can trap its fixed positioning),
 and that it is restored into the footer on close and on desktop.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import subprocess
@@ -26,8 +28,8 @@ import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+CSS = family_source("style")
 
 
 def _function_body(src: str, marker: str) -> str:

@@ -10,6 +10,7 @@ from typing import Any, cast
 import pytest
 
 from tests.conftest import TEST_BASE, requires_agent_modules
+from tests.frontend_asset_contract import family_source
 
 
 def _install_fake_moa_config(monkeypatch, *, default_preset="moa-default", usage_text="Usage: /moa <prompt>"):
@@ -90,8 +91,7 @@ def test_moa_resolve_endpoint_returns_200():
 
 
 def test_moa_not_in_agent_commands_webui():
-    js_path = Path(__file__).resolve().parent.parent / "static" / "messages.js"
-    source = js_path.read_text(encoding="utf-8")
+    source = family_source("messages")
     match = re.search(r"_AGENT_COMMANDS_RUN_ON_WEBUI\s*=\s*new\s+Set\(\[([^\]]+)\]\)", source)
     assert match, "_AGENT_COMMANDS_RUN_ON_WEBUI not found in messages.js"
     entries = match.group(1)
@@ -127,8 +127,7 @@ def test_moa_config_is_per_turn_not_persisted():
     assert re.search(r"if body\.get\(\"moa_config\"\):[\s\S]*?moa_config = resolve_moa_config\(\)", routes_source), \
         "chat-start must re-resolve MoA config server-side instead of trusting the browser payload"
     assert "MoA override is unavailable on gateway-backed sessions" in routes_source
-    js_path = Path(__file__).resolve().parent.parent / "static" / "messages.js"
-    js_source = js_path.read_text(encoding="utf-8")
+    js_source = family_source("messages")
     assert "moa_config:_pendingMoaConfig?true:undefined" in js_source
     assert "_pendingMoaConfig=null" in js_source
 

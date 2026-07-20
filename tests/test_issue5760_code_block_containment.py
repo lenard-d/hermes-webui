@@ -1,9 +1,11 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 import re
 
 
 REPO = Path(__file__).resolve().parent.parent
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 def _base_msg_body_pre_rule() -> str:

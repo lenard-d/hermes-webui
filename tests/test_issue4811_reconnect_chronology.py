@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 MESSAGES_JS = REPO_ROOT / "static" / "messages.js"
 NODE = shutil.which("node")
@@ -26,7 +28,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 _DRIVER_SRC = r"""
 'use strict';
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = fs.readFileSync(0, 'utf8');
 
 // Extract every function whose name starts with _anchorScene
 // by brace-matching from the `function` keyword.
@@ -108,7 +110,8 @@ def driver_path(tmp_path_factory):
     gen_path.write_text(_DRIVER_SRC, encoding="utf-8")
     # Run the generator to produce the actual driver
     result = subprocess.run(
-        [NODE, str(gen_path), str(MESSAGES_JS)],
+        [NODE, str(gen_path)],
+        input=family_source("messages"),
         capture_output=True, text=True, timeout=15,
     )
     if result.returncode != 0:

@@ -1,11 +1,13 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 WORKSPACE_JS = (ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE = family_source("style")
 
 
 def _function_body(src: str, name: str) -> str:

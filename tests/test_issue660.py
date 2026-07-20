@@ -5,13 +5,15 @@ Tests for session queue persistence across page refresh and tab restore.
 state to localStorage and restoring from the durable copy when sessionStorage is
 missing after browser tab/process restore.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 UI_JS = pathlib.Path(__file__).parent.parent / 'static' / 'ui.js'
 SESSIONS_JS = pathlib.Path(__file__).parent.parent / 'static' / 'sessions.js'
 
-ui_src = UI_JS.read_text(encoding='utf-8')
-sess_src = SESSIONS_JS.read_text(encoding='utf-8')
+ui_src = family_source("ui")
+sess_src = family_source("sessions")
 
 
 class TestQueuePersistence:

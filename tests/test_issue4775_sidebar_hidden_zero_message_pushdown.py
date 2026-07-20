@@ -1,5 +1,7 @@
 """Regression coverage for issue #4775: hide zero-message and default_hidden rows for default sidebar loads."""
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 from pathlib import Path
@@ -247,7 +249,7 @@ def test_omit_exclude_hidden_still_returns_default_hidden_rows(monkeypatch):
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_default_and_unassigned_queries_send_exclude_hidden(monkeypatch):
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     requested_source_fn = _extract_function(src, "_requestedSessionSidebarSource")
     exclude_hidden_fn = _extract_function(src, "_sessionListExcludeHiddenEnabled")
     project_filter_fn = _extract_function(src, "_setActiveProjectFilter")
@@ -281,7 +283,7 @@ console.log(JSON.stringify({{ default_query, unassigned_query, named_project_que
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_project_filter_click_path_triggers_fresh_session_load():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     project_filter_fn = _extract_function(src, "_setActiveProjectFilter")
     script = f"""
 const calls = [];

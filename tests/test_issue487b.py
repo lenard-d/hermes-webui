@@ -10,11 +10,13 @@ a completely broken image source.
 Fix: extend _al_stash regex to also stash <img> tags:
   (<a\b[^>]*>[\s\S]*?<\/a>|<img\b[^>]*>)
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 # ── Source-level check ────────────────────────────────────────────────────────

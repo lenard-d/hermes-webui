@@ -15,6 +15,8 @@ import tempfile
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
@@ -23,7 +25,7 @@ UI_JS = os.path.join(os.path.dirname(__file__), '..', 'static', 'ui.js')
 
 def _extract_js_block():
     """Extract the tool-card preview functions from ui.js by finding their definition range."""
-    lines = open(UI_JS, encoding='utf-8').readlines()
+    lines = family_source("ui").splitlines(keepends=True)
 
     # Find start line of _toolArgPreviewValue (the earliest dependency)
     start_line = None

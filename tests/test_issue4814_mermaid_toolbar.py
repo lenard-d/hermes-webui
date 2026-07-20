@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parent.parent
 UI = ROOT / "static" / "ui.js"
@@ -18,7 +20,7 @@ NODE = shutil.which("node")
 _DRIVER_SRC = r"""
 const fs = require('fs');
 
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = fs.readFileSync(0, 'utf8');
 const helperStart = ui.indexOf('const _MERMAID_VIEWER_MIN_SCALE');
 const helperEnd = ui.indexOf("document.addEventListener('click'");
 if (helperStart < 0 || helperEnd < 0) {
@@ -436,14 +438,15 @@ function runScenario(payload) {
   throw new Error('unknown scenario: ' + payload.scenario);
 }
 
-const payload = JSON.parse(process.argv[3]);
+const payload = JSON.parse(process.argv[2]);
 process.stdout.write(JSON.stringify(runScenario(payload)));
 """
 
 
 def _run_node(driver_path: str, payload: dict) -> dict:
     result = subprocess.run(
-        [NODE, driver_path, str(UI), json.dumps(payload)],
+        [NODE, driver_path, json.dumps(payload)],
+        input=family_source("ui"),
         capture_output=True,
         text=True,
         timeout=30,

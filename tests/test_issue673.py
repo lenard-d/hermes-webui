@@ -12,6 +12,8 @@ Covers:
 - Integration: GET/POST /api/settings round-trip sidebar_density
 """
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import json
 import pathlib
 import unittest
@@ -24,10 +26,10 @@ CONFIG_PY = (
 ).read_text(encoding="utf-8")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 from tests._pytest_port import BASE
 
@@ -123,22 +125,8 @@ class TestSidebarDensitySessionRendering(unittest.TestCase):
 
 
 class TestSidebarDensityI18N(unittest.TestCase):
-    def _extract_locale_block(self, start_marker, end_marker):
-        start = I18N_JS.find(start_marker)
-        end = I18N_JS.find(end_marker, start)
-        self.assertGreater(start, -1)
-        self.assertGreater(end, start)
-        return I18N_JS[start:end]
-
     def test_all_locale_blocks_have_sidebar_density_keys(self):
-        locale_ranges = [
-            ("\n  en: {", "\n  ru: {"),
-            ("\n  ru: {", "\n  es: {"),
-            ("\n  es: {", "\n  de: {"),
-            ("\n  de: {", "\n  zh: {"),
-            ("\n  zh: {", "\n  // Traditional Chinese (zh-Hant)"),
-            ("\n  // Traditional Chinese (zh-Hant)\n  'zh-Hant': {", "\n};"),
-        ]
+        locale_names = {"locale-en.js", "locale-ru.js", "locale-es.js", "locale-de.js", "locale-zh.js", "locale-zh_hant.js"}
         required = (
             "settings_label_sidebar_density",
             "settings_desc_sidebar_density",
@@ -146,10 +134,12 @@ class TestSidebarDensityI18N(unittest.TestCase):
             "settings_sidebar_density_detailed",
             "session_meta_messages",
         )
-        for start, end in locale_ranges:
-            block = self._extract_locale_block(start, end)
+        locale_paths = [path for path in family_asset_paths("i18n") if path.name in locale_names]
+        self.assertEqual({path.name for path in locale_paths}, locale_names)
+        for path in locale_paths:
+            block = path.read_text(encoding="utf-8")
             for key in required:
-                self.assertIn(key, block, f"{key} missing from locale block {start}")
+                self.assertIn(key, block, f"{key} missing from locale asset {path.name}")
 
 
 class TestSidebarDensitySettingsAPI(unittest.TestCase):

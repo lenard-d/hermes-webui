@@ -6,6 +6,8 @@ Covers:
   3. Backend parity — frontend reason map covers all backend fallback codes
   4. Recovery DOM — _showSteerRecovery creates correct structure; dismiss removes it
 """
+from tests.frontend_asset_contract import family_asset_paths
+
 import re
 import subprocess
 import sys
@@ -48,12 +50,8 @@ FRONTEND_NETWORK_CODE = "network_error"
 
 def test_i18n_steer_failure_keys_exist():
     """All 10 expected i18n keys are present in the en locale block."""
-    text = I18N_JS.read_text(encoding="utf-8")
-    # Find the en locale block: from 'en:' or 'en =' up to the next top-level locale key
-    en_match = re.search(r"\ben\s*:\s*\{", text)
-    assert en_match, "Could not locate 'en:' locale block in i18n.js"
-    # Grab a large slice starting at the en block; the block is thousands of lines
-    en_block = text[en_match.start():]
+    en_path = next(path for path in family_asset_paths("i18n") if path.name == "locale-en.js")
+    en_block = en_path.read_text(encoding="utf-8")
     for key in EXPECTED_I18N_KEYS:
         pattern = rf"^\s+{re.escape(key)}\s*:"
         assert re.search(pattern, en_block, re.MULTILINE), (

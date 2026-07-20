@@ -6,13 +6,15 @@ user scroll position. The bug was that scrollToBottom() was called
 unconditionally inside renderMessages() and appendThinking(), even during
 an active stream — overriding any scroll position the user had set.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 class TestScrollPinningFix:

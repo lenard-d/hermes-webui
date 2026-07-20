@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
 NODE = shutil.which("node")
@@ -59,15 +61,19 @@ process.stdin.on('end', () => {
 
 @pytest.fixture(scope="module")
 def driver_path(tmp_path_factory):
-    p = tmp_path_factory.mktemp("shell_fullcmd_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("shell_fullcmd_driver")
+    p = directory / "driver.js"
     p.write_text(_DRIVER_SRC, encoding="utf-8")
-    return str(p)
+    source = directory / "ui-browser-order.js"
+    source.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(source)
 
 
 def _run(driver_path: str, tc: dict) -> dict:
     assert NODE is not None
+    driver, ui_source = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH)],
+        [NODE, driver, ui_source],
         input=json.dumps({"tc": tc}),
         capture_output=True,
         text=True,

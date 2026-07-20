@@ -1,4 +1,6 @@
 """OpenAI-compatible TTS endpoint and UI wiring coverage for #4982."""
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 import socket
@@ -527,13 +529,13 @@ def test_openai_option_in_html():
 
 
 def test_openai_voice_placeholder_in_panels():
-    src = (STATIC_DIR / "panels.js").read_text(encoding="utf-8")
+    src = family_source("panels")
     assert "engine==='openai'" in src
     assert 'OpenAI voice (server-configured)' in src
 
 
 def test_play_openai_tts_exists_in_ui_js():
-    src = (STATIC_DIR / "ui.js").read_text(encoding="utf-8")
+    src = family_source("ui")
     assert 'function _playOpenaiTts(text, btn)' in src
     assert "body:JSON.stringify({text:text, engine:'openai'})" in src
 

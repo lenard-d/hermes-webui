@@ -13,6 +13,8 @@ import tempfile
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
@@ -21,7 +23,7 @@ UI_JS = os.path.join(os.path.dirname(__file__), '..', 'static', 'ui.js')
 
 def _extract_drag_functions():
     """Extract the six drag-drop functions from ui.js."""
-    src = open(UI_JS, encoding='utf-8').read()
+    src = family_source("ui")
 
     # Extract module-scoped let declarations
     _let_re = re.compile(r'^let\s+(_wsActiveDragPath|_wsActiveDragType)\s*=\s*null\s*;$')

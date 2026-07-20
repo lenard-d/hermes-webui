@@ -1,4 +1,6 @@
 """Regression coverage for issue #500 transcript virtualization."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -55,7 +57,7 @@ function extractFunc(name) {{
 
 
 def test_message_virtual_window_virtualizes_older_history_but_keeps_recent_tail():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 eval(extractFunc('_messageVirtualWindow'));
 const metrics = _messageVirtualWindow({
@@ -79,7 +81,7 @@ console.log(JSON.stringify(metrics));
 
 
 def test_message_virtual_window_collapses_to_tail_only_near_bottom():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 eval(extractFunc('_messageVirtualWindow'));
 const metrics = _messageVirtualWindow({
@@ -102,7 +104,7 @@ console.log(JSON.stringify(metrics));
 
 
 def test_render_messages_uses_virtual_window_and_spacer_measurement_path():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     render_start = js.index("function renderMessages(options)")
     render_end = js.index("function _toolDisplayName", render_start)
     render_body = js[render_start:render_end]
@@ -131,7 +133,7 @@ def test_render_messages_uses_virtual_window_and_spacer_measurement_path():
 
 
 def test_measurement_uses_one_primary_row_and_adjacent_activity_siblings_only():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 eval(extractFunc('_measureMessageVirtualRow'));
 const nextMessage = {
@@ -170,7 +172,7 @@ console.log(JSON.stringify({
 
 
 def test_virtual_keep_tail_count_stays_bounded_after_history_expands_render_window():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_RENDER_WINDOW_DEFAULT = 50;
 let _messageRenderWindowSize = 240;
@@ -187,7 +189,7 @@ console.log(JSON.stringify({
 
 
 def test_virtual_prepended_height_delta_uses_prefix_cache_only_when_virtualized():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS = {
   user: 120,
@@ -219,7 +221,7 @@ console.log(JSON.stringify({active, inactive}));
 
 
 def test_virtual_question_jump_scroll_target_uses_visible_index_height_prefix():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let _messageVirtualHeightCache = [100, 120, 80, 140];
 let _messageVirtualHeightCacheEntries = [];
@@ -251,7 +253,7 @@ console.log(JSON.stringify({visibleIdx, scrollTop}));
 
 
 def test_height_cache_preserves_measured_prefix_across_append_only_growth():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHT = 140;
 let _messageVirtualHeightCache = [180, 220];
@@ -299,7 +301,7 @@ console.log(JSON.stringify({
 
 
 def test_height_cache_preserves_measured_suffix_across_prepended_history():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHT = 140;
 let _messageVirtualHeightCache = [180, 220];
@@ -350,7 +352,7 @@ console.log(JSON.stringify({
 
 
 def test_measurement_refresh_budget_is_keyed_to_window_shape_not_pad_height():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 eval(extractFunc('_messageVirtualMeasurementCycleKeyFor'));
 console.log(JSON.stringify({
@@ -363,7 +365,7 @@ console.log(JSON.stringify({
 
 
 def test_tool_rows_do_not_carry_message_measurement_hook():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     build_start = js.index("function buildToolCard(tc){")
     build_end = js.index("function _colorDiffLines", build_start)
     build_body = js[build_start:build_end]
@@ -373,7 +375,7 @@ def test_tool_rows_do_not_carry_message_measurement_hook():
 
 
 def test_viewport_intersection_helper_detects_visible_rendered_rows_only():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let rows = [];
 const container = {
@@ -402,7 +404,7 @@ console.log(JSON.stringify({blank, visible}));
 
 
 def test_render_messages_has_one_shot_virtual_blank_viewport_fallback():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     render_start = js.index("function renderMessages(options)")
     render_end = js.index("function _toolDisplayName", render_start)
     render_body = js[render_start:render_end]
@@ -416,7 +418,7 @@ def test_render_messages_has_one_shot_virtual_blank_viewport_fallback():
 
 
 def test_virtual_blank_viewport_recovery_evicts_stale_cache_before_fallback():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let deletes = [];
 let renderCalls = [];
@@ -438,7 +440,7 @@ console.log(JSON.stringify({recovered, deletes, renderCalls}));
 
 
 def test_same_frame_restore_nudges_virtual_window_when_anchor_row_is_missing():
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + r"""
 const ROW_HEIGHT = 120;
 const TOTAL = 60;
@@ -538,7 +540,7 @@ def test_virtualize_transcript_opt_out_forces_full_render_window():
     """#4325: when window._virtualizeTranscript===false, _currentMessageVirtualWindow
     must return a non-virtualized full window even for a long (>threshold) transcript,
     so the whole transcript renders. When true/undefined it virtualizes as before."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS={
   user:120,
@@ -591,7 +593,7 @@ console.log(JSON.stringify({off, on, undef}));
 def test_virtualize_transcript_gate_present_in_current_window_fn():
     """The opt-out gate must live in _currentMessageVirtualWindow (the single
     chokepoint), guarding on window._virtualizeTranscript===false."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     start = js.index("function _currentMessageVirtualWindow(")
     body = js[start:start + 900]
     assert "_virtualizeTranscript===false" in body, (
@@ -603,7 +605,7 @@ def test_virtualize_transcript_gate_present_in_current_window_fn():
 
 def test_message_virtual_default_height_for_role_returns_correct_heights():
     """Verify per-role default heights are configured."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS={
   user:120,
@@ -630,7 +632,7 @@ console.log(JSON.stringify({
 
 def test_message_virtual_role_for_entry_classifies_tool_calls():
     """Verify role classifier detects tool_calls, tool_use content, and _partial_tool_calls."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 eval(extractFunc('_messageVirtualRoleForEntry'));
 console.log(JSON.stringify({
@@ -655,7 +657,7 @@ console.log(JSON.stringify({
 
 def test_message_virtual_window_with_role_for_idx_uses_role_defaults():
     """Verify _messageVirtualWindow uses role-specific heights when roleForIdx is provided."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS={
   user:120,
@@ -706,7 +708,7 @@ console.log(JSON.stringify({
 
 def test_message_virtual_window_cached_heights_override_role_defaults():
     """Verify cached heights take precedence over role-specific defaults."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS={
   user:120,
@@ -778,7 +780,7 @@ def test_offset_helpers_use_per_role_defaults_for_uncached_rows():
     """Verify _messageVirtualScrollTopForVisibleIdx and _messageVirtualPrependedHeightDelta
     use per-role default heights (not the flat 140px estimate) for uncached rows,
     and that these agree with _messageVirtualWindow's own accounting."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 const MESSAGE_VIRTUAL_DEFAULT_ROW_HEIGHTS = {
   user: 120,
@@ -869,7 +871,7 @@ console.log(JSON.stringify({scrollTop, delta, windowCoversAll}));
 def test_compensate_scroll_for_measurement_delta_no_anchor_does_not_throw():
     """When _captureMessageViewportAnchor returns null, the compensation helper
     should not throw and should not mutate scrollTop."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let renderCalls = [];
 let scrollTopWasMutated = false;
@@ -902,7 +904,7 @@ console.log(JSON.stringify({
 def test_compensate_scroll_for_measurement_delta_shifts_scroll_when_anchor_moves():
     """When the anchor row shifts position due to measurement changes,
     scrollTop should be adjusted by the delta."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let scrollTopValue = 200;
 let scrollHistory = [];
@@ -955,7 +957,7 @@ console.log(JSON.stringify({
 
 def test_compensate_scroll_for_measurement_delta_skips_small_delta():
     """When delta < 2px, no compensation is applied (tolerance)."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let scrollTopValue = 200;
 let scrollHistory = [];
@@ -1005,7 +1007,7 @@ console.log(JSON.stringify({
 
 def test_compensate_scroll_for_measurement_delta_sets_programmatic_scroll_flag():
     """_programmaticScroll should be set during compensation and cleared after rAF+setTimeout."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let scrollTopValue = 200;
 let _programmaticScroll = false;
@@ -1062,7 +1064,7 @@ console.log(JSON.stringify({
 
 def test_virtualized_render_uses_compensation_helper():
     """_scheduleMessageVirtualizedRender must wrap renderMessages with _compensateScrollForMeasurementDelta."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     start = js.index("function _scheduleMessageVirtualizedRender(")
     end = js.index("\n// ──", start)
     body = js[start:end]
@@ -1080,7 +1082,7 @@ def test_scroll_listener_guards_programmatic_scroll_before_marking_active():
     """The _programmaticScroll guard must appear before _markMessageVirtualScrollActive
     in the scroll listener so that programmatic scrolls (e.g. from
     _compensateScrollForMeasurementDelta) do not arm the 150ms settle timer."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     listener_start = js.index("el.addEventListener('scroll',()=>{")
     listener_end = js.index("});", listener_start)
     listener_body = js[listener_start:listener_end]
@@ -1098,7 +1100,7 @@ def test_clear_height_cache_resets_scroll_settle_globals():
     """_clearMessageVirtualHeightCache must zero out the three scroll-settle globals
     so that a deferred measurement from a previous session cannot fire against the
     new session's DOM after a session switch."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + """
 let timerCleared = false;
 let _messageVirtualScrollActive = true;

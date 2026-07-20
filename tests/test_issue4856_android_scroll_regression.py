@@ -1,10 +1,12 @@
 """Regression tests for #4856: Android scroll-to-top on every interaction."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 
 _FUNC_MARKER = "window._fixMobileScrollJank=function _fixMobileScrollJank(){"
 _RAF_MARKER = "setTimeout(()=>{"

@@ -1,5 +1,7 @@
 """Regression tests for issue #5749 Transparent Stream prefix dedupe."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -9,8 +11,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 ISSUE5749_CAPTURED_SESSION = json.loads(
     (ROOT / "tests" / "fixtures" / "issue5749_captured_session_prefix.json").read_text(encoding="utf-8")

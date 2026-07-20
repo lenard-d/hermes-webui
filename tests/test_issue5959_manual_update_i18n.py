@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -12,7 +14,7 @@ def read(relative_path: str) -> str:
 
 
 def test_manual_update_instruction_exists_in_every_locale():
-    source = read("static/i18n.js")
+    source = family_source("i18n")
     assert source.count("settings_update_manual_docker:") == 15
 
     values = re.findall(r"settings_update_manual_docker:\s*'([^']*)'", source)
@@ -21,7 +23,7 @@ def test_manual_update_instruction_exists_in_every_locale():
 
 
 def test_manual_update_instruction_uses_translation_helper():
-    source = read("static/ui.js")
+    source = family_source("ui")
     match = re.search(
         r"function _formatManualUpdateInstruction\b.*?\n\}", source, re.DOTALL
     )
@@ -33,6 +35,6 @@ def test_manual_update_instruction_uses_translation_helper():
 
 
 def test_settings_panel_has_no_hardcoded_manual_update_fallback():
-    source = read("static/panels.js")
+    source = family_source("panels")
     assert "Manual update required" not in source
     assert "_formatManualUpdateInstruction(data.webui)" in source

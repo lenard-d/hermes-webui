@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS = ROOT / "static" / "ui.js"
@@ -38,6 +40,8 @@ NODE = shutil.which("node")
 
 
 def _read(path: Path) -> str:
+    if path == UI_JS:
+        return family_source("ui")
     return path.read_text(encoding="utf-8")
 
 
@@ -66,7 +70,7 @@ def test_model_state_no_longer_blindly_reads_selected_option():
 
 _DRIVER = r"""
 const fs = require('fs');
-const uiSrc = fs.readFileSync(process.argv[1], 'utf8');
+const uiSrc = fs.readFileSync(0, 'utf8');
 
 function extractFunction(source, name) {
   const marker = 'function ' + name + '(';
@@ -145,7 +149,8 @@ process.stdout.write(JSON.stringify(results));
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_model_provider_resolution_behavior():
     proc = subprocess.run(
-        [NODE, "-e", _DRIVER, str(UI_JS)],
+        [NODE, "-e", _DRIVER],
+        input=family_source("ui"),
         capture_output=True,
         text=True,
         timeout=30,

@@ -16,13 +16,15 @@ Strategy:
   - Python mirror tests verify the rendering logic with exhaustive edge cases,
     especially code blocks inside tables (the specific case Nathan flagged).
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 import html as _html
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

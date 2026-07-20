@@ -7,12 +7,14 @@ Tests for fixes:
          The legacy raw sidebar count was removed by #584, and later reintroduced
          in a gated detailed-density mode by #673.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 INIT_SH   = (REPO_ROOT / "docker_init.bash").read_text(encoding="utf-8")
-UI_JS     = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS     = family_source("ui")
 
 
 # ── #569: docker UID/GID auto-detect ─────────────────────────────────────────
@@ -151,7 +153,7 @@ def test_579_sidebar_count_is_gated_behind_detailed_density():
     optional metadata, but only when the user explicitly opts into detailed
     sidebar density.
     """
-    sessions_js = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    sessions_js = family_source("sessions")
     assert "const density=(window._sidebarDensity==='detailed'?'detailed':'compact');" in sessions_js, (
         "sessions.js must normalize sidebar density before rendering metadata"
     )

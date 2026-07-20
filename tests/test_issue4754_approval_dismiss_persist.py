@@ -2,13 +2,15 @@
 
 Uses the node-driver (static source extraction) pattern — no browser required.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 def _compact(text: str) -> str:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 import urllib.error
@@ -15,7 +17,7 @@ from api.gateway_chat import _run_gateway_chat_streaming
 
 REPO = Path(__file__).resolve().parents[1]
 GATEWAY_CHAT = (REPO / "api" / "gateway_chat.py").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _gateway_session(tmp_path, monkeypatch, *, session_id: str, stream_id: str):

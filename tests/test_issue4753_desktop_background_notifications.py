@@ -1,5 +1,7 @@
 """Behavioral coverage for desktop-backgrounded notification delivery (#4753)."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import os
 import shutil
@@ -11,7 +13,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_SRC = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_SRC = family_source("messages")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

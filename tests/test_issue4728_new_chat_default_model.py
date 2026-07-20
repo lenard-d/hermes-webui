@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
 NODE = shutil.which("node")
@@ -29,8 +31,8 @@ function extractNewSession(src) {
   throw new Error('newSession body not closed');
 }
 
-const src = fs.readFileSync(process.argv[2], 'utf8');
-const args = JSON.parse(process.argv[3]);
+const src = fs.readFileSync(0, 'utf8');
+const args = JSON.parse(process.argv[2]);
 const modelSelect = {
   value: args.currentModel || '',
   options: [],
@@ -184,7 +186,8 @@ def driver_path(tmp_path_factory):
 
 def _run_case(driver_path, payload):
     result = subprocess.run(
-        [NODE, driver_path, str(SESSIONS_JS_PATH), json.dumps(payload)],
+        [NODE, driver_path, json.dumps(payload)],
+        input=family_source("sessions"),
         capture_output=True,
         text=True,
         timeout=30,

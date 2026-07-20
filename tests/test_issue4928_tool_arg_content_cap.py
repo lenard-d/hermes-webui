@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 from api.streaming import (
     _TOOL_ARG_CONTENT_CAP,
     _TOOL_ARG_CONTENT_KEYS,
@@ -97,14 +99,18 @@ process.stdin.on('end', () => {
 def fe_driver(tmp_path_factory):
     if NODE is None:
         pytest.skip("node not on PATH")
-    p = tmp_path_factory.mktemp("args_snapshot_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("args_snapshot_driver")
+    p = directory / "driver.js"
     p.write_text(_FE_DRIVER, encoding="utf-8")
-    return str(p)
+    source = directory / "ui-browser-order.js"
+    source.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(source)
 
 
 def _fe_snapshot(fe_driver: str, args: dict) -> dict:
+    driver, ui_source = fe_driver
     result = subprocess.run(
-        [NODE, fe_driver, str(UI_JS_PATH)],
+        [NODE, driver, ui_source],
         input=json.dumps({"args": args}),
         capture_output=True,
         text=True,
@@ -163,9 +169,12 @@ process.stdin.on('end', () => {
 def detail_driver(tmp_path_factory):
     if NODE is None:
         pytest.skip("node not on PATH")
-    p = tmp_path_factory.mktemp("detail_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("detail_driver")
+    p = directory / "driver.js"
     p.write_text(_DETAIL_DRIVER, encoding="utf-8")
-    return str(p)
+    source = directory / "ui-browser-order.js"
+    source.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(source)
 
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -173,8 +182,9 @@ def test_transparent_full_tab_redacts_secret_in_long_command(detail_driver):
     """#4928 gate: now that content args are retained to 4000 chars, the Full-tab
     args render must redact secrets past char 120 (it renders tc.args directly)."""
     cmd = "echo start\n" + ("x" * 130) + "\nexport OPENAI_API_KEY=sk_LEAKsecret123\necho end"
+    driver, ui_source = detail_driver
     result = subprocess.run(
-        [NODE, detail_driver, str(UI_JS_PATH)],
+        [NODE, driver, ui_source],
         input=json.dumps({"tc": {"name": "shell", "args": {"command": cmd}}}),
         capture_output=True,
         text=True,

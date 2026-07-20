@@ -14,12 +14,14 @@ running a lightweight Python mirror of the fixed renderMd logic.
 Strategy: verify the fix is present in the JS source, then test the
 expected rendering behaviour through the Python mirror.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 import html as _html
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS = ROOT / "static" / "ui.js"
@@ -15,8 +17,8 @@ NODE = shutil.which("node")
 
 _DRIVER = r"""
 const fs = require('fs');
-const uiSrc = fs.readFileSync(process.argv[1], 'utf8');
-const preferredProvider = process.argv[2] || '';
+const uiSrc = fs.readFileSync(0, 'utf8');
+const preferredProvider = process.argv[1] || '';
 
 function isIdentifierChar(ch) {
   return /[A-Za-z0-9_$]/.test(ch || '');
@@ -214,7 +216,8 @@ process.stdout.write(JSON.stringify({
 
 def _run_driver(preferred_provider: str) -> dict:
     proc = subprocess.run(
-        [NODE, "-e", _DRIVER, str(UI_JS), preferred_provider],
+        [NODE, "-e", _DRIVER, preferred_provider],
+        input=family_source("ui"),
         capture_output=True,
         text=True,
         timeout=30,

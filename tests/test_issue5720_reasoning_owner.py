@@ -6,9 +6,12 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
+
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,8 +30,6 @@ def _run_reasoning_scene(
 ) -> dict:
     assert NODE, "node is required for the #5720 browser-chain regression"
     env = os.environ.copy()
-    env.setdefault("ISSUE5720_UI_JS", str(ROOT / "static" / "ui.js"))
-    env.setdefault("ISSUE5720_MESSAGES_JS", str(ROOT / "static" / "messages.js"))
     env.setdefault(
         "ISSUE5720_ANCHORS_JS",
         str(ROOT / "static" / "assistant_turn_anchors.js"),
@@ -46,15 +47,22 @@ def _run_reasoning_scene(
         env["ISSUE5720_STALE_LIVE_TURN"] = "1"
     if not show_thinking:
         env["ISSUE5720_SHOW_THINKING"] = "0"
-    result = subprocess.run(
-        [NODE, "-e", _NODE_SCENE],
-        cwd=ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=10,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="hermes-issue5720-") as source_dir:
+        ui_source = Path(source_dir) / "ui-browser-order.js"
+        messages_source = Path(source_dir) / "messages-browser-order.js"
+        ui_source.write_text(family_source("ui"), encoding="utf-8")
+        messages_source.write_text(family_source("messages"), encoding="utf-8")
+        env["ISSUE5720_UI_JS"] = str(ui_source)
+        env["ISSUE5720_MESSAGES_JS"] = str(messages_source)
+        result = subprocess.run(
+            [NODE, "-e", _NODE_SCENE],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -527,10 +535,7 @@ class FakeEventSource {
 }
 global.EventSource=FakeEventSource;
 
-const attachStart=messagesSrc.indexOf('function attachLiveStream(');
-const attachEnd=messagesSrc.indexOf('\nfunction transcript(){',attachStart);
-if(attachStart<0||attachEnd<0) throw new Error('attachLiveStream source boundary not found');
-eval(messagesSrc.slice(attachStart,attachEnd));
+eval(extractFunc(messagesSrc,'attachLiveStream'));
 attachLiveStream('sid-1','stream-1');
 const source=FakeEventSource.instances[0];
 if(!source) throw new Error('attachLiveStream did not create EventSource');

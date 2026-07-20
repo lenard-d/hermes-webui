@@ -1,6 +1,8 @@
 """Regression tests for issue #696 — MCP server visibility panel MVP."""
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -18,7 +20,7 @@ def test_settings_system_panel_contains_readonly_mcp_visibility_section():
 
 
 def test_mcp_panel_renders_status_badges_tool_counts_and_empty_error_states():
-    js = read("static/panels.js")
+    js = family_source("panels")
     assert "function _mcpStatusLabel" in js
     assert "mcp-status-badge" in js
     assert "mcp-tool-count" in js
@@ -33,7 +35,7 @@ def test_mcp_panel_renders_status_badges_tool_counts_and_empty_error_states():
 
 
 def test_mcp_i18n_includes_visibility_status_labels():
-    i18n = read("static/i18n.js")
+    i18n = family_source("i18n")
     for key in [
         "mcp_status_active",
         "mcp_status_configured",

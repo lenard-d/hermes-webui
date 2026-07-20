@@ -7,11 +7,12 @@ Focus:
 - _buildPluginCard must show the active-provider badge when is_active_provider
   is true, regardless of the activation string.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
-from pathlib import Path
 
 
-PANELS_JS = (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def _function_block(src: str, name: str) -> str:

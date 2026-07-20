@@ -15,6 +15,8 @@ preserved. These tests pin the new configurable shape while keeping the existing
 Tree/Raw renderer invariants (wrapper class, helpers, value types, toggle, YAML
 support) intact.
 """
+from tests.frontend_asset_contract import family_source
+
 import shutil
 import subprocess
 from pathlib import Path
@@ -31,30 +33,25 @@ class TestTreeRenderer:
     """Fenced JSON/YAML blocks should get a tree view toggle."""
 
     def test_json_blocks_get_tree_wrapper(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "code-tree-wrap" in content
         assert "data-raw" in content
         assert "data-lang" in content
 
     def test_json_yaml_lang_detection(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "lang==='json'||lang==='yaml'" in content
 
     def test_initTreeViews_function_exists(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "function initTreeViews" in content
 
     def test_buildTreeDOM_function_exists(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "function _buildTreeDOM(val, depth)" in content
 
     def test_initTreeViews_called_in_post_render(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         # Behavior assertion (#5338): post-render scheduled via
         # _postProcessWithAnchorSuppression, which still calls postProcessRenderedMessages.
         assert "requestAnimationFrame(()=>_postProcessWithAnchorSuppression(" in content
@@ -68,35 +65,30 @@ class TestTreeRenderer:
 
     def test_tree_handles_all_value_types(self):
         """_buildTreeDOM should handle null, boolean, number, string, array, object."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         for cls in ("tree-null", "tree-bool", "tree-num", "tree-str", "tree-array", "tree-object"):
             assert cls in content, f"Missing type class: {cls}"
 
     def test_tree_collapse_support(self):
         """Tree nodes should be collapsible with collapsed/expanded states."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "tree-collapsed" in content
         assert "tree-collapsible" in content
         assert "classList.toggle" in content
 
     def test_tree_depth_auto_collapse(self):
         """Nested levels beyond depth 2 should be collapsed by default."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "depth>=2" in content
 
     def test_toggle_button_uses_i18n(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "t('raw_view')" in content
         assert "t('tree_view')" in content
 
     def test_yaml_support_via_jsyaml(self):
         """YAML should be parsed via jsyaml if available."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "jsyaml" in content
 
 
@@ -105,8 +97,7 @@ class TestConfigurableDefaultView:
 
     def test_hardcoded_threshold_is_gone(self):
         """The original `lineCount>=10` hardcode must no longer drive the default."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "const showTree=lineCount>=10;" not in content, (
             "The hardcoded `const showTree=lineCount>=10;` must be replaced by the "
             "configurable decision helper."
@@ -117,16 +108,14 @@ class TestConfigurableDefaultView:
         )
 
     def test_decision_helper_exists(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "function _structuredCodeShowTree(mode,threshold,lineCount)" in content
         assert "function _structuredCodeMode(" in content
         assert "function _structuredCodeThreshold(" in content
 
     def test_all_three_modes_represented(self):
         """auto / on / off must all be handled in the renderer."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         start = content.find("function _structuredCodeShowTree")
         body = content[start:start + 400]
         assert "'on'" in body, "mode 'on' (always Tree) must be handled"
@@ -138,8 +127,7 @@ class TestConfigurableDefaultView:
 
     def test_default_threshold_fallback_is_10(self):
         """An invalid/missing threshold must fall back to 10 (original behavior)."""
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         thr_start = content.find("function _structuredCodeThreshold")
         thr_body = content[thr_start:thr_start + 300]
         assert ":10" in thr_body or "?10" in thr_body or " 10" in thr_body, (
@@ -149,8 +137,7 @@ class TestConfigurableDefaultView:
         assert "1000" in thr_body, "threshold should be clamped to an upper bound"
 
     def test_renderer_uses_helper_for_decision(self):
-        with open("static/ui.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("ui")
         assert "_structuredCodeShowTree(_structuredCodeMode(),_structuredCodeThreshold(),lineCount)" in content
 
     @pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -163,7 +150,7 @@ class TestConfigurableDefaultView:
           - auto, threshold 10, count 10  => True
           - auto, invalid threshold       => fallback 10 (count 10 => True, 9 => False)
         """
-        src = UI_JS_PATH.read_text(encoding="utf-8")
+        src = family_source("ui")
         # Extract the brace-balanced body of _structuredCodeShowTree.
         marker = "function _structuredCodeShowTree("
         start = src.find(marker)
@@ -224,8 +211,7 @@ class TestTreeCSS:
     """CSS classes for tree viewer."""
 
     def test_tree_css_classes_exist(self):
-        with open("static/style.css", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("style")
         for cls in (".code-tree-wrap", ".tree-view", ".tree-hidden", ".tree-toggle-btn",
                     ".tree-node", ".tree-collapsible", ".tree-children", ".tree-collapsed",
                     ".tree-key", ".tree-str", ".tree-num", ".tree-bool", ".tree-null",
@@ -233,8 +219,7 @@ class TestTreeCSS:
             assert cls in content, f"Missing CSS: {cls}"
 
     def test_tree_colors_match_types(self):
-        with open("static/style.css", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("style")
         # Green strings, blue numbers, amber booleans
         assert "#4ade80" in content  # tree-str green
         assert "#60a5fa" in content  # tree-key/tree-num blue
@@ -243,16 +228,14 @@ class TestTreeCSS:
 
 class TestTreeI18n:
     def test_i18n_keys_present(self):
-        with open("static/i18n.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("i18n")
         for key in ("tree_view", "raw_view"):
             count = content.count(key)
             assert count >= 7, f"{key} found {count} times, expected >= 7"
 
     def test_structured_code_setting_i18n_keys_present(self):
         """The new settings labels/options/help text must exist in i18n."""
-        with open("static/i18n.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("i18n")
         for key in (
             "settings_label_structured_code",
             "settings_option_structured_code_auto",
@@ -292,8 +275,7 @@ class TestStructuredCodeSettingsWiring:
         assert "window._structuredCodeAutoTreeLines" in content
 
     def test_panel_persists_setting(self):
-        with open("static/panels.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("panels")
         assert "_structuredCodeViewFromUi" in content
         assert "structured_code_default_view" in content
         assert "structured_code_auto_tree_lines" in content

@@ -1,13 +1,15 @@
 """Issue #5671: workspace switcher and New Chat workspace announcements."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 def _block(source: str, start_marker: str, end_marker: str) -> str:

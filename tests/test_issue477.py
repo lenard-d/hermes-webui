@@ -3,12 +3,14 @@
 KaTeX is vendored locally, so the CSP should not need to loosen font-src for a
 third-party CDN.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 REPO = pathlib.Path(__file__).parent.parent
 HELPERS_PY = (REPO / "api" / "helpers.py").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _font_src() -> str:

@@ -15,6 +15,7 @@ import json
 import pathlib
 import pytest
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
 from tests.conftest import requires_agent_modules
 
 TEST_BASE = f"http://127.0.0.1:{os.environ.get('HERMES_WEBUI_TEST_PORT', '8788')}"
@@ -33,7 +34,7 @@ def commands_js():
 
 @pytest.fixture(scope="module")
 def messages_js():
-    return _read_static_file("messages.js")
+    return family_source("messages")
 
 
 @pytest.fixture(scope="module")
@@ -43,12 +44,18 @@ def index_html():
 
 @pytest.fixture(scope="module")
 def style_css():
-    return _read_static_file("style.css")
+    return family_source("style")
 
 
 @pytest.fixture(scope="module")
-def i18n_js():
-    return _read_static_file("i18n.js")
+def i18n_locale_sources():
+    sources = {}
+    for path in family_asset_paths("i18n"):
+        if not path.name.startswith("locale-"):
+            continue
+        locale = path.stem.removeprefix("locale-").replace("zh_hant", "zh-Hant")
+        sources[locale] = path.read_text(encoding="utf-8")
+    return sources
 
 
 def _get(path, expect_ok=True):
@@ -252,16 +259,8 @@ class TestYoloI18n:
     LOCALES = ["en", "ru", "es", "de", "zh", "ko"]
 
     @pytest.mark.parametrize("locale", LOCALES)
-    def test_locale_has_all_yolo_keys(self, i18n_js, locale):
-        pattern = rf"\s{locale}:\s*\{{"
-        match = re.search(pattern, i18n_js)
-        assert match, f"Locale '{locale}' not found in i18n.js"
-        start = match.end()
-        next_locale = re.search(r"\n  \w{2}:\s*\{", i18n_js[start:])
-        if next_locale:
-            block = i18n_js[start:start + next_locale.start()]
-        else:
-            block = i18n_js[start:]
-
+    def test_locale_has_all_yolo_keys(self, i18n_locale_sources, locale):
+        assert locale in i18n_locale_sources, f"Locale '{locale}' asset not found"
+        block = i18n_locale_sources[locale]
         for key in self.REQUIRED_KEYS:
             assert key in block, f"Key '{key}' missing in locale '{locale}'"

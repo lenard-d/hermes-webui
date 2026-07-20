@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 _HELPERS_PATH = Path(__file__).with_name("test_renderer_js_behaviour.py")
 _SPEC = importlib.util.spec_from_file_location("issue5641_renderer_helpers", _HELPERS_PATH)
@@ -11,8 +13,30 @@ assert _SPEC.loader is not None
 _SPEC.loader.exec_module(_HELPERS)
 
 NODE = _HELPERS.NODE
-_render = _HELPERS._render
-driver_path = _HELPERS.driver_path
+
+
+@pytest.fixture(scope="module")
+def driver_path(tmp_path_factory):
+    directory = tmp_path_factory.mktemp("issue5641_renderer_driver")
+    driver = directory / "driver.js"
+    source = directory / "ui-browser-order.js"
+    driver.write_text(_HELPERS._DRIVER_SRC, encoding="utf-8")
+    source.write_text(family_source("ui"), encoding="utf-8")
+    return str(driver), str(source)
+
+
+def _render(driver_paths, markdown: str) -> str:
+    driver, source = driver_paths
+    result = _HELPERS.subprocess.run(
+        [NODE, driver, source],
+        input=markdown,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"node driver failed: {result.stderr}")
+    return result.stdout
 
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

@@ -1,5 +1,7 @@
 """Regression coverage for #5989's cross-source model picker duplicate."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import subprocess
@@ -7,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _function(source, name):

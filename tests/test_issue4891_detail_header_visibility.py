@@ -15,10 +15,11 @@ read/help view must show the header (flex), never hide it.
 """
 from __future__ import annotations
 
-import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-PANELS = (Path(__file__).resolve().parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+import re
+
+PANELS = family_source("panels")
 
 
 def _fn_body(name: str) -> str:

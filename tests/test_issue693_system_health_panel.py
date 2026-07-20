@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import sys
@@ -10,10 +12,10 @@ from urllib.parse import urlparse
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 AUTH_PY = (REPO_ROOT / "api" / "auth.py").read_text(encoding="utf-8")
 

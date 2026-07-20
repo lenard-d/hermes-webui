@@ -25,10 +25,11 @@ intent) WITHOUT coercing `overflow-y` or creating a scroll container, so
 These are source-level guards; the runtime collapse is layout/viewport
 specific and not reproducible in headless CI without a full browser.
 """
-import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-CSS = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
+import re
+
+CSS = family_source("style")
 
 
 def _mobile_messages_inner_rule() -> str:

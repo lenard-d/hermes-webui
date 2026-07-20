@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
@@ -40,7 +42,7 @@ def _run_node(source: str) -> dict:
 def _js_prefix() -> str:
     return f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(UI_JS_PATH))}, 'utf8');
+const src = {json.dumps(family_source("ui"))};
 function extractBetween(startMarker, endMarker, startFrom = 0) {{
   const start = src.indexOf(startMarker, startFrom);
   if (start < 0) throw new Error(startMarker + ' not found');

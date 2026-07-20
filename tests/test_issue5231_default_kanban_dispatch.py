@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -10,7 +12,7 @@ from tests.js_source_extract import extract_function
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PANELS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS = family_source("panels")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

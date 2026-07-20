@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 MESSAGES_JS = REPO_ROOT / "static" / "messages.js"
 NODE = shutil.which("node")
@@ -28,10 +30,10 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 # Grab the nested function body and eval it with a controllable global S.
 _DRIVER = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = fs.readFileSync(0, 'utf8');
 const m = src.match(/function _anchorSceneTurnDurationForSettlement\([^]*?\n  }/);
 if (!m) throw new Error('_anchorSceneTurnDurationForSettlement not found');
-const payload = JSON.parse(process.argv[3] || '{}');
+const payload = JSON.parse(process.argv[2] || '{}');
 global.S = payload.S || null;
 // Pin Date.now well past any pending_started_at so a stale stamp would yield a
 // large bogus elapsed if the gate were absent.
@@ -49,7 +51,8 @@ def _run(payload: dict) -> dict:
     p.write_text(_DRIVER, encoding="utf-8")
     try:
         result = subprocess.run(
-            [NODE, str(p), str(MESSAGES_JS), json.dumps(payload)],
+            [NODE, str(p), json.dumps(payload)],
+            input=family_source("messages"),
             capture_output=True, text=True, timeout=30,
         )
     finally:

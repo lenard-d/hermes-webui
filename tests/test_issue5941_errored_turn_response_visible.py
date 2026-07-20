@@ -25,6 +25,8 @@ only its error card.
 Behavioral tests extract the real predicate from static/ui.js and execute it in
 Node; structural tests lock the wiring into the render gate.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -34,7 +36,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 NODE = shutil.which("node")
 

@@ -1,4 +1,6 @@
 """Regression coverage for issue #500 session-sidebar virtualization."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -56,7 +58,7 @@ function extractFunc(name) {{
 
 def test_session_virtual_window_reduces_large_lists_and_tracks_scroll():
     """A 1000-row sidebar should render a bounded slice near scroll position."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _extract_func_script(js) + """
 eval(extractFunc('_sessionVirtualWindow'));
 const metrics = _sessionVirtualWindow({
@@ -80,7 +82,7 @@ console.log(JSON.stringify(metrics));
 
 def test_session_virtual_window_keeps_active_session_rendered():
     """The active sidebar row must remain in the DOM when we anchor a new active session."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _extract_func_script(js) + """
 eval(extractFunc('_sessionVirtualWindow'));
 const metrics = _sessionVirtualWindow({
@@ -102,7 +104,7 @@ console.log(JSON.stringify(metrics));
 
 def test_session_list_render_path_uses_virtual_spacers_and_scroll_rerender():
     """renderSessionListFromCache should window rows without stale cached slices."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     render_start = js.index("function renderSessionListFromCache()")
     render_end = js.index("async function _handleActiveSessionStorageEvent", render_start)
     render_body = js[render_start:render_end]
@@ -124,7 +126,7 @@ def test_session_list_render_path_uses_virtual_spacers_and_scroll_rerender():
 
 def test_session_list_only_moves_to_active_when_active_row_is_not_visible():
     """Changing filters should not jump the sidebar when active row is already visible."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     render_start = js.index("function renderSessionListFromCache()")
     render_end = js.index("async function _handleActiveSessionStorageEvent", render_start)
     render_body = js[render_start:render_end]
@@ -142,7 +144,7 @@ def test_session_list_only_moves_to_active_when_active_row_is_not_visible():
 
 def test_session_list_resyncs_when_browser_clamps_virtual_scroll_restore():
     """If a hidden/reflowed sidebar rejects restored scrollTop, re-render the visible window."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     render_start = js.index("function renderSessionListFromCache()")
     render_end = js.index("async function _handleActiveSessionStorageEvent", render_start)
     render_body = js[render_start:render_end]

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parent.parent
 MESSAGES_JS = ROOT / "static" / "messages.js"
 NODE = shutil.which("node")
@@ -18,7 +20,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node is required")
 
 _DRIVER = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = fs.readFileSync(0, 'utf8');
 
 function extractFunc(name) {
   const re = new RegExp('function\\s+' + name + '\\s*\\(');
@@ -291,7 +293,8 @@ def _run_js(driver_body: str):
 
     try:
         result = subprocess.run(
-            [NODE, str(script), str(MESSAGES_JS)],
+            [NODE, str(script)],
+            input=family_source("messages"),
             capture_output=True,
             text=True,
             timeout=30,

@@ -22,6 +22,8 @@ This module verifies BOTH:
      three Codex-caught edges: original-vs-mutated payload, dropped attachments,
      and cross-session composer pollution.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -31,7 +33,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-MESSAGES_JS = ROOT.joinpath("static", "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 # ---------------------------------------------------------------------------

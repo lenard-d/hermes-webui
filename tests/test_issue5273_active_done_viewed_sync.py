@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -8,8 +10,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(src: str, name: str) -> str:

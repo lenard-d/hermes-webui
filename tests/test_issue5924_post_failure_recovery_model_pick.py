@@ -21,12 +21,14 @@ Two-layer invariant pinned here:
     (the #3737/#5731 repair path must not regress).
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 import api.routes as routes
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 COMMANDS_JS = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
 
 

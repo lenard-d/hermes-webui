@@ -10,10 +10,12 @@ expand, recovering the rows from the owning message after an HTML-cache restore
 (where the JS-property stash is dropped). These are source-assertion tests in
 the same style as the other anchor-scene UI tests (no JS engine needed).
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _function_body(src: str, name: str) -> str:

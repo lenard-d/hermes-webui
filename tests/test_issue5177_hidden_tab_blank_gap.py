@@ -29,10 +29,12 @@ These are static source assertions (whitespace-stripped substring + simple
 brace-matching) so the keep-stale shape and the
 recovery-reason → keepStaleUntilLoaded plumbing cannot silently regress.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _compact(text: str) -> str:
@@ -76,6 +78,23 @@ def _refresh_block(compact: str) -> str:
             if depth == 0:
                 return compact[start: j + 1]
     raise AssertionError("refreshActiveSessionIfExternallyUpdated braces did not balance")
+
+
+def _restore_loaded_session_block(compact: str) -> str:
+    marker = "asyncfunction_restoreLoadedSession(ctx){"
+    start = compact.find(marker)
+    assert start != -1, "expected the _restoreLoadedSession owner"
+    i = start + len(marker) - 1
+    depth = 0
+    for j in range(i, len(compact)):
+        c = compact[j]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return compact[start : j + 1]
+    raise AssertionError("_restoreLoadedSession braces did not balance")
 
 
 def _ensure_messages_loaded_block(compact: str) -> str:
@@ -153,10 +172,10 @@ def test_only_one_synchronous_messages_clear_in_loadsession_force_block():
 
 
 def test_ensure_messages_loaded_called_with_keep_stale_flag():
-    # Both _ensureMessagesLoaded call sites inside loadSession must forward
+    # Both _ensureMessagesLoaded call sites inside the extracted restore owner must forward
     # the keep-stale flag so the early-return inside _ensureMessagesLoaded
     # cannot skip the swap when stale messages are still in place.
-    block = _load_session_block(_compact(SESSIONS_JS))
+    block = _restore_loaded_session_block(_compact(SESSIONS_JS))
     # Both INFLIGHT and idle paths.
     assert block.count("await_ensureMessagesLoaded(sid,{force:_keepStaleUntilLoaded,loadGeneration:_loadGeneration})") == 2
 

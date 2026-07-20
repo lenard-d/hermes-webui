@@ -13,11 +13,13 @@ These tests assert the one-line symmetry fix is present in the done handler and
 that it behaves correctly (full payload -> offset 0; explicit offset honored).
 """
 
+from tests.frontend_asset_contract import family_source
+
 import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _compact(text: str) -> str:

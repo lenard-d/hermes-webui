@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -80,7 +82,7 @@ def _run_node(script: str) -> dict:
 
 
 def _new_session_driver(session_workspace: str, default_workspace: str, switch_workspace: str | None) -> str:
-    new_session = _extract_async_function(SESSIONS_JS.read_text(encoding="utf-8"), "newSession")
+    new_session = _extract_async_function(family_source("sessions"), "newSession")
     return textwrap.dedent(
         f"""
         let captured=null;
@@ -156,7 +158,7 @@ def test_new_session_one_shot_switch_workspace_still_wins_and_clears():
 
 @node_test
 def test_busy_workspace_switch_returns_before_session_update():
-    switch_to_workspace = _extract_async_function(PANELS_JS.read_text(encoding="utf-8"), "switchToWorkspace")
+    switch_to_workspace = _extract_async_function(family_source("panels"), "switchToWorkspace")
     script = textwrap.dedent(
         f"""
         const calls=[];

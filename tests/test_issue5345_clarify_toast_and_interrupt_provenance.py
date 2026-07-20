@@ -25,11 +25,13 @@ Backend fact locked by test_clarify_pending_never_404s: the handler returns 200
 with {"pending": None} for an unknown session, so a real 404 can only be a
 missing route (server predates the endpoint) or an unrelated session-scoped 404.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 
 
@@ -172,7 +174,7 @@ def test_explicit_cancel_call_sites_pass_a_reason():
     """Every explicit cancelStream() call site should pass a descriptive reason
     string (composer-stop, slash-stop, slash-interrupt, busy-interrupt) so the
     provenance log is meaningful rather than a bare 'explicit-cancel'."""
-    ui = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    ui = family_source("ui")
     commands = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
     messages = MESSAGES_JS
     combined = ui + commands + messages

@@ -8,6 +8,8 @@ drawn twice (`...M9 4H4v5M15 4h5v5...`), so it rendered pixel-identical to `fit`
 Fix: give `fullscreen` a distinct glyph (corner frame + outward diagonal expand
 arrows) so the two controls are visually distinguishable.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 import re
 
@@ -17,7 +19,7 @@ UI = ROOT / "static" / "ui.js"
 
 def _icon(kind: str) -> str:
     """Extract the SVG string for a given _mermaidViewerIcon kind."""
-    src = UI.read_text(encoding="utf-8")
+    src = family_source("ui")
     # Match `kind: '<svg ...></svg>',` inside the icons map.
     m = re.search(rf"\b{kind}:\s*'(<svg.*?</svg>)'", src)
     assert m, f"icon {kind!r} not found in _mermaidViewerIcon"

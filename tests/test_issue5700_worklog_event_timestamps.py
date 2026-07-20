@@ -4,9 +4,12 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
+
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,9 +20,12 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 def _run_node(body):
     env = os.environ.copy()
-    env["UI_JS_PATH"] = str(UI_JS)
     script = NODE_PREFIX + body
-    result = subprocess.run([NODE, "-e", script], env=env, text=True, capture_output=True, check=False)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".js", encoding="utf-8") as source:
+        source.write(family_source("ui"))
+        source.flush()
+        env["UI_JS_PATH"] = source.name
+        result = subprocess.run([NODE, "-e", script], env=env, text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 

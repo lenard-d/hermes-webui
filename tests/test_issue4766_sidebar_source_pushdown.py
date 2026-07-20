@@ -1,5 +1,7 @@
 """Regression coverage for issue #4766: `/api/sessions` filters by active sidebar source."""
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 from pathlib import Path
@@ -289,7 +291,7 @@ def test_sidebar_source_varies_cache_key():
 
 
 def test_frontend_sends_sidebar_source_param():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     assert "function _requestedSessionSidebarSource()" in src
     assert "function _sessionListQueryString()" in src
@@ -301,7 +303,7 @@ def test_frontend_sends_sidebar_source_param():
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_session_list_query_string_respects_sidebar_source_and_flags():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     requested_source_fn = _extract_function(src, "_requestedSessionSidebarSource")
     exclude_hidden_fn = _extract_function(src, "_sessionListExcludeHiddenEnabled")
     archive_filter_fn = _extract_function(src, "_sessionArchivePagingFilterActive")
@@ -352,7 +354,7 @@ console.log(JSON.stringify({{ first, second, searchFiltered, projectFiltered, ca
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_archived_search_input_refetches_uncapped_then_restores_paging():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     requested_source_fn = _extract_function(src, "_requestedSessionSidebarSource")
     exclude_hidden_fn = _extract_function(src, "_sessionListExcludeHiddenEnabled")
     archive_filter_fn = _extract_function(src, "_sessionArchivePagingFilterActive")
@@ -405,7 +407,7 @@ console.log(JSON.stringify({{ calls }}));
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_session_source_switch_fetches_selected_bucket():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     fn_source = _extract_function(src, "_setSessionSourceFilter")
     script = f"""
 const renderCalls = [];
@@ -449,7 +451,7 @@ console.log(JSON.stringify({{
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_apply_payload_and_tab_count_helpers_cover_old_and_new_payloads():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     requested_source_fn = _extract_function(src, "_requestedSessionSidebarSource")
     exclude_hidden_fn = _extract_function(src, "_sessionListExcludeHiddenEnabled")
     apply_fn = _extract_function(src, "_applySessionListPayload")
@@ -531,7 +533,7 @@ console.log(JSON.stringify({{ oldPayload, newPayload }}));
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_source_filtered_cache_preserves_hidden_bucket_runtime_state():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     is_cli_fn = _extract_function(src, "_isCliSession")
     remember_source_fn = _extract_function(src, "_rememberSessionListSource")
     remember_streaming_fn = _extract_function(src, "_rememberRenderedStreamingState")
@@ -607,7 +609,7 @@ console.log(JSON.stringify({{
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_sid_only_source_remembering_skips_scope_fallback():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     is_cli_fn = _extract_function(src, "_isCliSession")
     remember_source_fn = _extract_function(src, "_rememberSessionListSource")
     script = f"""
@@ -653,7 +655,7 @@ def test_session_list_response_omits_bucket_counts_when_missing(monkeypatch):
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_scope_mismatch_error_path_respects_sidebar_source():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     purge_fn = _extract_function(src, "_purgeStaleInflightEntries")
     clear_fn = _extract_function(src, "_clearSessionSourceTabCounts")
     requested_source_fn = _extract_function(src, "_requestedSessionSidebarSource")

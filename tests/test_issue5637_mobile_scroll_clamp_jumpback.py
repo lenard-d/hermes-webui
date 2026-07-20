@@ -25,11 +25,13 @@ jump-back to two causes:
 Both tests fail on the pre-fix tree and pass only on the fixed tree.
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 
 
 def _coarse_pointer_block() -> str:

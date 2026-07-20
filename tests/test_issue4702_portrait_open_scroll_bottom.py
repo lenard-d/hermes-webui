@@ -12,10 +12,12 @@ These are source-level guards (the runtime behavior is iOS-Safari-specific and n
 reproducible in CI), mirroring the static-assertion style of
 test_issue1360_streaming_scroll_hardening.py.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def test_client_height_seeded_with_scrolltop_on_programmatic_writes():

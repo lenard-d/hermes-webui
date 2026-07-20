@@ -1,9 +1,12 @@
 """Browserless regression for transparent stream live row reconciliation."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -16,15 +19,18 @@ NODE = shutil.which("node")
 def _run_node_script(script, ui_js_path=None):
     assert NODE, "node is required for DOM-executed anchor render tests"
     env = os.environ.copy()
-    if ui_js_path is not None:
-        env["UI_JS_PATH"] = ui_js_path
-    result = subprocess.run([NODE, "-e", script], env=env, text=True, capture_output=True, check=False)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".js", encoding="utf-8") as source:
+        if ui_js_path is not None:
+            source.write(family_source("ui"))
+            source.flush()
+            env["UI_JS_PATH"] = source.name
+        result = subprocess.run([NODE, "-e", script], env=env, text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
 
 def test_transparent_thinking_scroll_container_reserves_gutter():
-    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    css = family_source("style")
     # Find the transparent thinking scroll container block and verify scrollbar-gutter:stable is present.
     # There are multiple blocks with this selector — check that at least one has the property.
     import re

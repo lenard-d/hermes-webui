@@ -20,6 +20,8 @@ The fix has two parts, both in static/ui.js:
 Source-assertion tests (repo convention for anchor-scene UI) + a behavioral
 node-vm harness that proves the mounted-node reduction is real and non-vacuous.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -29,8 +31,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -295,8 +297,8 @@ def test_label_uses_i18n_with_fallback():
     body = _function_body(UI_JS, "_tOrDefault")
     assert "v!==key" in body
     assert "show_earlier_step_one: 'Show 1 earlier step'" in (
-        (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+        family_source("i18n")
     )
     assert "show_earlier_steps: 'Show {0} earlier steps'" in (
-        (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+        family_source("i18n")
     )

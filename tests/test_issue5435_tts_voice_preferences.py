@@ -1,5 +1,7 @@
 """Regression checks for #5435 TTS and voice preference persistence."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import importlib
 import pathlib
@@ -13,7 +15,7 @@ SETTINGS_PY = (
     ROOT / "api" / "config_parts" / "settings_persistence.py"
 ).read_text(encoding="utf-8")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 SPEECH_DEFAULTS = {
     "tts_enabled": False,
@@ -343,8 +345,20 @@ assert.strictEqual(localStorage.getItem('hermes-tts-pitch'), '1');
 
 def test_settings_panel_speech_payload_is_sparse_by_ownership():
     speech_helpers_start = PANELS_JS.index("const _SETTINGS_SPEECH_STORAGE_KEYS=")
-    speech_helpers_end = PANELS_JS.index("function _setPreferencesAutosaveStatus", speech_helpers_start)
+    speech_helpers_end = PANELS_JS.index("window.HermesPanels.settingsNavigation", speech_helpers_start)
     speech_helpers_block = PANELS_JS[speech_helpers_start:speech_helpers_end].strip()
+    payload_start = PANELS_JS.index("function _speechPreferencesPayloadFromUi()")
+    payload_open = PANELS_JS.index("{", payload_start)
+    depth = 1
+    payload_end = payload_open + 1
+    while depth and payload_end < len(PANELS_JS):
+        if PANELS_JS[payload_end] == "{":
+            depth += 1
+        elif PANELS_JS[payload_end] == "}":
+            depth -= 1
+        payload_end += 1
+    assert depth == 0, "_speechPreferencesPayloadFromUi braces did not balance"
+    speech_helpers_block += "\n" + PANELS_JS[payload_start:payload_end]
     script = f"""
 const assert = require('assert');
 const localStorage = {{

@@ -5,9 +5,9 @@ tappable elements unless `touch-action:manipulation` is set. The fix adds that â
 plus `-webkit-tap-highlight-color:transparent` â€” to interactive controls in the
 touch/compact media block so the send button and friends fire on the first tap.
 """
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-CSS = (Path(__file__).resolve().parents[1] / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def test_interactive_buttons_have_touch_action_manipulation():

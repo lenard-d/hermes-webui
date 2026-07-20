@@ -27,6 +27,8 @@ transcript to the bottom ONLY when the reader is still pinned (honoring
 This module verifies the static wiring, the helper's guard logic, AND the actual
 autoResize() round-trip clamp-and-restore via a node `vm` sandbox.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -36,8 +38,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 
 

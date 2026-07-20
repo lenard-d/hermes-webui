@@ -6,10 +6,12 @@ raises that cap from min(52dvh,360px) to min(60dvh,420px). Source-level guard so
 the taller cap can't silently regress.
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE = family_source("style")
 
 
 def test_mobile_approval_inner_dvh_cap_raised():

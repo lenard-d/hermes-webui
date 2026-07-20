@@ -6,6 +6,8 @@ behavioural check is a manual browser pass documented in the PR). They pin that
 the per-profile count cache + the empty-branch wiring exist and are connected, so
 a refactor can't silently drop the empty-profile affordance.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -17,7 +19,7 @@ STYLE_CSS = Path(__file__).resolve().parent.parent / "static" / "style.css"
 
 
 def _sessions():
-    return SESSIONS_JS.read_text(encoding="utf-8")
+    return family_source("sessions")
 
 
 def test_per_profile_count_cache_helpers_exist():
@@ -59,12 +61,12 @@ def test_empty_branch_skipped_when_filter_active():
 
 
 def test_switch_call_site_passes_target_profile():
-    src = PANELS_JS.read_text(encoding="utf-8")
+    src = family_source("panels")
     assert "showSessionListSkeleton(name)" in src, "profile switch must pass the target profile to the skeleton"
 
 
 def test_empty_skeleton_css_respects_reduced_motion():
-    css = STYLE_CSS.read_text(encoding="utf-8")
+    css = family_source("style")
     assert ".skeleton-empty-hint" in css
     # The empty hint must have a reduced-motion override (no animation).
     rm_blocks = re.findall(r"@media\s*\(prefers-reduced-motion:reduce\)\s*\{[^}]*skeleton-empty-hint[^}]*\}", css)

@@ -1,11 +1,13 @@
 """Regression coverage for #5748 model picker selected badge and scroll state."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
 
 
 def _body_between(src: str, start: str, end: str) -> str:

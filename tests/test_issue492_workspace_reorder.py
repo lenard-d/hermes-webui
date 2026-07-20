@@ -1,4 +1,6 @@
 """Tests for issue #492 — workspace drag-to-reorder."""
+from tests.frontend_asset_contract import family_source
+
 import json, pytest
 from unittest.mock import patch, MagicMock, call
 from api.routes import _handle_workspace_reorder
@@ -115,8 +117,7 @@ class TestWorkspaceReorderFrontend:
 
     def test_i18n_keys_present_in_all_locales(self):
         """workspace_drag_hint and workspace_reorder_failed must exist in all locales."""
-        with open("static/i18n.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("i18n")
         for key in ("workspace_drag_hint", "workspace_reorder_failed"):
             count = content.count(key)
             assert count >= 7, f"{key} found {count} times, expected >= 7"
@@ -127,14 +128,12 @@ class TestWorkspaceReorderFrontend:
         assert "'grip-vertical'" in content
 
     def test_renderWorkspacesPanel_has_drag_attrs(self):
-        with open("static/panels.js", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("panels")
         for attr in ("draggable=true", "dragstart", "dragover", "dragend",
                       "ws-drag-handle", "/api/workspaces/reorder"):
             assert attr in content, f"Missing: {attr}"
 
     def test_css_drag_classes_exist(self):
-        with open("static/style.css", "r", encoding="utf-8") as f:
-            content = f.read()
+        content = family_source("style")
         for cls in (".ws-drag-handle", ".ws-row.dragging", ".ws-row.drag-over"):
             assert cls in content, f"Missing CSS: {cls}"

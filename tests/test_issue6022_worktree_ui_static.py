@@ -8,6 +8,8 @@ load, with nothing to reap it (#6023).
 
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,7 +19,7 @@ def read(path):
 
 
 def test_new_session_forwards_explicit_worktree_and_omits_absent():
-    src = read("static/sessions.js")
+    src = family_source("sessions")
     # Explicit true/false forwarded verbatim; absent key stays absent so the
     # server can apply the config default.
     assert (
@@ -43,7 +45,7 @@ def test_onboarding_session_sends_explicit_worktree_false():
 
 
 def test_profile_switch_session_sends_explicit_worktree_false():
-    src = read("static/panels.js")
+    src = family_source("panels")
     assert (
         "await newSession(false, {awaitWorkspaceLoad: workspaceVisible, worktree: false});"
         in src
@@ -53,7 +55,7 @@ def test_profile_switch_session_sends_explicit_worktree_false():
 def test_workspace_bind_prompts_send_explicit_worktree_false():
     # promptWorkspacePath + switchToWorkspace both auto-mint a session from a
     # blank page; each must opt out of the config default explicitly.
-    src = read("static/panels.js")
+    src = family_source("panels")
     assert (
         src.count(
             "body:JSON.stringify({workspace:ws,worktree:false})"
@@ -65,7 +67,7 @@ def test_workspace_bind_prompts_send_explicit_worktree_false():
 
 
 def test_file_and_folder_creation_send_explicit_worktree_false():
-    src = read("static/ui.js")
+    src = family_source("ui")
     for fn in ("async function promptNewFile", "async function promptNewFolder"):
         block = src[src.index(fn) :]
         block = block[: block.index("\n}\n")]
@@ -84,7 +86,7 @@ def test_no_bare_session_new_posts_remain_in_static_js():
     # auto-mint path. All known auto-mint sites are asserted above; this
     # catches future regressions of the same shape.
     for name in ("panels.js", "ui.js"):
-        src = read(f"static/{name}")
+        src = family_source(name.removesuffix(".js"))
         assert "body:JSON.stringify({workspace:ws})" not in src, (
             f"static/{name}: auto-mint session/new must pass explicit worktree:false"
         )

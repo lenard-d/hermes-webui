@@ -1,5 +1,7 @@
 """Regression tests for the WebUI /pet handoff."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 from pathlib import Path
 import subprocess
@@ -9,7 +11,7 @@ import textwrap
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _run_pet_js(

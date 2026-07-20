@@ -1,5 +1,7 @@
 """Regression coverage for issue #5501: session-list retry affordance."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -36,7 +38,7 @@ def _run_node(script):
 
 
 def _build_node_script(extra_js):
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     show_error_fn = _extract_function(src, "_showSessionListLoadError")
     retry_note_fn = _extract_function(src, "_renderSessionListLoadErrorNote")
     invalidate_fn = _extract_function(src, "_invalidateSessionListRenders")
@@ -198,7 +200,7 @@ def _render_script(extra_js):
 
 
 def _load_source():
-    return SESSIONS_JS.read_text(encoding="utf-8"), STYLE_CSS.read_text(encoding="utf-8")
+    return family_source("sessions"), family_source("style")
 
 
 def test_retry_button_pending_state_paints_before_settlement():

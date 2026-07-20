@@ -23,6 +23,8 @@ Every behavioral test below is designed to FAIL on the known-buggy version (no
 inline intrinsic-size written -> the row keeps the flat 96px stylesheet estimate)
 and PASS only on the fixed version.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -128,7 +130,7 @@ def test_estimate_reserves_more_than_96px_for_a_tall_user_message():
     """A long user message must estimate an intrinsic height well above the flat
     96px stylesheet fallback, so a rebuilt off-screen row reserves close to its
     real height and scrollHeight does not collapse."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + r"""
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
 // ~2000 chars across the mobile bubble width => tens of lines => >>96px.
@@ -154,7 +156,7 @@ def test_apply_uses_remembered_measured_height_over_estimate():
     pass), _applyUserRowIntrinsicHeight must write THAT exact height onto the
     rebuilt row's inline contain-intrinsic-size -- not the 96px stylesheet default
     and not the coarser content estimate."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _fake_row_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -179,7 +181,7 @@ def test_apply_falls_back_to_estimate_before_first_measure():
     """A never-measured tall row (no remembered height) must still reserve a
     content-derived estimate >> 96px at build time, so even the very first
     fresh-element frame does not collapse scrollHeight."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _fake_row_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -205,7 +207,7 @@ def test_measure_persists_user_row_height_and_writes_inline_intrinsic():
     (b) remember it so the NEXT rebuild of that sessionIdx reserves the real
     height. The buggy version never touched intrinsic-size, so a rebuilt row
     collapsed to 96px."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _fake_row_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -249,7 +251,7 @@ def test_measure_ignores_assistant_rows_for_intrinsic_writeback():
     are content-visibility:visible on mobile per #5638; writing intrinsic-size on
     them would be meaningless and could mask a real regression). Measuring an
     assistant row must NOT write an inline intrinsic-size."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _fake_row_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));
@@ -286,7 +288,7 @@ def test_cache_cleared_on_session_switch_prevents_stale_height_bleed():
 
     Mutation: make _clearUserRowIntrinsicHeightCache a no-op and this fails (the
     rebuilt row reserves the stale 5000px instead of the ~short estimate)."""
-    js = UI_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("ui")
     source = _extract_func_script(js) + _fake_row_prelude() + r"""
 eval(extractFunc('_rememberUserRowIntrinsicHeight'));
 eval(extractFunc('_estimateUserRowIntrinsicHeight'));

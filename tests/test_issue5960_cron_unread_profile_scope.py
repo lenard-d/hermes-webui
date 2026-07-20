@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -11,8 +13,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+SESSIONS_JS = family_source("sessions")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 NODE = shutil.which("node")
 
@@ -631,8 +633,8 @@ process.stdout.write(JSON.stringify({{
 def test_stale_pre_switch_session_list_does_not_recreate_cron_markers():
     """Greptile #5975 P1: delayed /api/sessions after profile switch must not remount cron dots."""
     # Re-read sources so this test always sees the latest shipped functions.
-    sessions_js = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    panels_js = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    sessions_js = family_source("sessions")
+    panels_js = family_source("panels")
     apply_fn = _extract_function(sessions_js, "_applySessionListPayload")
     mark_poll = _extract_function(sessions_js, "_markPollingCompletionUnreadTransitions")
     helpers = "\n".join(
@@ -761,7 +763,7 @@ process.stdout.write(JSON.stringify({{
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_fresh_session_list_still_marks_when_unread_gen_matches():
     """Sanity: matching unreadGen still allows completion marks after switch."""
-    sessions_js = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    sessions_js = family_source("sessions")
     apply_fn = _extract_function(sessions_js, "_applySessionListPayload")
     mark_poll = _extract_function(sessions_js, "_markPollingCompletionUnreadTransitions")
     helpers = "\n".join(

@@ -11,6 +11,8 @@ Fix: all three guards now reject a `next` that targets the login page or already
 carries a nested `next=`, plus a length cap — while preserving legitimate
 `next=/some/real/path` redirects and the existing open-redirect protections.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 from api.routes import _safe_login_redirect_path as guard
@@ -107,7 +109,7 @@ class TestClientGuardsWired:
         # #5578 Codex round-2: workspace.js was fixed but two more client 401
         # redirect helpers (ui.js _redirectIfUnauth, boot.js redirectToLogin)
         # also nested the login URL. All three must carry the on-login guard.
-        UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+        UI_JS = family_source("ui")
         BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
         assert "login$/.test(_p)" in UI_JS, "ui.js _redirectIfUnauth must guard the login page"
         assert "login$/.test(_p)" in BOOT_JS, "boot.js redirectToLogin must guard the login page"

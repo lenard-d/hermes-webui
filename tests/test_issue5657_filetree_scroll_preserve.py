@@ -13,11 +13,13 @@ the reporter's getBoundingClientRect anchor sketch is deliberately NOT used, and
 the ``.file-item`` rows carry no ``data-path`` for it anyway.
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _render_file_tree_body() -> str:

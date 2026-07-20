@@ -14,6 +14,8 @@ import subprocess
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 NODE = shutil.which("node")
 
@@ -21,8 +23,9 @@ NODE = shutil.which("node")
 def _node_contract_cases() -> dict[str, object]:
     script = r"""
 const fs = require('fs');
-const ui = fs.readFileSync('static/ui.js', 'utf8');
-const messages = fs.readFileSync('static/messages.js', 'utf8');
+const sources = JSON.parse(fs.readFileSync(0, 'utf8'));
+const ui = sources.ui;
+const messages = sources.messages;
 function fn(source, name) {
   const marker = 'function ' + name + '(';
   const start = source.indexOf(marker);
@@ -103,6 +106,7 @@ console.log(JSON.stringify({
     completed = subprocess.run(
         [NODE, "-e", script],
         cwd=REPO_ROOT,
+        input=json.dumps({"ui": family_source("ui"), "messages": family_source("messages")}),
         capture_output=True,
         check=False,
         text=True,

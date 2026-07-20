@@ -10,14 +10,16 @@ silently regress:
   * style.css defines the skeleton classes, the sheen + fade keyframes, the
     reduced-motion fallback, and dark-mode tokens.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-PANELS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-SESSIONS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+PANELS = family_source("panels")
+SESSIONS = family_source("sessions")
 WORKSPACE = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
-CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def _switch_body() -> str:

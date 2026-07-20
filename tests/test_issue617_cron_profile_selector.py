@@ -1,5 +1,7 @@
 """Regression coverage for issue #617 scheduled-job profile selection."""
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 import sys
@@ -212,9 +214,9 @@ def test_manual_cron_run_uses_execution_profile_but_persists_to_owning_store(mon
 
 
 def test_cron_profile_selector_source_hooks_present():
-    panels = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-    css = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-    i18n = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
+    css = family_source("style")
+    i18n = family_source("i18n")
 
     assert "async function loadCronProfiles()" in panels
     assert "api('/api/profiles')" in panels
