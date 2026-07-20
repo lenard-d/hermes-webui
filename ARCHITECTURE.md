@@ -65,7 +65,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       config.py            Compatibility facade and owner of shared mutable config state
       config_parts/        Importable config I/O, discovery, routing, settings, and reasoning domains
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
-        models_cache.py    Model-catalog cache I/O, validation, fingerprints, and invalidation
+        models_cache.py    Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       insights.py          Usage aggregation across WebUI index and Hermes state.db
       model_catalog.py     Static provider names, aliases, and fallback models

@@ -120,6 +120,10 @@ def test_config_reexports_config_domain_implementations():
         "_load_stale_models_cache_from_disk",
         "_save_models_cache_to_disk",
         "_get_fresh_memory_models_cache",
+        "_models_cache_file_age_seconds",
+        "warm_models_catalog_provenance_if_cold",
+        "get_available_models_for_session_visit",
+        "_maybe_log_slow_stages",
         "invalidate_models_cache",
         "invalidate_credential_pool_cache",
         "invalidate_provider_models_cache",
@@ -260,6 +264,87 @@ def test_models_cache_does_not_own_mutable_cache_or_generation_state():
 
     assert facade_owned_state <= vars(config).keys()
     assert facade_owned_state.isdisjoint(vars(models_cache))
+
+
+def test_models_cache_session_visit_exports_preserve_facade_module_identity():
+    exports = (
+        config._models_cache_file_age_seconds,
+        config.warm_models_catalog_provenance_if_cold,
+        config.get_available_models_for_session_visit,
+        config._maybe_log_slow_stages,
+    )
+
+    assert exports == (
+        models_cache._models_cache_file_age_seconds,
+        models_cache.warm_models_catalog_provenance_if_cold,
+        models_cache.get_available_models_for_session_visit,
+        models_cache._maybe_log_slow_stages,
+    )
+    assert {export.__module__ for export in exports} == {"api.config"}
+
+
+def test_session_visit_cache_uses_late_bound_facade_and_preserves_fallback_order(
+    monkeypatch,
+):
+    events = []
+    stale_catalog = {"groups": ["stale"]}
+    monkeypatch.setattr(config, "_get_models_cache_path", lambda: "patched-path")
+    monkeypatch.setattr(
+        config,
+        "_models_cache_file_age_seconds",
+        lambda path, _now: events.append(("age", path)) or None,
+    )
+    monkeypatch.setattr(
+        config,
+        "_load_stale_models_cache_from_disk",
+        lambda: events.append("stale") or stale_catalog,
+    )
+
+    def fail_refresh(**kwargs):
+        events.append(("refresh", kwargs))
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(config, "get_available_models", fail_refresh)
+    monkeypatch.setattr(
+        config,
+        "_maybe_log_slow_stages",
+        lambda *_args: events.append("timing"),
+    )
+
+    assert config.get_available_models_for_session_visit() == stale_catalog
+    assert events == [
+        ("age", "patched-path"),
+        "stale",
+        ("refresh", {"force_refresh": True}),
+        "timing",
+    ]
+
+
+def test_models_cache_slow_stage_logger_reports_ordered_deltas():
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def warning(self, *args):
+            self.calls.append(args)
+
+    logger = Recorder()
+
+    config._maybe_log_slow_stages(
+        logger,
+        [("enter", 10.0), ("disk", 10.125), ("refresh", 10.5)],
+        400.0,
+        "models.session_visit",
+    )
+
+    assert logger.calls == [
+        (
+            "[SLOW] %s total=%.1fms stages: %s",
+            "models.session_visit",
+            500.0,
+            "disk=125.0ms refresh=375.0ms",
+        )
+    ]
 
 
 def test_models_cache_full_invalidation_publishes_before_revoking_generation(
