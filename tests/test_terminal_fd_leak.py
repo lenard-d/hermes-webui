@@ -26,7 +26,11 @@ import pytest
 if os.name != "posix":
     pytest.skip("terminal tests require POSIX terminal support", allow_module_level=True)
 
-import api.terminal as terminal
+from api.terminal import lifecycle as terminal
+from api.terminal import process
+
+
+RUNTIME = terminal._RUNTIME
 
 
 class _FakeProc:
@@ -60,21 +64,21 @@ def _make_registered_term(monkeypatch, sid, *, alive=True, last_activity=0.0, re
         master_fd=master_fd,
         last_activity=last_activity,
     )
-    with terminal._LOCK:
-        terminal._TERMINALS[sid] = term
+    with RUNTIME._lock:
+        RUNTIME._terminals[sid] = term
     return term
 
 
 @pytest.fixture(autouse=True)
 def _clean_terminals(monkeypatch):
     # Never kill real process groups in these unit tests.
-    monkeypatch.setattr(terminal.os, "killpg", lambda *a, **k: None)
+    monkeypatch.setattr(process.os, "killpg", lambda *a, **k: None)
     yield
-    with terminal._LOCK:
-        sids = list(terminal._TERMINALS)
+    with RUNTIME._lock:
+        sids = list(RUNTIME._terminals)
     for sid in sids:
         try:
-            terminal.close_terminal(sid)
+            RUNTIME.close(sid)
         except Exception:
             pass
 
@@ -87,10 +91,10 @@ def test_reader_loop_retires_session_and_closes_fd(monkeypatch):
     fd = term.master_fd
 
     # Run the reader loop directly: a dead proc makes it exit its first iteration.
-    terminal._reader_loop(term)
+    RUNTIME._reader_loop(term)
 
-    with terminal._LOCK:
-        assert sid not in terminal._TERMINALS, "entry not retired on shell exit"
+    with RUNTIME._lock:
+        assert sid not in RUNTIME._terminals, "entry not retired on shell exit"
     with pytest.raises(OSError):
         os.fstat(fd)  # master_fd was closed — no leak
 
@@ -102,20 +106,20 @@ def test_reader_loop_retire_is_identity_guarded_against_restart(monkeypatch):
     old = _make_registered_term(monkeypatch, sid, alive=False)
     # Simulate a restart: a NEW terminal now occupies the same sid.
     new = _make_registered_term(monkeypatch, sid, alive=True)
-    assert terminal._TERMINALS[sid] is new
+    assert RUNTIME._terminals[sid] is new
 
     # The OLD reader loop finishes now.
-    terminal._reader_loop(old)
+    RUNTIME._reader_loop(old)
 
     # The new terminal must still be registered and its fd open.
-    assert terminal._TERMINALS.get(sid) is new
+    assert RUNTIME._terminals.get(sid) is new
     os.fstat(new.master_fd)  # not closed
 
 
 # ── Leak 2: _MAX_TERMINALS cap evicts the least-recently-active terminal ──────
 
 def test_cap_evicts_least_recently_active(monkeypatch):
-    monkeypatch.setattr(terminal, "_MAX_TERMINALS", 3)
+    monkeypatch.setattr(RUNTIME, "max_terminals", 3)
     # Fill to the cap with alive terminals of increasing activity.
     terms = {}
     for i in range(3):
@@ -123,40 +127,40 @@ def test_cap_evicts_least_recently_active(monkeypatch):
             monkeypatch, f"cap-{i}", alive=True, last_activity=100.0 + i
         )
     # cap-0 is least-recently-active. Enforcing the cap for a NEW sid evicts it.
-    terminal._enforce_terminal_cap(exclude_sid="cap-new")
+    RUNTIME._enforce_cap(exclude_sid="cap-new")
 
-    with terminal._LOCK:
-        live = set(terminal._TERMINALS)
+    with RUNTIME._lock:
+        live = set(RUNTIME._terminals)
     assert "cap-0" not in live, "least-recently-active terminal was not evicted"
     assert {"cap-1", "cap-2"} <= live
     assert len(live) < 3  # room was made for the new terminal
 
 
 def test_cap_prefers_dead_terminals_for_eviction(monkeypatch):
-    monkeypatch.setattr(terminal, "_MAX_TERMINALS", 3)
+    monkeypatch.setattr(RUNTIME, "max_terminals", 3)
     # A dead terminal that is NOT the least-recently-active must still go first.
     _make_registered_term(monkeypatch, "cap-dead", alive=False, last_activity=999.0)
     _make_registered_term(monkeypatch, "cap-live-a", alive=True, last_activity=1.0)
     _make_registered_term(monkeypatch, "cap-live-b", alive=True, last_activity=2.0)
 
-    terminal._enforce_terminal_cap(exclude_sid="cap-new")
+    RUNTIME._enforce_cap(exclude_sid="cap-new")
 
-    with terminal._LOCK:
-        live = set(terminal._TERMINALS)
+    with RUNTIME._lock:
+        live = set(RUNTIME._terminals)
     assert "cap-dead" not in live, "dead terminal not preferred for eviction"
     assert {"cap-live-a", "cap-live-b"} <= live
 
 
 def test_cap_reuse_of_existing_sid_evicts_nothing(monkeypatch):
-    monkeypatch.setattr(terminal, "_MAX_TERMINALS", 2)
+    monkeypatch.setattr(RUNTIME, "max_terminals", 2)
     _make_registered_term(monkeypatch, "keep-a", alive=True, last_activity=1.0)
     _make_registered_term(monkeypatch, "keep-b", alive=True, last_activity=2.0)
 
     # Reusing an already-registered sid replaces in place — no growth, no evict.
-    terminal._enforce_terminal_cap(exclude_sid="keep-a")
+    RUNTIME._enforce_cap(exclude_sid="keep-a")
 
-    with terminal._LOCK:
-        assert {"keep-a", "keep-b"} <= set(terminal._TERMINALS)
+    with RUNTIME._lock:
+        assert {"keep-a", "keep-b"} <= set(RUNTIME._terminals)
 
 
 # ── F1: writes/resizes are serialized against close (no fd-reuse injection) ───
@@ -173,7 +177,7 @@ def test_write_after_close_raises_and_never_touches_fd(monkeypatch):
     # Simulate the teardown having marked the terminal closed.
     term.closed.set()
     with pytest.raises(KeyError):
-        terminal.write_terminal(sid, "rm -rf /\n")
+        RUNTIME.write(sid, "rm -rf /\n")
     assert calls == [], "write reached os.write after close — fd-reuse risk"
 
 
@@ -192,7 +196,7 @@ def test_close_acquires_io_lock_before_closing_fd(monkeypatch):
     # Hold io_lock, then kick off a close in another thread and confirm it blocks
     # on the fd-close until we release.
     with term.io_lock:
-        t = threading.Thread(target=lambda: terminal.close_terminal(sid, expected=term))
+        t = threading.Thread(target=lambda: RUNTIME.close(sid, expected=term))
         t.start()
         t.join(timeout=0.3)
         assert closed_fd == [], "close closed the fd without waiting for io_lock"
@@ -203,20 +207,20 @@ def test_close_acquires_io_lock_before_closing_fd(monkeypatch):
 # ── F2: cap eviction is identity-guarded ─────────────────────────────────────
 
 def test_cap_eviction_uses_expected_guard(monkeypatch):
-    monkeypatch.setattr(terminal, "_MAX_TERMINALS", 1)
+    monkeypatch.setattr(RUNTIME, "max_terminals", 1)
     victim = _make_registered_term(monkeypatch, "cap-victim", alive=True, last_activity=1.0)
 
     seen = {}
 
-    real_close = terminal.close_terminal
+    real_close = RUNTIME.close
 
     def _spy_close(sid, *, expected=None):
         seen["sid"] = sid
         seen["expected"] = expected
         return real_close(sid, expected=expected)
 
-    monkeypatch.setattr(terminal, "close_terminal", _spy_close)
-    terminal._enforce_terminal_cap(exclude_sid="cap-new")
+    monkeypatch.setattr(RUNTIME, "close", _spy_close)
+    RUNTIME._enforce_cap(exclude_sid="cap-new")
 
     assert seen.get("sid") == "cap-victim"
     assert seen.get("expected") is victim, "cap eviction must pass expected= for identity safety"

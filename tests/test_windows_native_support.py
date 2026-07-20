@@ -1,4 +1,4 @@
-"""Tests for native Windows support (terminal.py POSIX guards + bootstrap.py unblock).
+"""Tests for native Windows support (terminal package guards + bootstrap unblock).
 
 terminal.py guards:
 - _TERMINAL_SUPPORTED is False on Windows, True on POSIX
@@ -32,25 +32,25 @@ class TestTerminalPosixGuard:
     """Verify _TERMINAL_SUPPORTED flag and import guards."""
 
     def test_terminal_supported_matches_platform(self):
-        from api import terminal
+        from api.terminal import process
         if sys.platform == "win32":
-            assert not terminal._TERMINAL_SUPPORTED
+            assert not process.TERMINAL_SUPPORTED
         else:
-            assert terminal._TERMINAL_SUPPORTED
+            assert process.TERMINAL_SUPPORTED
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only check")
     def test_posix_modules_are_loaded(self):
-        from api import terminal
-        assert terminal.fcntl is not None
-        assert terminal.select is not None
-        assert terminal.termios is not None
+        from api.terminal import lifecycle
+        assert lifecycle.fcntl is not None
+        assert lifecycle.select is not None
+        assert lifecycle.termios is not None
 
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only check")
     def test_windows_modules_are_none(self):
-        from api import terminal
-        assert terminal.fcntl is None
-        assert terminal.select is None
-        assert terminal.termios is None
+        from api.terminal import lifecycle
+        assert lifecycle.fcntl is None
+        assert lifecycle.select is None
+        assert lifecycle.termios is None
 
 
 class TestTerminalWindowsFunctions:
@@ -59,8 +59,8 @@ class TestTerminalWindowsFunctions:
     @pytest.fixture(autouse=True)
     def _force_unsupported(self, monkeypatch):
         """Force _TERMINAL_SUPPORTED=False regardless of actual platform."""
-        from api import terminal
-        monkeypatch.setattr(terminal, "_TERMINAL_SUPPORTED", False)
+        from api.terminal import process
+        monkeypatch.setattr(process, "TERMINAL_SUPPORTED", False)
 
     def test_start_terminal_raises(self, tmp_path):
         from api.terminal import start_terminal

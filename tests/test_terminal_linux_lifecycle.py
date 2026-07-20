@@ -6,6 +6,8 @@ import time
 
 import pytest
 
+from api.terminal import lifecycle, process
+
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
@@ -68,20 +70,19 @@ def test_terminal_survives_short_lived_request_thread(tmp_path):
 
 
 def test_terminal_spawn_delegates_popen_to_supervisor_thread(monkeypatch, tmp_path):
-    import api.terminal as terminal
     from api.terminal import close_terminal, start_terminal
 
     sid = f"terminal-supervisor-delegation-{os.getpid()}-{id(tmp_path)}"
     request_thread_id = None
     popen_thread_id = None
-    real_popen = terminal.subprocess.Popen
+    real_popen = process.subprocess.Popen
 
     def tracking_popen(*args, **kwargs):
         nonlocal popen_thread_id
         popen_thread_id = threading.get_ident()
         return real_popen(*args, **kwargs)
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", tracking_popen)
+    monkeypatch.setattr(process.subprocess, "Popen", tracking_popen)
 
     result = queue.Queue()
 
@@ -151,12 +152,11 @@ def test_terminal_supervisor_handles_concurrent_spawns(tmp_path):
 
 
 def test_terminal_supervisor_propagates_popen_failure(monkeypatch, tmp_path):
-    import api.terminal as terminal
     from api.terminal import start_terminal
 
     expected = RuntimeError("spawn failed")
     captured = {}
-    real_put = terminal._spawn_queue.put
+    real_put = process._SPAWN_SUPERVISOR.queue.put
 
     def failing_popen(*args, **kwargs):
         raise expected
@@ -165,8 +165,8 @@ def test_terminal_supervisor_propagates_popen_failure(monkeypatch, tmp_path):
         captured["request"] = request
         return real_put(request)
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", failing_popen)
-    monkeypatch.setattr(terminal._spawn_queue, "put", capture_request)
+    monkeypatch.setattr(process.subprocess, "Popen", failing_popen)
+    monkeypatch.setattr(process._SPAWN_SUPERVISOR.queue, "put", capture_request)
 
     with pytest.raises(RuntimeError, match="spawn failed") as excinfo:
         start_terminal(
@@ -183,7 +183,6 @@ def test_terminal_supervisor_propagates_popen_failure(monkeypatch, tmp_path):
 
 
 def test_terminal_spawn_timeout_abandons_late_process(monkeypatch, tmp_path):
-    import api.terminal as terminal
     from api.terminal import start_terminal
 
     class FakeProc:
@@ -212,7 +211,7 @@ def test_terminal_spawn_timeout_abandons_late_process(monkeypatch, tmp_path):
     proc = FakeProc()
     kills = []
     captured = {}
-    real_put = terminal._spawn_queue.put
+    real_put = process._SPAWN_SUPERVISOR.queue.put
 
     class TimedOutEvent:
         def __init__(self):
@@ -237,9 +236,9 @@ def test_terminal_spawn_timeout_abandons_late_process(monkeypatch, tmp_path):
         captured["request"] = request
         return real_put(request)
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", slow_popen)
-    monkeypatch.setattr(terminal._spawn_queue, "put", force_timeout)
-    monkeypatch.setattr(terminal.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
+    monkeypatch.setattr(process.subprocess, "Popen", slow_popen)
+    monkeypatch.setattr(process._SPAWN_SUPERVISOR.queue, "put", force_timeout)
+    monkeypatch.setattr(process.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
 
     sid = f"terminal-spawn-timeout-{os.getpid()}-{id(tmp_path)}"
     try:
@@ -257,18 +256,17 @@ def test_terminal_spawn_timeout_abandons_late_process(monkeypatch, tmp_path):
     while time.monotonic() < deadline and not kills:
         time.sleep(0.01)
 
-    assert kills == [(proc.pid, terminal.signal.SIGHUP)]
+    assert kills == [(proc.pid, process.signal.SIGHUP)]
     assert proc.wait_calls == [1.0]
     assert proc.poll() is not None
-    assert sid not in terminal._TERMINALS
+    assert sid not in lifecycle._RUNTIME._terminals
     assert captured["request"].done.set_calls == 1
-    assert getattr(proc, "returncode") is not None
-    assert terminal._spawn_supervisor_thread is not None
-    assert terminal._spawn_supervisor_thread.is_alive()
+    assert proc.returncode is not None
+    assert process._SPAWN_SUPERVISOR.thread is not None
+    assert process._SPAWN_SUPERVISOR.thread.is_alive()
 
 
 def test_terminal_timeout_race_after_spawn_completion_does_not_orphan(monkeypatch, tmp_path):
-    import api.terminal as terminal
     from api.terminal import close_terminal, start_terminal
 
     class FakeProc:
@@ -299,7 +297,7 @@ def test_terminal_timeout_race_after_spawn_completion_does_not_orphan(monkeypatc
     proc = FakeProc()
     captured = {}
     reaped = []
-    real_put = terminal._spawn_queue.put
+    real_put = process._SPAWN_SUPERVISOR.queue.put
 
     def fake_popen(*args, **kwargs):
         return proc
@@ -309,10 +307,10 @@ def test_terminal_timeout_race_after_spawn_completion_does_not_orphan(monkeypatc
         captured["request"] = request
         return real_put(request)
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(terminal._spawn_queue, "put", capture_request)
-    monkeypatch.setattr(terminal.os, "killpg", lambda *args: None)
-    monkeypatch.setattr(terminal, "_reap_abandoned_spawn", lambda proc: reaped.append(proc) or True)
+    monkeypatch.setattr(process.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(process._SPAWN_SUPERVISOR.queue, "put", capture_request)
+    monkeypatch.setattr(process.os, "killpg", lambda *args: None)
+    monkeypatch.setattr(process, "_reap_abandoned_spawn", lambda proc: reaped.append(proc) or True)
 
     sid = f"terminal-timeout-race-complete-{os.getpid()}-{id(tmp_path)}"
     term = start_terminal(sid, tmp_path, restart=True)
@@ -324,7 +322,7 @@ def test_terminal_timeout_race_after_spawn_completion_does_not_orphan(monkeypatc
         assert request.done.is_set()
         assert not request.timed_out.is_set()
         assert reaped == []
-        assert terminal._TERMINALS[sid].proc is proc
+        assert lifecycle._RUNTIME._terminals[sid].proc is proc
     finally:
         close_terminal(sid)
 
@@ -350,8 +348,8 @@ def test_terminal_supervisor_continues_after_mixed_popen_failures(monkeypatch, t
             raise result
         return result
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", flaky_popen)
-    monkeypatch.setattr(terminal.os, "killpg", lambda *args: None)
+    monkeypatch.setattr(process.subprocess, "Popen", flaky_popen)
+    monkeypatch.setattr(process.os, "killpg", lambda *args: None)
 
     with pytest.raises(RuntimeError, match="first failure"):
         start_terminal(f"terminal-mixed-fail-1-{os.getpid()}", tmp_path, restart=True)
@@ -376,15 +374,14 @@ def test_terminal_supervisor_continues_after_mixed_popen_failures(monkeypatch, t
         assert term_1.proc is not term_2.proc
         assert isinstance(term_1, terminal.TerminalSession)
         assert isinstance(term_2, terminal.TerminalSession)
-        assert terminal._spawn_supervisor_thread is not None
-        assert terminal._spawn_supervisor_thread.is_alive()
+        assert process._SPAWN_SUPERVISOR.thread is not None
+        assert process._SPAWN_SUPERVISOR.thread.is_alive()
     finally:
         close_terminal(sid_ok_1)
         close_terminal(sid_ok_2)
 
 
 def test_terminal_supervisor_survives_repeated_popen_failures(monkeypatch, tmp_path):
-    import api.terminal as terminal
     from api.terminal import close_terminal, start_terminal
 
     class FakeProc:
@@ -404,21 +401,21 @@ def test_terminal_supervisor_survives_repeated_popen_failures(monkeypatch, tmp_p
             raise RuntimeError(f"spawn failure {attempts['count']}")
         return FakeProc()
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", failing_then_success)
-    monkeypatch.setattr(terminal.os, "killpg", lambda *args: None)
+    monkeypatch.setattr(process.subprocess, "Popen", failing_then_success)
+    monkeypatch.setattr(process.os, "killpg", lambda *args: None)
 
     for idx in range(5):
         with pytest.raises(RuntimeError, match=f"spawn failure {idx + 1}"):
             start_terminal(f"terminal-repeat-fail-{idx}-{os.getpid()}", tmp_path, restart=True)
 
-    assert terminal._spawn_supervisor_thread is not None
-    assert terminal._spawn_supervisor_thread.is_alive()
+    assert process._SPAWN_SUPERVISOR.thread is not None
+    assert process._SPAWN_SUPERVISOR.thread.is_alive()
 
     sid = f"terminal-repeat-success-{os.getpid()}"
     term = start_terminal(sid, tmp_path, restart=True)
     try:
-        assert term.proc is terminal._TERMINALS[sid].proc
-        assert terminal._spawn_supervisor_thread is not None
-        assert terminal._spawn_supervisor_thread.is_alive()
+        assert term.proc is lifecycle._RUNTIME._terminals[sid].proc
+        assert process._SPAWN_SUPERVISOR.thread is not None
+        assert process._SPAWN_SUPERVISOR.thread.is_alive()
     finally:
         close_terminal(sid)

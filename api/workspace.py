@@ -82,12 +82,17 @@ def _last_workspace_file() -> Path:
 
 
 
-def _is_remote_terminal_backend(terminal_cfg: dict | None) -> bool:
+def is_remote_terminal_backend(terminal_cfg: dict | None) -> bool:
     """Return True when the active terminal backend runs outside this WebUI host."""
     if not isinstance(terminal_cfg, dict):
         return False
     backend = str(terminal_cfg.get('backend') or '').strip().lower()
     return backend not in ('', 'local')
+
+
+# Temporary compatibility name for existing workspace callers. New domains use
+# the public interface above instead of importing a private workspace helper.
+_is_remote_terminal_backend = is_remote_terminal_backend
 
 
 def _remote_terminal_cwd() -> str | None:

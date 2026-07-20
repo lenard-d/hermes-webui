@@ -8684,21 +8684,73 @@ _install_routes_part(globals(), _stream_transport_routes_part)
 del _stream_transport_routes_part
 
 
-from api.routes_parts import terminal as _terminal_routes_part
-from api.routes_parts.terminal import (  # noqa: F401 - compatibility facade re-exports
-    _terminal_session_lookup,
-    _REMOTE_TERMINAL_BACKEND_UNSUPPORTED_ERROR,
-    _REMOTE_TERMINAL_BACKEND_UNSUPPORTED_MESSAGE,
-    _terminal_remote_backend_enabled,
-    _handle_terminal_start,
-    _handle_terminal_input,
-    _handle_terminal_resize,
-    _handle_terminal_close,
-    _handle_terminal_output,
+from api import terminal as _terminal_domain
+from api.routes_parts import terminal as _terminal_http
+
+
+_REMOTE_TERMINAL_BACKEND_UNSUPPORTED_ERROR = (
+    _terminal_domain.REMOTE_BACKEND_UNSUPPORTED_ERROR
+)
+_REMOTE_TERMINAL_BACKEND_UNSUPPORTED_MESSAGE = (
+    _terminal_domain.REMOTE_BACKEND_UNSUPPORTED_MESSAGE
 )
 
-_install_routes_part(globals(), _terminal_routes_part)
-del _terminal_routes_part
+
+def _terminal_session_lookup(body_or_query):
+    """Compatibility adapter for callers that still import this route helper."""
+    return _terminal_domain.lookup_terminal_session(body_or_query.get("session_id"))
+
+
+def _terminal_remote_backend_enabled() -> bool:
+    return _terminal_domain.terminal_remote_backend_enabled()
+
+
+def _handle_terminal_start(handler, body):
+    return _terminal_http.handle_terminal_start(
+        handler,
+        body,
+        gate=_embedded_terminal_gate_allows,
+        gate_denied_message=_EMBEDDED_TERMINAL_GATE_DENIED_MESSAGE,
+    )
+
+
+def _handle_terminal_input(handler, body):
+    return _terminal_http.handle_terminal_input(
+        handler,
+        body,
+        gate=_embedded_terminal_gate_allows,
+        gate_denied_message=_EMBEDDED_TERMINAL_GATE_DENIED_MESSAGE,
+    )
+
+
+def _handle_terminal_resize(handler, body):
+    return _terminal_http.handle_terminal_resize(
+        handler,
+        body,
+        gate=_embedded_terminal_gate_allows,
+        gate_denied_message=_EMBEDDED_TERMINAL_GATE_DENIED_MESSAGE,
+    )
+
+
+def _handle_terminal_close(handler, body):
+    return _terminal_http.handle_terminal_close(
+        handler,
+        body,
+        gate=_embedded_terminal_gate_allows,
+        gate_denied_message=_EMBEDDED_TERMINAL_GATE_DENIED_MESSAGE,
+    )
+
+
+def _handle_terminal_output(handler, parsed):
+    return _terminal_http.handle_terminal_output(
+        handler,
+        parsed,
+        gate=_embedded_terminal_gate_allows,
+        gate_denied_message=_EMBEDDED_TERMINAL_GATE_DENIED_MESSAGE,
+        heartbeat_seconds=_SSE_HEARTBEAT_INTERVAL_SECONDS,
+        send_event=_sse,
+        set_write_deadline=_sse_set_write_deadline,
+    )
 
 
 

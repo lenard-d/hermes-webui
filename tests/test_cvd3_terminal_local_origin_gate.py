@@ -123,10 +123,10 @@ def test_terminal_start_refuses_public_client_without_spawning(monkeypatch):
 
     spawned = {"called": False}
     # If the gate fails to block, this would be the RCE primitive — assert it
-    # is never reached. _terminal_session_lookup also must not run.
+    # is never reached. The terminal-domain start operation also must not run.
     monkeypatch.setattr(
-        routes, "_terminal_session_lookup",
-        lambda body: spawned.__setitem__("called", True) or ("s", SimpleNamespace(workspace="")),
+        "api.terminal.start_terminal_for_session",
+        lambda *args, **kwargs: spawned.__setitem__("called", True),
     )
 
     handler = _Handler(client_ip="8.8.8.8", body=b'{"session_id":"s"}')
@@ -190,8 +190,9 @@ def test_terminal_start_loopback_client_passes_gate(monkeypatch):
 
     reached = {"called": False}
     monkeypatch.setattr(
-        routes, "_terminal_session_lookup",
-        lambda body: reached.__setitem__("called", True) or (_ for _ in ()).throw(KeyError("Session not found")),
+        "api.terminal.start_terminal_for_session",
+        lambda *args, **kwargs: reached.__setitem__("called", True)
+        or (_ for _ in ()).throw(KeyError("Session not found")),
     )
 
     handler = _Handler(client_ip="127.0.0.1", body=b'{"session_id":"s"}')

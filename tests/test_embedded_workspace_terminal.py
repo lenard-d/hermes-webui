@@ -235,7 +235,7 @@ def test_terminal_process_does_not_mutate_global_terminal_cwd(tmp_path, monkeypa
 
 def test_terminal_output_preserves_control_sequences_for_xterm():
     import codecs
-    from api.terminal import _decode_terminal_output
+    from api.terminal.lifecycle import _decode_terminal_output
 
     raw = "\x1b[?2004h$ \x1b[32mhello\x1b[0m\n"
     decoder = codecs.getincrementaldecoder("utf-8")("replace")
@@ -292,6 +292,7 @@ class _RouteHandler:
 
 def test_workspaces_route_exposes_terminal_remote_backend_flag(monkeypatch):
     import api.routes as routes
+    from api.terminal import application
 
     monkeypatch.setattr(
         routes,
@@ -299,7 +300,11 @@ def test_workspaces_route_exposes_terminal_remote_backend_flag(monkeypatch):
         lambda: [{"path": "/tmp/project", "name": "Project"}],
     )
     monkeypatch.setattr(routes, "get_last_workspace", lambda: "/tmp/project")
-    monkeypatch.setattr(routes, "get_config", lambda: {"terminal": {"backend": "ssh"}})
+    monkeypatch.setattr(
+        application.config,
+        "get_config",
+        lambda: {"terminal": {"backend": "ssh"}},
+    )
 
     handler = _RouteHandler()
     routes.handle_get(handler, urlsplit("/api/workspaces"))
@@ -313,9 +318,10 @@ def test_workspaces_route_exposes_terminal_remote_backend_flag(monkeypatch):
 
 def test_terminal_start_rejects_remote_backend_with_stale_workspace_before_local_validation(monkeypatch):
     import api.routes as routes
+    from api.terminal import application
 
     monkeypatch.setattr(
-        routes,
+        application.models,
         "get_session",
         lambda sid: SimpleNamespace(
             session_id=sid,
@@ -323,7 +329,7 @@ def test_terminal_start_rejects_remote_backend_with_stale_workspace_before_local
         ),
     )
     monkeypatch.setattr(
-        routes,
+        application.config,
         "get_config",
         lambda: {"terminal": {"backend": "docker", "cwd": "/Users/joeyshiue"}},
     )

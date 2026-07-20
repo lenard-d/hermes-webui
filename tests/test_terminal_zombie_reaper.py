@@ -7,11 +7,15 @@ import pytest
 pytestmark = pytest.mark.skipif(
     os.name == "nt"
     or not sys.platform.startswith("linux")
-    or not getattr(__import__("api.terminal", fromlist=["_TERMINAL_SUPPORTED"]), "_TERMINAL_SUPPORTED", False),
+    or not getattr(__import__("api.terminal.process", fromlist=["TERMINAL_SUPPORTED"]), "TERMINAL_SUPPORTED", False),
     reason="Linux-only terminal zombie reaper coverage",
 )
 
 import api.terminal as terminal
+from api.terminal import lifecycle, process
+
+
+RUNTIME = lifecycle._RUNTIME
 
 
 def _wait_until_waitable(pid: int, timeout: float = 2.0) -> None:
@@ -43,7 +47,7 @@ def test_reap_terminal_descendants_reaps_exited_child():
 
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
-            terminal._reap_terminal_descendants(pid)
+            process.reap_terminal_descendants(pid)
             try:
                 os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             except ChildProcessError:
@@ -83,17 +87,17 @@ def test_close_terminal_reaps_descendants_after_shell_wait(monkeypatch):
         proc=proc,
         master_fd=12345,
     )
-    terminal._TERMINALS["term-descendant-reap"] = term
+    RUNTIME._terminals["term-descendant-reap"] = term
     kills = []
     reaped = []
 
-    monkeypatch.setattr(terminal.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
-    monkeypatch.setattr(terminal.os, "close", lambda fd: None)
-    monkeypatch.setattr(terminal, "_reap_terminal_descendants", lambda pgid: reaped.append(pgid) or 0)
+    monkeypatch.setattr(process.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
+    monkeypatch.setattr(lifecycle.os, "close", lambda fd: None)
+    monkeypatch.setattr(process, "reap_terminal_descendants", lambda pgid: reaped.append(pgid) or 0)
 
     assert terminal.close_terminal("term-descendant-reap") is True
 
-    assert kills == [(proc.pid, terminal.signal.SIGHUP)]
+    assert kills == [(proc.pid, process.signal.SIGHUP)]
     assert proc.wait_calls == [1.5]
     assert reaped == [proc.pid]
 
@@ -105,9 +109,9 @@ def test_reap_terminal_descendants_ignores_expected_waitpid_errors(monkeypatch):
         calls.append((pid, flags))
         raise ChildProcessError()
 
-    monkeypatch.setattr(terminal.os, "waitpid", fake_waitpid)
+    monkeypatch.setattr(process.os, "waitpid", fake_waitpid)
 
-    assert terminal._reap_terminal_descendants(123) == 0
+    assert process.reap_terminal_descendants(123) == 0
     assert calls == [(-123, os.WNOHANG)]
 
 
@@ -118,7 +122,7 @@ def test_reap_terminal_descendants_is_bounded(monkeypatch):
         calls.append((pid, flags))
         return (len(calls), 0)
 
-    monkeypatch.setattr(terminal.os, "waitpid", fake_waitpid)
+    monkeypatch.setattr(process.os, "waitpid", fake_waitpid)
 
-    assert terminal._reap_terminal_descendants(123, limit=3) == 3
+    assert process.reap_terminal_descendants(123, limit=3) == 3
     assert calls == [(-123, os.WNOHANG), (-123, os.WNOHANG), (-123, os.WNOHANG)]

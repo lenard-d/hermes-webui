@@ -9,6 +9,10 @@ if os.name != "posix":
     pytest.skip("terminal process cleanup tests require POSIX terminal support", allow_module_level=True)
 
 import api.terminal as terminal
+from api.terminal import lifecycle, process
+
+
+RUNTIME = lifecycle._RUNTIME
 
 
 class _DummyThread:
@@ -56,9 +60,9 @@ def test_terminal_shell_does_not_use_pdeathsig_preexec(monkeypatch, tmp_path):
         captured["kwargs"] = kwargs
         return proc
 
-    monkeypatch.setattr(terminal.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(terminal.threading, "Thread", _DummyThread)
-    monkeypatch.setattr(terminal, "_set_size", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(lifecycle.threading, "Thread", _DummyThread)
+    monkeypatch.setattr(RUNTIME, "_set_size", lambda *args, **kwargs: None)
 
     term = terminal.start_terminal("term-no-preexec", tmp_path)
 
@@ -130,40 +134,40 @@ def test_close_terminal_waits_again_after_sigkill(monkeypatch):
         proc=proc,
         master_fd=12345,
     )
-    terminal._TERMINALS["term-timeout"] = term
+    RUNTIME._terminals["term-timeout"] = term
     kills = []
-    monkeypatch.setattr(terminal.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
-    monkeypatch.setattr(terminal.os, "close", lambda fd: None)
+    monkeypatch.setattr(process.os, "killpg", lambda pid, sig: kills.append((pid, sig)))
+    monkeypatch.setattr(lifecycle.os, "close", lambda fd: None)
 
     assert terminal.close_terminal("term-timeout") is True
 
     assert proc.wait_calls == [1.5, 1.0]
-    assert kills == [(proc.pid, terminal.signal.SIGHUP), (proc.pid, terminal.signal.SIGKILL)]
+    assert kills == [(proc.pid, process.signal.SIGHUP), (proc.pid, process.signal.SIGKILL)]
 
 
 def test_close_all_terminals_closes_snapshot(monkeypatch):
-    terminal._TERMINALS.clear()
-    terminal._TERMINALS.update({"a": object(), "b": object()})
+    RUNTIME._terminals.clear()
+    RUNTIME._terminals.update({"a": object(), "b": object()})
     closed = []
 
     def fake_close(session_id):
         closed.append(session_id)
-        terminal._TERMINALS.pop(session_id, None)
+        RUNTIME._terminals.pop(session_id, None)
         return True
 
-    monkeypatch.setattr(terminal, "close_terminal", fake_close)
+    monkeypatch.setattr(RUNTIME, "close", fake_close)
 
     terminal.close_all_terminals()
 
     assert closed == ["a", "b"]
-    assert terminal._TERMINALS == {}
+    assert RUNTIME._terminals == {}
 
 
 def test_terminal_module_registers_graceful_shutdown_reaper():
     """atexit is still the reap path; pdeathsig must NOT be re-introduced."""
-    src = terminal.Path(terminal.__file__).read_text()
+    src = lifecycle.Path(lifecycle.__file__).read_text()
 
-    assert "atexit.register(close_all_terminals)" in src
+    assert "atexit.register(_RUNTIME.close_all)" in src
     # The PR_SET_PDEATHSIG implementation broke every Linux user (#2853);
     # guard against accidentally bringing it back.
     assert "preexec_fn=_terminal_shell_preexec_fn" not in src
