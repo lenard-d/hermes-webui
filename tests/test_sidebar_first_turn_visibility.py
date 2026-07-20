@@ -95,28 +95,44 @@ class TestSidebarFirstTurnVisibility:
         assert "active_stream_id:null" in clear_body.replace(" ", "")
         assert "_sessionStreamingById.set(sid,false)" in clear_body.replace(" ", "")
 
-    def test_backend_compact_counts_pending_first_turn_as_visible(self):
-        src = read("api/models.py")
-        compact = src[src.index("def compact"):src.index("def _get_profile_home")]
-        assert "has_pending_user_message" in compact and "pending_user_message" in compact, (
-            "Session.compact() must account for pending_user_message in sidebar metadata."
-        )
-        assert "message_count = max(message_count, 1)" in compact, (
-            "Pending first user turn should make message_count non-zero for /api/sessions."
-        )
-        assert "pending_started_at" in compact and "last_message_at" in compact, (
-            "Pending first user turn should sort by pending_started_at in the sidebar."
+    def test_backend_compact_counts_pending_first_turn_as_visible(self, tmp_path):
+        from api.models import Session
+
+        session = Session(
+            session_id="pending-first-turn",
+            workspace=tmp_path,
+            pending_user_message="hello",
+            pending_started_at=1234,
         )
 
-    def test_backend_index_filter_keeps_pending_first_turn_sessions(self):
-        src = read("api/models.py")
-        index_filter_start = src.index("# Hide empty Untitled sessions from the UI entirely")
-        index_filter_end = src.index("visible_result = [s for s in sidebar_candidates if not _hide_from_default_sidebar", index_filter_start)
-        index_filter = src[index_filter_start:index_filter_end]
-        assert "has_pending_user_message" in index_filter, (
-            "The index-path empty-session filter must exempt pending first-turn sessions, "
-            "matching the full-scan fallback."
+        compact = session.compact()
+        assert compact["has_pending_user_message"] is True
+        assert compact["message_count"] == 1
+        assert compact["last_message_at"] == 1234
+
+    def test_backend_index_filter_keeps_pending_first_turn_sessions(self, monkeypatch, tmp_path):
+        import json
+        import api.models as models
+
+        sid = "pending-index-turn"
+        sidecar = models.Session(
+            session_id=sid,
+            workspace=tmp_path,
+            pending_user_message="hello",
+            pending_started_at=1234,
         )
+        monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
+        monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "_index.json")
+        monkeypatch.setattr(models, "SESSIONS", {})
+        sidecar.save()
+        row = sidecar.compact()
+        row["message_count"] = 0
+        models.SESSION_INDEX_FILE.write_text(json.dumps([row]), encoding="utf-8")
+        monkeypatch.setattr(models, "_stale_snapshot_metadata_refresh_ids", lambda _rows: set())
+
+        result = models.all_sessions(include_lineage_metadata=False)
+
+        assert [item["session_id"] for item in result] == [sid]
 
     def test_session_refresh_preserves_optimistic_first_turn_rows_when_server_lags(self):
         src = read("static/sessions.js")

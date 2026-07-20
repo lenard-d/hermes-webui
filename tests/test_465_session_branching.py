@@ -448,38 +448,35 @@ def test_branch_route_keeps_404_for_truly_missing_sessions(monkeypatch):
 
 # ── Session model ──────────────────────────────────────────────────────────────
 
-def test_session_model_parent_session_id():
+def test_session_model_parent_session_id(tmp_path):
     """Verify Session model supports parent_session_id."""
-    src = _read('api/models.py')
-    assert 'parent_session_id' in src, "Session model should have parent_session_id"
-    # Check __init__ parameter
-    assert 'parent_session_id: str=None' in src, \
-        "Session.__init__ should accept parent_session_id parameter"
-    # Check it's set on self
-    assert 'self.parent_session_id = parent_session_id' in src, \
-        "Session.__init__ should assign parent_session_id"
+    from api.models import Session
+
+    session = Session(workspace=tmp_path, parent_session_id="parent-1")
+    assert session.parent_session_id == "parent-1"
 
 
-def test_session_compact_includes_parent():
+def test_session_compact_includes_parent(tmp_path):
     """Verify compact() includes parent_session_id."""
-    src = _read('api/models.py')
-    # Find the compact method and scan its full body for parent_session_id.
-    # PR #1591 (May 2026) added a has_pending_user_message recompute block at
-    # the top of compact() which pushed the parent_session_id field beyond a
-    # 1500-char window — widen the scan to 3000 chars to cover the full
-    # return-dict body without re-tightening every time compact() grows.
-    compact_def_match = re.search(r"def compact\(self", src)
-    assert compact_def_match, "Could not find compact() method"
-    snippet = src[compact_def_match.start():compact_def_match.start() + 3000]
-    assert "'parent_session_id'" in snippet, \
-        "compact() should include parent_session_id"
+    from api.models import Session
+
+    compact = Session(workspace=tmp_path, parent_session_id="parent-1").compact()
+    assert compact["parent_session_id"] == "parent-1"
 
 
-def test_session_metadata_fields_includes_parent():
+def test_session_metadata_fields_includes_parent(monkeypatch, tmp_path):
     """Verify parent_session_id is in METADATA_FIELDS for persistence."""
-    src = _read('api/models.py')
-    assert "'parent_session_id'" in src, \
-        "METADATA_FIELDS should include parent_session_id"
+    import api.models as models
+
+    monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "_index.json")
+    session = models.Session(
+        session_id="child-session",
+        workspace=tmp_path,
+        parent_session_id="parent-1",
+    )
+    session.save(skip_index=True)
+    assert models.Session.load("child-session").parent_session_id == "parent-1"
 
 
 # ── Frontend: slash command ────────────────────────────────────────────────────

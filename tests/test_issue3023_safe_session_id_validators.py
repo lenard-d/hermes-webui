@@ -74,12 +74,36 @@ def test_session_worktree_remove_validator_accepts_hyphenated_ids():
     assert "'0123456789abcdefghijklmnopqrstuvwxyz_'" not in block
 
 
-def test_repair_stale_pending_validator_accepts_hyphenated_ids():
+def test_repair_stale_pending_validator_accepts_hyphenated_ids(monkeypatch, tmp_path):
     """``_repair_stale_pending`` in models.py must accept hyphens (#3023)."""
-    models_src = open("api/models.py", encoding="utf-8").read()
-    assert "is_safe_session_id" in models_src
-    # No magic-string validator should survive anywhere in models.py
-    assert "'0123456789abcdefghijklmnopqrstuvwxyz_'" not in models_src
+    import threading
+    import api.models as models
+
+    session = models.Session(
+        session_id="api-hyphenated-id",
+        workspace=tmp_path,
+        active_stream_id="stale-stream",
+        pending_user_message="hello",
+        pending_started_at=0,
+    )
+    observed = {}
+    monkeypatch.setattr(models, "_active_stream_ids", lambda: set())
+    monkeypatch.setattr(models, "_has_compression_continuation", lambda _session: False)
+    monkeypatch.setattr(models, "_get_profile_home", lambda _profile: tmp_path)
+    monkeypatch.setattr(models, "_get_session_agent_lock", lambda _sid: threading.Lock())
+
+    def apply_marker(actual_session, core_path, **_kwargs):
+        observed["sid"] = actual_session.session_id
+        observed["core_path"] = core_path
+        return True
+
+    monkeypatch.setattr(models, "_apply_core_sync_or_error_marker", apply_marker)
+
+    assert models._repair_stale_pending(session) is True
+    assert observed == {
+        "sid": "api-hyphenated-id",
+        "core_path": tmp_path / "sessions" / "session_api-hyphenated-id.json",
+    }
 
 
 def test_no_lowercase_only_magic_string_remains_in_session_validators():

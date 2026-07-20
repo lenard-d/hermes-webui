@@ -11,21 +11,30 @@ Fixes:
 2. Exception path: log a warning instead of silently returning [].
 """
 import pathlib
-import re
+
+import api.models as models
 
 MODELS_PY = pathlib.Path(__file__).parent.parent / 'api' / 'models.py'
 AGENT_SESSIONS_PY = pathlib.Path(__file__).parent.parent / 'api' / 'agent_sessions.py'
 src = MODELS_PY.read_text(encoding='utf-8')
 agent_src = AGENT_SESSIONS_PY.read_text(encoding='utf-8')
 combined_src = src + "\n" + agent_src
+def _exercise_cli_error(monkeypatch, caplog, tmp_path):
+    db_path = tmp_path / "state.db"
 
+    def fail_load(*_args, **_kwargs):
+        raise RuntimeError("schema exploded")
 
-def _get_cli_sessions_source() -> str:
-    match = re.search(r"^def get_cli_sessions\(", src, re.M)
-    assert match is not None, "get_cli_sessions() definition not found"
-    func_start = match.start()
-    func_end = src.find("\ndef ", func_start + 1)
-    return src[func_start:func_end] if func_end != -1 else src[func_start:]
+    monkeypatch.setattr(models, "_cli_sessions_cache_ttl_seconds", lambda: 0)
+    monkeypatch.setattr(
+        models,
+        "_resolve_cli_sessions_context",
+        lambda _source=None, **_kwargs: (tmp_path, db_path, None, ("issue-634",)),
+    )
+    monkeypatch.setattr(models, "_load_cli_sessions_uncached", fail_load)
+    caplog.set_level("WARNING", logger="api.models")
+    result = models.get_cli_sessions()
+    return result, db_path, caplog.text
 
 
 class TestCliSessionsErrorSurface:
@@ -44,30 +53,20 @@ class TestCliSessionsErrorSurface:
         """Warning message must suggest upgrading hermes-agent."""
         assert "Upgrade hermes-agent" in combined_src or "upgrade hermes-agent" in combined_src.lower()
 
-    def test_exception_path_logs_warning(self):
+    def test_exception_path_logs_warning(self, monkeypatch, caplog, tmp_path):
         """The except clause must call logger.warning, not silently pass."""
-        func_body = _get_cli_sessions_source()
-        assert "warning(" in func_body, \
-            "get_cli_sessions() exception handler must call logging.warning()"
+        _result, _db_path, log_text = _exercise_cli_error(monkeypatch, caplog, tmp_path)
+        assert "get_cli_sessions() failed" in log_text
 
-    def test_exception_path_includes_db_path(self):
+    def test_exception_path_includes_db_path(self, monkeypatch, caplog, tmp_path):
         """The warning must include the db_path for diagnosability."""
-        func_body = _get_cli_sessions_source()
-        # db_path should appear in the warning call
-        warning_pos = func_body.find("warning(")
-        warning_block = func_body[warning_pos:warning_pos + 300]
-        assert "db_path" in warning_block, \
-            "Warning must include db_path so admins can find the problematic database"
+        _result, db_path, log_text = _exercise_cli_error(monkeypatch, caplog, tmp_path)
+        assert str(db_path) in log_text
 
-    def test_still_returns_empty_on_error(self):
+    def test_still_returns_empty_on_error(self, monkeypatch, caplog, tmp_path):
         """Function must still return [] after logging (graceful degradation)."""
-        # After the warning, it should return cli_sessions (the empty list) not raise
-        func_body = _get_cli_sessions_source()
-        # Must have a 'return' after the warning call
-        warning_pos = func_body.find("_cli_err:")
-        after_warning = func_body[warning_pos:warning_pos + 400]
-        assert "return" in after_warning, \
-            "Function must return after the warning (not raise)"
+        result, _db_path, _log_text = _exercise_cli_error(monkeypatch, caplog, tmp_path)
+        assert result == []
 
     def test_source_column_check_before_sql_query(self):
         """Schema check must happen before the main SQL SELECT."""
