@@ -5,29 +5,22 @@ configured same-origin script/style injection plus sandboxed static file serving
 It is disabled by default and never executes or fetches third-party URLs.
 """
 
-import html
-import http.client
 import json
 import math
 import logging
 import os
 import re
-import socket
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import unquote, urlsplit
-import hashlib
-import io
-import time
-import zipfile
-from urllib.request import (
-    HTTPRedirectHandler,
-    HTTPSHandler,
-    build_opener,
-)
+from urllib.parse import urlsplit
 
-from api.helpers import _security_headers, j
+from api.helpers import _security_headers, j  # noqa: F401 - late-bound part dependencies
+from api.extensions_parts.facade import bind_extensions_api
+
+
+bind_extensions_api(lambda: sys.modules[__name__])
 
 _log = logging.getLogger(__name__)
 
@@ -74,6 +67,55 @@ class ExtensionSidecarProxyError(Exception):
         self.status = status
 
 
+from api.extensions_parts.gallery import (  # noqa: E402, F401 - compatibility exports
+    _GALLERY_INSTALL_STATE_FILENAME,
+    _MAX_INSTALL_MANIFEST_BYTES,
+    _MAX_GALLERY_INSTALLED_IDS,
+    _MAX_ZIP_DOWNLOAD_BYTES,
+    _REGISTRY_URL,
+    _REGISTRY_ALLOWED_DOWNLOAD_HOSTS,
+    _REGISTRY_CACHE,
+    _REGISTRY_LOCK,
+    _REGISTRY_TTL_SECONDS,
+    _AllowlistRedirectHandler,
+    _connect_ipv4_first,
+    _IPv4FirstHTTPSConnection,
+    _IPv4FirstHTTPSHandler,
+    _build_gallery_opener,
+    _safe_download,
+    _install_manifest_file,
+    _empty_install_manifest,
+    _load_install_manifest,
+    _write_install_manifest,
+    install_extension,
+    uninstall_extension,
+    get_extension_registry,
+)
+from api.extensions_parts.security import (  # noqa: E402, F401 - compatibility exports
+    _fully_unquote_path,
+    _is_safe_relative_path,
+    _is_safe_asset_url,
+    _warn_rejected_url,
+    _append_safe_asset_url,
+    _read_url_list,
+    inject_extension_tags,
+    _not_found,
+    serve_extension_static,
+)
+from api.extensions_parts.sidecars import (  # noqa: E402, F401 - compatibility exports
+    _normalize_loopback_sidecar_origin,
+    _normalize_sidecar_health_path,
+    _is_valid_sidecar_proxy_path,
+    _sidecar_from_manifest_entry,
+    _extension_sidecar_proxy_path,
+    _sidecar_proxy_public_status,
+    _extension_sidecar_records,
+    _normalize_sidecar_proxy_path,
+    set_extension_sidecar_proxy_consent,
+    resolve_extension_sidecar_proxy_target,
+)
+
+
 EXTENSION_ROUTE_PREFIX = "/extensions/"
 _EXTENSION_DIR_ENV = "HERMES_WEBUI_EXTENSION_DIR"
 _EXTENSION_SCRIPT_URLS_ENV = "HERMES_WEBUI_EXTENSION_SCRIPT_URLS"
@@ -92,108 +134,6 @@ _EXTENSION_SETTINGS_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,63}$")
 _EXTENSION_STATE_WARNING_SOURCE = "extension_state"
 _EXTENSION_STATE_LOCK = threading.Lock()
 _EXTENSION_SETTING_TYPES = {"boolean", "string", "number", "integer", "enum"}
-
-_GALLERY_INSTALL_STATE_FILENAME = "extension-install-manifest.json"
-_MAX_INSTALL_MANIFEST_BYTES = 128 * 1024
-_MAX_GALLERY_INSTALLED_IDS = 256
-_MAX_ZIP_DOWNLOAD_BYTES = 32 * 1024 * 1024
-_REGISTRY_URL = "https://hermes-webui.github.io/hermes-webui-extensions/registry.json"
-_REGISTRY_ALLOWED_DOWNLOAD_HOSTS = frozenset({"hermes-webui.github.io"})
-_REGISTRY_CACHE: dict = {}
-_REGISTRY_LOCK = threading.Lock()
-_REGISTRY_TTL_SECONDS = 300
-
-
-class _AllowlistRedirectHandler(HTTPRedirectHandler):
-    """Reject redirects to hosts not in the download allowlist."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        parsed = urlsplit(newurl)
-        if parsed.scheme != "https" or parsed.hostname not in _REGISTRY_ALLOWED_DOWNLOAD_HOSTS:
-            raise ExtensionInstallError("Download redirected to disallowed host")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def _connect_ipv4_first(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None):
-    """Connect to *address*, preferring IPv4 to avoid dead-route stalls.
-
-    Some networks advertise IPv6 routes (router advertisements, tunnel brokers)
-    that do not actually reach the public internet.  ``socket.create_connection``
-    follows the OS address ordering, which typically tries IPv6 first; each dead
-    address stalls for the full TCP timeout (~75–130 s) before falling back to
-    IPv4.  This makes gallery installs and registry fetches appear to hang until
-    the browser or curl timeout kills them.
-
-    We iterate families in IPv4→IPv6 order so the common case (IPv4 works, IPv6
-    is a broken route) completes instantly.  IPv6 is still tried as a fallback so
-    IPv6-only networks are unaffected.
-
-    Signature matches ``socket.create_connection`` including the
-    ``_GLOBAL_DEFAULT_TIMEOUT`` sentinel so callers that rely on the stdlib
-    default-timeout behaviour are not broken.
-    """
-    host, port = address
-    if timeout is socket._GLOBAL_DEFAULT_TIMEOUT:
-        timeout = socket.getdefaulttimeout()
-    last_error: OSError | None = None
-    for family in (socket.AF_INET, socket.AF_INET6):
-        try:
-            infos = socket.getaddrinfo(host, port, family, socket.SOCK_STREAM)
-        except socket.gaierror:
-            continue
-        for _fam, socktype, proto, _canon, sockaddr in infos:
-            sock = None
-            try:
-                sock = socket.socket(_fam, socktype, proto)
-                if timeout is not None:
-                    sock.settimeout(timeout)
-                if source_address is not None:
-                    sock.bind(source_address)
-                sock.connect(sockaddr)
-                return sock
-            except OSError as exc:
-                last_error = exc
-                if sock is not None:
-                    sock.close()
-    if last_error is not None:
-        raise last_error
-    raise OSError(f"Could not connect to {host}:{port}")
-
-
-class _IPv4FirstHTTPSConnection(http.client.HTTPSConnection):
-    """HTTPS connection that resolves IPv4 addresses before IPv6.
-
-    Overrides the class-level ``_create_connection`` that
-    ``HTTPConnection.connect()`` calls — the stdlib extension point designed for
-    exactly this kind of per-class customisation (added in Python 3.9,
-    bpo-37830).  No global state is mutated, so the change is thread-safe under
-    ``ThreadingHTTPServer``.
-    """
-
-    _create_connection = staticmethod(_connect_ipv4_first)
-
-
-class _IPv4FirstHTTPSHandler(HTTPSHandler):
-    """HTTPS handler that builds IPv4-first connections for gallery downloads."""
-
-    def https_open(self, req):
-        return self.do_open(_IPv4FirstHTTPSConnection, req)
-
-
-def _build_gallery_opener():
-    """Opener with IPv4-first downloads and redirect-host allowlist."""
-    return build_opener(_IPv4FirstHTTPSHandler, _AllowlistRedirectHandler)
-
-
-def _safe_download(url: str, max_bytes: int, timeout: int = 30) -> bytes:
-    """Download from an allowlisted host, rejecting cross-host redirects."""
-    opener = _build_gallery_opener()
-    resp = opener.open(url, timeout=timeout)
-    try:
-        return resp.read(max_bytes + 1)
-    finally:
-        resp.close()
-
 
 _EXTENSION_MIME = {
     "css": "text/css",
@@ -481,113 +421,6 @@ def _write_extension_state(state: Dict[str, Any]) -> None:
             pass
 
 
-def _fully_unquote_path(path: str) -> str:
-    """Decode percent-encoding until stable so encoded dot-segments cannot hide.
-
-    Iterates up to 10 times so even quadruple-encoded inputs like
-    ``%2525252e%2525252e`` collapse to literal ``..`` and are rejected by
-    the segment-level safety check downstream. URL strings stabilize in
-    fewer than 5 iterations in practice; the cap is defensive.
-    """
-    previous = path
-    for _ in range(10):
-        current = unquote(previous)
-        if current == previous:
-            return current
-        previous = current
-    return previous
-
-
-def _is_safe_asset_url(value: str) -> bool:
-    """Allow only same-origin extension/static asset URLs.
-
-    External schemes, protocol-relative URLs, fragments, arbitrary API paths, and
-    encoded traversal are rejected so enabling extensions does not require
-    loosening the CSP.
-    """
-    if not value or any(ch in value for ch in ('\x00', '\r', '\n', '"', "'", "<", ">", "\\")):
-        return False
-    parsed = urlsplit(value)
-    if parsed.scheme or parsed.netloc or parsed.fragment:
-        return False
-
-    decoded_path = _fully_unquote_path(parsed.path)
-    if not any(decoded_path.startswith(prefix) for prefix in _ALLOWED_ASSET_PREFIXES):
-        return False
-
-    for prefix in _ALLOWED_ASSET_PREFIXES:
-        if decoded_path.startswith(prefix):
-            return _is_safe_relative_path(decoded_path[len(prefix) :])
-    return False
-
-
-def _warn_rejected_url(value: str, source: str) -> None:
-    if value in _warned_urls:
-        return
-    _warned_urls.add(value)
-    _log.warning(
-        "Rejected extension URL %r from %s (not a same-origin "
-        "/extensions/ or /static/ path, or contains unsafe chars)",
-        value, source,
-    )
-
-
-def _append_safe_asset_url(
-    urls: List[str],
-    value: str,
-    source: str,
-    *,
-    dedupe: bool = True,
-    diagnostics: Optional[Dict[str, Any]] = None,
-) -> bool:
-    """Append a validated URL while preserving order and the global cap.
-
-    Returns False when the caller should stop accumulating entries for this list.
-    Manifest paths dedupe by default, while env-only lists preserve their legacy
-    behavior unless they are appending after manifest-provided assets.
-    """
-    value = value.strip() if isinstance(value, str) else ""
-    if not value:
-        return True
-    if not _is_safe_asset_url(value):
-        _warn_rejected_url(value, source)
-        _add_diagnostic_warning(diagnostics, "asset_url_rejected", source)
-        return True
-    if dedupe and value in urls:
-        return True
-    if len(urls) >= _MAX_URL_LIST:
-        if source not in _warned_urls:
-            _warned_urls.add(source)
-            _log.warning(
-                "Extension URL list %s truncated at %d entries",
-                source, _MAX_URL_LIST,
-            )
-        _add_diagnostic_warning(diagnostics, "asset_url_list_truncated", source)
-        return False
-    urls.append(value)
-    return True
-
-
-def _read_url_list(
-    env_name: str,
-    existing: Optional[List[str]] = None,
-    *,
-    diagnostics: Optional[Dict[str, Any]] = None,
-) -> List[str]:
-    raw = os.getenv(env_name, "")
-    urls = list(existing or [])
-    # Preserve legacy env-only behavior: duplicate env URLs injected twice before
-    # manifests existed. When a manifest seeds the list, dedupe appended env URLs
-    # so bundle manifests and explicit overrides do not double-load an asset.
-    dedupe = existing is not None
-    for item in raw.split(","):
-        if not _append_safe_asset_url(
-            urls, item, env_name, dedupe=dedupe, diagnostics=diagnostics
-        ):
-            break
-    return urls
-
-
 def _manifest_path_with_status(root: Path) -> Tuple[Optional[Path], str]:
     raw = os.getenv(_EXTENSION_MANIFEST_ENV, "").strip()
     if not raw:
@@ -777,137 +610,6 @@ def _sanitize_settings_schema(entry: Dict[str, object]) -> List[Dict[str, object
             field["options"] = options
         fields.append(field)
     return fields
-
-
-def _normalize_loopback_sidecar_origin(value: object) -> Optional[str]:
-    """Return a canonical loopback origin or None when unsafe.
-
-    Only browser-addressable loopback HTTP(S) origins are accepted. The returned
-    value is rebuilt from parsed components so rejected raw input is never echoed
-    into diagnostics.
-    """
-    if not isinstance(value, str):
-        return None
-    origin = value.strip()
-    if not origin or any(
-        ch in origin for ch in ("\x00", "\r", "\n", '"', "'", "<", ">", "\\")
-    ):
-        return None
-    parsed = urlsplit(origin)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        return None
-    if parsed.username or parsed.password:
-        return None
-    if parsed.path or parsed.query or parsed.fragment:
-        return None
-    host = (parsed.hostname or "").lower()
-    if host not in _LOOPBACK_SIDECAR_HOSTS:
-        return None
-    try:
-        port = parsed.port
-    except ValueError:
-        return None
-    display_host = f"[{host}]" if ":" in host else host
-    return f"{parsed.scheme}://{display_host}{':' + str(port) if port is not None else ''}"
-
-
-def _normalize_sidecar_health_path(value: object) -> Optional[str]:
-    """Return a safe sidecar health path, or None when unsafe.
-
-    Health paths are same-origin paths relative to the validated sidecar origin.
-    Queries are rejected even though they are not cross-origin: health checks are
-    diagnostics, and query strings often accidentally carry tokens.
-    """
-    if not isinstance(value, str):
-        return None
-    path = value.strip()
-    if not path or not path.startswith("/") or path.startswith("//"):
-        return None
-    if any(ch in path for ch in ("\x00", "\r", "\n", '"', "'", "<", ">", "\\")):
-        return None
-    parsed = urlsplit(path)
-    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
-        return None
-    decoded_path = _fully_unquote_path(parsed.path)
-    if any(ch in decoded_path for ch in ("\x00", "\r", "\n", '"', "'", "<", ">", "\\")):
-        return None
-    # #4612 (Codex gate): the raw query/fragment ban above runs BEFORE percent-
-    # decoding, so an encoded delimiter (e.g. "/health%3Ftoken=abc" -> "?token=abc"
-    # or "/health%23frag" -> "#frag") would survive into the probed URL despite the
-    # documented query/fragment ban. Re-reject "?" and "#" on the decoded path.
-    if any(ch in decoded_path for ch in ("?", "#")):
-        return None
-    if any(ch.isspace() for ch in decoded_path):
-        return None
-    if not decoded_path.startswith("/") or decoded_path.startswith("//"):
-        return None
-    segments = decoded_path.split("/")[1:]
-    if not segments:
-        return None
-    for segment in segments:
-        if not segment or segment in (".", ".."):
-            return None
-    return decoded_path
-
-
-def _is_valid_sidecar_proxy_path(decoded_path: str) -> bool:
-    if any(ch in decoded_path for ch in ("?", "#")):
-        return False
-    if any(ch.isspace() for ch in decoded_path):
-        return False
-    if not decoded_path.startswith("/") or decoded_path.startswith("//"):
-        return False
-    segments = decoded_path.split("/")[1:]
-    if not segments:
-        return False
-    for segment in segments:
-        if not segment or segment in (".", ".."):
-            return False
-    return True
-
-
-def _sidecar_from_manifest_entry(
-    entry: Dict[str, object], diagnostics: Optional[Dict[str, Any]] = None
-) -> Optional[Dict[str, str]]:
-    raw = entry.get("sidecar")
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        _add_diagnostic_warning(diagnostics, "sidecar_invalid", _SIDECAR_WARNING_SOURCE)
-        return None
-    if raw.get("type") != "loopback":
-        _add_diagnostic_warning(
-            diagnostics, "sidecar_type_unsupported", _SIDECAR_WARNING_SOURCE
-        )
-        return None
-    origin = _normalize_loopback_sidecar_origin(raw.get("origin"))
-    if origin is None:
-        _add_diagnostic_warning(
-            diagnostics, "sidecar_origin_rejected", _SIDECAR_WARNING_SOURCE
-        )
-        return None
-    if "health_path" in raw:
-        health_path = _normalize_sidecar_health_path(raw.get("health_path"))
-        if health_path is None:
-            # Missing health_path defaults to /health; an explicitly invalid path
-            # rejects the sidecar so the browser does not probe a declaration the
-            # administrator needs to fix.
-            _add_diagnostic_warning(
-                diagnostics, "sidecar_health_path_rejected", _SIDECAR_WARNING_SOURCE
-            )
-            return None
-    else:
-        health_path = _DEFAULT_SIDECAR_HEALTH_PATH
-    sidecar_id = _manifest_entry_text(entry, "id")
-    name = _manifest_entry_text(entry, "name")
-    return {
-        "id": sidecar_id,
-        "name": name,
-        "type": "loopback",
-        "origin": origin,
-        "health_path": health_path,
-        "health_url": f"{origin}{health_path}",
-    }
 
 
 def _manifest_extension_entries(manifest: object) -> List[Tuple[str, int, Dict[str, object]]]:
@@ -1148,97 +850,6 @@ def _manifest_extension_state(
         "manifest_disabled_ids": manifest_disabled_ids,
     }
 
-
-def _extension_sidecar_proxy_path(extension_id: str) -> str:
-    return f"/api/extensions/{extension_id}/sidecar/"
-
-
-def _sidecar_proxy_public_status(
-    extension_id: str,
-    origin: str,
-    approved_origin: Optional[str],
-    *,
-    available: bool,
-) -> Dict[str, Any]:
-    consented = bool(available and approved_origin == origin)
-    origin_changed = bool(available and approved_origin and approved_origin != origin)
-    return {
-        "available": available,
-        "consented": consented,
-        "consent_required": bool(available and not consented),
-        "path": _extension_sidecar_proxy_path(extension_id),
-        "origin_changed": origin_changed,
-    }
-
-
-def _extension_sidecar_records(
-    manifest: object,
-    disabled_ids: Optional[Set[str]] = None,
-    state: Optional[Dict[str, Any]] = None,
-    diagnostics: Optional[Dict[str, Any]] = None,
-) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
-    disabled_ids = disabled_ids or set()
-    consent_map = {}
-    if isinstance(state, dict) and isinstance(state.get("sidecar_proxy_consents"), dict):
-        consent_map = state["sidecar_proxy_consents"]
-    id_counts: Dict[str, int] = {}
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for _source, _index, entry in _manifest_extension_entries(manifest):
-        raw_id = _manifest_entry_text(entry, "id")
-        if not _valid_extension_id(raw_id):
-            continue
-        ext_id = raw_id.strip()
-        id_counts[ext_id] = id_counts.get(ext_id, 0) + 1
-        if ext_id in by_id:
-            continue
-        manifest_enabled = entry.get("enabled", True) is not False
-        user_disabled = ext_id in disabled_ids
-        effective_enabled = manifest_enabled and not user_disabled
-        sidecar = _sidecar_from_manifest_entry(entry, diagnostics) if effective_enabled else None
-        approved_origin = consent_map.get(ext_id) if isinstance(consent_map.get(ext_id), str) else None
-        by_id[ext_id] = {
-            "id": ext_id,
-            "name": _manifest_entry_text(entry, "name"),
-            "manifest_enabled": manifest_enabled,
-            "user_disabled": user_disabled,
-            "effective_enabled": effective_enabled,
-            "sidecar": sidecar,
-            "approved_origin": approved_origin,
-        }
-    records: List[Dict[str, Any]] = []
-    for ext_id, item in by_id.items():
-        sidecar = item.get("sidecar")
-        if sidecar is None:
-            continue
-        available = bool(item["effective_enabled"] and id_counts.get(ext_id, 0) == 1)
-        proxy = _sidecar_proxy_public_status(
-            ext_id,
-            sidecar["origin"],
-            item.get("approved_origin"),
-            available=available,
-        )
-        item["duplicate_id"] = id_counts.get(ext_id, 0) > 1
-        item["proxy"] = proxy
-        if len(records) < _MAX_URL_LIST:
-            records.append({**sidecar, "proxy": proxy})
-        else:
-            _add_diagnostic_warning(diagnostics, "sidecar_list_truncated", _SIDECAR_WARNING_SOURCE)
-            break
-    return records, by_id
-
-
-def _normalize_sidecar_proxy_path(value: object) -> Optional[str]:
-    if value is None:
-        return "/"
-    raw = str(value)
-    if raw == "":
-        return "/"
-    if raw.startswith("/"):
-        return None
-    candidate = f"/{raw}"
-    if not _is_valid_sidecar_proxy_path(_fully_unquote_path(candidate)):
-        return None
-    return candidate
 
 def _extension_runtime_entries(
     manifest: object, disabled_ids: Optional[Set[str]] = None
@@ -1522,493 +1133,3 @@ def set_extension_user_enabled(extension_id: object, enabled: object) -> Dict[st
     # while blocking other toggles; a concurrent toggle may be reflected too,
     # which is fine because the UI re-renders from the current effective state.
     return get_extension_status()
-
-
-def set_extension_sidecar_proxy_consent(extension_id: object, approved: object) -> Dict[str, Any]:
-    """Persist or revoke proxy consent for the current sidecar origin."""
-    if not _valid_extension_id(extension_id):
-        raise ExtensionSidecarProxyError("Invalid extension id", status=400)
-    ext_id = str(extension_id).strip()
-    if not isinstance(approved, bool):
-        raise ExtensionSidecarProxyError("approved must be a boolean", status=400)
-    root = _extension_root()
-    if root is None:
-        raise ExtensionSidecarProxyError("Extensions are not configured", status=404)
-    with _EXTENSION_STATE_LOCK:
-        diagnostics = _new_diagnostics()
-        state = _load_extension_state(diagnostics)
-        disabled_ids = set(state.get("disabled_extensions") or [])
-        consent_map = dict(state.get("sidecar_proxy_consents") or {})
-        manifest, manifest_status = _load_manifest_with_status(root, diagnostics)
-        if manifest is None or not manifest_status.get("loaded", False):
-            raise ExtensionSidecarProxyError("Extension manifest is not loaded", status=409)
-        extension_state = _manifest_extension_state(
-            manifest,
-            disabled_ids,
-            diagnostics,
-            consent_ids=set(consent_map.keys()),
-        )
-        known_ids: Set[str] = extension_state["known_ids"]
-        if ext_id not in known_ids:
-            raise ExtensionSidecarProxyError("Extension not found", status=404)
-        _sidecars, by_id = _extension_sidecar_records(
-            manifest,
-            disabled_ids=disabled_ids,
-            state=state,
-            diagnostics=diagnostics,
-        )
-        item = by_id.get(ext_id) or {}
-        sidecar = item.get("sidecar")
-        proxy = item.get("proxy") or {}
-        if approved:
-            if sidecar is None or proxy.get("available") is not True:
-                raise ExtensionSidecarProxyError("Extension sidecar proxy is unavailable", status=409)
-            consent_map[ext_id] = sidecar["origin"]
-        else:
-            consent_map.pop(ext_id, None)
-        _write_extension_state(
-            {
-                "disabled_extensions": sorted(disabled_ids),
-                "sidecar_proxy_consents": {
-                    consent_ext_id: origin
-                    for consent_ext_id, origin in consent_map.items()
-                    if consent_ext_id in known_ids
-                },
-            }
-        )
-    return get_extension_status()
-
-
-def resolve_extension_sidecar_proxy_target(
-    extension_id: object,
-    proxy_path: object,
-    query: str = "",
-) -> Dict[str, Any]:
-    """Resolve the current approved sidecar proxy target for an extension."""
-    if not _valid_extension_id(extension_id):
-        raise ExtensionSidecarProxyError("Invalid extension id", status=400)
-    normalized_path = _normalize_sidecar_proxy_path(proxy_path)
-    if normalized_path is None:
-        raise ExtensionSidecarProxyError("Invalid sidecar proxy path", status=400)
-    ext_id = str(extension_id).strip()
-    root = _extension_root()
-    if root is None:
-        raise ExtensionSidecarProxyError("Extensions are not configured", status=404)
-    diagnostics = _new_diagnostics()
-    state = _load_extension_state(diagnostics)
-    disabled_ids = set(state.get("disabled_extensions") or [])
-    manifest, manifest_status = _load_manifest_with_status(root, diagnostics)
-    if manifest is None or not manifest_status.get("loaded", False):
-        raise ExtensionSidecarProxyError("Extension manifest is not loaded", status=409)
-    consent_ids = set((state.get("sidecar_proxy_consents") or {}).keys())
-    extension_state = _manifest_extension_state(
-        manifest,
-        disabled_ids,
-        diagnostics,
-        consent_ids=consent_ids,
-    )
-    if ext_id not in extension_state["known_ids"]:
-        raise ExtensionSidecarProxyError("Extension not found", status=404)
-    _sidecars, by_id = _extension_sidecar_records(
-        manifest,
-        disabled_ids=disabled_ids,
-        state=state,
-        diagnostics=diagnostics,
-    )
-    item = by_id.get(ext_id) or {}
-    sidecar = item.get("sidecar")
-    proxy = item.get("proxy") or {}
-    if sidecar is None or proxy.get("available") is not True:
-        raise ExtensionSidecarProxyError("Extension sidecar proxy is unavailable", status=409)
-    if proxy.get("consented") is not True:
-        raise ExtensionSidecarProxyError("Extension sidecar proxy consent required", status=403)
-    upstream_url = f"{sidecar['origin']}{normalized_path}"
-    if query:
-        upstream_url = f"{upstream_url}?{query}"
-    return {
-        "extension_id": ext_id,
-        "origin": sidecar["origin"],
-        "proxy_path": proxy["path"],
-        "upstream_url": upstream_url,
-    }
-
-
-def _install_manifest_file() -> Path:
-    return _extension_state_dir() / _GALLERY_INSTALL_STATE_FILENAME
-
-
-def _empty_install_manifest() -> Dict[str, Any]:
-    return {"version": 1, "installed": {}}
-
-
-def _load_install_manifest() -> Dict[str, Any]:
-    """Load gallery install manifest, failing safe on any error."""
-    mfile = _install_manifest_file()
-    try:
-        if not mfile.exists() or not mfile.is_file():
-            return _empty_install_manifest()
-        with mfile.open("rb") as fh:
-            raw = fh.read(_MAX_INSTALL_MANIFEST_BYTES + 1)
-        if len(raw) > _MAX_INSTALL_MANIFEST_BYTES:
-            return _empty_install_manifest()
-        parsed = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError):
-        return _empty_install_manifest()
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("installed"), dict):
-        return _empty_install_manifest()
-    installed: Dict[str, Any] = {}
-    for ext_id, entry in parsed["installed"].items():
-        if not _valid_extension_id(ext_id):
-            continue
-        if not isinstance(entry, dict):
-            continue
-        files = entry.get("files", [])
-        if not isinstance(files, list):
-            continue
-        installed[ext_id] = {
-            "version": str(entry.get("version", "unknown")),
-            "files": [f for f in files if isinstance(f, str)],
-            "installed_at": str(entry.get("installed_at", "")),
-        }
-        if len(installed) >= _MAX_GALLERY_INSTALLED_IDS:
-            break
-    return {"version": 1, "installed": installed}
-
-
-def _write_install_manifest(manifest: Dict[str, Any]) -> None:
-    """Persist install manifest with atomic same-directory replace."""
-    target = _install_manifest_file()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-    data = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
-    try:
-        with tmp.open("wb") as fh:
-            fh.write(data)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, target)
-    finally:
-        try:
-            if tmp.exists():
-                tmp.unlink()
-        except OSError:
-            pass
-
-
-def install_extension(id: object, download_url: object, sha256: object) -> Dict[str, Any]:
-    """Download, verify, and extract a gallery extension."""
-    if not _valid_extension_id(id):
-        raise ExtensionInstallError("Invalid extension id")
-    ext_id = str(id).strip()
-    if not isinstance(download_url, str) or not download_url.startswith("https://"):
-        raise ExtensionInstallError("Invalid download URL")
-    parsed_url = urlsplit(download_url)
-    if parsed_url.hostname not in _REGISTRY_ALLOWED_DOWNLOAD_HOSTS:
-        raise ExtensionInstallError("Invalid download URL")
-    if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
-        raise ExtensionInstallError("Invalid sha256")
-    root = _writable_extension_root()
-    if root is None:
-        raise ExtensionInstallError("Extensions not configured", 404)
-    try:
-        raw_data = _safe_download(download_url, _MAX_ZIP_DOWNLOAD_BYTES)
-    except ExtensionInstallError:
-        raise
-    except Exception as exc:
-        raise ExtensionInstallError("Download failed", 502) from exc
-    if len(raw_data) > _MAX_ZIP_DOWNLOAD_BYTES:
-        raise ExtensionInstallError("Download too large")
-    if hashlib.sha256(raw_data).hexdigest() != sha256:
-        raise ExtensionInstallError("SHA-256 mismatch")
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(raw_data))
-    except zipfile.BadZipFile as exc:
-        raise ExtensionInstallError("Invalid zip archive") from exc
-    ext_dir = root / ext_id
-    member_names = zf.namelist()
-    total_uncompressed = sum(info.file_size for info in zf.infolist() if not info.is_dir())
-    if total_uncompressed > _MAX_ZIP_DOWNLOAD_BYTES * 10:
-        raise ExtensionInstallError("Archive uncompressed size exceeds limit")
-    file_members = [n for n in member_names if n and not n.endswith("/")]
-    if len(file_members) > 1024:
-        raise ExtensionInstallError("Archive contains too many files")
-    # Detect and strip a single top-level directory prefix matching the extension id.
-    # Registry artifacts root files under <id>/ (e.g. desktop-companion/manifest.json).
-    strip_prefix = ""
-    candidate = ext_id + "/"
-    if all(n.startswith(candidate) for n in file_members):
-        strip_prefix = candidate
-    def _stripped(name: str) -> str:
-        if strip_prefix and name.startswith(strip_prefix):
-            return name[len(strip_prefix):]
-        return name
-    root_resolved = root.resolve()
-    ext_dir_resolved = ext_dir.resolve()
-    for member_name in file_members:
-        decoded = _fully_unquote_path(_stripped(member_name))
-        if not decoded or not _is_safe_relative_path(decoded):
-            raise ExtensionInstallError("Unsafe archive member")
-        resolved = (ext_dir / decoded).resolve()
-        try:
-            resolved.relative_to(root_resolved)
-        except ValueError as exc:
-            raise ExtensionInstallError("Zip-slip detected") from exc
-        try:
-            resolved.relative_to(ext_dir_resolved)
-        except ValueError as exc:
-            raise ExtensionInstallError("Zip-slip detected") from exc
-    # Determine version from extension.json or manifest.json in zip
-    version = "unknown"
-    for vfile in ("extension.json", "manifest.json"):
-        candidate_name = strip_prefix + vfile if strip_prefix else vfile
-        if candidate_name in member_names:
-            try:
-                mdata = json.loads(zf.read(candidate_name).decode("utf-8"))
-                if isinstance(mdata, dict) and isinstance(mdata.get("version"), str):
-                    version = mdata["version"]
-                    break
-            except Exception:
-                pass
-    with _EXTENSION_STATE_LOCK:
-        ext_dir.mkdir(parents=True, exist_ok=True)
-        if ext_dir.is_symlink():
-            raise ExtensionInstallError("Extension directory is a symlink", 400)
-        rollback: List[Path] = []
-        try:
-            for member_name in file_members:
-                decoded = _fully_unquote_path(_stripped(member_name))
-                dest = (ext_dir / decoded).resolve()
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(zf.read(member_name))
-                rollback.append(dest)
-        except Exception as exc:
-            for path in rollback:
-                try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            try:
-                if ext_dir.exists() and not any(ext_dir.iterdir()):
-                    ext_dir.rmdir()
-            except OSError:
-                pass
-            raise ExtensionInstallError("Extraction failed", 500) from exc
-        try:
-            manifest = _load_install_manifest()
-            from datetime import datetime, timezone
-            rel_files = [p.relative_to(ext_dir_resolved).as_posix() for p in rollback]
-            manifest["installed"][ext_id] = {
-                "version": version,
-                "files": rel_files,
-                "installed_at": datetime.now(timezone.utc).isoformat(),
-            }
-            encoded = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
-            if len(encoded) > _MAX_INSTALL_MANIFEST_BYTES:
-                raise ExtensionInstallError("Install manifest would exceed size limit")
-            _write_install_manifest(manifest)
-        except ExtensionInstallError:
-            for path in rollback:
-                try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            try:
-                if ext_dir.exists() and not any(ext_dir.iterdir()):
-                    ext_dir.rmdir()
-            except OSError:
-                pass
-            raise
-        except Exception as exc:
-            for path in rollback:
-                try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            try:
-                if ext_dir.exists() and not any(ext_dir.iterdir()):
-                    ext_dir.rmdir()
-            except OSError:
-                pass
-            raise ExtensionInstallError("Failed to record install", 500) from exc
-    return {"installed": True, "id": ext_id, "version": version}
-
-
-def uninstall_extension(id: object) -> Dict[str, Any]:
-    """Remove a gallery-installed extension's files and manifest entry."""
-    if not _valid_extension_id(id):
-        raise ExtensionInstallError("Invalid extension id")
-    ext_id = str(id).strip()
-    root = _extension_root()
-    if root is None:
-        raise ExtensionInstallError("Extensions not configured", 404)
-    with _EXTENSION_STATE_LOCK:
-        manifest = _load_install_manifest()
-        entry = manifest["installed"].get(ext_id)
-        if entry is None:
-            raise ExtensionInstallError("Extension not installed", 404)
-        ext_dir = root / ext_id
-        for rel_path in entry.get("files", []):
-            if not _is_safe_relative_path(rel_path):
-                continue
-            target = (ext_dir / rel_path).resolve()
-            try:
-                target.relative_to(ext_dir.resolve())
-            except ValueError:
-                continue
-            try:
-                target.unlink(missing_ok=True)
-            except OSError:
-                pass
-        # Remove empty directories bottom-up
-        if ext_dir.exists():
-            for dirpath in sorted(
-                (d for d in ext_dir.rglob("*") if d.is_dir()),
-                key=lambda p: len(p.parts),
-                reverse=True,
-            ):
-                try:
-                    if not any(dirpath.iterdir()):
-                        dirpath.rmdir()
-                except OSError:
-                    pass
-            try:
-                if not any(ext_dir.iterdir()):
-                    ext_dir.rmdir()
-            except OSError:
-                pass
-        del manifest["installed"][ext_id]
-        _write_install_manifest(manifest)
-    return {"uninstalled": True, "id": ext_id}
-
-
-def get_extension_registry() -> Dict[str, Any]:
-    """Fetch the extension registry with a 5-minute TTL cache."""
-    with _REGISTRY_LOCK:
-        now = time.monotonic()
-        cached = _REGISTRY_CACHE.get("data")
-        cached_at = _REGISTRY_CACHE.get("fetched_at", 0.0)
-        if cached is not None and (now - cached_at) < _REGISTRY_TTL_SECONDS:
-            return {"entries": cached}
-        try:
-            opener = _build_gallery_opener()
-            raw = opener.open(_REGISTRY_URL, timeout=10).read(2 * 1024 * 1024)
-            data = json.loads(raw.decode("utf-8"))
-            if isinstance(data, list):
-                entries = data
-            elif isinstance(data, dict):
-                entries = data.get("extensions") or data.get("entries") or []
-            else:
-                entries = []
-            if not isinstance(entries, list):
-                entries = []
-            _REGISTRY_CACHE["data"] = entries
-            _REGISTRY_CACHE["fetched_at"] = now
-            return {"entries": entries}
-        except Exception:
-            return {"entries": [], "error": "registry_unavailable"}
-
-
-def inject_extension_tags(index_html: str) -> str:
-    """Inject configured extension tags into the app shell.
-
-    Tags are inserted only when the extension directory is enabled. URLs are
-    escaped even though they are already validated, keeping the renderer robust
-    if validation rules evolve later.
-    """
-    config = get_extension_config()
-    if not config["enabled"]:
-        return index_html
-
-    result = index_html
-    stylesheet_tags = [
-        '<link rel="stylesheet" href="{}">'.format(html.escape(url, quote=True))
-        for url in config["stylesheet_urls"]
-    ]
-    script_tags = [
-        '<script src="{}" defer></script>'.format(html.escape(url, quote=True))
-        for url in config["script_urls"]
-    ]
-    runtime_config = {
-        "extensions": config.get("extensions", []),
-    }
-    runtime_json = json.dumps(runtime_config, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
-    runtime_tag = (
-        "<script>window.__HERMES_EXTENSION_CONFIG__={};"
-        "if(window.HermesExtensionSettings)window.HermesExtensionSettings.primeFromStatus(window.__HERMES_EXTENSION_CONFIG__);"
-        "</script>"
-    ).format(runtime_json)
-
-    if stylesheet_tags:
-        head_marker = "</head>"
-        block = "\n".join(stylesheet_tags) + "\n"
-        if head_marker in result:
-            result = result.replace(head_marker, block + head_marker, 1)
-        else:
-            result = block + result
-
-    if runtime_config["extensions"] or script_tags:
-        body_marker = "</body>"
-        block = runtime_tag + "\n"
-        if script_tags:
-            block += "\n".join(script_tags) + "\n"
-        if body_marker in result:
-            result = result.replace(body_marker, block + body_marker, 1)
-        else:
-            result = result + "\n" + block
-
-    return result
-
-
-def _is_safe_relative_path(rel: str) -> bool:
-    if not rel or "\x00" in rel or "\\" in rel:
-        return False
-    for segment in rel.split("/"):
-        if not segment or segment in (".", "..") or segment.startswith("."):
-            return False
-    return True
-
-
-def _not_found(handler) -> bool:
-    j(handler, {"error": "not found"}, status=404)
-    return True
-
-
-def serve_extension_static(handler, parsed) -> bool:
-    """Serve a file from the configured extension directory.
-
-    The function always returns True for /extensions/* requests: either a file
-    response or a 404. It never reveals why a request failed, which avoids
-    leaking local paths or extension configuration details.
-    """
-    root = _extension_root()
-    if root is None:
-        return _not_found(handler)
-
-    rel = unquote(parsed.path[len(EXTENSION_ROUTE_PREFIX) :])
-    if not _is_safe_relative_path(rel):
-        return _not_found(handler)
-
-    static_file = (root / rel).resolve()
-    try:
-        static_file.relative_to(root)
-    except ValueError:
-        return _not_found(handler)
-
-    if not static_file.exists() or not static_file.is_file():
-        return _not_found(handler)
-
-    ct = _EXTENSION_MIME.get(static_file.suffix.lower().lstrip("."), "text/plain")
-    ct_header = "{}; charset=utf-8".format(ct) if ct in _TEXT_MIME_TYPES else ct
-    try:
-        raw = static_file.read_bytes()
-    except OSError:
-        return _not_found(handler)
-
-    handler.send_response(200)
-    handler.send_header("Content-Type", ct_header)
-    handler.send_header("Cache-Control", "no-store")
-    handler.send_header("Content-Length", str(len(raw)))
-    _security_headers(handler)
-    handler.end_headers()
-    handler.wfile.write(raw)
-    return True
