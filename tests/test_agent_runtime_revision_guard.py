@@ -539,19 +539,19 @@ def test_git_commit_message_stale_runtime_returns_typed_409(
 ):
     """Commit-message generation must preserve the stale-runtime contract."""
     from api import routes
-    from api import workspace_git
+    from api import workspace as workspace_api
 
     session = types.SimpleNamespace(workspace=str(tmp_path))
     monkeypatch.setattr(routes, "require", lambda _body, *keys: None)
     monkeypatch.setattr(routes, "get_session", lambda _sid: session)
     monkeypatch.setattr(routes, "_git_paths_from_body", lambda _body: ["selected.py"])
     monkeypatch.setattr(
-        workspace_git,
+        workspace_api,
         "staged_commit_message_prompt",
         lambda _workspace: {"system_prompt": "system", "user_prompt": "user"},
     )
     monkeypatch.setattr(
-        workspace_git,
+        workspace_api,
         "selected_commit_message_prompt",
         lambda _workspace, _paths: {
             "system_prompt": "system",

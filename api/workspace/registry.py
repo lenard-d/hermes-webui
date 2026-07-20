@@ -1,9 +1,8 @@
-"""Hermes Web UI workspace registry and compatibility interface.
+"""Workspace identity, profile-scoped registry, and trust resolution.
 
 Workspace lists and last-used workspace are stored per profile. Filesystem
-trust checks, descriptor-anchored operations, read-only browsing, escape grants,
-and Git summaries live in focused workspace modules and are re-exported here so
-existing callers keep one stable import seam.
+trust policy is applied through the path-safety module before a registered
+workspace becomes an active file or Git context.
 """
 
 import json
@@ -16,20 +15,10 @@ from api.config import (
     WORKSPACES_FILE as _GLOBAL_WS_FILE,
     LAST_WORKSPACE_FILE as _GLOBAL_LW_FILE,
     DEFAULT_WORKSPACE as _BOOT_DEFAULT_WORKSPACE,
-    IMAGE_EXTS,
-    MAX_FILE_BYTES,
-    MD_EXTS,
 )
-from api.workspace_parts.path_safety import (
-    _DIR_FD_OK,
-    _O_DIRECTORY,
-    _O_NOFOLLOW,
-    _USER_TMP_PREFIXES,
-    _as_posix_path,
+from .path_safety import (
     _expanduser_path,
     _home_path,
-    _is_blocked_posix_workspace_path,
-    _is_blocked_system_path,
     _is_blocked_workspace_path,
     _is_within,
     _normalize_posix_path,
@@ -37,17 +26,6 @@ from api.workspace_parts.path_safety import (
     _resolve_path,
     _safe_resolve,
     _strip_surrounding_quotes,
-    _workspace_blocked_exact_roots,
-    _workspace_blocked_resolved_subtrees,
-    _workspace_blocked_roots,
-    make_anchored_dir,
-    open_anchored_create_fd,
-    open_anchored_fd,
-    open_anchored_write_fd,
-    rename_anchored,
-    rmtree_anchored,
-    safe_resolve_ws,
-    unlink_anchored,
 )
 
 logger = logging.getLogger(__name__)
@@ -662,19 +640,3 @@ def validate_workspace_to_add(path: str) -> Path:
         raise ValueError(f"Path points to a system directory: {candidate}")
 
     return candidate
-
-
-from api.workspace_parts.escape_navigation import (
-    EscapeAuthorizationExpiredError,
-    authorize_escape_target,
-    list_authorized_escape_dir,
-    raw_authorized_escape_target,
-    read_authorized_escape_file_content,
-    resolve_authorized_escape_request,
-)
-from api.workspace_parts.file_access import (
-    dir_signature,
-    list_dir,
-    read_file_content,
-)
-from api.workspace_parts.git_summary import _run_git, git_info_for_workspace

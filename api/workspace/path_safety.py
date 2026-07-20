@@ -12,8 +12,6 @@ import posixpath
 import shutil
 from pathlib import Path, PurePosixPath
 
-from api.workspace_parts.bindings import workspace_api
-
 
 def _expanduser_path(path: str | Path) -> Path:
     """Return *path* after shell-style home expansion.
@@ -49,19 +47,18 @@ def _expanduser_path(path: str | Path) -> Path:
 
 def _resolve_path(path: str | Path) -> Path:
     """Resolve *path* after env-aware home expansion, without raising."""
-    api = workspace_api()
-    return api._safe_resolve(api._expanduser_path(path))
+    return _safe_resolve(_expanduser_path(path))
 
 
 def _home_path() -> Path:
     """Return the current effective home directory with env-aware expansion."""
-    return workspace_api()._resolve_path("~")
+    return _resolve_path("~")
 
 
 def _as_posix_path(path: str | Path | None) -> PurePosixPath | None:
     if path in (None, ""):
         return None
-    raw = workspace_api()._strip_surrounding_quotes(str(path)).strip().replace('\\', '/')
+    raw = _strip_surrounding_quotes(str(path)).strip().replace('\\', '/')
     # Reject embedded null bytes here rather than letting them survive normpath
     # and crash later at .resolve() with an uncaught ValueError (surfaces as a
     # 500). Fail-closed: treat as an invalid path.
@@ -81,7 +78,7 @@ def _posix_is_within(path: PurePosixPath, root: PurePosixPath) -> bool:
 
 
 def _normalize_posix_path(path: str | Path | None) -> str | None:
-    candidate = workspace_api()._as_posix_path(path)
+    candidate = _as_posix_path(path)
     if candidate is None:
         return None
     return candidate.as_posix()
@@ -148,7 +145,7 @@ def _workspace_blocked_roots() -> tuple[Path, ...]:
     _seen: set[Path] = set()
     _out: list[Path] = []
     for _p in _raw:
-        for _form in (Path(_p), workspace_api()._safe_resolve(Path(_p))):
+        for _form in (Path(_p), _safe_resolve(Path(_p))):
             if _form not in _seen:
                 _seen.add(_form)
                 _out.append(_form)
@@ -157,8 +154,7 @@ def _workspace_blocked_roots() -> tuple[Path, ...]:
 
 def _is_blocked_posix_workspace_path(raw_path: str | Path | None) -> bool:
     """Detect blocked POSIX-style system roots even on non-POSIX hosts."""
-    api = workspace_api()
-    candidate = api._as_posix_path(raw_path)
+    candidate = _as_posix_path(raw_path)
     if candidate is None:
         return False
     if candidate == PurePosixPath('/'):
@@ -170,7 +166,7 @@ def _is_blocked_posix_workspace_path(raw_path: str | Path | None) -> bool:
         PurePosixPath('/private/var/tmp'),
     )
     for tmp in carveouts:
-        if api._posix_is_within(candidate, tmp):
+        if _posix_is_within(candidate, tmp):
             return False
     blocked_roots = (
         PurePosixPath('/etc'),
@@ -191,7 +187,7 @@ def _is_blocked_posix_workspace_path(raw_path: str | Path | None) -> bool:
         PurePosixPath('/private/var'),
     )
     for blocked in blocked_roots:
-        if api._posix_is_within(candidate, blocked):
+        if _posix_is_within(candidate, blocked):
             return True
     return False
 
@@ -203,18 +199,17 @@ def _is_blocked_system_path(candidate: Path) -> bool:
     nominally under ``/var`` (``/var/folders`` on macOS, ``/var/tmp`` on
     Linux/macOS) remain valid workspace candidates and reachable file targets.
     """
-    api = workspace_api()
-    for tmp in api._USER_TMP_PREFIXES:
-        if api._is_within(candidate, tmp):
+    for tmp in _USER_TMP_PREFIXES:
+        if _is_within(candidate, tmp):
             return False
-    for blocked in api._workspace_blocked_roots():
-        if api._is_within(candidate, blocked):
+    for blocked in _workspace_blocked_roots():
+        if _is_within(candidate, blocked):
             return True
     return False
 
 
 def _workspace_blocked_resolved_subtrees() -> tuple[Path, ...]:
-    roots = list(workspace_api()._workspace_blocked_roots()) + [Path('/private/etc')]
+    roots = list( _workspace_blocked_roots()) + [Path('/private/etc')]
     resolved: list[Path] = []
     for root in roots:
         try:
@@ -228,7 +223,7 @@ def _workspace_blocked_resolved_subtrees() -> tuple[Path, ...]:
 
 def _workspace_blocked_exact_roots() -> tuple[Path, ...]:
     roots = [Path('/'), Path('/private/var')]
-    for root in workspace_api()._workspace_blocked_roots():
+    for root in _workspace_blocked_roots():
         try:
             roots.append(root.expanduser().resolve())
         except Exception:
@@ -247,31 +242,30 @@ def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = No
     macOS /etc -> /private/etc bypass without globally banning temporary pytest
     paths under /private/var/folders.
     """
-    api = workspace_api()
     raw = None
     if raw_path not in (None, ""):
         try:
-            normalized_posix = api._normalize_posix_path(raw_path)
-            raw = Path(normalized_posix) if normalized_posix is not None else api._expanduser_path(raw_path)
+            normalized_posix = _normalize_posix_path(raw_path)
+            raw = Path(normalized_posix) if normalized_posix is not None else _expanduser_path(raw_path)
         except Exception:
             raw = None
 
     posix_probe = raw_path if raw_path not in (None, "") else candidate.as_posix()
-    if api._is_blocked_posix_workspace_path(posix_probe):
+    if _is_blocked_posix_workspace_path(posix_probe):
         return True
 
-    exact = api._workspace_blocked_exact_roots()
-    if candidate in exact or (raw is not None and raw in api._workspace_blocked_roots()):
+    exact = _workspace_blocked_exact_roots()
+    if candidate in exact or (raw is not None and raw in _workspace_blocked_roots()):
         return True
 
-    for tmp in api._USER_TMP_PREFIXES:
-        if api._is_within(candidate, tmp) or (raw is not None and api._is_within(raw, tmp)):
+    for tmp in _USER_TMP_PREFIXES:
+        if _is_within(candidate, tmp) or (raw is not None and _is_within(raw, tmp)):
             return False
 
     # Raw paths under literal roots (e.g. /etc/ssh, /var/db) are always blocked.
     if raw is not None:
-        for blocked in api._workspace_blocked_roots():
-            if api._is_within(raw, blocked):
+        for blocked in _workspace_blocked_roots():
+            if _is_within(raw, blocked):
                 return True
 
     # Resolved subtree checks catch symlink aliases such as /private/etc.  The
@@ -279,16 +273,16 @@ def _is_blocked_workspace_path(candidate: Path, raw_path: str | Path | None = No
     # and per-user temporary workspaces; other direct /private/var system data
     # such as /private/var/db and /private/var/log remains blocked.
     allowed_private_var = (Path('/private/var/folders'), Path('/private/var/tmp'))
-    for blocked in api._workspace_blocked_resolved_subtrees():
+    for blocked in _workspace_blocked_resolved_subtrees():
         if blocked == Path('/private/var'):
             if candidate == blocked:
                 return True
-            if any(api._is_within(candidate, allowed) for allowed in allowed_private_var):
+            if any(_is_within(candidate, allowed) for allowed in allowed_private_var):
                 continue
-            if api._is_within(candidate, blocked):
+            if _is_within(candidate, blocked):
                 return True
             continue
-        if api._is_within(candidate, blocked):
+        if _is_within(candidate, blocked):
             return True
     return False
 
@@ -335,7 +329,7 @@ def safe_resolve_ws(root: Path, requested: str) -> Path:
     try:
         resolved.relative_to(root_resolved)
     except ValueError:
-        raise ValueError(f"Path traversal blocked: {requested}")
+        raise ValueError(f"Path traversal blocked: {requested}") from None
     return resolved
 
 
@@ -365,7 +359,6 @@ def open_anchored_fd(workspace: Path, target: Path, *, want_dir: bool) -> int:
     if a component is missing / wrong-type, or ValueError if a component was
     swapped to a symlink (escape attempt). Caller owns and must close the fd.
     """
-    api = workspace_api()
     root_resolved = workspace.resolve()
     # Relative, symlink-free component list (resolve() already collapsed any links).
     try:
@@ -373,11 +366,11 @@ def open_anchored_fd(workspace: Path, target: Path, *, want_dir: bool) -> int:
     except ValueError:
         raise ValueError(f"Path traversal blocked: {target}") from None
 
-    if not api._DIR_FD_OK:
+    if not _DIR_FD_OK:
         # Windows / no openat: fall back to a plain pathname open. No new race
         # protection, but no regression vs the prior path-based behaviour, and
         # symlink creation needs admin on Windows anyway.
-        flags = os.O_RDONLY | (api._O_DIRECTORY if want_dir else 0) | api._O_NOFOLLOW
+        flags = os.O_RDONLY | (_O_DIRECTORY if want_dir else 0) | _O_NOFOLLOW
         try:
             return os.open(str(target), flags)
         except OSError:
@@ -387,12 +380,12 @@ def open_anchored_fd(workspace: Path, target: Path, *, want_dir: bool) -> int:
     # collapsed any symlinks to REACH it, e.g. macOS /tmp -> /private/tmp), so its
     # final component is legitimately a real directory — O_NOFOLLOW here only fires
     # if the root itself was raced into a symlink after resolve() (escape attempt).
-    fd = os.open(str(root_resolved), os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW)
+    fd = os.open(str(root_resolved), os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW)
     try:
         for i, part in enumerate(rel_parts):
             is_last = i == len(rel_parts) - 1
             want_directory = (not is_last) or want_dir
-            flags = os.O_RDONLY | api._O_NOFOLLOW | (api._O_DIRECTORY if want_directory else 0)
+            flags = os.O_RDONLY | _O_NOFOLLOW | (_O_DIRECTORY if want_directory else 0)
             try:
                 nfd = os.open(part, flags, dir_fd=fd)
             except OSError:
@@ -422,7 +415,6 @@ def open_anchored_create_fd(root: Path, dest: Path) -> int:
     write fd. On platforms without dir_fd support (Windows) falls back to a plain
     exclusive create — no new race protection but no regression.
     """
-    api = workspace_api()
     root_resolved = root.resolve()
     try:
         rel_parts = dest.relative_to(root_resolved).parts
@@ -431,19 +423,19 @@ def open_anchored_create_fd(root: Path, dest: Path) -> int:
     if not rel_parts:
         raise ValueError(f"Invalid destination: {dest}")
 
-    if not api._DIR_FD_OK:
+    if not _DIR_FD_OK:
         # Windows / no openat: create parent dirs then exclusively create the leaf.
         dest.parent.mkdir(parents=True, exist_ok=True)
-        return os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_EXCL | api._O_NOFOLLOW, 0o644)
+        return os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_NOFOLLOW, 0o644)
 
-    fd = os.open(str(root_resolved), os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW)
+    fd = os.open(str(root_resolved), os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW)
     try:
         for part in rel_parts[:-1]:
             try:
-                nfd = os.open(part, os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW, dir_fd=fd)
             except FileNotFoundError:
                 os.mkdir(part, 0o755, dir_fd=fd)
-                nfd = os.open(part, os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW, dir_fd=fd)
             except OSError:
                 # ELOOP — component swapped to a symlink (escape attempt).
                 raise FileNotFoundError(f"Not found: {dest}") from None
@@ -451,7 +443,7 @@ def open_anchored_create_fd(root: Path, dest: Path) -> int:
             fd = nfd
         return os.open(
             rel_parts[-1],
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | api._O_NOFOLLOW,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | _O_NOFOLLOW,
             0o644,
             dir_fd=fd,
         )
@@ -472,7 +464,6 @@ def make_anchored_dir(root: Path, dest: Path) -> None:
     if a component was swapped to a symlink. On platforms without dir_fd support
     (Windows) falls back to a plain Path.mkdir — no regression.
     """
-    api = workspace_api()
     root_resolved = root.resolve()
     dest_resolved = dest.resolve()
     if dest_resolved == root_resolved:
@@ -482,18 +473,18 @@ def make_anchored_dir(root: Path, dest: Path) -> None:
     except ValueError:
         raise ValueError(f"Path traversal blocked: {dest}") from None
 
-    if not api._DIR_FD_OK:
+    if not _DIR_FD_OK:
         dest.mkdir(parents=True, exist_ok=True)
         return
 
-    fd = os.open(str(root_resolved), os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW)
+    fd = os.open(str(root_resolved), os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW)
     try:
         for part in rel_parts:
             try:
-                nfd = os.open(part, os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW, dir_fd=fd)
             except FileNotFoundError:
                 os.mkdir(part, 0o755, dir_fd=fd)
-                nfd = os.open(part, os.O_RDONLY | api._O_DIRECTORY | api._O_NOFOLLOW, dir_fd=fd)
+                nfd = os.open(part, os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW, dir_fd=fd)
             except OSError:
                 # ELOOP — component swapped to a symlink (escape attempt).
                 raise FileNotFoundError(f"Not found: {dest}") from None
@@ -508,7 +499,6 @@ def make_anchored_dir(root: Path, dest: Path) -> None:
 
 def open_anchored_write_fd(root: Path, target: Path) -> int:
     """Open existing ``target`` for truncating writes anchored under ``root``."""
-    api = workspace_api()
     root_resolved = root.resolve()
     target_resolved = target.resolve()
     try:
@@ -518,11 +508,11 @@ def open_anchored_write_fd(root: Path, target: Path) -> int:
     if not rel_parts:
         raise ValueError(f"Invalid target: {target}")
 
-    flags = os.O_WRONLY | os.O_TRUNC | api._O_NOFOLLOW
-    if not api._DIR_FD_OK:
+    flags = os.O_WRONLY | os.O_TRUNC | _O_NOFOLLOW
+    if not _DIR_FD_OK:
         return os.open(str(target_resolved), flags)
 
-    parent_fd = api.open_anchored_fd(root_resolved, target_resolved.parent, want_dir=True)
+    parent_fd = open_anchored_fd(root_resolved, target_resolved.parent, want_dir=True)
     try:
         return os.open(rel_parts[-1], flags, dir_fd=parent_fd)
     finally:
@@ -531,7 +521,6 @@ def open_anchored_write_fd(root: Path, target: Path) -> int:
 
 def unlink_anchored(root: Path, target: Path) -> None:
     """Unlink an existing file anchored under ``root``."""
-    api = workspace_api()
     root_resolved = root.resolve()
     target_resolved = target.resolve()
     try:
@@ -541,11 +530,11 @@ def unlink_anchored(root: Path, target: Path) -> None:
     if not rel_parts:
         raise ValueError(f"Invalid target: {target}")
 
-    if not api._DIR_FD_OK:
+    if not _DIR_FD_OK:
         target_resolved.unlink()
         return
 
-    parent_fd = api.open_anchored_fd(root_resolved, target_resolved.parent, want_dir=True)
+    parent_fd = open_anchored_fd(root_resolved, target_resolved.parent, want_dir=True)
     try:
         os.unlink(rel_parts[-1], dir_fd=parent_fd)
     finally:
@@ -554,7 +543,6 @@ def unlink_anchored(root: Path, target: Path) -> None:
 
 def rmtree_anchored(root: Path, target: Path) -> None:
     """Remove a directory tree anchored under ``root`` without following symlink swaps."""
-    api = workspace_api()
     root_resolved = root.resolve()
     target_resolved = target.resolve()
     try:
@@ -564,11 +552,11 @@ def rmtree_anchored(root: Path, target: Path) -> None:
     if not rel_parts:
         raise ValueError(f"Invalid target: {target}")
 
-    if not api._DIR_FD_OK:
+    if not _DIR_FD_OK:
         shutil.rmtree(target_resolved)
         return
 
-    parent_fd = api.open_anchored_fd(root_resolved, target_resolved.parent, want_dir=True)
+    parent_fd = open_anchored_fd(root_resolved, target_resolved.parent, want_dir=True)
     try:
         shutil.rmtree(rel_parts[-1], dir_fd=parent_fd)
     finally:
@@ -577,7 +565,6 @@ def rmtree_anchored(root: Path, target: Path) -> None:
 
 def rename_anchored(root: Path, source: Path, dest: Path) -> None:
     """Rename ``source`` to ``dest`` using anchored parent directory fds."""
-    api = workspace_api()
     root_resolved = root.resolve()
     source_resolved = source.resolve()
     dest_parent_resolved = dest.parent.resolve()
@@ -595,13 +582,13 @@ def rename_anchored(root: Path, source: Path, dest: Path) -> None:
     if not dest_leaf:
         raise ValueError(f"Invalid destination: {dest}")
 
-    if not api._DIR_FD_OK:
+    if not _DIR_FD_OK:
         source_resolved.rename(dest)
         return
 
-    src_parent_fd = api.open_anchored_fd(root_resolved, source_resolved.parent, want_dir=True)
+    src_parent_fd = open_anchored_fd(root_resolved, source_resolved.parent, want_dir=True)
     try:
-        dst_parent_fd = api.open_anchored_fd(root_resolved, dest_parent_resolved, want_dir=True)
+        dst_parent_fd = open_anchored_fd(root_resolved, dest_parent_resolved, want_dir=True)
         try:
             try:
                 os.stat(dest_leaf, dir_fd=dst_parent_fd, follow_symlinks=False)

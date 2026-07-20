@@ -27,7 +27,7 @@ def test_subdir_of_boot_default_is_trusted(monkeypatch, tmp_path):
     This is the core Docker case: DEFAULT_WORKSPACE=/data/workspace, and the
     user tries to open /data/workspace/myproject — should NOT raise ValueError.
     """
-    import api.workspace as ws_mod
+    from api.workspace import registry as ws_mod
 
     boot_default = tmp_path / "data" / "workspace"
     boot_default.mkdir(parents=True)
@@ -43,7 +43,7 @@ def test_subdir_of_boot_default_is_trusted(monkeypatch, tmp_path):
 
 def test_boot_default_itself_is_trusted(monkeypatch, tmp_path):
     """The DEFAULT_WORKSPACE path itself must also be trusted (not only subdirs)."""
-    import api.workspace as ws_mod
+    from api.workspace import registry as ws_mod
 
     boot_default = tmp_path / "data" / "workspace"
     boot_default.mkdir(parents=True)
@@ -57,7 +57,7 @@ def test_boot_default_itself_is_trusted(monkeypatch, tmp_path):
 def test_path_outside_boot_default_and_home_is_rejected(monkeypatch, tmp_path):
     """A path that is not under home, not in the saved list, and not under
     DEFAULT_WORKSPACE must still be rejected."""
-    import api.workspace as ws_mod
+    from api.workspace import registry as ws_mod
 
     boot_default = tmp_path / "data" / "workspace"
     boot_default.mkdir(parents=True)
@@ -75,7 +75,7 @@ def test_path_outside_boot_default_and_home_is_rejected(monkeypatch, tmp_path):
 
 def test_none_path_returns_boot_default(monkeypatch, tmp_path):
     """resolve_trusted_workspace(None) always returns the boot default unchanged."""
-    import api.workspace as ws_mod
+    from api.workspace import registry as ws_mod
 
     boot_default = tmp_path / "data" / "workspace"
     boot_default.mkdir(parents=True)
@@ -94,7 +94,7 @@ def test_path_traversal_via_dotdot_does_not_escape_boot_default(monkeypatch, tmp
     also caught earlier by the system-roots block, but this test pins the
     behavior in case the order of conditions ever changes).
     """
-    import api.workspace as ws_mod
+    from api.workspace import registry as ws_mod
 
     boot_default = tmp_path / "data" / "workspace"
     boot_default.mkdir(parents=True)

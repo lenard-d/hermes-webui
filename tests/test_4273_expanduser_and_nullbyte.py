@@ -43,7 +43,7 @@ def test_root_remains_unblocked_for_root_deployments():
     src = (
         Path(__file__).resolve().parent.parent
         / "api"
-        / "workspace_parts"
+        / "workspace"
         / "path_safety.py"
     ).read_text(encoding="utf-8")
     assert "'/root'" not in src and "PurePosixPath('/root')" not in src, (

@@ -119,8 +119,8 @@ class TestGitInfoParallel:
         source = (
             pathlib.Path(__file__).parent.parent
             / "api"
-            / "workspace_parts"
-            / "git_summary.py"
+            / "workspace"
+            / "git.py"
         )
         src = source.read_text()
         fn = src[src.find("def git_info_for_workspace") :]
@@ -138,7 +138,7 @@ class TestGitInfoParallel:
         """Proof that status/ahead/behind git commands execute in parallel,
         not sequentially. Uses threading.Barrier to verify overlap."""
         from api.workspace import git_info_for_workspace
-        import api.workspace as ws_mod
+        from api.workspace import git as ws_mod
 
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -157,7 +157,7 @@ class TestGitInfoParallel:
                 return ""
             return "0"
 
-        with patch.object(ws_mod, "_run_git", side_effect=fake_git):
+        with patch.object(ws_mod, "_run_summary_git", side_effect=fake_git):
             result = git_info_for_workspace(tmp_path)
 
         assert result is not None
@@ -192,7 +192,7 @@ class TestGitInfoParallel:
         without the flaky wall-clock assertion.)
         """
         from api.workspace import git_info_for_workspace
-        import api.workspace as ws_mod
+        from api.workspace import git as ws_mod
 
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -214,7 +214,7 @@ class TestGitInfoParallel:
                 return ""
             return "0"
 
-        with patch.object(ws_mod, "_run_git", side_effect=concurrent_git):
+        with patch.object(ws_mod, "_run_summary_git", side_effect=concurrent_git):
             result = git_info_for_workspace(tmp_path)
 
         assert result is not None

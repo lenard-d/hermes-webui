@@ -4,6 +4,7 @@ import pytest
 
 from api import config as api_config
 from api import workspace
+from api.workspace import registry as workspace_registry
 
 
 REMOTE_CWD = "/Users/joeyshiue"
@@ -22,7 +23,7 @@ def test_remote_terminal_cwd_is_profile_default_without_local_stat(monkeypatch, 
     monkeypatch.setattr(api_config, "DEFAULT_WORKSPACE", fallback)
     monkeypatch.setattr(api_config, "get_config", lambda: _remote_config())
 
-    assert workspace._profile_default_workspace() == REMOTE_CWD
+    assert workspace_registry._profile_default_workspace() == REMOTE_CWD
 
 
 def test_remote_terminal_last_workspace_ignores_stale_local_path(monkeypatch, tmp_path):
@@ -32,8 +33,12 @@ def test_remote_terminal_last_workspace_ignores_stale_local_path(monkeypatch, tm
     last_workspace.write_text(str(stale_local), encoding="utf-8")
 
     monkeypatch.setattr(api_config, "get_config", lambda: _remote_config())
-    monkeypatch.setattr(workspace, "_last_workspace_file", lambda: last_workspace)
-    monkeypatch.setattr(workspace, "_GLOBAL_LW_FILE", tmp_path / "missing-global-last-workspace.txt")
+    monkeypatch.setattr(workspace_registry, "_last_workspace_file", lambda: last_workspace)
+    monkeypatch.setattr(
+        workspace_registry,
+        "_GLOBAL_LW_FILE",
+        tmp_path / "missing-global-last-workspace.txt",
+    )
 
     assert workspace.get_last_workspace() == REMOTE_CWD
 
@@ -85,9 +90,17 @@ def test_var_home_workspaces_stay_allowed_before_system_root_blocklist(monkeypat
     home = Path("/var/home/joeyshiue")
     candidate = home / "projects/demo"
 
-    monkeypatch.setattr(workspace, "_resolve_path", lambda raw: candidate if str(raw) == str(candidate) else Path(raw))
-    monkeypatch.setattr(workspace, "_home_path", lambda: home)
-    monkeypatch.setattr(workspace, "_workspace_access_error", lambda _candidate: None)
+    monkeypatch.setattr(
+        workspace_registry,
+        "_resolve_path",
+        lambda raw: candidate if str(raw) == str(candidate) else Path(raw),
+    )
+    monkeypatch.setattr(workspace_registry, "_home_path", lambda: home)
+    monkeypatch.setattr(
+        workspace_registry,
+        "_workspace_access_error",
+        lambda _candidate: None,
+    )
 
     assert validator(str(candidate)) == candidate
 
@@ -99,7 +112,7 @@ def test_remote_terminal_workspace_rejects_embedded_nullbyte_in_raw_path(monkeyp
     # Path with embedded null byte
     nullbyte_path = f"{REMOTE_CWD}/projects\x00/demo"
 
-    assert workspace._remote_terminal_workspace_candidate(nullbyte_path) is None
+    assert workspace_registry._remote_terminal_workspace_candidate(nullbyte_path) is None
 
 
 def test_remote_terminal_workspace_rejects_embedded_nullbyte_in_cwd(monkeypatch):
@@ -109,4 +122,4 @@ def test_remote_terminal_workspace_rejects_embedded_nullbyte_in_cwd(monkeypatch)
     # Normal path, but remote cwd contains null byte
     normal_path = f"{REMOTE_CWD}/projects/demo"
 
-    assert workspace._remote_terminal_workspace_candidate(normal_path) is None
+    assert workspace_registry._remote_terminal_workspace_candidate(normal_path) is None

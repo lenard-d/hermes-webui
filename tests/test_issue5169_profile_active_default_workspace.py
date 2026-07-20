@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 import api.profiles as profiles
 import api.routes as routes
-import api.workspace as workspace
+from api.workspace import registry as workspace
 import api.config as config_mod
 
 

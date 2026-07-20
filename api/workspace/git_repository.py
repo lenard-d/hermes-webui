@@ -20,9 +20,9 @@ import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 
-from api.workspace import safe_resolve_ws
+from .path_safety import safe_resolve_ws
 
 
 logger = logging.getLogger(__name__)
@@ -76,20 +76,6 @@ _REMOTE_HELPER_CONFIG_RE = re.compile(r"^remote\.(.+)\.(uploadpack|receivepack)$
 _LOCKS_GUARD = threading.Lock()
 _OP_LOCKS: dict[str, threading.Lock] = {}
 
-
-def _facade_collaborator(name: str, fallback: Any) -> Any:
-    """Resolve legacy monkeypatch seams from the compatibility facade.
-
-    ``api.workspace_git`` historically owned these names directly. Looking up
-    an already-imported facade at call time preserves that patch/rebinding
-    contract without introducing an import cycle during module initialization.
-    """
-    facade = sys.modules.get("api.workspace_git")
-    if facade is None:
-        return fallback
-    return getattr(facade, name, fallback)
-
-
 def _windows_hide_flags() -> int:
     """Hide short-lived Git console windows on Windows without detaching."""
     if sys.platform == "win32":
@@ -98,10 +84,7 @@ def _windows_hide_flags() -> int:
 
 
 def workspace_git_destructive_enabled() -> bool:
-    env_name = _facade_collaborator(
-        "WORKSPACE_GIT_DESTRUCTIVE_ENV",
-        WORKSPACE_GIT_DESTRUCTIVE_ENV,
-    )
+    env_name = WORKSPACE_GIT_DESTRUCTIVE_ENV
     return os.getenv(env_name, "").strip().lower() in {
         "1",
         "true",
@@ -114,11 +97,8 @@ def _clean_git_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     env = os.environ.copy()
     if extra:
         env.update(extra)
-    scrub_keys = _facade_collaborator("_GIT_ENV_SCRUB_KEYS", _GIT_ENV_SCRUB_KEYS)
-    scrub_prefixes = _facade_collaborator(
-        "_GIT_ENV_SCRUB_PREFIXES",
-        _GIT_ENV_SCRUB_PREFIXES,
-    )
+    scrub_keys = _GIT_ENV_SCRUB_KEYS
+    scrub_prefixes = _GIT_ENV_SCRUB_PREFIXES
     for key in scrub_keys:
         env.pop(key, None)
     for key in list(env):
@@ -174,11 +154,8 @@ def _hardened_git_argv(
     hooks_path: str | None = None,
 ) -> list[str]:
     argv = ["git"]
-    hardened_config = _facade_collaborator("_GIT_HARDENED_CONFIG", _GIT_HARDENED_CONFIG)
-    destructive_config = _facade_collaborator(
-        "_GIT_DESTRUCTIVE_HARDENED_CONFIG",
-        _GIT_DESTRUCTIVE_HARDENED_CONFIG,
-    )
+    hardened_config = _GIT_HARDENED_CONFIG
+    destructive_config = _GIT_DESTRUCTIVE_HARDENED_CONFIG
     for key, value in hardened_config:
         argv.extend(["-c", f"{key}={value}"])
     if destructive:
@@ -201,7 +178,7 @@ def _config_names_for_scope(
     *,
     ignore_unsupported: bool = False,
 ) -> set[str]:
-    windows_hide_flags = _facade_collaborator("_windows_hide_flags", _windows_hide_flags)
+    windows_hide_flags = _windows_hide_flags
     result = subprocess.run(
         ["git", "config", "--includes", scope, "--name-only", "--get-regexp", config_pattern],
         cwd=str(cwd),
@@ -216,7 +193,7 @@ def _config_names_for_scope(
         if ignore_unsupported:
             return set()
         message = (result.stderr or result.stdout or "Git command failed").strip()
-        classify_error = _facade_collaborator("_classify_git_error", _classify_git_error)
+        classify_error = _classify_git_error
         raise GitWorkspaceError(message, classify_error(message, ["config"]))
     names: set[str] = set()
     for line in (result.stdout or "").splitlines():
@@ -233,10 +210,7 @@ def _filter_names_for_scope(
     *,
     ignore_unsupported: bool = False,
 ) -> set[str]:
-    config_names_for_scope = _facade_collaborator(
-        "_config_names_for_scope",
-        _config_names_for_scope,
-    )
+    config_names_for_scope = _config_names_for_scope
     return config_names_for_scope(
         scope,
         cwd,
@@ -254,10 +228,7 @@ def _merge_driver_names_for_scope(
     *,
     ignore_unsupported: bool = False,
 ) -> set[str]:
-    config_names_for_scope = _facade_collaborator(
-        "_config_names_for_scope",
-        _config_names_for_scope,
-    )
+    config_names_for_scope = _config_names_for_scope
     return config_names_for_scope(
         scope,
         cwd,
@@ -275,10 +246,7 @@ def _remote_helper_names_for_scope(
     *,
     ignore_unsupported: bool = False,
 ) -> set[str]:
-    config_names_for_scope = _facade_collaborator(
-        "_config_names_for_scope",
-        _config_names_for_scope,
-    )
+    config_names_for_scope = _config_names_for_scope
     return config_names_for_scope(
         scope,
         cwd,
@@ -290,10 +258,7 @@ def _remote_helper_names_for_scope(
 
 
 def _destructive_filter_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[str, str]]:
-    filter_names_for_scope = _facade_collaborator(
-        "_filter_names_for_scope",
-        _filter_names_for_scope,
-    )
+    filter_names_for_scope = _filter_names_for_scope
     names = filter_names_for_scope("--local", cwd, env)
     names |= filter_names_for_scope("--worktree", cwd, env, ignore_unsupported=True)
     overrides: list[tuple[str, str]] = []
@@ -313,10 +278,7 @@ def _destructive_filter_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[
 
 
 def _destructive_merge_driver_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[str, str]]:
-    merge_driver_names_for_scope = _facade_collaborator(
-        "_merge_driver_names_for_scope",
-        _merge_driver_names_for_scope,
-    )
+    merge_driver_names_for_scope = _merge_driver_names_for_scope
     names = merge_driver_names_for_scope("--local", cwd, env)
     names |= merge_driver_names_for_scope("--worktree", cwd, env, ignore_unsupported=True)
     overrides: list[tuple[str, str]] = []
@@ -329,10 +291,7 @@ def _destructive_merge_driver_overrides(cwd: Path, env: dict[str, str]) -> list[
 
 
 def _destructive_remote_helper_overrides(cwd: Path, env: dict[str, str]) -> list[tuple[str, str]]:
-    remote_helper_names_for_scope = _facade_collaborator(
-        "_remote_helper_names_for_scope",
-        _remote_helper_names_for_scope,
-    )
+    remote_helper_names_for_scope = _remote_helper_names_for_scope
     names = remote_helper_names_for_scope("--local", cwd, env)
     names |= remote_helper_names_for_scope("--worktree", cwd, env, ignore_unsupported=True)
     overrides: list[tuple[str, str]] = []
@@ -352,10 +311,7 @@ def _destructive_remote_helper_overrides(cwd: Path, env: dict[str, str]) -> list
 def _destructive_remote_command_args(args: list[str], cwd: Path, env: dict[str, str]) -> list[str]:
     if not args:
         return args
-    remote_helper_names_for_scope = _facade_collaborator(
-        "_remote_helper_names_for_scope",
-        _remote_helper_names_for_scope,
-    )
+    remote_helper_names_for_scope = _remote_helper_names_for_scope
     names = remote_helper_names_for_scope("--local", cwd, env)
     names |= remote_helper_names_for_scope("--worktree", cwd, env, ignore_unsupported=True)
     if not names:
@@ -369,10 +325,7 @@ def _destructive_remote_command_args(args: list[str], cwd: Path, env: dict[str, 
 
 
 def _has_repo_local_filters(cwd: Path, env: dict[str, str]) -> bool:
-    filter_names_for_scope = _facade_collaborator(
-        "_filter_names_for_scope",
-        _filter_names_for_scope,
-    )
+    filter_names_for_scope = _filter_names_for_scope
     names = filter_names_for_scope("--local", cwd, env)
     names |= filter_names_for_scope("--worktree", cwd, env, ignore_unsupported=True)
     return bool(names)
@@ -389,7 +342,7 @@ class WorkspaceGitRepository:
     @classmethod
     def resolve(cls, workspace: str | Path) -> WorkspaceGitRepository | None:
         ws = Path(workspace).expanduser().resolve()
-        git_runner = _facade_collaborator("_run_git", run_git)
+        git_runner = run_git
         result = git_runner(ws, ["rev-parse", "--show-toplevel"], check=False)
         if result.returncode != 0:
             return None
@@ -410,7 +363,7 @@ class WorkspaceGitRepository:
 
     def repo_relative(self, workspace_rel: str) -> str:
         try:
-            path_resolver = _facade_collaborator("safe_resolve_ws", safe_resolve_ws)
+            path_resolver = safe_resolve_ws
             target = path_resolver(self.workspace, workspace_rel or ".")
         except ValueError as exc:
             raise GitWorkspaceError(str(exc), "path_outside_workspace") from exc
@@ -449,7 +402,7 @@ class WorkspaceGitRepository:
         neutralize_filter_programs: bool = False,
         neutralize_remote_helpers: bool = False,
     ) -> subprocess.CompletedProcess[str]:
-        git_runner = _facade_collaborator("_run_git", run_git)
+        git_runner = run_git
         return git_runner(
             self,
             args,
@@ -466,9 +419,9 @@ class WorkspaceGitRepository:
     @contextmanager
     def mutation(self) -> Iterator[None]:
         key = str(self.repo_root)
-        locks_guard = _facade_collaborator("_LOCKS_GUARD", _LOCKS_GUARD)
-        operation_locks = _facade_collaborator("_OP_LOCKS", _OP_LOCKS)
-        remote_timeout = _facade_collaborator("GIT_REMOTE_TIMEOUT", GIT_REMOTE_TIMEOUT)
+        locks_guard = _LOCKS_GUARD
+        operation_locks = _OP_LOCKS
+        remote_timeout = GIT_REMOTE_TIMEOUT
         with locks_guard:
             lock = operation_locks.setdefault(key, threading.Lock())
         if not lock.acquire(timeout=remote_timeout):
@@ -479,15 +432,9 @@ class WorkspaceGitRepository:
             lock.release()
 
     def block_filtered_write(self, message: str) -> None:
-        destructive_enabled = _facade_collaborator(
-            "workspace_git_destructive_enabled",
-            workspace_git_destructive_enabled,
-        )
-        filter_check = _facade_collaborator(
-            "_has_repo_local_filters",
-            _has_repo_local_filters,
-        )
-        clean_env = _facade_collaborator("_clean_git_env", _clean_git_env)
+        destructive_enabled = workspace_git_destructive_enabled
+        filter_check = _has_repo_local_filters
+        clean_env = _clean_git_env
         if destructive_enabled() and filter_check(
             self.repo_root,
             clean_env(),
@@ -513,11 +460,8 @@ def run_git(
         if isinstance(repository_or_cwd, WorkspaceGitRepository)
         else Path(repository_or_cwd)
     )
-    clean_env = _facade_collaborator("_clean_git_env", _clean_git_env)
-    destructive_enabled = _facade_collaborator(
-        "workspace_git_destructive_enabled",
-        workspace_git_destructive_enabled,
-    )
+    clean_env = _clean_git_env
+    destructive_enabled = workspace_git_destructive_enabled
     run_env = clean_env(env)
     effective_destructive = destructive and destructive_enabled()
     hardened_destructive_path = effective_destructive or force_destructive_hardening
@@ -533,26 +477,14 @@ def run_git(
             attributes_file = attributes_path
             temporary_attributes = [attributes_path]
         if disable_filter_attributes or neutralize_filter_programs:
-            filter_overrides = _facade_collaborator(
-                "_destructive_filter_overrides",
-                _destructive_filter_overrides,
-            )
+            filter_overrides = _destructive_filter_overrides
             extra_configs.extend(filter_overrides(cwd, run_env))
         if effective_destructive:
-            merge_overrides = _facade_collaborator(
-                "_destructive_merge_driver_overrides",
-                _destructive_merge_driver_overrides,
-            )
+            merge_overrides = _destructive_merge_driver_overrides
             extra_configs.extend(merge_overrides(cwd, run_env))
         if effective_destructive or neutralize_remote_helpers:
-            remote_overrides = _facade_collaborator(
-                "_destructive_remote_helper_overrides",
-                _destructive_remote_helper_overrides,
-            )
-            remote_args = _facade_collaborator(
-                "_destructive_remote_command_args",
-                _destructive_remote_command_args,
-            )
+            remote_overrides = _destructive_remote_helper_overrides
+            remote_args = _destructive_remote_command_args
             extra_configs.extend(remote_overrides(cwd, run_env))
             args = remote_args(args, cwd, run_env)
         if hardened_destructive_path:
@@ -563,8 +495,8 @@ def run_git(
             for index, (key, value) in enumerate(extra_configs):
                 run_env[f"GIT_CONFIG_KEY_{index}"] = key
                 run_env[f"GIT_CONFIG_VALUE_{index}"] = value
-        hardened_argv = _facade_collaborator("_hardened_git_argv", _hardened_git_argv)
-        windows_hide_flags = _facade_collaborator("_windows_hide_flags", _windows_hide_flags)
+        hardened_argv = _hardened_git_argv
+        windows_hide_flags = _windows_hide_flags
         result = subprocess.run(
             hardened_argv(
                 args,
@@ -585,7 +517,7 @@ def run_git(
     except FileNotFoundError as exc:
         raise GitWorkspaceError("Git is not installed or not available on PATH", "missing_git") from exc
     except OSError as exc:
-        classify_error = _facade_collaborator("_classify_git_error", _classify_git_error)
+        classify_error = _classify_git_error
         raise GitWorkspaceError(str(exc), classify_error(str(exc), args)) from exc
     finally:
         for path in temporary_attributes:
@@ -594,13 +526,12 @@ def run_git(
             shutil.rmtree(path, ignore_errors=True)
     if check and result.returncode != 0:
         message = (result.stderr or result.stdout or "Git command failed").strip()
-        classify_error = _facade_collaborator("_classify_git_error", _classify_git_error)
+        classify_error = _classify_git_error
         raise GitWorkspaceError(message, classify_error(message, args))
     return result
 
 
-# Compatibility helpers for the existing facade while callers migrate to the
-# repository object's interface.
+# Functional helpers used by the high-level Git workflow.
 GitContext = WorkspaceGitRepository
 
 

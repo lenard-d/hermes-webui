@@ -4,7 +4,8 @@ from types import SimpleNamespace
 import pytest
 
 from api import config as api_config
-from api import routes, workspace
+from api import routes
+from api.workspace import registry
 
 
 def test_profile_default_workspace_uses_live_config_default(monkeypatch, tmp_path):
@@ -14,7 +15,7 @@ def test_profile_default_workspace_uses_live_config_default(monkeypatch, tmp_pat
     monkeypatch.setattr(api_config, "DEFAULT_WORKSPACE", live_default)
     monkeypatch.setattr(api_config, "get_config", lambda: {})
 
-    assert workspace._profile_default_workspace() == str(live_default.resolve())
+    assert registry._profile_default_workspace() == str(live_default.resolve())
 
 
 def test_resolve_chat_workspace_with_recovery_repairs_missing_implicit_workspace(monkeypatch, tmp_path):

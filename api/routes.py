@@ -4929,7 +4929,7 @@ def handle_get(handler, parsed) -> bool:
             s = get_session(sid)
         except KeyError:
             return bad(handler, "Session not found", 404)
-        from api.workspace_git import GitWorkspaceError, git_status
+        from api.workspace import GitWorkspaceError, git_status
 
         try:
             status = git_status(Path(s.workspace))

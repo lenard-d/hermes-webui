@@ -54,7 +54,7 @@ def _git_locked_by_active_stream(session) -> bool:
 
 
 def _git_reject_destructive_if_unsafe(handler, session) -> bool:
-    from api.workspace_git import (
+    from api.workspace import (
         GitWorkspaceError,
         WORKSPACE_GIT_DESTRUCTIVE_ENV,
         workspace_git_destructive_enabled,
@@ -89,7 +89,7 @@ def _handle_git_status(handler, parsed):
     if workspace is None:
         return True
     try:
-        from api.workspace_git import GitWorkspaceError, git_status
+        from api.workspace import GitWorkspaceError, git_status
 
         return j(handler, {"git": git_status(workspace)})
     except GitWorkspaceError as e:
@@ -102,7 +102,7 @@ def _handle_git_branches(handler, parsed):
     if workspace is None:
         return True
     try:
-        from api.workspace_git import GitWorkspaceError, git_branches
+        from api.workspace import GitWorkspaceError, git_branches
 
         return j(handler, {"branches": git_branches(workspace)})
     except GitWorkspaceError as e:
@@ -119,7 +119,7 @@ def _handle_git_diff(handler, parsed):
     if not path:
         return bad(handler, "path required")
     try:
-        from api.workspace_git import GitWorkspaceError, git_diff
+        from api.workspace import GitWorkspaceError, git_diff
 
         return j(handler, {"diff": git_diff(workspace, path, kind)})
     except GitWorkspaceError as e:
@@ -157,7 +157,7 @@ def _handle_git_stage(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_stage
+        from api.workspace import GitWorkspaceError, git_stage
 
         return j(handler, {"ok": True, "git": git_stage(workspace, paths)})
     except ValueError as e:
@@ -175,7 +175,7 @@ def _handle_git_unstage(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_unstage
+        from api.workspace import GitWorkspaceError, git_unstage
 
         return j(handler, {"ok": True, "git": git_unstage(workspace, paths)})
     except ValueError as e:
@@ -193,7 +193,7 @@ def _handle_git_discard(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_discard
+        from api.workspace import GitWorkspaceError, git_discard
 
         return j(
             handler,
@@ -308,7 +308,7 @@ def _llm_git_commit_message(system_prompt: str, user_prompt: str, session=None) 
 
 
 def _handle_git_commit_message(handler, body):
-    from api.workspace_git import (
+    from api.workspace import (
         GitWorkspaceError,
         clean_generated_commit_message,
         staged_commit_message_prompt,
@@ -344,7 +344,7 @@ def _handle_git_commit_message(handler, body):
 
 
 def _handle_git_commit_message_selected(handler, body):
-    from api.workspace_git import (
+    from api.workspace import (
         GitWorkspaceError,
         clean_generated_commit_message,
         selected_commit_message_prompt,
@@ -388,7 +388,7 @@ def _handle_git_commit(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_commit
+        from api.workspace import GitWorkspaceError, git_commit
 
         return j(handler, git_commit(workspace, body.get("message", "")))
     except ValueError as e:
@@ -406,7 +406,7 @@ def _handle_git_commit_selected(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_commit_selected
+        from api.workspace import GitWorkspaceError, git_commit_selected
 
         return j(handler, git_commit_selected(workspace, body.get("message", ""), paths))
     except ValueError as e:
@@ -423,7 +423,7 @@ def _handle_git_remote_action(handler, body, action: str):
             return True
         if action in {"pull", "push"} and _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_fetch, git_pull, git_push
+        from api.workspace import GitWorkspaceError, git_fetch, git_pull, git_push
 
         actions = {
             "fetch": git_fetch,
@@ -445,7 +445,7 @@ def _handle_git_checkout(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_checkout
+        from api.workspace import GitWorkspaceError, git_checkout
 
         result = git_checkout(
             workspace,
@@ -479,7 +479,7 @@ def _handle_git_stash_checkout(handler, body):
             return True
         if _git_reject_destructive_if_unsafe(handler, session):
             return True
-        from api.workspace_git import GitWorkspaceError, git_stash_and_checkout
+        from api.workspace import GitWorkspaceError, git_stash_and_checkout
 
         result = git_stash_and_checkout(
             workspace,

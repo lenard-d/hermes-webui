@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from api import workspace
+from api.workspace import registry as workspace
 
 
 def test_load_workspaces_preserves_unavailable_entries_on_disk(tmp_path, monkeypatch):

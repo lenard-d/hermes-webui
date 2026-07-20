@@ -114,12 +114,13 @@ def test_workspace_suggest_hidden_dirs_only_when_requested(cleanup_test_sessions
 
 def test_workspace_suggest_preserves_tilde_prefix(monkeypatch, tmp_path):
     from api import workspace
+    from api.workspace import registry as workspace_registry
 
     home = tmp_path / "home"
     child = home / "Projects"
     child.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(workspace, "_trusted_workspace_roots", lambda: [home.resolve()])
+    monkeypatch.setattr(workspace_registry, "_trusted_workspace_roots", lambda: [home.resolve()])
 
     suggestions = workspace.list_workspace_suggestions("~/")
 
@@ -129,12 +130,13 @@ def test_workspace_suggest_preserves_tilde_prefix(monkeypatch, tmp_path):
 
 def test_workspace_suggest_preserves_tilde_prefix_for_partial_child(monkeypatch, tmp_path):
     from api import workspace
+    from api.workspace import registry as workspace_registry
 
     home = tmp_path / "home"
     child = home / "Projects"
     child.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(workspace, "_trusted_workspace_roots", lambda: [home.resolve()])
+    monkeypatch.setattr(workspace_registry, "_trusted_workspace_roots", lambda: [home.resolve()])
 
     suggestions = workspace.list_workspace_suggestions("~/Pro")
 
@@ -143,6 +145,7 @@ def test_workspace_suggest_preserves_tilde_prefix_for_partial_child(monkeypatch,
 
 def test_workspace_suggest_expands_tilde_when_home_is_symlink(monkeypatch, tmp_path):
     from api import workspace
+    from api.workspace import registry as workspace_registry
 
     actual_home = tmp_path / "actual-home"
     child = actual_home / "Documents"
@@ -154,7 +157,11 @@ def test_workspace_suggest_expands_tilde_when_home_is_symlink(monkeypatch, tmp_p
         pytest.skip(f"symlinks are not available in this environment: {exc}")
 
     monkeypatch.setenv("HOME", str(link_home))
-    monkeypatch.setattr(workspace, "_trusted_workspace_roots", lambda: [actual_home.resolve()])
+    monkeypatch.setattr(
+        workspace_registry,
+        "_trusted_workspace_roots",
+        lambda: [actual_home.resolve()],
+    )
 
     suggestions = workspace.list_workspace_suggestions("~/Doc")
 
@@ -163,12 +170,13 @@ def test_workspace_suggest_expands_tilde_when_home_is_symlink(monkeypatch, tmp_p
 
 def test_workspace_suggest_keeps_absolute_prefix_absolute(monkeypatch, tmp_path):
     from api import workspace
+    from api.workspace import registry as workspace_registry
 
     home = tmp_path / "home"
     child = home / "Projects"
     child.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(workspace, "_trusted_workspace_roots", lambda: [home.resolve()])
+    monkeypatch.setattr(workspace_registry, "_trusted_workspace_roots", lambda: [home.resolve()])
 
     suggestions = workspace.list_workspace_suggestions(str(home) + "/Pro")
 

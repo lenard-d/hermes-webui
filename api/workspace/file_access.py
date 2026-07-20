@@ -6,12 +6,13 @@ import os
 import stat
 from pathlib import Path
 
-from api.workspace_parts.bindings import workspace_api
+from api.config import MAX_FILE_BYTES
+
+from . import path_safety
 
 
 def list_dir(workspace: Path, rel: str='.'):
-    api = workspace_api()
-    target = api.safe_resolve_ws(workspace, rel)
+    target = path_safety.safe_resolve_ws(workspace, rel)
     if not target.is_dir():
         raise FileNotFoundError(f"Not a directory: {rel}")
     ws_resolved = workspace.resolve()
@@ -55,7 +56,7 @@ def list_dir(workspace: Path, rel: str='.'):
                 link_target.relative_to(ws_resolved)
             except ValueError:
                 target_outside_workspace = True
-            if api._is_blocked_system_path(link_target):
+            if path_safety._is_blocked_system_path(link_target):
                 return
             display_path = name
             if rel and rel != '.':
@@ -114,7 +115,7 @@ def list_dir(workspace: Path, rel: str='.'):
                 'mtime_ns': mtime_ns,
             })
 
-    if api._DIR_FD_OK:
+    if path_safety._DIR_FD_OK:
         # #3398 TOCTOU hardening (Linux/macOS): open the directory via an anchored
         # openat-walk (O_NOFOLLOW on every component) and enumerate via the verified
         # fd (os.scandir(fd) + fd-relative fstatat/readlinkat), so a path component
@@ -133,7 +134,7 @@ def list_dir(workspace: Path, rel: str='.'):
                     pass
             return (not is_link, is_file, de.name.lower())
 
-        dir_fd = api.open_anchored_fd(workspace, target, want_dir=True)
+        dir_fd = path_safety.open_anchored_fd(workspace, target, want_dir=True)
         try:
             st = os.fstat(dir_fd)
             if not stat.S_ISDIR(st.st_mode):
@@ -217,7 +218,7 @@ def dir_signature(workspace: Path, rel: str = '.', entries: list[dict] | None = 
     mtimes, and symlink targets. It intentionally does not read file contents.
     """
     if entries is None:
-        entries = workspace_api().list_dir(workspace, rel)
+        entries = list_dir(workspace, rel)
     payload = []
     for entry in entries:
         payload.append({
@@ -235,22 +236,21 @@ def dir_signature(workspace: Path, rel: str = '.', entries: list[dict] | None = 
 
 
 def read_file_content(workspace: Path, rel: str) -> dict:
-    api = workspace_api()
-    target = api.safe_resolve_ws(workspace, rel)
+    target = path_safety.safe_resolve_ws(workspace, rel)
     if not target.is_file():
         raise FileNotFoundError(f"Not a file: {rel}")
     # #3398 TOCTOU hardening: open the resolved file via an anchored openat-walk
     # (O_NOFOLLOW on every component) so a path swapped to an escaping symlink
     # after safe_resolve_ws() cannot be followed, then read from the fd (not the
     # pathname) so the bytes returned are guaranteed to be the verified file.
-    fd = api.open_anchored_fd(workspace, target, want_dir=False)
+    fd = path_safety.open_anchored_fd(workspace, target, want_dir=False)
     with os.fdopen(fd, 'rb', closefd=True) as fh:
         st = os.fstat(fh.fileno())
         if not stat.S_ISREG(st.st_mode):
             raise FileNotFoundError(f"Not a file: {rel}")
-        if st.st_size > api.MAX_FILE_BYTES:
-            raise ValueError(f"File too large ({st.st_size} bytes, max {api.MAX_FILE_BYTES})")
-        raw = fh.read(api.MAX_FILE_BYTES + 1)
+        if st.st_size > MAX_FILE_BYTES:
+            raise ValueError(f"File too large ({st.st_size} bytes, max {MAX_FILE_BYTES})")
+        raw = fh.read(MAX_FILE_BYTES + 1)
     if Path(str(rel)).suffix.lower() in {".docx", ".xlsx", ".pptx"}:
         from api.office_documents import preview_office_document
 

@@ -27,7 +27,7 @@ def read(rel):
 class TestRootWorkspaceUnblocked:
 
     def test_root_not_in_blocked_system_roots(self):
-        src = read("api/workspace_parts/path_safety.py")
+        src = read("api/workspace/path_safety.py")
         assert "Path('/root')" not in src, (
             "/root must not be in _BLOCKED_SYSTEM_ROOTS — "
             "breaks deployments where Hermes runs as root"
@@ -41,7 +41,7 @@ class TestRootWorkspaceUnblocked:
         literal and resolved-canonical Path forms.  Assert the source still
         names ``/etc`` and ``/proc`` as blocked roots.
         """
-        src = read("api/workspace_parts/path_safety.py")
+        src = read("api/workspace/path_safety.py")
         assert "'/etc'" in src or 'Path("/etc")' in src or "Path('/etc')" in src
         assert "'/proc'" in src or 'Path("/proc")' in src or "Path('/proc')" in src
 

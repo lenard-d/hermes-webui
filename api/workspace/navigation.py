@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path, PurePosixPath
 
-from api.workspace_parts.bindings import workspace_api
+from . import file_access, path_safety
 
 _ESCAPE_AUTH_TTL_SECONDS = 300
 _ESCAPE_AUTH_LOCK = threading.Lock()
@@ -19,7 +19,7 @@ _ESCAPE_AUTH_TOKENS: dict[str, dict[str, str | int | float]] = {}
 
 
 def _normalize_workspace_rel_path(rel: str | Path) -> str:
-    raw = workspace_api()._strip_surrounding_quotes(str(rel or "")).strip().replace("\\", "/")
+    raw = path_safety._strip_surrounding_quotes(str(rel or "")).strip().replace("\\", "/")
     if not raw or raw == ".":
         return "."
     norm = posixpath.normpath(raw)
@@ -41,7 +41,6 @@ def _escape_virtual_path(root: str, rel: str) -> str:
 
 
 def _escape_surface_target(workspace: Path, rel: str) -> tuple[Path, Path]:
-    api = workspace_api()
     workspace_root = workspace.resolve()
     surface_rel = _normalize_workspace_rel_path(rel)
     surface_posix = PurePosixPath(surface_rel)
@@ -49,7 +48,7 @@ def _escape_surface_target(workspace: Path, rel: str) -> tuple[Path, Path]:
     if parent_rel in ("", "."):
         parent_path = workspace_root
     else:
-        parent_path = api.safe_resolve_ws(workspace_root, parent_rel)
+        parent_path = path_safety.safe_resolve_ws(workspace_root, parent_rel)
     surface_path = parent_path / surface_posix.name
     if not surface_path.is_symlink():
         raise ValueError(f"Path is not an escape-target symlink: {rel}")
@@ -62,7 +61,7 @@ def _escape_surface_target(workspace: Path, rel: str) -> tuple[Path, Path]:
         pass
     else:
         raise ValueError(f"Path does not escape workspace: {rel}")
-    if api._is_blocked_system_path(target):
+    if path_safety._is_blocked_system_path(target):
         raise ValueError(f"Path points to a system directory: {target}")
     return surface_path, target
 
@@ -115,7 +114,6 @@ def authorize_escape_target(workspace: Path, session_id: str, rel: str) -> dict:
 
 
 def _escape_authorization_record(workspace: Path, session_id: str, token: str) -> dict:
-    api = workspace_api()
     workspace_root = str(workspace.resolve())
     token = str(token or "").strip()
     if not token:
@@ -138,7 +136,7 @@ def _escape_authorization_record(workspace: Path, session_id: str, token: str) -
         raise EscapeAuthorizationExpiredError("Escape authorization expired") from None
     if str(current_target.resolve()) != surface_target:
         raise EscapeAuthorizationExpiredError("Escape authorization expired")
-    if not current_target.exists() or api._is_blocked_system_path(current_target):
+    if not current_target.exists() or path_safety._is_blocked_system_path(current_target):
         raise EscapeAuthorizationExpiredError("Escape authorization expired")
     return record
 
@@ -174,11 +172,10 @@ def resolve_authorized_escape_request(workspace: Path, session_id: str, token: s
 
 
 def list_authorized_escape_dir(workspace: Path, session_id: str, token: str, rel: str) -> dict:
-    api = workspace_api()
-    resolved = api.resolve_authorized_escape_request(workspace, session_id, token, rel)
+    resolved = resolve_authorized_escape_request(workspace, session_id, token, rel)
     external_root = resolved["external_root"]
     external_rel = resolved["external_rel"]
-    entries = api.list_dir(external_root, external_rel)
+    entries = file_access.list_dir(external_root, external_rel)
     surface_path = resolved["surface_path"]
     external_root_resolved = external_root.resolve()
     for entry in entries:
@@ -197,25 +194,23 @@ def list_authorized_escape_dir(workspace: Path, session_id: str, token: str, rel
     return {
         "path": resolved["request_path"],
         "entries": entries,
-        "signature": api.dir_signature(external_root, external_rel, entries),
+        "signature": file_access.dir_signature(external_root, external_rel, entries),
         "virtual_root": surface_path,
         "read_only": True,
     }
 
 
 def read_authorized_escape_file_content(workspace: Path, session_id: str, token: str, rel: str) -> dict:
-    api = workspace_api()
-    resolved = api.resolve_authorized_escape_request(workspace, session_id, token, rel)
-    payload = api.read_file_content(resolved["external_root"], resolved["external_rel"])
+    resolved = resolve_authorized_escape_request(workspace, session_id, token, rel)
+    payload = file_access.read_file_content(resolved["external_root"], resolved["external_rel"])
     payload["path"] = resolved["request_path"]
     payload["escape_read_only"] = True
     return payload
 
 
 def raw_authorized_escape_target(workspace: Path, session_id: str, token: str, rel: str) -> tuple[Path, Path]:
-    api = workspace_api()
-    resolved = api.resolve_authorized_escape_request(workspace, session_id, token, rel)
-    target = api.safe_resolve_ws(resolved["external_root"], resolved["external_rel"])
+    resolved = resolve_authorized_escape_request(workspace, session_id, token, rel)
+    target = path_safety.safe_resolve_ws(resolved["external_root"], resolved["external_rel"])
     return resolved["external_root"], target
 
 

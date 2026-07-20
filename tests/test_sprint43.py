@@ -31,7 +31,9 @@ PROFILES_RUNTIME_PY = (REPO_ROOT / "api" / "profiles_parts" / "runtime_scope.py"
     encoding="utf-8"
 )
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
-WORKSPACE_PY = (REPO_ROOT / "api" / "workspace.py").read_text(encoding="utf-8")
+WORKSPACE_REGISTRY_PY = (
+    REPO_ROOT / "api" / "workspace" / "registry.py"
+).read_text(encoding="utf-8")
 STATE_SYNC_PY = (REPO_ROOT / "api" / "state_sync.py").read_text(encoding="utf-8")
 
 
@@ -123,7 +125,7 @@ class TestBareExceptLogging(unittest.TestCase):
         ("api/gateway_watcher.py", GATEWAY_WATCHER_PY),
         ("api/profiles.py", PROFILES_PY),
         ("api/streaming.py", STREAMING_PY),
-        ("api/workspace.py", WORKSPACE_PY),
+        ("api/workspace/registry.py", WORKSPACE_REGISTRY_PY),
         ("api/state_sync.py", STATE_SYNC_PY),
         ("api/routes.py", ROUTES_PY),
     ]

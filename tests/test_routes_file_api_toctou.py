@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
 MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
-WORKSPACE_ESCAPE_PY = ROOT / "api" / "workspace_parts" / "escape_navigation.py"
+WORKSPACE_ESCAPE_PY = ROOT / "api" / "workspace" / "navigation.py"
 MEDIA_DELIVERY_PY = ROOT / "api" / "media" / "delivery.py"
 MEDIA_UPLOADS_PY = ROOT / "api" / "media" / "uploads.py"
 

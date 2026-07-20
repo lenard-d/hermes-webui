@@ -179,7 +179,8 @@ def test_read_file_toctou_swap_to_external_symlink_blocked(tmp_path, monkeypatch
     safe_resolve_ws() check, read_file_content must refuse, not follow the
     symlink and leak external content."""
     import api.workspace as w
-    if not w._DIR_FD_OK:
+    from api.workspace import path_safety
+    if not path_safety._DIR_FD_OK:
         pytest.skip("TOCTOU symlink-swap hardening requires dir_fd support")
 
     workspace = tmp_path / "workspace"
@@ -189,7 +190,7 @@ def test_read_file_toctou_swap_to_external_symlink_blocked(tmp_path, monkeypatch
     outside.mkdir()
     (outside / "secret.txt").write_text("SECRET-LEAK", encoding="utf-8")
 
-    real_resolve = w.safe_resolve_ws
+    real_resolve = path_safety.safe_resolve_ws
 
     def racing_resolve(root, rel):
         p = real_resolve(root, rel)
@@ -201,7 +202,7 @@ def test_read_file_toctou_swap_to_external_symlink_blocked(tmp_path, monkeypatch
             p.symlink_to(outside / "secret.txt")
         return p
 
-    monkeypatch.setattr(w, "safe_resolve_ws", racing_resolve)
+    monkeypatch.setattr(path_safety, "safe_resolve_ws", racing_resolve)
     try:
         result = w.read_file_content(workspace, "data.txt")
         assert "SECRET" not in result["content"], "TOCTOU symlink swap leaked external content"
@@ -214,7 +215,8 @@ def test_list_dir_toctou_swap_to_external_symlink_blocked(tmp_path, monkeypatch)
     safe_resolve_ws(), list_dir must refuse rather than enumerate the external
     directory."""
     import api.workspace as w
-    if not w._DIR_FD_OK:
+    from api.workspace import path_safety
+    if not path_safety._DIR_FD_OK:
         pytest.skip("TOCTOU symlink-swap hardening requires dir_fd support")
 
     workspace = tmp_path / "workspace"
@@ -224,7 +226,7 @@ def test_list_dir_toctou_swap_to_external_symlink_blocked(tmp_path, monkeypatch)
     outside.mkdir()
     (outside / "secret.txt").write_text("x", encoding="utf-8")
 
-    real_resolve = w.safe_resolve_ws
+    real_resolve = path_safety.safe_resolve_ws
 
     def racing_resolve(root, rel):
         p = real_resolve(root, rel)
@@ -236,7 +238,7 @@ def test_list_dir_toctou_swap_to_external_symlink_blocked(tmp_path, monkeypatch)
             p.symlink_to(outside)
         return p
 
-    monkeypatch.setattr(w, "safe_resolve_ws", racing_resolve)
+    monkeypatch.setattr(path_safety, "safe_resolve_ws", racing_resolve)
     try:
         entries = w.list_dir(workspace, "sub")
         names = {e["name"] for e in entries}
@@ -328,8 +330,9 @@ def test_list_read_create_work_on_no_dir_fd_fallback(tmp_path, monkeypatch):
     import os
 
     import api.workspace as w
+    from api.workspace import path_safety
 
-    monkeypatch.setattr(w, "_DIR_FD_OK", False)
+    monkeypatch.setattr(path_safety, "_DIR_FD_OK", False)
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -343,7 +346,7 @@ def test_list_read_create_work_on_no_dir_fd_fallback(tmp_path, monkeypatch):
 
     names = {e["name"] for e in w.list_dir(workspace, ".")}
     assert "a.txt" in names
-    if w._DIR_FD_OK:
+    if path_safety._DIR_FD_OK:
         assert "internal" in names          # legit internal symlink listed
     assert "escape" in names            # external symlink emitted (display-only)
     escape_entry = next(e for e in w.list_dir(workspace, ".") if e["name"] == "escape")

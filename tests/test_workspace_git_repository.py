@@ -34,7 +34,7 @@ def _init_repo(path):
 
 
 def test_repository_owns_identity_path_scope_and_git_execution(tmp_path):
-    from api.workspace_git_parts.repository import GitWorkspaceError, WorkspaceGitRepository
+    from api.workspace.git_repository import GitWorkspaceError, WorkspaceGitRepository
 
     repo = _init_repo(tmp_path / "repo")
     nested = repo / "nested"
@@ -58,7 +58,7 @@ def test_repository_owns_identity_path_scope_and_git_execution(tmp_path):
 
 
 def test_repository_mutation_owner_serializes_same_repo(tmp_path):
-    from api.workspace_git_parts.repository import WorkspaceGitRepository
+    from api.workspace.git_repository import WorkspaceGitRepository
 
     repo = _init_repo(tmp_path / "repo")
     nested = repo / "nested"
@@ -133,14 +133,14 @@ def test_workspace_git_import_star_keeps_historical_public_surface():
     assert expected <= namespace.keys()
 
 
-def test_repository_late_binds_historical_facade_monkeypatch_seams(tmp_path, monkeypatch):
-    from api import workspace_git
-    from api.workspace_git_parts.repository import GitWorkspaceError, WorkspaceGitRepository
+def test_repository_uses_explicit_owner_collaborators(tmp_path, monkeypatch):
+    from api.workspace import git_repository
+    from api.workspace.git_repository import GitWorkspaceError, WorkspaceGitRepository
 
     repo = _init_repo(tmp_path / "repo")
     (repo / "inside.txt").write_text("inside\n", encoding="utf-8")
-    real_run_git = workspace_git._run_git
-    real_safe_resolve_ws = workspace_git.safe_resolve_ws
+    real_run_git = git_repository.run_git
+    real_safe_resolve_ws = git_repository.safe_resolve_ws
     runner_calls = []
     resolver_calls = []
 
@@ -152,17 +152,17 @@ def test_repository_late_binds_historical_facade_monkeypatch_seams(tmp_path, mon
         resolver_calls.append((root, path))
         return real_safe_resolve_ws(root, path)
 
-    monkeypatch.setattr(workspace_git, "_run_git", recording_run_git)
+    monkeypatch.setattr(git_repository, "run_git", recording_run_git)
     owner = WorkspaceGitRepository.resolve(repo)
     assert owner is not None
     assert runner_calls and runner_calls[0][1] == ["rev-parse", "--show-toplevel"]
 
-    monkeypatch.setattr(workspace_git, "safe_resolve_ws", recording_safe_resolve_ws)
+    monkeypatch.setattr(git_repository, "safe_resolve_ws", recording_safe_resolve_ws)
     assert owner.repo_relative("inside.txt") == "inside.txt"
     assert resolver_calls == [(repo.resolve(), "inside.txt")]
 
-    monkeypatch.setattr(workspace_git, "workspace_git_destructive_enabled", lambda: True)
-    monkeypatch.setattr(workspace_git, "_has_repo_local_filters", lambda cwd, env: True)
+    monkeypatch.setattr(git_repository, "workspace_git_destructive_enabled", lambda: True)
+    monkeypatch.setattr(git_repository, "_has_repo_local_filters", lambda cwd, env: True)
     with pytest.raises(GitWorkspaceError) as exc:
         owner.block_filtered_write("Filtered writes are blocked")
     assert exc.value.code == "filtered_path"
