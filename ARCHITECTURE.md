@@ -85,7 +85,14 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       profiles/            Profile compatibility package plus catalog, management,
                            runtime-environment, and cron-scope owners
       providers/           Provider compatibility package plus credential, cost-history,
-                           and account/quota lifecycle owners
+                           and account/quota owners
+        account_usage.py   Stable quota interface and compatibility facade
+        quota_status.py    Provider dispatch and normalized quota response contracts
+        usage_projection.py Secret-safe account-limit and OpenRouter projections
+        account_usage_environment.py Profile-isolated credential/environment construction
+        account_usage_runtime.py Probe process, worker-pool, cache, and cleanup lifecycle
+        account_usage_probe_child.py JSON-lines child protocol (real importable module)
+        codex_pool_usage.py Codex credential-pool probing and safe aggregation
       run_event_sink.py    Journal, cursor, and live-frame publication ordering
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
@@ -1011,7 +1018,8 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         session_sources.py    Imported-session source identity policy
         stream_channel.py     Bounded live-event broadcast and replay
         turn_admission.py     Atomic local-turn admission and worker launch
-        providers/            Provider entrypoint, credentials, costs, and account/quota lifecycle
+        providers/            Provider entrypoint plus credential, cost, quota-dispatch,
+                              safe-projection, profile-environment, and probe-runtime owners
         profiles/             Profile entrypoint, catalog, management, runtime, and cron scopes
         updates/              Stable update interface plus semantic implementation modules
           {repository,policy,summary,transaction}.py

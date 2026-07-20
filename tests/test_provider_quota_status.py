@@ -67,10 +67,11 @@ def _restore_config(old_cfg, old_mtime):
 def test_account_usage_exports_preserve_owner_state_identity():
     import api.providers as providers
     from api.providers import account_usage
+    from api.providers import account_usage_runtime
 
     assert providers.get_provider_quota is account_usage.get_provider_quota
     assert providers._AccountUsageProbeWorker is account_usage._AccountUsageProbeWorker
-    assert providers._AccountUsageProbeWorker.fetch.__globals__ is vars(account_usage)
+    assert providers._AccountUsageProbeWorker.fetch.__globals__ is vars(account_usage_runtime)
     assert providers._account_usage_status_cache is account_usage._account_usage_status_cache
     assert providers._account_usage_status_cache_lock is account_usage._account_usage_status_cache_lock
     assert providers._account_usage_worker_pool is account_usage._account_usage_worker_pool
@@ -384,9 +385,9 @@ def test_codex_account_usage_subprocess_reports_read_only_credential_pool(monkey
     monkeypatch.setitem(sys.modules, "agent.account_usage", account_usage_mod)
     monkeypatch.setitem(sys.modules, "agent.credential_pool", credential_pool_mod)
     monkeypatch.setattr(providers.urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(sys, "argv", ["quota-probe", "openai-codex", ""])
+    from api.providers.account_usage_probe_child import main as run_probe
 
-    exec(providers._ACCOUNT_USAGE_SUBPROCESS_CODE, {"__name__": "__main__"})
+    run_probe(["openai-codex", ""])
 
     output = capsys.readouterr().out.strip()
     snapshot = json.loads(output)
@@ -535,9 +536,9 @@ def test_codex_account_usage_subprocess_retries_expired_pool_exhaustion(monkeypa
     monkeypatch.setitem(sys.modules, "agent.account_usage", account_usage_mod)
     monkeypatch.setitem(sys.modules, "agent.credential_pool", credential_pool_mod)
     monkeypatch.setattr(providers.urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(sys, "argv", ["quota-probe", "openai-codex", ""])
+    from api.providers.account_usage_probe_child import main as run_probe
 
-    exec(providers._ACCOUNT_USAGE_SUBPROCESS_CODE, {"__name__": "__main__"})
+    run_probe(["openai-codex", ""])
 
     output = capsys.readouterr().out.strip()
     snapshot = json.loads(output)
@@ -628,9 +629,9 @@ def test_codex_account_usage_subprocess_probes_pool_entries_concurrently(monkeyp
     monkeypatch.setitem(sys.modules, "agent.account_usage", account_usage_mod)
     monkeypatch.setitem(sys.modules, "agent.credential_pool", credential_pool_mod)
     monkeypatch.setattr(providers.urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(sys, "argv", ["quota-probe", "openai-codex", ""])
+    from api.providers.account_usage_probe_child import main as run_probe
 
-    exec(providers._ACCOUNT_USAGE_SUBPROCESS_CODE, {"__name__": "__main__"})
+    run_probe(["openai-codex", ""])
 
     output = capsys.readouterr().out.strip()
     snapshot = json.loads(output)
@@ -685,9 +686,9 @@ def test_codex_account_usage_subprocess_sanitizes_pool_entry_errors(monkeypatch,
     monkeypatch.setitem(sys.modules, "agent.account_usage", account_usage_mod)
     monkeypatch.setitem(sys.modules, "agent.credential_pool", credential_pool_mod)
     monkeypatch.setattr(providers.urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(sys, "argv", ["quota-probe", "openai-codex", ""])
+    from api.providers.account_usage_probe_child import main as run_probe
 
-    exec(providers._ACCOUNT_USAGE_SUBPROCESS_CODE, {"__name__": "__main__"})
+    run_probe(["openai-codex", ""])
 
     output = capsys.readouterr().out.strip()
     snapshot = json.loads(output)
@@ -743,9 +744,9 @@ def test_codex_account_usage_subprocess_keeps_legacy_reason_when_pool_misses(mon
     monkeypatch.setitem(sys.modules, "agent.account_usage", account_usage_mod)
     monkeypatch.setitem(sys.modules, "agent.credential_pool", credential_pool_mod)
     monkeypatch.setattr(providers.urllib.request, "urlopen", explode_urlopen)
-    monkeypatch.setattr(sys, "argv", ["quota-probe", "openai-codex", ""])
+    from api.providers.account_usage_probe_child import main as run_probe
 
-    exec(providers._ACCOUNT_USAGE_SUBPROCESS_CODE, {"__name__": "__main__"})
+    run_probe(["openai-codex", ""])
 
     snapshot = json.loads(capsys.readouterr().out.strip())
 
@@ -1507,6 +1508,7 @@ def test_account_usage_worker_idle_cleanup_closes_stale_process(monkeypatch, tmp
 
 def test_busy_account_usage_worker_uses_one_shot_fallback(monkeypatch, tmp_path):
     import api.providers.account_usage as providers
+    import api.providers.account_usage_runtime as usage_runtime
 
     worker = providers._AccountUsageProbeWorker(tmp_path)
     calls = []
@@ -1515,7 +1517,7 @@ def test_busy_account_usage_worker_uses_one_shot_fallback(monkeypatch, tmp_path)
         calls.append((provider, Path(home), api_key))
         return SimpleNamespace(provider=provider, source="usage_api", windows=(), details=(), available=True)
 
-    monkeypatch.setattr(providers, "_fetch_account_usage_once_for_home", fake_one_shot)
+    monkeypatch.setattr(usage_runtime, "_fetch_account_usage_once_for_home", fake_one_shot)
     locked = threading.Event()
     release = threading.Event()
 

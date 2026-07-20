@@ -28,9 +28,11 @@ from api.config import (
     PROVIDER_DISPLAY as _PROVIDER_DISPLAY,
     coerce_provider_cost_budget as _coerce_provider_cost_budget,
 )
-from api.providers.account_usage import (
+from api.providers.quota_status import (
     _OPENROUTER_KEY_URL,
     _PROVIDER_QUOTA_TIMEOUT_SECONDS,
+)
+from api.providers.usage_projection import (
     _quota_number,
     _sanitize_openrouter_quota,
 )
