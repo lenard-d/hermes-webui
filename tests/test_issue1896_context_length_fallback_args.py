@@ -188,13 +188,15 @@ def test_cfg_custom_providers_resolved_from_cfg_dict():
     )
 
 
-# ── Sibling fallback in api/routes.py session-load path ─────────────────────
+# ── Sibling fallback in the session-query HTTP owner ────────────────────────
 
-ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+SESSION_QUERIES_PY = (
+    REPO / "api" / "http" / "routes" / "session_queries.py"
+).read_text(encoding="utf-8")
 
 
 def test_routes_session_load_fallback_passes_config_overrides():
-    """The session-load fallback at api/routes.py (around 'older sessions
+    """The session-query owner's fallback (around 'older sessions
     (pre-#1318) that have context_length=0 persisted') has the SAME bug shape
     as the streaming.py fallbacks: it called `_get_cl(model, "")` with no
     config overrides, so `/api/session/get` returned 256K for old sessions
@@ -207,14 +209,14 @@ def test_routes_session_load_fallback_passes_config_overrides():
     """
     # Anchor: find the comment that pins this fallback's purpose.
     anchor = "older sessions (pre-#1318) that have context_length=0 persisted"
-    idx = ROUTES_PY.find(anchor)
+    idx = SESSION_QUERIES_PY.find(anchor)
     assert idx != -1, "session-load fallback comment moved/removed"
     # The route block may delegate the resolver details to a helper, but the
     # session-load path must still call the helper and that helper must preserve
     # the same kwargs as the streaming.py fix.
-    block_end = ROUTES_PY.find("_session_tool_calls =", idx)
+    block_end = SESSION_QUERIES_PY.find("_session_tool_calls =", idx)
     assert block_end != -1, "session-load fallback block end not found after fallback comment"
-    block = ROUTES_PY[idx:block_end]
+    block = SESSION_QUERIES_PY[idx:block_end]
     helper_start = SESSION_MODELS_PY.find("def _resolve_context_length_for_session_model")
     assert helper_start != -1, "context-length resolver helper not found"
     helper_end = SESSION_MODELS_PY.find("\ndef ", helper_start + 1)
@@ -228,15 +230,15 @@ def test_routes_session_load_fallback_passes_config_overrides():
     )
     # Same kwargs as the streaming.py fix.
     assert "config_context_length=" in helper, (
-        "session-load fallback in api/routes.py must pass config_context_length= "
+        "session-load fallback must pass config_context_length= "
         "so user-set model.context_length wins over the 256K default. See #1896."
     )
     assert "provider=_ctx_lookup.provider or provider or" in helper, (
-        "session-load fallback in api/routes.py must pass provider= "
+        "session-load fallback must pass provider= "
         "so the registry lookup is provider-aware. See #1896."
     )
     assert "custom_providers=" in helper, (
-        "session-load fallback in api/routes.py must pass custom_providers= "
+        "session-load fallback must pass custom_providers= "
         "so the per-model override path applies. See #1896."
     )
     # Legacy fallback for older hermes-agent builds that pre-date the kwargs.

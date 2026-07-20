@@ -10,13 +10,15 @@ test_regenerate_endpoint_syncs_title_to_state_db_when_enabled.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+SESSION_MUTATIONS_PY = (
+    ROOT / "api" / "http" / "routes" / "session_mutations.py"
+).read_text(encoding="utf-8")
 
 
 def test_rename_endpoint_syncs_title_to_state_db():
-    start_idx = ROUTES_PY.index('"/api/session/rename"')
-    end_idx = ROUTES_PY.index('"/api/session/title/regenerate"', start_idx)
-    block = ROUTES_PY[start_idx:end_idx]
+    start_idx = SESSION_MUTATIONS_PY.index('"/api/session/rename"')
+    end_idx = SESSION_MUTATIONS_PY.index('"/api/session/title/regenerate"', start_idx)
+    block = SESSION_MUTATIONS_PY[start_idx:end_idx]
     assert "_sync_session_title_to_insights(s)" in block, (
         "rename handler must call _sync_session_title_to_insights(s) so the "
         "new title reaches state.db, matching the regenerate handler"

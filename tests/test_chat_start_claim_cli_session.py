@@ -23,10 +23,13 @@ from types import SimpleNamespace
 
 import pytest
 
+import api.routes as routes
+from api.routes_parts import session_projection
+from api.sessions import materialization
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CHAT_RUNS_PY = ROOT / "api" / "routes_parts" / "chat_runs.py"
-SESSION_PROJECTION_PY = ROOT / "api" / "routes_parts" / "session_projection.py"
 SESSION_QUERIES_PY = ROOT / "api" / "http" / "routes" / "session_queries.py"
 
 
@@ -45,8 +48,7 @@ def _route_handler_block(src: str, handler: str) -> str:
 
 
 def test_helper_is_defined():
-    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
-    assert "def _claim_or_synthesize_cli_session(" in src, (
+    assert routes._claim_or_synthesize_cli_session is materialization._claim_or_synthesize_cli_session, (
         "shared foreign-session synthesiser must be defined; this helper "
         "closes the GET/POST asymmetry for CLI/TUI/Desktop sessions"
     )
@@ -112,8 +114,7 @@ def test_chat_start_sanitises_500_error():
 
 
 def test_classifier_helper_is_defined():
-    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
-    assert "def _session_index_marks_was_webui(" in src, (
+    assert routes._session_index_marks_was_webui is materialization._session_index_marks_was_webui, (
         "WebUI-vs-foreign classifier must be extracted so GET and POST can "
         "share the #2782 deleted-WebUI-session 404 contract"
     )
@@ -330,7 +331,25 @@ def _response_json(handler: _FakePostHandler) -> dict:
 
 @pytest.fixture
 def routes_module():
-    return pytest.importorskip("api.routes")
+    class OwnerAwareRoutesHarness:
+        _modules = (materialization, session_projection, routes)
+
+        def __getattr__(self, name):
+            for module in self._modules:
+                if hasattr(module, name):
+                    return getattr(module, name)
+            raise AttributeError(name)
+
+        def __setattr__(self, name, value):
+            matched = False
+            for module in self._modules:
+                if hasattr(module, name):
+                    setattr(module, name, value)
+                    matched = True
+            if not matched:
+                raise AttributeError(name)
+
+    return OwnerAwareRoutesHarness()
 
 
 @pytest.fixture
@@ -361,6 +380,8 @@ def isolated_state_db(tmp_path, monkeypatch):
     monkeypatch.setattr(_state_db, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_external, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_models, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(materialization, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(materialization, "SESSION_INDEX_FILE", index_path)
     monkeypatch.setattr(_routes, "SESSION_INDEX_FILE", index_path)
     for module in (_records, _cache, _external, _models):
         monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_path)
@@ -549,9 +570,11 @@ def test_helper_uses_get_last_workspace_when_cwd_missing(
     # The helper does ``from api.workspace import get_last_workspace`` inside
     # the function body, so the local name is re-resolved at every call.
     # Patch the source-of-truth attribute on api.workspace.
-    import api.workspace as _workspace_mod
-    monkeypatch.setattr(_workspace_mod, "get_last_workspace",
-                        lambda: str(fallback_workspace))
+    monkeypatch.setattr(
+        materialization,
+        "get_last_workspace",
+        lambda: str(fallback_workspace),
+    )
 
     sess, reason = routes_module._claim_or_synthesize_cli_session(SID)
     assert reason == "materialized"
@@ -1292,20 +1315,13 @@ def test_helper_denylist_includes_gateway_and_unknown():
     """Direct check on the denylist set — guards against a future
     refactor that splits the denylist and forgets the gateway/
     unknown/cron literals."""
-    import re
-    # Read the semantic helper owner rather than the HTTP facade.
-    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
-    # Find the function body
-    m = re.search(
-        r"def _is_claimable_cli_source.*?(?=\n\ndef |\Z)",
-        src, re.DOTALL,
-    )
-    assert m, "could not locate _is_claimable_cli_source"
-    body = m.group(0)
-    # Both the cli_meta branch and the state.db-source branch must
-    # list gateway, unknown, and cron.
     for literal in ("gateway", "unknown", "cron"):
-        assert f'"{literal}"' in body, (
+        assert materialization._is_claimable_cli_source(
+            {"source_tag": literal, "session_source": "other"}
+        )[0] is False
+        assert materialization._is_claimable_cli_source(
+            {}, state_db_source=literal
+        )[0] is False, (
             f"_is_claimable_cli_source must denylist '{literal}' in "
             f"both the cli_meta and state_db branches — cron was "
             f"added in the Greptile 4/5 P2 review to keep scheduled "

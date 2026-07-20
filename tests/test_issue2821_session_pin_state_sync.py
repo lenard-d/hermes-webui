@@ -6,7 +6,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+SESSION_ORGANIZATION_MUTATIONS_PY = (
+    ROOT / "api" / "http" / "routes" / "session_organization_mutations.py"
+).read_text(encoding="utf-8")
 SESSIONS_JS = family_source("sessions")
 
 
@@ -43,24 +45,25 @@ def test_session_field_helper_reads_dicts_and_objects():
 
 
 def test_pin_limit_snapshot_counts_index_dict_entries():
-    assert "def _session_counts_toward_pin_quota(session)" in ROUTES_PY
-    assert "_session_counts_toward_pin_quota(existing)" in ROUTES_PY
-    assert "_hide_from_default_sidebar(row)" in ROUTES_PY
+    from api.routes import _session_counts_toward_pin_quota
+
+    assert _session_counts_toward_pin_quota({"pinned": True, "archived": False})
+    assert not _session_counts_toward_pin_quota({"pinned": True, "archived": True})
     # #3288 replaced the set-of-ids snapshot with a visible-lineage row snapshot.
     # The load-bearing invariant this test guards is unchanged: the persisted pin
     # snapshot is computed BEFORE acquiring LOCK (all_sessions() acquires LOCK
     # internally, so snapshotting inside `with LOCK:` would deadlock).
-    start = ROUTES_PY.find("persisted_rows = [")
+    start = SESSION_ORGANIZATION_MUTATIONS_PY.find("persisted_rows = [")
     assert start != -1, "persisted pin snapshot not found"
-    end = ROUTES_PY.find("with LOCK:", start)
+    end = SESSION_ORGANIZATION_MUTATIONS_PY.find("with LOCK:", start)
     assert end != -1, "persisted pin snapshot should be computed before LOCK"
-    persisted_snapshot = ROUTES_PY[start:end]
+    persisted_snapshot = SESSION_ORGANIZATION_MUTATIONS_PY[start:end]
     # The snapshot must filter via the shared quota helper, not raw getattr checks.
     assert "_session_counts_toward_pin_quota(existing)" in persisted_snapshot
     assert 'getattr(existing, "pinned", False)' not in persisted_snapshot
     assert 'getattr(existing, "archived", False)' not in persisted_snapshot
     # The authoritative count collapses continuation siblings to visible lineages.
-    assert "_visible_pinned_lineage_ids(" in ROUTES_PY
+    assert "_visible_pinned_lineage_ids(" in SESSION_ORGANIZATION_MUTATIONS_PY
 
 
 def test_pin_action_does_not_short_circuit_on_stale_client_count():

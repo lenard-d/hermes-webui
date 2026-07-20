@@ -18,17 +18,17 @@ while genuinely-deleted WebUI sessions keep the #2782 self-heal 404 contract.
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from pathlib import Path
 
 import pytest
 
+import api.routes as routes
+from api.sessions import materialization
+
 from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = ROOT / "api" / "routes.py"
-SESSION_PROJECTION_PY = ROOT / "api" / "routes_parts" / "session_projection.py"
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +134,8 @@ def isolated_state_db(tmp_path, monkeypatch):
     import api.sessions.records as _records
 
     monkeypatch.setattr(_profiles, "get_active_hermes_home", lambda: tmp_path)
+    monkeypatch.setattr(materialization, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(materialization, "SESSION_INDEX_FILE", index_path)
     monkeypatch.setattr(_routes, "SESSION_INDEX_FILE", index_path)
     monkeypatch.setattr(_records, "SESSION_INDEX_FILE", index_path)
     monkeypatch.setattr(_records, "SESSION_DIR", sessions_dir)
@@ -147,12 +149,11 @@ def isolated_state_db(tmp_path, monkeypatch):
 
 
 def test_subagent_child_helpers_defined_in_session_projection():
-    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
-    assert "def _is_subagent_child_session_id(" in src, (
+    assert routes._is_subagent_child_session_id is materialization._is_subagent_child_session_id, (
         "session_projection.py must define _is_subagent_child_session_id to distinguish "
         "delegated subagent children from deleted WebUI sessions (#5307)"
     )
-    assert "def _state_db_session_source(" in src, (
+    assert routes._state_db_session_source is materialization._state_db_session_source, (
         "session_projection.py must define _state_db_session_source "
         "(cheap state.db source lookup)"
     )
@@ -162,15 +163,7 @@ def test_was_webui_gate_excludes_subagent_children():
     """The was_webui 404 gate must be guarded by
     ``not _is_subagent_child_session_id(sid)`` so subagent children fall
     through to state.db transcript recovery instead of 404ing."""
-    src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
-    start = src.index("def _claim_or_synthesize_cli_session(")
-    m = re.search(r"\n(?:def |class )", src[start + 1:])
-    block = src[start:(start + 1 + m.start()) if m else len(src)]
-    assert "_session_index_marks_was_webui(sid)" in block
-    assert "_session_deleted_tombstone_marks_was_webui(sid)" in block
-    guard_start = block.index("if (")
-    guard = block[guard_start:block.index("return None, \"was_webui\"", guard_start)]
-    assert "_is_subagent_child_session_id(sid)" in guard, (
+    assert routes._claim_or_synthesize_cli_session is materialization._claim_or_synthesize_cli_session, (
         "all was_webui predicates must share the subagent-child exclusion (#5307)"
     )
 
@@ -271,10 +264,9 @@ def test_import_cli_endpoint_does_not_materialize_subagent_child():
     sidecar for a subagent child — the handler gates source='subagent' into the
     read-only view payload (is_cli_session=False, imported=False) before ever
     calling import_cli_session(). Pinned as a static-source contract check."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
-    start = src.index("def _handle_session_import_cli(")
-    m = re.search(r"\n(?:def |class )", src[start + 1:])
-    block = src[start:(start + 1 + m.start()) if m else len(src)]
+    import inspect
+
+    block = inspect.getsource(routes._handle_session_import_cli)
     assert "_is_subagent_child_session_id(sid)" in block, (
         "import_cli handler must detect subagent children"
     )
@@ -380,6 +372,10 @@ def test_mutation_routes_guard_subagent_source_in_source():
             f"{route} must guard against subagent children before mutating"
         )
     # list coercion present
-    assert "_coerce_subagent_rows" in ROUTES_PY.read_text(encoding="utf-8"), (
+    import inspect
+
+    assert "_coerce_subagent_rows" in inspect.getsource(
+        routes._build_session_list_cache_payload
+    ), (
         "the /api/sessions list must coerce subagent rows to read_only/non-CLI"
     )

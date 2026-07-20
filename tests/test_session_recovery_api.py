@@ -70,7 +70,7 @@ def test_repair_safe_session_recovery_leaves_unsafe_orphan_for_manual_review(tmp
 def test_repair_safe_route_uses_clean_flag_for_status_code():
     from pathlib import Path
 
-    src = Path("api/routes.py").read_text(encoding="utf-8")
+    src = Path("api/http/routes/platform_mutations.py").read_text(encoding="utf-8")
 
     assert 'status=200 if result.get("clean") else 409' in src
 
@@ -78,9 +78,12 @@ def test_repair_safe_route_uses_clean_flag_for_status_code():
 def test_recovery_audit_routes_are_registered():
     from pathlib import Path
 
-    src = Path("api/routes.py").read_text(encoding="utf-8")
+    query_src = Path("api/http/routes/session_queries.py").read_text(encoding="utf-8")
+    mutation_src = Path("api/http/routes/platform_mutations.py").read_text(
+        encoding="utf-8"
+    )
 
-    assert 'parsed.path == "/api/session/recovery/audit"' in src
-    assert 'parsed.path == "/api/session/recovery/repair-safe"' in src
-    assert "audit_session_recovery" in src
-    assert "repair_safe_session_recovery" in src
+    assert 'parsed.path == "/api/session/recovery/audit"' in query_src
+    assert 'parsed.path == "/api/session/recovery/repair-safe"' in mutation_src
+    assert "audit_session_recovery" in query_src
+    assert "repair_safe_session_recovery" in mutation_src

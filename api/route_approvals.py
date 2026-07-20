@@ -184,6 +184,13 @@ def reconcile_gateway_pending_mirror_locked(session_key: str) -> tuple[dict | No
     return head, total, changed
 
 
+def pending_count(session_key: str) -> int:
+    """Return the reconciled number of pending approvals for a session."""
+    with _lock:
+        _head, total, _changed = reconcile_gateway_pending_mirror_locked(session_key)
+        return total
+
+
 def _gateway_mirrored_pending_run_id(session_key: str, approval_id: str) -> str | None:
     """Return the mirrored gateway approval run_id for a matching pending card.
 

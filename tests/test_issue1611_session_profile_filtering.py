@@ -224,12 +224,13 @@ def test_static_all_profiles_toggle_is_persisted_and_not_reset_by_profile_switch
 
 
 def test_keep_latest_messaging_runs_after_profile_filter():
-    """Source-string check: api/routes.py /api/sessions handler must call
-    _keep_latest_messaging_session_per_source AFTER the profile filter."""
+    """The actual session-query owner must preserve profile-before-dedupe."""
     from pathlib import Path
 
     repo_root = Path(__file__).parent.parent
-    src = (repo_root / 'api' / 'routes.py').read_text(encoding='utf-8')
+    src = (repo_root / 'api' / 'http' / 'routes' / 'session_queries.py').read_text(
+        encoding='utf-8'
+    )
 
     handler_idx = src.find('parsed.path == "/api/sessions":')
     assert handler_idx > 0
@@ -634,6 +635,7 @@ def test_session_import_stamps_active_profile():
     named-profile workspace. Pin the import-time ownership stamp directly.
     """
     import api.routes as routes
+    import api.sessions.materialization as materialization
 
     captured = {}
     body = {
@@ -655,8 +657,8 @@ def test_session_import_stamps_active_profile():
          patch("api.routes.resolve_trusted_workspace", return_value=Path("/tmp/named-profile-workspace")), \
          patch("api.routes.Session", side_effect=lambda **kwargs: _ImportedSessionStub(**kwargs)), \
          patch.object(routes, "SESSIONS", sessions), \
-         patch("api.routes.cache_full_session", side_effect=cache_session), \
-         patch("api.routes._write_session_index"), \
+         patch.object(materialization, "cache_full_session", side_effect=cache_session), \
+         patch.object(materialization, "_write_session_index"), \
          patch("api.routes.publish_session_list_changed"), \
          patch("api.routes.j", side_effect=fake_j):
         routes._handle_session_import(SimpleNamespace(headers={}), body)
@@ -670,6 +672,7 @@ def test_session_import_stamps_active_profile():
 def test_session_import_default_profile_remains_default_owned():
     """Root/default imports keep the legacy default ownership semantics."""
     import api.routes as routes
+    import api.sessions.materialization as materialization
 
     captured = {}
     body = {
@@ -688,8 +691,8 @@ def test_session_import_default_profile_remains_default_owned():
          patch("api.routes.resolve_trusted_workspace", return_value=Path("/tmp/default-workspace")), \
          patch("api.routes.Session", side_effect=lambda **kwargs: _ImportedSessionStub(**kwargs)), \
          patch.object(routes, "SESSIONS", sessions), \
-         patch("api.routes.cache_full_session", side_effect=cache_session), \
-         patch("api.routes._write_session_index"), \
+         patch.object(materialization, "cache_full_session", side_effect=cache_session), \
+         patch.object(materialization, "_write_session_index"), \
          patch("api.routes.publish_session_list_changed"), \
          patch("api.routes.j", side_effect=fake_j):
         routes._handle_session_import(SimpleNamespace(headers={}), body)

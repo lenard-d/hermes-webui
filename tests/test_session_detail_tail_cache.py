@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 import api.sessions.store as models
 import api.routes as routes
+from api.sessions import detail_projection
 
 
 def _session(sid, messages):
@@ -46,11 +47,11 @@ def _invoke_twice(tmp_path, monkeypatch):
     config.write_text("model: {}\n", encoding="utf-8")
     state_db = tmp_path / "state.db"
 
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(routes, "SETTINGS_FILE", settings)
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: state_db)
-    monkeypatch.setattr(routes, "_active_profile_config_path", lambda: config)
-    routes._clear_session_detail_tail_cache()
+    monkeypatch.setattr(detail_projection, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(detail_projection, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(detail_projection, "_active_state_db_path", lambda: state_db)
+    monkeypatch.setattr(detail_projection, "_active_profile_config_path", lambda: config)
+    detail_projection._clear_session_detail_tail_cache()
 
     full = _session(
         sid,
@@ -144,8 +145,8 @@ def test_sidecar_change_invalidates_cached_initial_tail(tmp_path, monkeypatch):
 def test_active_and_lineage_sessions_never_use_detail_tail_cache():
     active = _session("active_cache_001", [])
     active.active_stream_id = "stream-1"
-    assert routes._session_detail_tail_cache_eligible(active) is False
+    assert detail_projection._session_detail_tail_cache_eligible(active) is False
 
     child = _session("lineage_cache_001", [])
     child.parent_session_id = "parent_001"
-    assert routes._session_detail_tail_cache_eligible(child) is False
+    assert detail_projection._session_detail_tail_cache_eligible(child) is False
