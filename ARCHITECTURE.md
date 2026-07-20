@@ -62,8 +62,11 @@ actions. The topbar remains focused on conversation context and the workspace/fi
     api/
       __init__.py          Package marker
       auth.py              Optional password authentication, signed cookies, passkeys/WebAuthn
+      background_process.py Compatibility facade for background-run coordination
+      background_process_parts/ Completion-event and deferred-wakeup lifecycle owners
       config.py            Compatibility facade and owner of shared mutable config state
       config_parts/        Importable config I/O, discovery, routing, settings, and reasoning domains
+        model_catalog.py   Complete model discovery/catalog lifecycle; intentionally kept cohesive
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
         models_cache.py    Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
@@ -71,7 +74,10 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       model_catalog.py     Static provider names, aliases, and fallback models
       models.py            Compatibility facade for the session/model public API
       models_parts/        Importable session, persistence, projection, CLI, and state.db domains
-      profiles.py          Profile state management, hermes_cli wrapper
+      profiles.py          Profile compatibility facade and shared profile identity state
+      profiles_parts/      Catalog, management, runtime environment, and cron-scope owners
+      providers.py         Provider compatibility facade
+      provider_parts/      Credential, cost-history, and account/quota lifecycle owners
       run_event_sink.py    Journal, cursor, and live-frame publication ordering
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
       session_repository.py Full-load, lock, and persistence protocol for session edits
@@ -81,15 +87,23 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       turn_execution.py    Shared Local/Gateway worker resource startup and teardown
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            GET + POST dispatch and compatibility facade for extracted route domains
-      routes_parts/        Importable workspace, git, cron, terminal, login, notes/wiki, TTS, security, compression, and response routes
+      routes_parts/        Importable chat-run, projection, stream transport, media, model,
+                           workspace, git, cron, terminal, login, notes/wiki, TTS, security,
+                           compression, and response route owners
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
       streaming.py         SSE orchestration and compatibility facade for extracted stream domains
       streaming_parts/     Importable payload, replay, compression, Gateway routing metadata,
-                           attachment, and terminal domains
-      updates.py           Self-update check and release notes
+                           attachment, terminal, live-control, and local-run domains
+      updates.py           Stable self-update compatibility facade and status orchestration
+      update_repository.py Git/source discovery and hardened update repository boundary
+      update_policy.py     Version, channel, eligibility, and release-selection policy
+      update_transaction.py Install, rollback, restart, and recovery transaction owner
       upload.py            Multipart parser, file upload handler
-      workspace.py         File ops: list_dir, read_file_content, git detection, workspace helpers
+      workspace.py         Workspace identity/registry compatibility facade
+      workspace_parts/     Path safety, anchored file access, escape navigation, and git summary
+      workspace_git.py     High-level workspace Git compatibility facade
+      workspace_git_parts/ Repository identity, hardened subprocess, temp resource, and lock owner
     static/
       index.html           HTML template
       style.css            Base CSS loaded before ordered domain styles
@@ -98,15 +112,21 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       ui_parts/            Direct-loaded UI state, rendering, navigation, model, and composer domains
       session_render_cache.js Native ES module owning the bounded transcript-render LRU
       session_render_cache_adapter.js Temporary classic-frontend compatibility adapter
-      workspace.js         File preview, file ops, git badge, central api() fetch wrapper
+      workspace.js         Workspace transport and compatibility facade
+      workspace_parts/     Ordered navigation, preview/editor, and upload owners
       sessions.js          Session compatibility facade loaded after its ordered domain scripts
       sessions_parts/      Direct-loaded session state, lifecycle, list, sidebar, and management domains
       messages.js          Messages compatibility bootstrap loaded before ordered domain scripts
-      messages_parts/      Direct-loaded send, stream, approval, clarify, and session-event domains
+      messages_parts/      Direct-loaded send, stream lifecycle, anchor scene, live tools,
+                           stream rendering, approval, clarify, and session-event domains
       panels.js            Panels compatibility bootstrap loaded before ordered panel domain scripts
       panels_parts/        Direct-loaded cron, kanban, settings, profile, skill, and workspace domains
-      commands.js          Slash command registry, parser, autocomplete dropdown
-      boot.js              Event wiring, mobile nav, voice input, theme/skin boot, bfcache handler
+      commands.js          Slash registry/autocomplete facade loaded after command_parts/
+      command_parts/       Desktop, compression, run-control, and session-history owners
+      boot.js              Boot compatibility facade loaded after boot_parts/
+      boot_parts/          Run control, navigation, speech, voice, composer, appearance, bootstrap
+      assistant_turn_anchors.js Compatibility facade for stable assistant-turn anchors
+      assistant_turn_anchors_parts/ Anchor model/registry/recovery and activity-scene owners
       onboarding.js        First-run wizard overlay, provider setup flow
       i18n.js              Localization compatibility bootstrap
       i18n_parts/          Helpers, one coherent file per locale, and final runtime binding
@@ -296,13 +316,15 @@ larger migration remains incremental:
   Hermes `state.db`. Its Interface accepts query text and storage collaborators
   and returns a payload; the route wrapper only supplies those values and
   serializes the response.
-- `api.config`, `api.models`, `api.routes`, and `api.streaming` preserve their
-  established import and monkeypatch surfaces as compatibility facades. Cohesive
-  implementations live in `config_parts/`, `models_parts/`, `routes_parts/`, and
-  `streaming_parts/`: config and streaming helpers resolve facade collaborators
-  at call time, route exports are rebound into the facade namespace, and the
-  models facade republishes and synchronizes its semantic modules. These are
-  normal Python modules, not source strings or runtime-concatenated fragments.
+- `api.config`, `api.models`, `api.routes`, `api.streaming`, `api.providers`,
+  `api.profiles`, `api.updates`, `api.workspace`, and `api.workspace_git`
+  preserve their established import and monkeypatch surfaces as compatibility
+  facades. Cohesive implementations live in their corresponding owner modules
+  and `*_parts/` packages. Moved functions are rebound to the exporting facade
+  when historical monkeypatch or introspection behavior requires it; shared
+  locks, caches, registries, and `ContextVar` state retain one authoritative
+  owner. These are normal Python modules, not source strings or
+  runtime-concatenated fragments.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.
@@ -562,17 +584,25 @@ The main directly loaded families are:
 1. `style.css`, then `style_parts/` for theme, layout, transcript, settings, and panel CSS.
 2. `i18n.js`, helpers, one complete locale file per language, then the i18n runtime.
 3. `ui.js`, then ordered `ui_parts/` for UI state, navigation, model/composer controls, and rendering.
-4. Ordered `sessions_parts/`, then `sessions.js`, whose compatibility facade is intentionally installed last.
-5. `messages.js`, then `messages_parts/` for send, stream lifecycle, approvals, clarification, and session events.
-6. `panels.js`, then `panels_parts/` for cron, kanban, settings, profiles, skills, memory, and workspaces.
-7. Standalone owners such as `workspace.js`, `commands.js`, `terminal.js`, `onboarding.js`, and `boot.js`.
+4. `workspace.js`, then ordered `workspace_parts/` for navigation, preview/editor,
+   and upload behavior.
+5. Ordered `sessions_parts/`, then `sessions.js`, whose compatibility facade is intentionally installed last.
+6. Ordered `command_parts/`, then `commands.js`, preserving the command globals consumed by message sending.
+7. `messages.js`, then ordered `messages_parts/` for send, anchor modeling,
+   stream rendering/lifecycle, approvals, clarification, and session events.
+8. `panels.js`, then `panels_parts/` for cron, kanban, settings, profiles, skills, memory, and workspaces.
+9. Ordered `boot_parts/`, then `boot.js`; standalone owners such as `terminal.js`
+   and `onboarding.js` remain directly loaded.
 
 Most application assets remain classic scripts. Their browser order and selected
 compatibility globals are therefore part of the contract, while family namespaces
 such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
-the semantic owners. A domain stays intact when splitting it would cross a function
-or owner-closure boundary; `messages_parts/stream.js`, for example, is deliberately
-larger than the line-count heuristic.
+the semantic owners. A domain stays intact when splitting it would cross a
+function, transaction, or owner-closure boundary. Large modules such as
+`config_parts/model_catalog.py`, `streaming_parts/local_run.py`, and
+`ui_parts/017-message-renderer.js` are deliberately larger than the line-count
+heuristic because their state and cleanup lifecycles do not expose a narrower
+safe Interface.
 
 Three-panel layout (in static/index.html):
 
@@ -892,9 +922,10 @@ Current backend structure (roles only; use `wc -l` for current sizes):
       api/
         __init__.py
         routes.py             GET + POST dispatch and route compatibility facade
-        routes_parts/         Cohesive importable workspace, terminal, login, notes/wiki, TTS, and runtime route domains
+        routes_parts/         Cohesive importable chat-run, projection, transport, media,
+                              workspace, terminal, login, notes/wiki, TTS, and runtime domains
         config.py             Config compatibility facade and shared mutable state owner
-        config_parts/         Cohesive importable config domains with late binding
+        config_parts/         Cohesive importable config and model-catalog domains with late binding
         helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
         insights.py           Transport-independent usage aggregation
         model_catalog.py      Static provider and fallback-model catalog
@@ -905,16 +936,26 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         session_sources.py    Imported-session source identity policy
         stream_channel.py     Bounded live-event broadcast and replay
         turn_admission.py     Atomic local-turn admission and worker launch
-        workspace.py          File ops and workspace management
+        providers.py          Provider compatibility facade
+        provider_parts/       Credentials, costs, and account/quota lifecycle
+        profiles.py           Profile compatibility facade and shared identity state
+        profiles_parts/       Catalog, management, runtime, and cron scopes
+        updates.py            Stable update facade and status orchestration
+        update_{repository,policy,transaction}.py
+                              Repository, selection policy, and atomic update transaction
+        workspace.py          Workspace identity and registry facade
+        workspace_parts/      Path safety, anchored access, escape navigation, git summary
+        workspace_git.py      High-level Git workflow facade
+        workspace_git_parts/  Repository identity, subprocess, temp resource, and lock owner
         upload.py             Multipart parser and file upload handler
         streaming.py          SSE orchestration and streaming compatibility facade
         streaming_parts/      Payload, replay, compression, Gateway routing metadata,
-                              attachment, and terminal domains
+                              attachment, terminal, live-control, and local-run domains
       static/
         index.html            HTML document (served from disk)
         style.css             Base CSS
         style_parts/          Direct-loaded ordered CSS domains
-        {ui,sessions,messages,panels}.js
+        {ui,sessions,messages,panels,workspace,commands,boot}.js
                               Compatibility bootstraps/facades
         *_parts/              Direct-loaded ordered JavaScript domains
         *.js                  Standalone classic-script owners (no bundler)
