@@ -64,9 +64,9 @@ def test_workspace_panel_restore_sets_browse_mode():
     if iife_idx < 0:
         iife_idx = BOOT_JS.rfind("(async()=>{")
     iife_body = BOOT_JS[iife_idx:]
-    # The restore block must assign _workspacePanelMode = 'browse'
-    assert "_workspacePanelMode='browse'" in iife_body or "_workspacePanelMode = 'browse'" in iife_body, \
-        "Boot must set _workspacePanelMode='browse' when restoring an open panel"
+    # The restore block must ask the navigation owner to restore browse mode.
+    assert "setWorkspacePanelMode('browse')" in iife_body, \
+        "Boot must restore workspace browse mode through the navigation owner"
 
 
 def test_workspace_panel_restore_before_sync():

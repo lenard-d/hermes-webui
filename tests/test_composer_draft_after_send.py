@@ -60,7 +60,7 @@ def test_busy_send_paths_clear_persisted_composer_draft():
     try_steer_body = _block(
         COMMANDS_JS,
         "async function _trySteer(",
-        "\nglobalThis.HermesCommands.parts.runControls",
+        "\nexport {cmdGoal",
     )
     assert "_clearComposerDraft(ownerSid,_steerRestoreText(originalMsg,explicitSteer),pendingFilesSnapshot)" in try_steer_body, (
         "delivered steer must clear the captured owner draft with the submitted payload signature"

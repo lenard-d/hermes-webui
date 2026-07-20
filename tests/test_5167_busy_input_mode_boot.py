@@ -25,6 +25,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 BOOT_JS = family_source("boot")
+BOOT_INDEX = (ROOT / "static" / "modules" / "boot" / "index.js").read_text(encoding="utf-8")
+PUBLIC_INTERFACES = (ROOT / "static" / "modules" / "boot" / "public-interfaces.js").read_text(encoding="utf-8")
+COMPATIBILITY = (ROOT / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 MESSAGES_JS = family_source("messages")
 UI_JS = family_source("ui")
@@ -33,7 +36,8 @@ class TestEagerDefault:
 
     def test_eager_default_assigned_at_module_scope(self):
         """An eager top-level assignment must exist so first sends honor the preference."""
-        assert "window._defaultMessageMode=_readPersistedDefaultMessageMode()" in BOOT_JS, (
+        assert "const eagerDefaultMessageMode=_readPersistedDefaultMessageMode();" in PUBLIC_INTERFACES
+        assert "globalThis._defaultMessageMode=eagerDefaultMessageMode;" in COMPATIBILITY, (
             "boot.js must eagerly initialise window._defaultMessageMode from the persisted "
             "mirror at module scope so sends during the boot window don't default silently"
         )
@@ -44,24 +48,17 @@ class TestEagerDefault:
         This is the whole point of the fix: the value must be deterministic during
         the window between page load and the settings fetch resolving.
         """
-        eager_idx = BOOT_JS.find("window._defaultMessageMode=_readPersistedDefaultMessageMode()")
-        assert eager_idx >= 0, "eager default assignment not found"
-        # The async IIFE awaits /api/settings; the success-path assignment lives inside it.
-        await_idx = BOOT_JS.find("const s=await api('/api/settings')")
-        assert await_idx >= 0, "async settings fetch not found"
-        assert eager_idx < await_idx, (
-            "the eager window._defaultMessageMode default must be set BEFORE the async "
-            "/api/settings fetch — otherwise the boot-window race (#5167) persists"
-        )
+        assert "import '../compatibility.js';" in BOOT_INDEX
+        assert "const s=await api('/api/settings')" in BOOT_INDEX
+        assert BOOT_INDEX.index("import '../compatibility.js';") < BOOT_INDEX.index("(async()=>{")
 
     def test_eager_default_precedes_send_definition(self):
         """The eager default in boot.js loads after messages.js (defer order), but the
         assignment itself must sit at top level so it runs during script evaluation,
         not inside a later-firing callback."""
-        eager_idx = BOOT_JS.find("window._defaultMessageMode=_readPersistedDefaultMessageMode()")
-        # Must be at the start of a line (top-level statement), not indented inside a fn.
-        line_start = BOOT_JS.rfind("\n", 0, eager_idx) + 1
-        assert BOOT_JS[line_start:eager_idx].strip() == "", (
+        eager_idx = COMPATIBILITY.find("globalThis._defaultMessageMode=eagerDefaultMessageMode;")
+        line_start = COMPATIBILITY.rfind("\n", 0, eager_idx) + 1
+        assert COMPATIBILITY[line_start:eager_idx].strip() == "", (
             "the eager default must be a top-level statement (not nested in a function "
             "or callback) so it runs during script evaluation"
         )
@@ -72,11 +69,11 @@ class TestSyncMirrorHelpers:
 
     def test_persist_helper_defined_and_exposed(self):
         assert "function _persistDefaultMessageMode(" in BOOT_JS
-        assert "window._persistDefaultMessageMode=_persistDefaultMessageMode" in BOOT_JS
+        assert "_persistDefaultMessageMode," in COMPATIBILITY
 
     def test_read_helper_defined_and_exposed(self):
         assert "function _readPersistedDefaultMessageMode(" in BOOT_JS
-        assert "window._readPersistedDefaultMessageMode=_readPersistedDefaultMessageMode" in BOOT_JS
+        assert "_readPersistedDefaultMessageMode," in COMPATIBILITY
 
     def test_mirror_uses_dedicated_localstorage_key(self):
         assert "localStorage.setItem(_DEFAULT_MESSAGE_MODE_KEY" in BOOT_JS, (

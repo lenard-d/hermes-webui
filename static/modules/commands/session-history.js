@@ -1,6 +1,3 @@
-globalThis.HermesCommands=globalThis.HermesCommands||{};
-globalThis.HermesCommands.parts=globalThis.HermesCommands.parts||{};
-
 function cmdClear(){
   if(!S.session)return;
   S.messages=[];S.toolCalls=[];
@@ -264,14 +261,16 @@ async function forkFromMessage(msgIdx){
   }catch(e){showToast(t('branch_failed')+e.message);}
 }
 
-globalThis.HermesCommands.parts.sessionHistory=Object.freeze({
+export {
+  cmdBackground,
+  cmdBranch,
+  cmdBtw,
   cmdClear,
   cmdNew,
-  cmdTitle,
   cmdRetry,
-  cmdUndo,
-  undoLastExchange,
   cmdStatus,
-  cmdBranch,
+  cmdTitle,
+  cmdUndo,
   forkFromMessage,
-});
+  undoLastExchange,
+};

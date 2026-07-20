@@ -1,114 +1,93 @@
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_asset_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "static"
-PARTS_DIR = STATIC / "boot_parts"
-MANIFEST = PARTS_DIR / "manifest.json"
+MODULES_DIR = STATIC / "modules" / "boot"
+INDEX = MODULES_DIR / "index.js"
 
 
-def _manifest() -> dict:
-    return json.loads(MANIFEST.read_text(encoding="utf-8"))
-
-
-def _production_scripts() -> list[Path]:
-    return [STATIC / "boot.js", *(PARTS_DIR / name for name in _manifest()["parts"])]
-
-
-def _combined_source() -> str:
-    return "".join(path.read_text(encoding="utf-8") for path in _production_scripts())
-
-
-def test_boot_manifest_is_the_direct_script_load_order():
-    manifest = _manifest()
-    assert set(manifest) == {"version", "parts"}
-    assert manifest["version"] == 1
-    assert manifest["parts"] == [
-        "001-run-control.js",
-        "002-shell-navigation.js",
-        "003-speech-capture.js",
-        "004-public-interfaces.js",
-        "005-conversation-voice.js",
-        "006-composer-session-actions.js",
-        "007-appearance-preferences.js",
-        "008-bootstrap-coordinator.js",
+def test_boot_uses_semantic_native_modules_without_legacy_parts():
+    assert [path.name for path in family_asset_paths("boot")] == [
+        "server-lifecycle.js",
+        "run-control.js",
+        "speech-capture.js",
+        "public-interfaces.js",
+        "appearance.js",
+        "navigation.js",
+        "composer.js",
+        "voice-mode.js",
+        "index.js",
     ]
-    assert sorted(path.name for path in PARTS_DIR.glob("*.js")) == manifest["parts"]
+    assert not (STATIC / "boot.js").exists()
+    assert not (STATIC / "boot_parts").exists()
+    assert not any(re.match(r"\d{3}-", path.name) for path in MODULES_DIR.glob("*.js"))
 
 
-def test_boot_parts_are_parseable_and_publish_one_owner_each():
+def test_boot_modules_parse_independently_and_declare_interfaces():
     node = shutil.which("node")
-    owners: list[str] = []
-    for script in _production_scripts():
-        source = script.read_text(encoding="utf-8")
+    for path in family_asset_paths("boot"):
+        source = path.read_text(encoding="utf-8")
         assert source.endswith("\n")
-        assert len(source.splitlines()) <= 900, script
+        assert "HermesBoot.begin" not in source
+        assert "HermesBoot.publish" not in source
+        assert re.search(r"\b(?:import|export)\b", source), path
         if node:
             result = subprocess.run(
-                [node, "--check", str(script)],
+                [node, "--check", str(path)],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             assert result.returncode == 0, result.stderr
-        if script.parent == PARTS_DIR:
-            begin = re.findall(r"window\.HermesBoot\.begin\('([^']+)'\)", source)
-            publish = re.findall(r"window\.HermesBoot\.publish\('([^']+)'", source)
-            assert len(begin) == 1, script
-            assert publish == begin, script
-            owners.extend(begin)
-    assert len(owners) == len(set(owners))
 
 
-def test_boot_facade_declares_the_same_runtime_order_as_the_manifest():
-    facade = (STATIC / "boot.js").read_text(encoding="utf-8")
-    declared = re.findall(r"'([0-9]{3}-[^']+\.js)'", facade)
-    assert declared == _manifest()["parts"]
-    assert "root.HermesBoot=api;" in facade
-    assert "api.begin=function begin" in facade
-    assert "api.publish=function publish" in facade
-    coordinator = (PARTS_DIR / _manifest()["parts"][-1]).read_text(encoding="utf-8")
-    assert coordinator.rstrip().endswith("window.HermesBoot.assertComplete();")
+def test_boot_index_imports_owners_and_compatibility_before_coordinating():
+    source = INDEX.read_text(encoding="utf-8")
+    assert "import '../compatibility.js';" in source
+    for owner in (
+        "./navigation.js",
+        "./run-control.js",
+        "./public-interfaces.js",
+        "./appearance.js",
+        "./composer.js",
+        "./voice-mode.js",
+    ):
+        assert owner in source
+    assert "(async()=>{" in source
 
 
-def test_index_loads_boot_facade_and_parts_in_contract_order():
+def test_index_loads_one_boot_module_entrypoint_after_classic_dependencies():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    expected = [
-        'src="static/boot.js?v=__WEBUI_VERSION__"',
-        *(
-            f'src="static/boot_parts/{name}?v=__WEBUI_VERSION__"'
-            for name in _manifest()["parts"]
-        ),
-        'src="static/outline.js?v=__WEBUI_VERSION__"',
-    ]
-    positions = [html.index(marker) for marker in expected]
-    assert positions == sorted(positions)
+    marker = 'type="module" src="static/modules/boot/index.js?v=__WEBUI_VERSION__"'
+    assert html.count(marker) == 1
+    assert html.index('src="static/outline.js?v=__WEBUI_VERSION__"') < html.index(marker)
+    assert "static/boot.js" not in html
+    assert "static/boot_parts/" not in html
 
 
-def test_service_worker_precaches_the_complete_boot_family():
+def test_service_worker_precaches_boot_entry_and_unversioned_dependencies():
     worker = (STATIC / "sw.js").read_text(encoding="utf-8")
-    expected = [
-        "'./static/boot.js' + VQ",
-        *(f"'./static/boot_parts/{name}' + VQ" for name in _manifest()["parts"]),
-    ]
-    positions = [worker.index(marker) for marker in expected]
-    assert positions == sorted(positions)
+    assert "'./static/modules/boot/index.js' + VQ" in worker
+    for path in family_asset_paths("boot")[:-1]:
+        rel = path.relative_to(ROOT).as_posix()
+        assert f"'./{rel}'," in worker
+    assert "'./static/modules/compatibility.js'," in worker
 
 
-def test_full_boot_family_is_syntax_valid(tmp_path):
-    node = shutil.which("node")
-    if not node:
+def test_boot_module_graph_is_statically_valid():
+    deno = shutil.which("deno")
+    if not deno:
         return
-    combined = tmp_path / "boot-combined.js"
-    combined.write_text(_combined_source(), encoding="utf-8")
     result = subprocess.run(
-        [node, "--check", str(combined)],
+        [deno, "check", "--no-config", str(INDEX)],
         capture_output=True,
         text=True,
         check=False,

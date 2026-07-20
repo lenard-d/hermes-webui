@@ -1,4 +1,5 @@
-window.HermesBoot.begin('shellNavigation');
+import {speechCapture} from './speech-capture.js';
+
 // ── Mobile navigation ──────────────────────────────────────────────────────
 // URL prefill boot helpers.
 function _prefillHasDraftText(prefillIntent){
@@ -30,8 +31,35 @@ async function _finalizeComposerPrefillOnBoot(prefillIntent){
 // Mobile navigation.
 let _workspacePanelMode='closed'; // 'closed' | 'browse' | 'preview'
 
+function setWorkspacePanelMode(mode){
+  if(mode==='closed'||mode==='browse'||mode==='preview') _workspacePanelMode=mode;
+  return _workspacePanelMode;
+}
+
+function _hasFinePointerCoexisting(){
+  try{ return matchMedia('(any-pointer:fine)').matches; }catch(_){ return false; }
+}
+
 function _isCompactWorkspaceViewport(){
   return window.matchMedia('(max-width: 900px)').matches;
+}
+
+function clearPreview(opts={}){
+  const keepPanelOpen=!!(opts&&opts.keepPanelOpen);
+  if(typeof renderBreadcrumb==='function') renderBreadcrumb();
+  const closePanelAfter=_workspacePanelMode==='preview'&&!keepPanelOpen;
+  const pa=$('previewArea');if(pa)pa.classList.remove('visible');
+  const pi=$('previewImg');if(pi){pi.onerror=null;pi.src='';}
+  const pdf=$('previewPdfFrame');if(pdf)pdf.src='';
+  const html=$('previewHtmlIframe');if(html)html.src='';
+  const pm=$('previewMd');if(pm)pm.innerHTML='';
+  const pc=$('previewCode');if(pc)pc.textContent='';
+  const pp=$('previewPathText');if(pp)pp.textContent='';
+  const ft=$('fileTree');if(ft)ft.style.display='';
+  _previewCurrentPath='';_previewCurrentMode='';_previewDirty=false;
+  if(closePanelAfter)closeWorkspacePanel();
+  else if(keepPanelOpen&&_workspacePanelMode==='preview')openWorkspacePanel('browse');
+  else syncWorkspacePanelUI();
 }
 
 function _isPhoneWidthViewport(){
@@ -500,7 +528,7 @@ $('btnSend').onclick=()=>{
   if(typeof handleComposerPrimaryAction==='function') return handleComposerPrimaryAction();
   if(window._micActive){
     window._micPendingSend=true;
-    _stopMic();
+    if(typeof speechCapture.stopMic==='function') speechCapture.stopMic();
     return;
   }
   // Turn-based voice mode: let the voice mode system handle the send flow
@@ -514,4 +542,35 @@ $('btnSend').onclick=()=>{
 $('mainChat')?.addEventListener('pointerdown', closeMobileWorkspacePanelFromChat);
 $('btnAttach').onclick=e=>{if(e&&e.preventDefault)e.preventDefault();$('fileInput').value='';$('fileInput').click();};
 
-window.HermesBoot.publish('shellNavigation',{syncWorkspacePanelState,openWorkspacePanel,closeWorkspacePanel,toggleMobileSidebar,closeMobileSidebar,toggleSidebar,mobileSwitchPanel});
+export {
+  _finalizeComposerPrefillOnBoot,
+  _forceMobileViewportReflow,
+  _hasFinePointerCoexisting,
+  _isCompactWorkspaceViewport,
+  _isDesktopWidth,
+  _isInteractiveSwipeTarget,
+  _isSidebarCollapsed,
+  _maybeBindFreshDefaultWorkspaceSession,
+  _profileQueryBlocksSavedLocalRestore,
+  _rootPrefillNeedsFreshComposer,
+  _setButtonTooltip,
+  _syncKeyboardBottomInset,
+  _syncSidebarAria,
+  _syncWorkspacePanelInlineWidth,
+  _workspacePanelMode,
+  closeMobileSidebar,
+  closeMobileWorkspacePanelFromChat,
+  closeWorkspacePanel,
+  clearPreview,
+  expandSidebar,
+  handleWorkspaceClose,
+  mobileSwitchPanel,
+  openWorkspacePanel,
+  setWorkspacePanelMode,
+  syncWorkspacePanelState,
+  syncWorkspacePanelUI,
+  toggleMobileFiles,
+  toggleMobileSidebar,
+  toggleSidebar,
+  toggleWorkspacePanel,
+};

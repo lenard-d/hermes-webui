@@ -1,4 +1,42 @@
-window.HermesBoot.begin('bootstrapCoordinator');
+import '../compatibility.js';
+import {
+  _finalizeComposerPrefillOnBoot,
+  _isCompactWorkspaceViewport,
+  _isSidebarCollapsed,
+  _maybeBindFreshDefaultWorkspaceSession,
+  _profileQueryBlocksSavedLocalRestore,
+  _rootPrefillNeedsFreshComposer,
+  _syncKeyboardBottomInset,
+  _syncSidebarAria,
+  closeMobileSidebar,
+  setWorkspacePanelMode,
+  syncWorkspacePanelState,
+  toggleSidebar,
+} from './navigation.js';
+import {_savedSessionSidebarOnlyState} from './run-control.js';
+import {
+  _normalizeDefaultMessageMode,
+  _persistDefaultMessageMode,
+  _readPersistedDefaultMessageMode,
+} from './public-interfaces.js';
+import {
+  _LEGACY_THEME_MAP,
+  _VALID_SKINS,
+  _applyComposerControlOrder,
+  _applyComposerFooterVisibilitySettings,
+  _applyFontSize,
+  _applySkin,
+  _applyTheme,
+  _applyTitlebarProfileVisibility,
+  _composerControlVisibilityFromSettings,
+  _mirrorSpeechSettingsFromServer,
+  _normalizeAppearance,
+  _sanitizeComposerControlOrder,
+  applyBotName,
+} from './appearance.js';
+import {applyEmptyStateSuggestionPref,initResizePanels} from './composer.js';
+import {voiceMode} from './voice-mode.js';
+
 (async()=>{
   // Load send key preference
   let _bootSettings={};
@@ -160,7 +198,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
     // module init and settings-load completion (round-2 SILENT race).
     // Note: must use window._applyVoiceModePref — the bare name is
     // closure-local to the voice-mode IIFE and not visible here.
-    if(typeof window._applyVoiceModePref==='function') window._applyVoiceModePref();
+    if(typeof voiceMode.applyPreference==='function') voiceMode.applyPreference();
     _applyComposerFooterVisibilitySettings();
     // TTS: apply enabled state on boot so buttons show/hide correctly (#499)
     if(typeof _applyTtsEnabled==='function') _applyTtsEnabled(localStorage.getItem('hermes-tts-enabled')==='true');
@@ -221,7 +259,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
     // the failure-fallback path because _applyVoiceModePref is idempotent).
     // Note: must use window._applyVoiceModePref — the bare name is
     // closure-local to the voice-mode IIFE and not visible here.
-    if(typeof window._applyVoiceModePref==='function') window._applyVoiceModePref();
+    if(typeof voiceMode.applyPreference==='function') voiceMode.applyPreference();
     _applyComposerFooterVisibilitySettings();
     if(typeof _applyTtsEnabled==='function') _applyTtsEnabled(localStorage.getItem('hermes-tts-enabled')==='true');
   }
@@ -453,7 +491,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
   await renderSessionList();
   await _workspaceListReady;
   await _onboardingReady;
-  _initResizePanels();
+  initResizePanels();
   // Workspace panel restore happens AFTER loadSession so we know if
   // the session has a workspace — prevents the snap-open-then-closed flash (#576).
   // Fix #822: clear any browser-restored value before first render. This
@@ -511,7 +549,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
         S._bootReady=true;
         const _ephPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
           || localStorage.getItem('hermes-webui-workspace-panel')==='open';
-        if(_ephPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';
+        if(_ephPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');
         await _maybeBindFreshDefaultWorkspaceSession(prefillIntent);
         syncTopbar();syncWorkspacePanelState();
         $('emptyState').style.display='';
@@ -549,7 +587,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
         // even though there is no active session (#workspace-persist).
         const _ephPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
           || localStorage.getItem('hermes-webui-workspace-panel')==='open';
-        if(_ephPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';
+        if(_ephPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');
         await _maybeBindFreshDefaultWorkspaceSession(prefillIntent);
         syncTopbar();syncWorkspacePanelState();
         $('emptyState').style.display='';
@@ -562,7 +600,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
       const panelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
         || localStorage.getItem('hermes-webui-workspace-panel')==='open';
       if(S.session&&S.session.workspace&&panelPref&&!_isCompactWorkspaceViewport()){
-        _workspacePanelMode='browse';
+        setWorkspacePanelMode('browse');
       }
       S._bootReady=true;
       syncTopbar();syncWorkspacePanelState();await renderSessionList();if(typeof startGatewaySSE==='function')startGatewaySSE();await checkInflightOnBoot(saved);await _finalizeComposerPrefillOnBoot(prefillIntent);return;}
@@ -575,7 +613,7 @@ window.HermesBoot.begin('bootstrapCoordinator');
   // user had it open during their last session (#workspace-persist).
   const _freshPanelPref=localStorage.getItem('hermes-webui-workspace-panel-pref')==='open'
     || localStorage.getItem('hermes-webui-workspace-panel')==='open';
-  if(_freshPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';
+  if(_freshPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');
   await _maybeBindFreshDefaultWorkspaceSession(prefillIntent);
   syncWorkspacePanelState();
   $('emptyState').style.display='';
@@ -642,24 +680,3 @@ window.addEventListener('pageshow', async (event) => {
     } catch (_) {}
   }
 });
-
-async function shutdownServer() {
-  const ok = await showConfirmDialog({
-    title: (typeof t === 'function' ? t('settings_shutdown_confirm_title') : 'Stop Hermes WebUI'),
-    message: (typeof t === 'function' ? t('settings_shutdown_confirm_message') : 'Stop the Hermes WebUI server?'),
-    confirmLabel: (typeof t === 'function' ? t('settings_shutdown_confirm_btn') : 'Stop'),
-    danger: true,
-  });
-  if (!ok) return;
-  localStorage.setItem('hermes-webui-server-stopped', '1');
-  try { var bc = new BroadcastChannel('hermes-webui-shutdown'); bc.postMessage('stop'); bc.close(); } catch(_) {}
-  _showServerStopped();
-  try { await api('/api/shutdown', { method: 'POST' }); } catch (_) {}
-}
-
-function _showServerStopped() {
-  var stoppedMsg = (typeof t === 'function' ? t('settings_shutdown_stopped_message') : 'Server stopped. You can close this tab.');
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--muted);font-family:system-ui,ui-sans-serif;font-size:14px"><p>' + stoppedMsg + '</p></div>';
-}
-window.HermesBoot.publish('bootstrapCoordinator',{shutdownServer,showServerStopped:_showServerStopped});
-window.HermesBoot.assertComplete();

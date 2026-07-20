@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "parts": [
-    "001-desktop-companion.js",
-    "002-manual-compression.js",
-    "003-run-controls.js",
-    "004-session-history.js"
-  ]
-}

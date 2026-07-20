@@ -1,3 +1,20 @@
+import {handlePetSlashCommand} from './desktop-companion.js';
+import {cmdCompact,cmdCompress,resumeManualCompressionForSession} from './manual-compression.js';
+import {cmdGoal,cmdInterrupt,cmdQueue,cmdSteer,cmdStop,cmdYolo,_trySteer} from './run-controls.js';
+import {
+  cmdBackground,
+  cmdBranch,
+  cmdBtw,
+  cmdClear,
+  cmdNew,
+  cmdRetry,
+  cmdStatus,
+  cmdTitle,
+  cmdUndo,
+  forkFromMessage,
+  undoLastExchange,
+} from './session-history.js';
+
 // ── Slash commands ──────────────────────────────────────────────────────────
 // Built-in commands intercepted before send(). Each command runs locally
 // (no round-trip to the agent) and shows feedback via toast or local message.
@@ -137,14 +154,6 @@ function _invalidateSlashModelCache(){
   _slashModelCache=null;
   _slashModelCachePromise=null;
 }
-// Expose on window when available. Guarded by typeof so the module is
-// importable in headless test contexts (vm.runInContext) that don't
-// define a window global — see tests/test_cli_only_slash_commands.py.
-if(typeof window!=='undefined'){
-  window._invalidateSlashModelCache=_invalidateSlashModelCache;
-  window.invalidateSlashSkillCaches=invalidateSlashSkillCaches;
-}
-
 function _normalizeSlashSubArg(value){
   return String(value||'').trim();
 }
@@ -1127,56 +1136,55 @@ function selectCmdDropdownItem(){
 const HANDLERS = {};
 HANDLERS.skills = cmdSkills;
 
-/**
- * Commands compatibility facade.
- *
- * Load the numbered classic scripts in command_parts first, then this file.
- * The registry stays here as the authoritative dispatch interface; the parts
- * publish cohesive domain interfaces under window.HermesCommands.parts while
- * their existing globals remain available to messages.js, boot.js, sessions.js
- * and extension hooks.
- */
-(function installHermesCommandsFacade(root){
-  const commands=root.HermesCommands;
-  if(!commands||!commands.parts) throw new Error('Hermes command parts must load before commands.js');
+const commandInterface=Object.freeze({
+  COMMANDS,
+  parseCommand,
+  executeCommand,
+  getMatchingCommands,
+  getSlashAutocompleteMatches,
+  getComposerPathAutocompleteMatches,
+  showCmdDropdown,
+  hideCmdDropdown,
+  navigateCmdDropdown,
+  selectCmdDropdownItem,
+  ensureSkillCommandsLoadedForAutocomplete,
+  getAgentCommandMetadata,
+  executeAgentCommand,
+  executeAgentPluginCommand,
+  resolveBundleCommand,
+  getBundleCommandMetadata,
+  handlePetSlashCommand,
+  resumeManualCompressionForSession,
+  trySteer:_trySteer,
+  undoLastExchange,
+  forkFromMessage,
+  invalidateSlashSkillCaches,
+  invalidateSlashModelCache:_invalidateSlashModelCache,
+});
 
-  commands.loadOrder=Object.freeze([
-    '001-desktop-companion.js',
-    '002-manual-compression.js',
-    '003-run-controls.js',
-    '004-session-history.js',
-  ]);
-
-  const requiredParts=['desktopCompanion','manualCompression','runControls','sessionHistory'];
-  for(const name of requiredParts){
-    if(!commands.parts[name]) throw new Error(`Hermes command part missing: ${name}`);
-  }
-
-  commands.registry=COMMANDS;
-  commands.api=Object.freeze({
-    parseCommand,
-    executeCommand,
-    getMatchingCommands,
-    getSlashAutocompleteMatches,
-    getComposerPathAutocompleteMatches,
-    showCmdDropdown,
-    hideCmdDropdown,
-    navigateCmdDropdown,
-    selectCmdDropdownItem,
-    ensureSkillCommandsLoadedForAutocomplete,
-    getAgentCommandMetadata,
-    executeAgentCommand,
-    executeAgentPluginCommand,
-    resolveBundleCommand,
-    getBundleCommandMetadata,
-    handlePetSlashCommand:commands.parts.desktopCompanion.handlePetSlashCommand,
-    resumeManualCompressionForSession:commands.parts.manualCompression.resumeManualCompressionForSession,
-    trySteer:commands.parts.runControls.trySteer,
-    undoLastExchange:commands.parts.sessionHistory.undoLastExchange,
-    forkFromMessage:commands.parts.sessionHistory.forkFromMessage,
-    invalidateSlashSkillCaches,
-    invalidateSlashModelCache:_invalidateSlashModelCache,
-  });
-
-  Object.assign(root,commands.api);
-})(globalThis);
+export {
+  COMMANDS,
+  HANDLERS,
+  _activeSlashCommandOffset,
+  _findComposerPathToken,
+  commandInterface,
+  cliOnlyCommandResponse,
+  ensureSkillCommandsLoadedForAutocomplete,
+  executeAgentCommand,
+  executeAgentPluginCommand,
+  executeCommand,
+  getAgentCommandMetadata,
+  getBundleCommandMetadata,
+  getComposerPathAutocompleteMatches,
+  getMatchingCommands,
+  getSlashAutocompleteMatches,
+  hideCmdDropdown,
+  loadAgentCommandMetadata,
+  loadBundleCommands,
+  loadSkillCommands,
+  navigateCmdDropdown,
+  parseCommand,
+  resolveBundleCommand,
+  selectCmdDropdownItem,
+  showCmdDropdown,
+};

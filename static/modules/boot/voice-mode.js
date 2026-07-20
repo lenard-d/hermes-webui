@@ -1,13 +1,16 @@
-window.HermesBoot.begin('conversationVoice');
+import {_setButtonTooltip} from './navigation.js';
+import {_micOriginNeedsSecureContext,_micToastKeyForRecognitionError} from './speech-capture.js';
+import {_hermesTtsIsRegistered,_hermesTtsSynth} from './public-interfaces.js';
+
 // ── Turn-based voice mode (#1333) ────────────────────────────────────────
 // Chained flow: listen → send → (agent processes) → TTS response → listen again
-(function(){
+const voiceMode=(()=>{
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const hasSTT=!(!SpeechRecognition);
   const hasTTS=!!('speechSynthesis' in window);
 
   // Need both STT and TTS for turn-based voice mode
-  if(!hasSTT||!hasTTS) return;
+  if(!hasSTT||!hasTTS) return Object.freeze({});
 
   const modeBtn=$('btnVoiceMode');
   const bar=$('voiceModeBar');
@@ -16,7 +19,7 @@ window.HermesBoot.begin('conversationVoice');
   const micBtn=$('btnMic');
   const ta=$('msg');
 
-  if(!modeBtn||!bar||!indicator||!label) return;
+  if(!modeBtn||!bar||!indicator||!label) return Object.freeze({});
 
   // Voice-mode button is gated behind a Preferences toggle (#1488).
   // Default off — keeps the composer footer uncluttered for users who
@@ -35,9 +38,6 @@ window.HermesBoot.begin('conversationVoice');
     if(!enabled && _voiceModeActive) _deactivate();
   }
   _applyVoiceModePref();
-  // Expose so the settings pane can re-apply immediately on toggle.
-  window._applyVoiceModePref = _applyVoiceModePref;
-
   let _voiceModeState='idle'; // idle | listening | thinking | speaking
   let _recognition=null;
   let _silenceTimer=null;
@@ -240,14 +240,14 @@ window.HermesBoot.begin('conversationVoice');
     const engine=localStorage.getItem("hermes-tts-engine")||"browser";
     // Extension-registered TTS engine (window.registerHermesTtsEngine): synth
     // via the extension, then play through the same Audio lifecycle as edge.
-    if(typeof window._hermesTtsIsRegistered==='function' && window._hermesTtsIsRegistered(engine)){
+    if(_hermesTtsIsRegistered(engine)){
       _ttsSpeaking=true;
       const _opts={
         voice: localStorage.getItem("hermes-tts-voice")||'',
         rate: parseFloat(localStorage.getItem("hermes-tts-rate")),
         pitch: parseFloat(localStorage.getItem("hermes-tts-pitch")),
       };
-      Promise.resolve(window._hermesTtsSynth(engine, clean, _opts))
+      Promise.resolve(_hermesTtsSynth(engine, clean, _opts))
         .then(function(buf){
           const blob=new Blob([buf]);
           const url=URL.createObjectURL(blob);
@@ -449,7 +449,7 @@ window.HermesBoot.begin('conversationVoice');
   // We patch setComposerStatus to detect when a response completes
   const _origSetComposerStatus=(typeof setComposerStatus==='function')?setComposerStatus.bind(window):null;
 
-  window._voiceModeOnResponseComplete=function(){
+  function _voiceModeOnResponseComplete(){
     if(_voiceModeActive&&_voiceModeState==='thinking'){
       // Small delay to let DOM render the final message
       setTimeout(()=>{
@@ -458,7 +458,7 @@ window.HermesBoot.begin('conversationVoice');
         }
       },400);
     }
-  };
+  }
 
   // Observe S.busy changes to detect response completion
   // The existing code calls setBusy(false) when response completes
@@ -472,13 +472,13 @@ window.HermesBoot.begin('conversationVoice');
   // We override autoReadLastAssistant so that if voice mode is active, we use our
   // own speak-and-resume flow instead of the default auto-read.
   const _origAutoRead=(typeof autoReadLastAssistant==='function')?autoReadLastAssistant:null;
-  window.autoReadLastAssistant=function(){
+  function voiceAutoReadLastAssistant(){
     if(_voiceModeActive&&_voiceModeState==='thinking'){
       _speakResponse();
       return;
     }
     if(_origAutoRead) _origAutoRead.apply(this,arguments);
-  };
+  }
 
   function _activate(){
     if(_micOriginNeedsSecureContext()){
@@ -528,9 +528,14 @@ window.HermesBoot.begin('conversationVoice');
     }
   };
 
-  // Expose for external use
-  window._voiceModeActive=()=>_voiceModeActive;
-  window._voiceModeDeactivate=_deactivate;
-  window._voiceModeImmediateSend=_voiceModeSend;
+  return Object.freeze({
+    applyPreference:_applyVoiceModePref,
+    autoReadLastAssistant:voiceAutoReadLastAssistant,
+    deactivate:_deactivate,
+    isActive:()=>_voiceModeActive,
+    onResponseComplete:_voiceModeOnResponseComplete,
+    sendImmediately:_voiceModeSend,
+  });
 })();
-window.HermesBoot.publish('conversationVoice',{isActive:window._voiceModeActive,deactivate:window._voiceModeDeactivate,sendImmediately:window._voiceModeImmediateSend});
+
+export {voiceMode};

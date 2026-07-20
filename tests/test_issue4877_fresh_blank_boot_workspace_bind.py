@@ -157,7 +157,7 @@ def test_no_saved_session_branch_restores_panel_pref_before_bind_attempt():
     sync_idx = src.find("syncWorkspacePanelState();", start)
     assert sync_idx > start, "no-saved-session path must still call syncWorkspacePanelState()"
     segment = src[start:sync_idx]
-    fresh_pref = "if(_freshPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';"
+    fresh_pref = "if(_freshPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');"
     pref_idx = segment.find(fresh_pref)
     assert pref_idx >= 0, "no-saved-session path must restore panel preference"
     bind_call = "await _maybeBindFreshDefaultWorkspaceSession(prefillIntent);"
@@ -174,7 +174,7 @@ def test_ephemeral_blank_session_branch_restores_panel_pref_before_bind_attempt(
     return_idx = src.find("return;", marker_idx)
     assert return_idx > marker_idx, "ephemeral blank-session path must still return early"
     segment = src[marker_idx:return_idx]
-    eph_pref = "if(_ephPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';"
+    eph_pref = "if(_ephPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');"
     pref_idx = segment.find(eph_pref)
     assert pref_idx >= 0, "ephemeral blank-session path must restore panel preference"
     bind_call = "await _maybeBindFreshDefaultWorkspaceSession(prefillIntent);"

@@ -18,6 +18,7 @@ COMMANDS_JS = family_source("commands")
 BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 STYLE_CSS = family_source("style")
+COMPATIBILITY_JS = (REPO_ROOT / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
 
 
 def _function_body(source, name):
@@ -56,7 +57,7 @@ def test_skills_subargs_route_through_dedicated_loader():
 
 def test_skill_mutations_invalidate_slash_skill_caches():
     assert "function invalidateSlashSkillCaches()" in COMMANDS_JS
-    assert "window.invalidateSlashSkillCaches=invalidateSlashSkillCaches;" in COMMANDS_JS
+    assert "invalidateSlashSkillCaches:commandInterface.invalidateSlashSkillCaches" in COMPATIBILITY_JS
     for function_name in ("saveSkillForm", "deleteCurrentSkill", "toggleSkill"):
         assert "window.invalidateSlashSkillCaches()" in _function_body(PANELS_JS, function_name)
 

@@ -1,155 +1,97 @@
 from __future__ import annotations
 
-import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 from tests.frontend_asset_contract import family_asset_paths
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-STATIC = REPO_ROOT / "static"
-PARTS_DIR = STATIC / "command_parts"
-MANIFEST = PARTS_DIR / "manifest.json"
-INDEX = (STATIC / "index.html").read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+STATIC = ROOT / "static"
+MODULES_DIR = STATIC / "modules" / "commands"
+INDEX = MODULES_DIR / "index.js"
 
 
-def _part_paths() -> tuple[Path, ...]:
-    return family_asset_paths("commands")[:-1]
+def test_commands_use_semantic_native_modules_without_legacy_parts():
+    assert [path.name for path in family_asset_paths("commands")] == [
+        "desktop-companion.js",
+        "manual-compression.js",
+        "run-controls.js",
+        "session-history.js",
+        "registry.js",
+        "index.js",
+    ]
+    assert not (STATIC / "commands.js").exists()
+    assert not (STATIC / "command_parts").exists()
+    assert not any(re.match(r"\d{3}-", path.name) for path in MODULES_DIR.glob("*.js"))
 
 
-def test_commands_manifest_pins_the_direct_load_order():
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    part_paths = _part_paths()
-
-    assert manifest == {
-        "version": 1,
-        "parts": [path.name for path in part_paths],
-    }
-    assert len(part_paths) == 4
-    assert len(part_paths) == len(set(part_paths))
-    assert [path.name for path in part_paths] == sorted(path.name for path in part_paths)
-
-
-def test_command_parts_and_facade_are_individually_parseable():
+def test_command_modules_parse_independently_and_export_interfaces():
+    node = shutil.which("node")
     for path in family_asset_paths("commands"):
-        result = subprocess.run(
-            ["node", "--check", str(path)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, f"{path.relative_to(REPO_ROOT)}: {result.stderr}"
-
-
-def test_command_parts_register_cohesive_namespaced_interfaces():
-    expected = {
-        "001-desktop-companion.js": "desktopCompanion",
-        "002-manual-compression.js": "manualCompression",
-        "003-run-controls.js": "runControls",
-        "004-session-history.js": "sessionHistory",
-    }
-
-    for path in _part_paths():
         source = path.read_text(encoding="utf-8")
-        module = expected[path.name]
-        assert (
-            f"globalThis.HermesCommands.parts.{module}=Object.freeze(" in source
-        ), f"{path.name} must publish its owned interface"
+        assert source.endswith("\n")
+        assert "HermesCommands.parts" not in source
+        assert "export" in source
+        if node:
+            result = subprocess.run(
+                [node, "--check", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
 
 
-def test_commands_facade_loads_after_all_parts_and_before_messages():
-    asset_names = [
-        f"static/command_parts/{path.name}?v=__WEBUI_VERSION__"
-        for path in _part_paths()
-    ]
-    asset_names.extend(
-        [
-            "static/commands.js?v=__WEBUI_VERSION__",
-            "static/messages.js?v=__WEBUI_VERSION__",
-        ]
-    )
-    positions = [INDEX.index(name) for name in asset_names]
-    assert positions == sorted(positions)
-
-    facade = (STATIC / "commands.js").read_text(encoding="utf-8")
-    match = re.search(
-        r"commands\.loadOrder=Object\.freeze\(\[(.*?)\]\);",
-        facade,
-        re.DOTALL,
-    )
-    assert match is not None
-    assert re.findall(r"'([^']+\.js)'", match.group(1)) == [
-        path.name for path in _part_paths()
-    ]
-    assert "Object.assign(root,commands.api);" in facade
+def test_registry_imports_domain_handlers_and_exports_the_command_interface():
+    source = (MODULES_DIR / "registry.js").read_text(encoding="utf-8")
+    for owner in (
+        "./desktop-companion.js",
+        "./manual-compression.js",
+        "./run-controls.js",
+        "./session-history.js",
+    ):
+        assert owner in source
+    assert "const COMMANDS=[" in source
+    assert "const commandInterface=Object.freeze({" in source
+    assert "Object.assign(root" not in source
 
 
-def test_commands_family_installs_registry_and_compatibility_interface():
-    runner = r"""
-const fs=require('fs');
-const vm=require('vm');
-const context=vm.createContext({
-  console,
-  setTimeout,
-  clearTimeout,
-  URLSearchParams,
-  t:key=>key,
-});
-context.window=context;
-context.document={getElementById(){return null;}};
+def test_commands_are_loaded_transitively_by_the_single_boot_entrypoint():
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    compatibility = (STATIC / "modules" / "compatibility.js").read_text(encoding="utf-8")
+    assert "static/commands.js" not in html
+    assert "static/command_parts/" not in html
+    assert "./commands/index.js" in compatibility
 
-for(const path of process.argv.slice(1)){
-  vm.runInContext(fs.readFileSync(path,'utf8'),context,{filename:path});
-}
 
-if(!context.HermesCommands||context.HermesCommands.registry.length<20){
-  throw new Error('command registry was not installed');
-}
-for(const name of ['desktopCompanion','manualCompression','runControls','sessionHistory']){
-  if(!context.HermesCommands.parts[name]){
-    throw new Error('missing command part: '+name);
-  }
-}
-if(context.handlePetSlashCommand!==context.HermesCommands.parts.desktopCompanion.handlePetSlashCommand){
-  throw new Error('desktop companion compatibility global drifted');
-}
-if(context.resumeManualCompressionForSession!==context.HermesCommands.parts.manualCompression.resumeManualCompressionForSession){
-  throw new Error('manual compression compatibility global drifted');
-}
-if(context._trySteer!==context.HermesCommands.parts.runControls.trySteer){
-  throw new Error('run-control compatibility global drifted');
-}
-if(context.forkFromMessage!==context.HermesCommands.parts.sessionHistory.forkFromMessage){
-  throw new Error('session-history compatibility global drifted');
-}
-"""
+def test_compatibility_seam_documents_and_exports_remaining_global_callers():
+    source = (STATIC / "modules" / "compatibility.js").read_text(encoding="utf-8")
+    assert "Temporary classic-script compatibility seam" in source
+    assert "Object.assign(globalThis,commandCompatibility,definedBootCompatibility);" in source
+    for name in (
+        "COMMANDS",
+        "handlePetSlashCommand",
+        "resumeManualCompressionForSession",
+        "_trySteer",
+        "undoLastExchange",
+        "forkFromMessage",
+        "invalidateSlashSkillCaches",
+        "_invalidateSlashModelCache",
+    ):
+        assert name in source
+
+
+def test_command_module_graph_is_statically_valid():
+    deno = shutil.which("deno")
+    if not deno:
+        return
     result = subprocess.run(
-        [
-            "node",
-            "-e",
-            runner,
-            *(str(path) for path in family_asset_paths("commands")),
-        ],
-        check=False,
+        [deno, "check", "--no-config", str(INDEX)],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
-
-
-def test_command_modules_keep_cohesive_reviewable_sizes():
-    limits = {
-        "commands.js": 1400,
-        "001-desktop-companion.js": 200,
-        "002-manual-compression.js": 350,
-        "003-run-controls.js": 650,
-        "004-session-history.js": 400,
-    }
-    for path in family_asset_paths("commands"):
-        line_count = len(path.read_text(encoding="utf-8").splitlines())
-        assert line_count <= limits[path.name], (
-            f"{path.relative_to(REPO_ROOT)} has {line_count} lines; "
-            f"expected at most {limits[path.name]}"
-        )

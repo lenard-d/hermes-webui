@@ -302,13 +302,13 @@ class TestFrontendWiring:
     def test_try_steer_calls_endpoint(self):
         idx = self.cmds.find("async function _trySteer(")
         assert idx >= 0
-        body = _source_between(self.cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
+        body = _source_between(self.cmds, "async function _trySteer(", "\nexport {cmdGoal")
         assert "/api/chat/steer" in body, "_trySteer must POST to /api/chat/steer"
         assert "method:'POST'" in body or 'method:"POST"' in body
 
     def test_try_steer_handles_fallback_without_cancelling(self):
         idx = self.cmds.find("async function _trySteer(")
-        body = _source_between(self.cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
+        body = _source_between(self.cmds, "async function _trySteer(", "\nexport {cmdGoal")
         # Must check result.accepted and keep generic failures from cancelling.
         assert "result&&result.accepted" in body or "result.accepted" in body
         assert "result&&result.fallback==='gateway_steer_queued'" in body
@@ -333,7 +333,7 @@ class TestFrontendWiring:
         )
         idx = cmds.find("async function _trySteer(")
         assert idx >= 0
-        body = _source_between(cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
+        body = _source_between(cmds, "async function _trySteer(", "\nexport {cmdGoal")
         assert "const ownerSid=(typeof S!=='undefined'&&S.session&&S.session.session_id)||null;" in body
         assert "const pendingFilesSnapshot=typeof S!=='undefined'&&Array.isArray(S.pendingFiles)?[...S.pendingFiles]:[];" in body
         assert "steerText=await _steerTextWithPendingFiles(originalMsg,ownerSid,pendingFilesSnapshot)" in body
@@ -348,7 +348,7 @@ class TestFrontendWiring:
         cmds = self.cmds
         idx = cmds.find("async function _trySteer(")
         assert idx >= 0
-        body = _source_between(cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
+        body = _source_between(cmds, "async function _trySteer(", "\nexport {cmdGoal")
         await_idx = body.find("steerText=await _steerTextWithPendingFiles")
         assert await_idx >= 0
         after_upload = body[await_idx:]
@@ -363,9 +363,9 @@ class TestFrontendWiring:
         steer_helpers = _source_between(
             self.cmds,
             "function _steerOwnerIsCurrent",
-            "\nglobalThis.HermesCommands.parts.runControls",
+            "\nexport {cmdGoal",
         )
-        try_body = _source_between(self.cmds, "async function _trySteer(", "\nglobalThis.HermesCommands.parts.runControls")
+        try_body = _source_between(self.cmds, "async function _trySteer(", "\nexport {cmdGoal")
         assert "function _steerSetComposerStatusForOwner" in steer_helpers
         assert "_steerSetComposerStatusForOwner(ownerSid,t('uploading')||'Uploading…')" in steer_helpers
         assert "_steerSetComposerStatusForOwner(ownerSid,'')" in steer_helpers
@@ -389,7 +389,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _steerUploadedAttachmentPaths",
-            "\nglobalThis.HermesCommands.parts.runControls",
+            "\nexport {cmdGoal",
         )
         script = textwrap.dedent(
             f"""
@@ -438,7 +438,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _steerUploadedAttachmentPaths",
-            "\nglobalThis.HermesCommands.parts.runControls",
+            "\nexport {cmdGoal",
         )
         script = textwrap.dedent(
             f"""
@@ -486,7 +486,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _steerUploadedAttachmentPaths",
-            "\nglobalThis.HermesCommands.parts.runControls",
+            "\nexport {cmdGoal",
         )
         script = textwrap.dedent(
             f"""
@@ -551,7 +551,7 @@ class TestFrontendWiring:
         steer_src = _source_between(
             self.cmds,
             "function _showSteerRecovery",
-            "\nglobalThis.HermesCommands.parts.runControls",
+            "\nexport {cmdGoal",
         )
         script = textwrap.dedent(
             f"""

@@ -334,7 +334,7 @@ def test_render_tray_calls_update_send_btn():
 
 def test_boot_js_input_calls_update_send_btn():
     """boot.js input event listener must call updateSendBtn()."""
-    _, status = get_text("/static/boot.js")
+    _, status = get_text("/static/modules/boot/index.js")
     js = family_source("boot")
     assert status == 200
     assert 'updateSendBtn' in js

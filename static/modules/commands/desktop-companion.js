@@ -1,6 +1,3 @@
-globalThis.HermesCommands=globalThis.HermesCommands||{};
-globalThis.HermesCommands.parts=globalThis.HermesCommands.parts||{};
-
 const DESKTOP_COMPANION_EXTENSION_ID='desktop-companion';
 const DESKTOP_COMPANION_NAME='Desktop Companion';
 const DESKTOP_COMPANION_INSTALL_PATH='Settings -> Extensions -> Gallery -> Desktop Companion';
@@ -19,8 +16,7 @@ function _getDesktopCompanionExtensionStatus(status){
 }
 
 function _petSlashCommandArgs(rawCommandText){
-  const parsed=parseCommand(String(rawCommandText||'').trim());
-  return parsed&&parsed.name==='pet' ? parsed.args : String(rawCommandText||'').trim().replace(/^\/pet\b\s*/i,'').trim();
+  return String(rawCommandText||'').trim().replace(/^\/pet\b\s*/i,'').trim().split(/\s+/).filter(Boolean).join(' ');
 }
 
 function _desktopCompanionMissingMessage(){
@@ -122,6 +118,4 @@ async function handlePetSlashCommand(rawCommandText,meta){
   return {handled:false,message:_desktopCompanionUnavailableMessage()};
 }
 
-globalThis.HermesCommands.parts.desktopCompanion=Object.freeze({
-  handlePetSlashCommand,
-});
+export {handlePetSlashCommand};

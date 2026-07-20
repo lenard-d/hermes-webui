@@ -20,6 +20,7 @@ from pathlib import Path
 
 REPO = Path(__file__).parent.parent
 BOOT_JS = family_source("boot")
+COMPAT_JS = (REPO / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
 
 
 # ── Layer 1: structural ──────────────────────────────────────────────────────
@@ -28,8 +29,8 @@ def test_register_api_exposed_on_window():
     assert "function registerHermesSkin(descriptor)" in BOOT_JS, (
         "registerHermesSkin API missing from boot.js"
     )
-    assert "window.registerHermesSkin=registerHermesSkin" in BOOT_JS, (
-        "registerHermesSkin must be exposed on window for extensions to call"
+    assert "registerHermesSkin," in COMPAT_JS, (
+        "registerHermesSkin must be published by the temporary compatibility seam"
     )
 
 
@@ -142,13 +143,13 @@ global.localStorage = {
 global.window = {};
 
 // Pull the exact constants + functions out of boot.js by evaluating just the
-// region from `const _EXT_SKIN_STYLE_ID` through the window assignment line.
+// region from `const _EXT_SKIN_STYLE_ID` through the registration function.
 const startMarker = "const _EXT_SKIN_STYLE_ID";
-const endMarker = "window.registerHermesSkin=registerHermesSkin;";
+const endMarker = "function applyBotName(){";
 const a = src.indexOf(startMarker);
 const b = src.indexOf(endMarker);
 if (a < 0 || b < 0) { console.log(JSON.stringify({error: 'markers not found'})); process.exit(0); }
-let region = src.slice(a, b + endMarker.length);
+let region = src.slice(a, b);
 
 // The region references _SKINS / _VALID_SKINS / _applySkin / _buildSkinPicker /
 // _syncSkinPicker from the surrounding module — stub them.
@@ -312,7 +313,7 @@ def test_registration_and_sanitization_behavior():
         f.write(_HARNESS)
         harness_path = f.name
     proc = subprocess.run(
-        [node, harness_path, str(REPO / "static" / "boot_parts" / "007-appearance-preferences.js")],
+        [node, harness_path, str(REPO / "static" / "modules" / "boot" / "appearance.js")],
         capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == 0, f"harness failed: {proc.stderr or proc.stdout}"
@@ -344,7 +345,7 @@ def test_extension_skin_scheme_drives_effective_dark_class():
         f.write(_SCHEME_HARNESS)
         harness_path = f.name
     proc = subprocess.run(
-        [node, harness_path, str(REPO / "static" / "boot_parts" / "007-appearance-preferences.js")],
+        [node, harness_path, str(REPO / "static" / "modules" / "boot" / "appearance.js")],
         capture_output=True, text=True, timeout=30,
     )
     assert proc.returncode == 0, f"harness failed: {proc.stderr or proc.stdout}"

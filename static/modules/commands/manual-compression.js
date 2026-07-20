@@ -1,6 +1,3 @@
-globalThis.HermesCommands=globalThis.HermesCommands||{};
-globalThis.HermesCommands.parts=globalThis.HermesCommands.parts||{};
-
 function _compressionAnchorMessageKey(m){
   if(!m||!m.role||m.role==='tool') return null;
   let content='';
@@ -230,8 +227,4 @@ async function cmdCompact(args){
   await _runManualCompression((args||'').trim());
 }
 
-globalThis.HermesCommands.parts.manualCompression=Object.freeze({
-  cmdCompress,
-  cmdCompact,
-  resumeManualCompressionForSession,
-});
+export {cmdCompact,cmdCompress,resumeManualCompressionForSession};

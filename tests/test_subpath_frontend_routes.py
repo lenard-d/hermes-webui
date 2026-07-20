@@ -37,10 +37,11 @@ def test_server_auth_redirect_uses_relative_login_path_with_encoded_next():
 
 
 def test_direct_frontend_fetches_are_relative_to_current_mount():
-    for path in ("static/boot.js", "static/sessions.js", "static/ui.js"):
+    for path in ("static/modules/boot/index.js", "static/sessions.js", "static/ui.js"):
         family = {
             "static/sessions.js": "sessions",
             "static/ui.js": "ui",
+            "static/modules/boot/index.js": "boot",
         }.get(path)
         src = family_source(family) if family else read(path)
         assert "fetch('/api/" not in src, (

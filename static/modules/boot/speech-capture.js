@@ -1,4 +1,3 @@
-window.HermesBoot.begin('speechCapture');
 // ── Voice input (Web Speech API + MediaRecorder fallback) ───────────────────
 function _micIsLocalhostOrLoopback(hostname){
   const host=String(hostname||'').toLowerCase().replace(/^\[|\]$/g,'');
@@ -30,10 +29,10 @@ function _micToastKeyForRecognitionError(error){
   return msgs[error]||null;
 }
 
-(function(){
+const speechCapture=(()=>{
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const _canRecordAudio=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
-  if(!SpeechRecognition&&!_canRecordAudio) return; // Browser unsupported — mic button stays hidden
+  if(!SpeechRecognition&&!_canRecordAudio) return Object.freeze({}); // Browser unsupported — mic button stays hidden
 
   // Persist SR failure across reloads (e.g. Tailscale/network error)
   const _micForceMediaRecorderKey='mic_force_mediarecorder';
@@ -121,7 +120,6 @@ function _micToastKeyForRecognitionError(error){
     if(rawAudioCheckbox) rawAudioCheckbox.checked=_rawAudioMode;
     _updateMicTooltip();
   }
-  window._applyRawAudioModePreference=_applyRawAudioModePreference;
 
   function _applyDictationAppendPreference(enabled){
     _dictationAppend=!!enabled;
@@ -129,7 +127,6 @@ function _micToastKeyForRecognitionError(error){
     const cb=document.getElementById('settingsDictationAppend');
     if(cb) cb.checked=_dictationAppend;
   }
-  window._applyDictationAppendPreference=_applyDictationAppendPreference;
 
   async function _sendRawAudio(blob){
     const ext=(blob.type&&blob.type.includes('ogg'))?'ogg':'webm';
@@ -335,7 +332,6 @@ function _micToastKeyForRecognitionError(error){
     _setRecording(false);
     _stopTracks();
   }
-  window._stopMic=_stopMic; // expose for send-guard above
 
   function _ensureSpeechRecognition(){
     if(!SpeechRecognition) return null;
@@ -607,7 +603,6 @@ function _micToastKeyForRecognitionError(error){
     }
     await _startMicCapture();
   }
-  window._toggleMicCapture=_toggleMicCapture;
 
   btn.addEventListener('pointerdown',e=>{
     if(e.button!==0) return;
@@ -678,8 +673,14 @@ function _micToastKeyForRecognitionError(error){
     });
   }
   _updateMicTooltip();
+  return Object.freeze({
+    applyDictationAppendPreference:_applyDictationAppendPreference,
+    applyRawAudioModePreference:_applyRawAudioModePreference,
+    stopMic:_stopMic,
+    toggleMicCapture:_toggleMicCapture,
+  });
 })();
 window._micActive=window._micActive||false;
 window._micPendingSend=window._micPendingSend||false;
 
-window.HermesBoot.publish('speechCapture',{micOriginNeedsSecureContext:_micOriginNeedsSecureContext,micToastKeyForRecognitionError:_micToastKeyForRecognitionError,stopMic:window._stopMic});
+export {_micOriginNeedsSecureContext,_micToastKeyForRecognitionError,speechCapture};

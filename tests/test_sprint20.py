@@ -191,7 +191,7 @@ def test_mic_btn_has_transition():
 
 def test_boot_js_serves_ok():
     """boot.js must be served successfully."""
-    _, status = get_text("/static/boot.js")
+    _, status = get_text("/static/modules/boot/index.js")
     assert status == 200
 
 

@@ -251,13 +251,12 @@ class TestIndexHtmlIntegration:
         # Versioned shell assets must include the cache version query.
         for asset in (
             "style.css",
-            "boot.js",
+            "modules/boot/index.js",
             "session_render_cache_adapter.js",
             "ui.js",
             "messages.js",
             "sessions.js",
             "panels.js",
-            "commands.js",
             "icons.js",
             "i18n.js",
             "workspace.js",
@@ -277,6 +276,16 @@ class TestIndexHtmlIntegration:
             "the service worker must pre-cache the unversioned URL requested "
             "by the adapter's static relative module import"
         )
+        for module in (
+            "modules/compatibility.js",
+            "modules/boot/navigation.js",
+            "modules/commands/index.js",
+            "modules/commands/registry.js",
+        ):
+            assert f"'./static/{module}'," in src, (
+                f"native module dependency {module} must be cached at its "
+                "unversioned static-import URL"
+            )
 
     def test_sw_shell_assets_are_network_first(self):
         """Shell JS/CSS must prefer the network, then fall back to CacheStorage.

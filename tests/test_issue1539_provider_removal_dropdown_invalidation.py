@@ -97,19 +97,12 @@ class TestSlashModelCacheInvalidator:
         )
 
     def test_invalidator_exposed_on_window(self):
-        src = _read_static("commands.js")
-        # Exposed on window via a typeof-guarded assignment so the module is
-        # also importable in headless test contexts (vm.runInContext) that
-        # don't define a window global.
-        assert "window._invalidateSlashModelCache=_invalidateSlashModelCache" in src, (
-            "_invalidateSlashModelCache must be exposed on window so static/panels.js "
+        src = (REPO / "static" / "modules" / "compatibility.js").read_text()
+        assert "_invalidateSlashModelCache:commandInterface.invalidateSlashModelCache" in src, (
+            "_invalidateSlashModelCache must be published by the compatibility seam so static/panels.js "
             "can invoke it across module boundaries."
         )
-        assert "typeof window!=='undefined'" in src, (
-            "The window-export assignment must be guarded by `typeof window!=='undefined'` "
-            "so static/commands.js stays importable in headless vm contexts (the "
-            "tests/test_cli_only_slash_commands.py harness has no window global)."
-        )
+        assert "Object.assign(globalThis,commandCompatibility" in src
 
 
 class TestProviderRemoveInvalidatesDropdowns:

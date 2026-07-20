@@ -96,8 +96,8 @@ class TestBootPathsRestorePanelPref:
             "Ephemeral-session boot path must read 'hermes-webui-workspace-panel-pref' "
             "from localStorage before calling syncWorkspacePanelState()"
         )
-        assert "_workspacePanelMode='browse'" in block or "_workspacePanelMode = 'browse'" in block, (
-            "Ephemeral-session path must set _workspacePanelMode='browse' "
+        assert "setWorkspacePanelMode('browse')" in block, (
+            "Ephemeral-session path must restore browse mode through its owner "
             "when the pref is 'open'"
         )
 
@@ -116,8 +116,8 @@ class TestBootPathsRestorePanelPref:
             "No-saved-session boot path must read 'hermes-webui-workspace-panel-pref' "
             "before calling syncWorkspacePanelState()"
         )
-        assert "_workspacePanelMode='browse'" in block or "_workspacePanelMode = 'browse'" in block, (
-            "No-saved-session path must set _workspacePanelMode='browse' "
+        assert "setWorkspacePanelMode('browse')" in block, (
+            "No-saved-session path must restore browse mode through its owner "
             "when the pref is 'open'"
         )
 

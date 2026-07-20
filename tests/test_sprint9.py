@@ -13,7 +13,7 @@ STATIC_FAMILIES = {
     "/static/sessions.js": "sessions",
     "/static/messages.js": "messages",
     "/static/panels.js": "panels",
-    "/static/boot.js": "boot",
+    "/static/modules/boot/index.js": "boot",
 }
 
 def get_text(path):
@@ -101,9 +101,9 @@ def test_panels_js_served(cleanup_test_sessions):
     assert "async function loadMemory(" in src
 
 def test_boot_js_served(cleanup_test_sessions):
-    served = get_text("/static/boot.js")
-    assert "bootstrapHermesBoot" in served
-    src = get_family_source("/static/boot.js")
+    served = get_text("/static/modules/boot/index.js")
+    assert "import '../compatibility.js'" in served
+    src = get_family_source("/static/modules/boot/index.js")
     assert "btnSend" in src
     assert "btnNewChat" in src
     # boot IIFE
@@ -114,8 +114,9 @@ def test_app_js_no_longer_referenced_in_html(cleanup_test_sessions):
     html = get_text("/")
     assert 'src="static/app.js"' not in html
     # All split modules must be present with the server-injected cache-busting version query.
-    for module in ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "boot.js"]:
+    for module in ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js"]:
         assert f'src="static/{module}?v=' in html, f"Missing versioned {module} in index.html"
+    assert 'src="static/modules/boot/index.js?v=' in html
 
 def test_module_load_order_correct(cleanup_test_sessions):
     """ui.js must appear before sessions.js which must appear before boot.js."""
@@ -125,16 +126,16 @@ def test_module_load_order_correct(cleanup_test_sessions):
     sess_pos = html.find('src="static/sessions.js?v=')
     msg_pos = html.find('src="static/messages.js?v=')
     panels_pos = html.find('src="static/panels.js?v=')
-    boot_pos = html.find('src="static/boot.js?v=')
+    boot_pos = html.find('src="static/modules/boot/index.js?v=')
     assert ui_pos < ws_pos < sess_pos < msg_pos < panels_pos < boot_pos
 
 def test_no_duplicate_function_definitions(cleanup_test_sessions):
     """No function name should appear in more than one module."""
     import re
-    modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "boot.js"]
+    modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "modules/boot/index.js"]
     seen = {}
     for m in modules:
-        src = get_family_source(f"/static/{m}")
+        src = family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")
         fns = re.findall(r'(?:async )?function ([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(', src)
         for fn in fns:
             if fn in seen:
@@ -144,10 +145,10 @@ def test_no_duplicate_function_definitions(cleanup_test_sessions):
 
 def test_all_functions_present_across_modules(cleanup_test_sessions):
     """Key functions must be present somewhere in the split modules."""
-    modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "boot.js"]
+    modules = ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "modules/boot/index.js"]
     all_src = ""
     for m in modules:
-        all_src += get_family_source(f"/static/{m}")
+        all_src += family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")
     required = [
         "setBusy", "syncTopbar", "renderMessages", "send", "loadSession",
         "newSession", "renderSessionList", "loadDir", "switchPanel",

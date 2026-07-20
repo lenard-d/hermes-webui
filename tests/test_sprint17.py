@@ -81,8 +81,8 @@ def test_settings_unknown_key_ignored():
 # ── Static file: commands.js ────────────────────────────────────────────────
 
 def test_static_commands_js_served():
-    """GET /static/commands.js returns 200 and contains COMMANDS registry."""
-    req = urllib.request.Request(BASE + "/static/commands.js")
+    """GET the native command registry module and verify its interface."""
+    req = urllib.request.Request(BASE + "/static/modules/commands/registry.js")
     with urllib.request.urlopen(req, timeout=10) as r:
         body = r.read().decode()
         assert r.status == 200

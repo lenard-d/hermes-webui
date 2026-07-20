@@ -9,6 +9,7 @@ from tests.frontend_asset_contract import (
     FRONTEND_FAMILIES,
     REPO_ROOT,
     family_asset_paths,
+    family_entrypoint_path,
 )
 
 
@@ -51,12 +52,23 @@ def _direct_urls_for_family(family: str) -> list[str]:
     return [url for url in _direct_asset_urls() if url.partition("?")[0] in expected]
 
 
+def _expected_direct_urls(family: str) -> list[str]:
+    if family == "commands":
+        return []
+    if family == "boot":
+        entrypoint = family_entrypoint_path(family)
+        assert entrypoint is not None
+        path = entrypoint.relative_to(REPO_ROOT).as_posix()
+        return [f"{path}{VERSION_QUERY}"]
+    return [f"{path}{VERSION_QUERY}" for path in _relative_family_assets(family)]
+
+
 @pytest.mark.parametrize("family", FRONTEND_FAMILIES)
 def test_index_direct_load_order_matches_each_split_family_architecture(family: str):
     expected = _relative_family_assets(family)
     actual_urls = _direct_urls_for_family(family)
 
-    assert actual_urls == [f"{path}{VERSION_QUERY}" for path in expected]
+    assert actual_urls == _expected_direct_urls(family)
     assert all(path.is_file() for path in family_asset_paths(family))
 
 
@@ -67,7 +79,7 @@ def test_facades_have_the_required_side_of_each_direct_load_order():
         assert family_asset_paths(family)[0].name == f"{family}.js"
 
 
-def test_every_direct_split_asset_is_precached_with_the_version_query():
+def test_every_frontend_asset_is_precached_at_its_browser_request_url():
     sw_source = SERVICE_WORKER.read_text(encoding="utf-8")
     assert f"const VQ = '{VERSION_QUERY}';" in sw_source
     shell_assets = sw_source[sw_source.index("const SHELL_ASSETS = [") :]
@@ -75,13 +87,25 @@ def test_every_direct_split_asset_is_precached_with_the_version_query():
     versioned_shell_paths = set(
         re.findall(r"'\./(static/[^']+)'\s*\+\s*VQ", shell_assets)
     )
+    unversioned_shell_paths = set(
+        re.findall(r"'\./(static/[^']+)'\s*,", shell_assets)
+    )
 
-    direct_split_assets = {
+    direct_assets = {
         url.removesuffix(VERSION_QUERY)
         for family in FRONTEND_FAMILIES
         for url in _direct_urls_for_family(family)
     }
-    assert direct_split_assets <= versioned_shell_paths
+    assert direct_assets <= versioned_shell_paths
+
+    native_dependencies = {
+        path.relative_to(REPO_ROOT).as_posix()
+        for family in ("boot", "commands")
+        for path in family_asset_paths(family)
+        if path != family_entrypoint_path(family)
+    }
+    native_dependencies.add("static/modules/compatibility.js")
+    assert native_dependencies <= unversioned_shell_paths
 
 
 def test_split_families_use_direct_assets_not_runtime_manifests():
@@ -91,9 +115,9 @@ def test_split_families_use_direct_assets_not_runtime_manifests():
         for url in _direct_urls_for_family(family)
     }
     expected_urls = {
-        f"{path}{VERSION_QUERY}"
+        url
         for family in FRONTEND_FAMILIES
-        for path in _relative_family_assets(family)
+        for url in _expected_direct_urls(family)
     }
 
     assert direct_urls == expected_urls

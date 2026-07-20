@@ -1,4 +1,4 @@
-window.HermesBoot.begin('runControl');
+import {showServerStopped} from './server-lifecycle.js';
 // Early boot initialization that must run before any other code.
 // These run during script evaluation to handle server-stopped state
 // and cross-tab shutdown broadcasts as early as possible.
@@ -8,7 +8,7 @@ window.HermesBoot.begin('runControl');
   // Listen for shutdown broadcast from other tabs
   try {
     var _stopChan = new BroadcastChannel('hermes-webui-shutdown');
-    _stopChan.onmessage = function() { _showServerStopped(); };
+    _stopChan.onmessage = function() { showServerStopped(); };
   } catch(_) {}
 })();
 
@@ -115,4 +115,4 @@ async function _savedSessionSidebarOnlyState(sid){
   }
 }
 
-window.HermesBoot.publish('runControl',{cancelStream,cancelSessionStream,savedSessionSidebarOnlyState:_savedSessionSidebarOnlyState});
+export {cancelSessionStream,cancelStream,_savedSessionSidebarOnlyState};

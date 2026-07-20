@@ -178,9 +178,9 @@ def test_static_index_has_resize_handles():
 
 def test_app_js_has_resize_logic():
     """Sprint 9: app.js replaced by modules. Resize logic lives in boot.js."""
-    raw, _, status = get_raw("/static/boot.js")
+    raw, _, status = get_raw("/static/modules/boot/composer.js")
     assert status == 200
     raw = family_source("boot").encode()
-    assert b"_initResizePanels" in raw
+    assert b"initResizePanels" in raw
     assert b"hermes-sidebar-w" in raw
     assert b"hermes-panel-w" in raw

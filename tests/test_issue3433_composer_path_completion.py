@@ -13,6 +13,7 @@ import pytest
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 COMMANDS_JS = family_source("commands")
+COMMANDS_ENTRY = REPO_ROOT / "static" / "modules" / "commands" / "index.js"
 BOOT_JS = family_source("boot")
 STYLE_CSS = family_source("style")
 NODE = shutil.which("node")
@@ -39,9 +40,11 @@ def _run_commands_js(script_body: str) -> dict:
             }};
           }}
         }};
-        vm.createContext(ctx);
-        vm.runInContext({json.dumps(COMMANDS_JS)}, ctx);
         (async () => {{
+          Object.assign(globalThis, ctx);
+          const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
+          Object.assign(ctx, commands.commandInterface, commands);
+          vm.createContext(ctx);
           const result = await vm.runInContext(`(async () => {{ {script_body} }})()`, ctx);
           process.stdout.write(JSON.stringify(result));
         }})().catch(err => {{

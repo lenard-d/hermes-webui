@@ -14,6 +14,7 @@ from api.commands import list_commands
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = family_source("commands")
+COMMANDS_ENTRY = REPO_ROOT / "static" / "modules" / "commands" / "index.js"
 MESSAGES_JS = family_source("messages")
 def test_api_commands_exposes_cli_only_metadata_for_webui_intercept():
     """CLI-only commands must remain visible so the frontend can explain them."""
@@ -221,9 +222,11 @@ def _run_commands_js(script_body: str) -> dict:
             throw new Error('unexpected api path: ' + path);
           }}
         }};
-        vm.createContext(ctx);
-        vm.runInContext({json.dumps(COMMANDS_JS)}, ctx);
         (async () => {{
+          Object.assign(globalThis, ctx);
+          const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
+          Object.assign(ctx, commands.commandInterface, commands);
+          vm.createContext(ctx);
           const result = await vm.runInContext(`(async () => {{ {script_body} }})()`, ctx);
           process.stdout.write(JSON.stringify(result));
         }})().catch(err => {{
@@ -378,9 +381,11 @@ def test_bundle_collisions_stay_hidden_until_agent_metadata_is_ready():
             throw new Error('unexpected api path: ' + path);
           }}
         }};
-        vm.createContext(ctx);
-        vm.runInContext({json.dumps(COMMANDS_JS)}, ctx);
         (async () => {{
+          Object.assign(globalThis, ctx);
+          const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
+          Object.assign(ctx, commands.commandInterface, commands);
+          vm.createContext(ctx);
           const bundleLoad = vm.runInContext('loadBundleCommands(true)', ctx);
           const before = await vm.runInContext("getSlashAutocompleteMatches('/plugin')", ctx);
           releaseCommands({{

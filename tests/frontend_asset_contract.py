@@ -1,7 +1,7 @@
-"""Test-only path and source helpers for directly loaded frontend families.
+"""Authoritative frontend asset inventory used by architecture test harnesses.
 
-Production loads every file with a static ``<link>`` or ``<script>`` tag.  These
-helpers deliberately do not read the split manifests or model a runtime loader.
+Classic families list their direct browser load order. Native-module families
+list their complete dependency surface and identify one page entrypoint.
 """
 
 from __future__ import annotations
@@ -60,6 +60,27 @@ _MESSAGE_PART_NAMES = (
     "notifications_background.js",
 )
 
+_COMMAND_MODULE_NAMES = (
+    "desktop-companion.js",
+    "manual-compression.js",
+    "run-controls.js",
+    "session-history.js",
+    "registry.js",
+    "index.js",
+)
+
+_BOOT_MODULE_NAMES = (
+    "server-lifecycle.js",
+    "run-control.js",
+    "speech-capture.js",
+    "public-interfaces.js",
+    "appearance.js",
+    "navigation.js",
+    "composer.js",
+    "voice-mode.js",
+    "index.js",
+)
+
 
 def _numbered_parts(directory: str, suffix: str) -> tuple[Path, ...]:
     pattern = f"[0-9][0-9][0-9]-*{suffix}"
@@ -86,7 +107,10 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
     if family == "sessions":
         return (*_numbered_parts("sessions_parts", ".js"), STATIC_DIR / "sessions.js")
     if family == "commands":
-        return (*_numbered_parts("command_parts", ".js"), STATIC_DIR / "commands.js")
+        return tuple(
+            STATIC_DIR / "modules" / "commands" / name
+            for name in _COMMAND_MODULE_NAMES
+        )
     if family == "messages":
         return (
             STATIC_DIR / "messages.js",
@@ -95,7 +119,10 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
     if family == "panels":
         return (STATIC_DIR / "panels.js", *_numbered_parts("panels_parts", ".js"))
     if family == "boot":
-        return (STATIC_DIR / "boot.js", *_numbered_parts("boot_parts", ".js"))
+        return tuple(
+            STATIC_DIR / "modules" / "boot" / name
+            for name in _BOOT_MODULE_NAMES
+        )
     raise ValueError(f"unknown frontend asset family: {family}")
 
 
@@ -105,3 +132,14 @@ def family_source(family: str) -> str:
     return "".join(
         path.read_text(encoding="utf-8") for path in family_asset_paths(family)
     )
+
+
+def family_entrypoint_path(family: str) -> Path | None:
+    """Return the asset loaded by the page for a native-module family."""
+
+    if family == "boot":
+        return STATIC_DIR / "modules" / "boot" / "index.js"
+    if family == "commands":
+        return None  # imported by boot/index.js through the compatibility seam
+    paths = family_asset_paths(family)
+    return paths[0] if paths else None

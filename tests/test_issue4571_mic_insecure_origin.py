@@ -58,7 +58,7 @@ def test_permission_style_speech_errors_use_insecure_origin_key_only_on_that_bra
     helper = _slice_between(
         BOOT_JS,
         "function _micToastKeyForRecognitionError(error)",
-        "\n}\n\n(function(){",
+        "\n}\n\nconst speechCapture=",
     )
     for error in ("not-allowed", "service-not-allowed", "audio-capture"):
         assert error in helper

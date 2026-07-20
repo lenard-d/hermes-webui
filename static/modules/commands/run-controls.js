@@ -1,6 +1,3 @@
-globalThis.HermesCommands=globalThis.HermesCommands||{};
-globalThis.HermesCommands.parts=globalThis.HermesCommands.parts||{};
-
 async function cmdStop(){
   if(!S.session){showToast(t('no_active_session'));return;}
   if(!S.activeStreamId){showToast(t('no_active_task'));return;}
@@ -475,12 +472,4 @@ async function cmdYolo(){
   }catch(e){showToast('YOLO: '+e.message);}
 }
 
-globalThis.HermesCommands.parts.runControls=Object.freeze({
-  cmdStop,
-  cmdGoal,
-  cmdQueue,
-  cmdInterrupt,
-  cmdSteer,
-  trySteer:_trySteer,
-  cmdYolo,
-});
+export {cmdGoal,cmdInterrupt,cmdQueue,cmdSteer,cmdStop,cmdYolo,_trySteer};

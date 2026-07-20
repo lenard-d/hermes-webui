@@ -283,9 +283,9 @@ def test_workspace_panel_inline_width_is_desktop_only():
 def test_workspace_panel_boot_restore_is_desktop_only():
     """Persisted workspace panels should not auto-cover compact/mobile launch."""
     boot_js = family_source("boot")
-    assert "if(_ephPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';" in boot_js
+    assert "if(_ephPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');" in boot_js
     assert "if(S.session&&S.session.workspace&&panelPref&&!_isCompactWorkspaceViewport()){" in boot_js
-    assert "if(_freshPanelPref&&!_isCompactWorkspaceViewport()) _workspacePanelMode='browse';" in boot_js
+    assert "if(_freshPanelPref&&!_isCompactWorkspaceViewport()) setWorkspacePanelMode('browse');" in boot_js
 
 
 def _container_query_block(css: str, container_query: str):

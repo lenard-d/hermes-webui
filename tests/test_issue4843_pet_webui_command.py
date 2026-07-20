@@ -11,6 +11,7 @@ import textwrap
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = family_source("commands")
+COMMANDS_ENTRY = REPO_ROOT / "static" / "modules" / "commands" / "index.js"
 MESSAGES_JS = family_source("messages")
 
 
@@ -72,9 +73,11 @@ def _run_pet_js(
           }},
         }};
         {hook_setup}
-        vm.createContext(ctx);
-        vm.runInContext({json.dumps(COMMANDS_JS)}, ctx);
         (async () => {{
+          Object.assign(globalThis, ctx);
+          const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
+          Object.assign(ctx, commands.commandInterface, commands);
+          vm.createContext(ctx);
           const result = await vm.runInContext(`(async () => {{ return await handlePetSlashCommand({json.dumps(command)}, {{name:'pet'}}); }})()`, ctx);
           process.stdout.write(JSON.stringify({{result, hookCalls, consoleErrors}}));
         }})().catch(err => {{
@@ -218,11 +221,13 @@ def _run_send_js(*, command, status, adapter_status=None, hook_result=None, hook
           }},
         }};
         ctx.window.window = ctx.window;
-        vm.createContext(ctx);
-        vm.runInContext({json.dumps(COMMANDS_JS)}, ctx);
-        {hook_setup}
-        vm.runInContext({json.dumps(MESSAGES_JS)}, ctx);
         (async () => {{
+          Object.assign(globalThis, ctx);
+          const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
+          Object.assign(ctx, commands.commandInterface, commands);
+          vm.createContext(ctx);
+          {hook_setup}
+          vm.runInContext({json.dumps(MESSAGES_JS)}, ctx);
           await vm.runInContext('send()', ctx);
           process.stdout.write(JSON.stringify({{
             messages: ctx.S.messages,

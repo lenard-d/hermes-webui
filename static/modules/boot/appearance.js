@@ -1,4 +1,3 @@
-window.HermesBoot.begin('appearancePreferences');
 // ── Appearance helpers (theme = light/dark/system, skin = palette/accent) ────
 const _THEMES=[
   {name:'Light', value:'light', colors:['#FEFCF7','#FAF7F0','#B8860B']},
@@ -354,7 +353,6 @@ function registerHermesSkin(descriptor){
     return true;
   }catch(_){ return false; }
 }
-if(typeof window!=='undefined') window.registerHermesSkin=registerHermesSkin;
 
 function applyBotName(){
   // The saved assistant name applies to the default profile only.
@@ -382,7 +380,6 @@ const _COMPOSER_CONTROL_TOGGLE_DEFS=[
   {key:'hide_composer_reasoning',label:'Reasoning',labelKey:'composer_control_reasoning',selectors:['#composerReasoningWrap','#composerMobileReasoningAction'],orderSelector:'#composerReasoningWrap',orderGroup:'left'},
   {key:'hide_composer_context',label:'Context',labelKey:'composer_control_context',selectors:['#ctxIndicatorWrap','#composerMobileContextAction'],orderSelector:'#ctxIndicatorWrap',orderGroup:'right'},
 ];
-window._COMPOSER_CONTROL_TOGGLE_DEFS=_COMPOSER_CONTROL_TOGGLE_DEFS;
 
 const _COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS=[
   {key:'hide_composer_voice_mode',label:'Voice mode',labelKey:'composer_control_voice_mode',selectors:['#btnVoiceMode'],orderSelector:'#btnVoiceMode',orderGroup:'left'},
@@ -393,7 +390,6 @@ const _COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS=[
   {key:'hide_composer_toolsets',label:'Toolsets',labelKey:'composer_control_toolsets',selectors:['#composerToolsetsWrap'],orderSelector:'#composerToolsetsWrap',orderGroup:'left'},
   {key:'hide_composer_status',label:'Status',labelKey:'composer_control_status',selectors:['#composerStatus'],orderSelector:'#composerStatus',orderGroup:'right'},
 ];
-window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS=_COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS;
 
 function _allComposerControlToggleDefs(){
   return _COMPOSER_CONTROL_TOGGLE_DEFS.concat(_COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS);
@@ -411,7 +407,6 @@ function _sanitizeComposerControlOrder(order){
   });
   return out;
 }
-window._sanitizeComposerControlOrder=_sanitizeComposerControlOrder;
 
 function _orderedComposerControlDefs(order){
   const defs=_allComposerControlToggleDefs();
@@ -423,7 +418,6 @@ function _orderedComposerControlDefs(order){
   defs.forEach(def=>{if(!out.includes(def)) out.push(def);});
   return out;
 }
-window._orderedComposerControlDefs=_orderedComposerControlDefs;
 
 function _applyComposerControlOrder(order){
   window._composerControlOrder=_sanitizeComposerControlOrder(order);
@@ -448,7 +442,6 @@ function _applyComposerControlOrder(order){
   });
   if(typeof _fitComposerFooter==='function') _fitComposerFooter();
 }
-window._applyComposerControlOrder=_applyComposerControlOrder;
 
 function _composerControlVisibilityFromSettings(settings){
   const next={};
@@ -457,7 +450,6 @@ function _composerControlVisibilityFromSettings(settings){
   }
   return next;
 }
-window._composerControlVisibilityFromSettings=_composerControlVisibilityFromSettings;
 
 function _setComposerControlHidden(el, hidden){
   if(!el) return;
@@ -510,14 +502,12 @@ function _applyComposerFooterVisibilitySettings(){
     _divider.classList.toggle('composer-control-hidden',_allLeftHidden);
   }
 }
-window._applyComposerFooterVisibilitySettings=_applyComposerFooterVisibilitySettings;
 
 function _applyTitlebarProfileVisibility(){
   const btn=$('titlebarProfileBtn');
   if(!btn) return;
   btn.style.display=window._showTitlebarProfile?'':'none';
 }
-window._applyTitlebarProfileVisibility=_applyTitlebarProfileVisibility;
 
 function _mirrorSpeechSettingsFromServer(s){
   if(!s||typeof s!=='object') return;
@@ -588,6 +578,29 @@ function _mirrorSpeechSettingsFromServer(s){
     }
   }
 }
-window._mirrorSpeechSettingsFromServer=_mirrorSpeechSettingsFromServer;
 
-window.HermesBoot.publish('appearancePreferences',{applyTheme:_applyTheme,applySkin:_applySkin,applyFontSize:_applyFontSize,registerHermesSkin,applyBotName,applyComposerFooterVisibilitySettings:_applyComposerFooterVisibilitySettings,mirrorSpeechSettingsFromServer:_mirrorSpeechSettingsFromServer});
+export {
+  _COMPOSER_CONTROL_TOGGLE_DEFS,
+  _COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS,
+  _LEGACY_THEME_MAP,
+  _VALID_SKINS,
+  _applyComposerControlOrder,
+  _applyComposerFooterVisibilitySettings,
+  _applyFontSize,
+  _applySkin,
+  _applyTheme,
+  _applyTitlebarProfileVisibility,
+  _buildSkinPicker,
+  _composerControlVisibilityFromSettings,
+  _mirrorSpeechSettingsFromServer,
+  _normalizeAppearance,
+  _orderedComposerControlDefs,
+  _pickFontSize,
+  _pickTheme,
+  _sanitizeComposerControlOrder,
+  _syncFontSizePicker,
+  _syncSkinPicker,
+  _syncThemePicker,
+  applyBotName,
+  registerHermesSkin,
+};

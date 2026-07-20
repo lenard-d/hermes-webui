@@ -31,6 +31,7 @@ import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 BOOT_JS = family_source("boot")
+COMPAT_JS = (REPO_ROOT / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 
@@ -48,11 +49,8 @@ def _windowed_guard(ev: str) -> str:
 
 def test_isimeenter_helper_is_exposed_on_window():
     """boot.js must attach `_isImeEnter` to `window` so other modules can reuse it."""
-    assert re.search(
-        r"window\._isImeEnter\s*=\s*_isImeEnter\s*;?",
-        BOOT_JS,
-    ), (
-        "boot.js must export `window._isImeEnter = _isImeEnter` so "
+    assert "  _isImeEnter," in COMPAT_JS, (
+        "the compatibility seam must publish `_isImeEnter` so "
         "static/sessions.js and static/ui.js can call the same Safari-aware "
         "helper without duplicating the IIFE per input (issue #1443)."
     )

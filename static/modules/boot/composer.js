@@ -1,4 +1,26 @@
-window.HermesBoot.begin('composerSessionActions');
+import {
+  _forceMobileViewportReflow,
+  _hasFinePointerCoexisting,
+  _isDesktopWidth,
+  _syncKeyboardBottomInset,
+  _syncWorkspacePanelInlineWidth,
+  closeMobileSidebar,
+  handleWorkspaceClose,
+  syncWorkspacePanelState,
+  toggleSidebar,
+} from './navigation.js';
+import {
+  _activeSlashCommandOffset,
+  ensureSkillCommandsLoadedForAutocomplete,
+  getComposerPathAutocompleteMatches,
+  getMatchingCommands,
+  getSlashAutocompleteMatches,
+  hideCmdDropdown,
+  navigateCmdDropdown,
+  selectCmdDropdownItem,
+  showCmdDropdown,
+} from '../commands/index.js';
+
 function _currentSessionIsReusableEmptyChat(){
   if(!S.session) return false;
   const hasVisibleMessages=Array.isArray(S.messages)
@@ -141,25 +163,6 @@ $('importFileInput').onchange=async(e)=>{
     showToast(t('import_failed')+(err.message||t('import_invalid_json')));
   }
 };
-// btnRefreshFiles is now panel-icon-btn in header (see HTML)
-function clearPreview(opts={}){
-  const keepPanelOpen=!!(opts&&opts.keepPanelOpen);
-  // Restore directory breadcrumb after closing file preview
-  if(typeof renderBreadcrumb==='function') renderBreadcrumb();
-  const closePanelAfter=_workspacePanelMode==='preview'&&!keepPanelOpen;
-  const pa=$('previewArea');if(pa)pa.classList.remove('visible');
-  const pi=$('previewImg');if(pi){pi.onerror=null;pi.src='';}
-  const pdf=$('previewPdfFrame');if(pdf)pdf.src='';
-  const html=$('previewHtmlIframe');if(html)html.src='';
-  const pm=$('previewMd');if(pm)pm.innerHTML='';
-  const pc=$('previewCode');if(pc)pc.textContent='';
-  const pp=$('previewPathText');if(pp)pp.textContent='';
-  const ft=$('fileTree');if(ft)ft.style.display='';
-  _previewCurrentPath='';_previewCurrentMode='';_previewDirty=false;
-  if(closePanelAfter)closeWorkspacePanel();
-  else if(keepPanelOpen&&_workspacePanelMode==='preview')openWorkspacePanel('browse');
-  else syncWorkspacePanelUI();
-}
 $('btnClearPreview').onclick=handleWorkspaceClose;
 // workspacePath click handler removed -- use topbar workspace chip dropdown instead
 function _applySessionContextMetadataUpdate(data){
@@ -301,7 +304,6 @@ let _imeComposing=false;
   _c.addEventListener('blur',()=>{_imeComposing=false;});
 })();
 function _isImeEnter(e){return e.isComposing||e.keyCode===229||_imeComposing;}
-window._isImeEnter=_isImeEnter;
 // #3076: a touch-primary device (`pointer:coarse`) can still have a
 // physical keyboard attached (Android tablet + Bluetooth keyboard,
 // detachable Surface in tablet mode, iPad + Magic Keyboard). When that
@@ -311,9 +313,6 @@ window._isImeEnter=_isImeEnter;
 // whenever ANY available pointing device is fine-grained — which is the
 // strongest signal browsers expose for "there is a real keyboard /
 // trackpad in the picture too". Skip the mobile default in that case.
-function _hasFinePointerCoexisting(){
-  try{ return matchMedia('(any-pointer:fine)').matches; }catch(_){ return false; }
-}
 function _isNumpadEnter(e){
   return e.key==='Enter'&&(e.code==='NumpadEnter'||e.location===KeyboardEvent.DOM_KEY_LOCATION_NUMPAD);
 }
@@ -554,6 +553,7 @@ if(window.visualViewport){
 
 // Boot: restore last session or start fresh
 // ── Resizable panels ──────────────────────────────────────────────────────
+let initResizePanels;
 (function(){
   const SIDEBAR_MIN=180, SIDEBAR_MAX=420;
   const PANEL_MIN=180,   PANEL_MAX=1200;
@@ -597,7 +597,7 @@ if(window.visualViewport){
   }
 
   // Run after DOM ready (called from boot)
-  window._initResizePanels = function(){
+  initResizePanels = function(){
     const sidebar    = document.querySelector('.sidebar');
     const rightpanel = document.querySelector('.rightpanel');
     initResize('sidebarResize',    sidebar,    'right', SIDEBAR_MIN, SIDEBAR_MAX, 'hermes-sidebar-w');
@@ -605,4 +605,11 @@ if(window.visualViewport){
   };
 })();
 
-window.HermesBoot.publish('composerSessionActions',{currentSessionIsReusableEmptyChat:_currentSessionIsReusableEmptyChat,exportSessionHTML,clearPreview,isImeEnter:_isImeEnter,shouldAttachLargePastedText:_shouldAttachLargePastedText,initResizePanels:window._initResizePanels});
+export {
+  _currentSessionIsReusableEmptyChat,
+  _isImeEnter,
+  _shouldAttachLargePastedText,
+  applyEmptyStateSuggestionPref,
+  exportSessionHTML,
+  initResizePanels,
+};

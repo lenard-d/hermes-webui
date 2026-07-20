@@ -94,7 +94,7 @@ def test_session_crud_still_works(cleanup_test_sessions):
     post("/api/session/delete", {"session_id": sid})
 
 def test_static_files_still_served(cleanup_test_sessions):
-    for f in ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "boot.js"]:
+    for f in ["ui.js", "workspace.js", "sessions.js", "messages.js", "panels.js", "modules/boot/index.js"]:
         src, status = get_text(f"/static/{f}")
         assert status == 200, f"/static/{f} returned {status}"
         assert len(src) > 100

@@ -20,13 +20,14 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 BOOT_JS = family_source("boot")
+PUBLIC_INTERFACES = REPO / "static" / "modules" / "boot" / "public-interfaces.js"
+COMPAT_JS = (REPO / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 PANELS_JS = family_source("panels")
 def test_public_api_present():
-    assert "window.registerHermesTtsEngine=function" in BOOT_JS
-    assert "window._hermesTtsSynth=function" in BOOT_JS
-    assert "window._hermesTtsIsRegistered=function" in BOOT_JS
-    assert "window._hermesTtsEngineOptions=function" in BOOT_JS
+    assert "function registerHermesTtsEngine(" in BOOT_JS
+    for name in ("registerHermesTtsEngine", "_hermesTtsSynth", "_hermesTtsIsRegistered", "_hermesTtsEngineOptions"):
+        assert f"  {name}," in COMPAT_JS
 
 
 def test_reserved_builtins_guarded():
@@ -58,44 +59,46 @@ def test_option_label_uses_textcontent_not_innerhtml():
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not available")
 def test_registration_behavior():
-    """Drive the real registry logic from boot.js in a Node harness."""
-    start = BOOT_JS.index("var _HERMES_TTS_ENGINES")
-    end = BOOT_JS.index("window._hermesTtsSynth=function")
-    end = BOOT_JS.index("};", BOOT_JS.index("throw new Error('TTS engine returned", end)) + 2
-    region = BOOT_JS[start:end]
+    """Drive the real native module in a Node harness."""
 
     harness = textwrap.dedent(
         """
         const window = {};
         const document = { getElementById: () => null };  // no <select> in harness
-        %s
+        const localStorage = { getItem: () => null, setItem() {} };
+        globalThis.window = window;
+        globalThis.document = document;
+        globalThis.localStorage = localStorage;
+        import(%s).then(module => {
+        const {registerHermesTtsEngine, _hermesTtsIsRegistered, _hermesTtsEngineOptions, _hermesTtsSynth} = module;
         const results = {};
         // valid registration
-        results.validOk = window.registerHermesTtsEngine({
+        results.validOk = registerHermesTtsEngine({
           id: 'voicevox', label: 'VOICEVOX', synthesize: () => new ArrayBuffer(4)
         });
-        results.isRegistered = window._hermesTtsIsRegistered('voicevox');
+        results.isRegistered = _hermesTtsIsRegistered('voicevox');
         // reserved key rejected
-        results.reservedRejected = (window.registerHermesTtsEngine({
+        results.reservedRejected = (registerHermesTtsEngine({
           id: 'edge', label: 'x', synthesize: () => new ArrayBuffer(1) }) === false);
-        results.openaiReservedRejected = (window.registerHermesTtsEngine({
+        results.openaiReservedRejected = (registerHermesTtsEngine({
           id: 'openai', label: 'x', synthesize: () => new ArrayBuffer(1) }) === false);
         // bad id rejected
-        results.badIdRejected = (window.registerHermesTtsEngine({
+        results.badIdRejected = (registerHermesTtsEngine({
           id: 'Bad Id!', label: 'x', synthesize: () => new ArrayBuffer(1) }) === false);
         // missing synthesize rejected
-        results.noSynthRejected = (window.registerHermesTtsEngine({ id: 'nosynth', label: 'x' }) === false);
+        results.noSynthRejected = (registerHermesTtsEngine({ id: 'nosynth', label: 'x' }) === false);
         // options list reflects the registered engine
-        results.optionListed = window._hermesTtsEngineOptions().some(e => e.id === 'voicevox');
+        results.optionListed = _hermesTtsEngineOptions().some(e => e.id === 'voicevox');
         // synth coerces ArrayBuffer through
-        window._hermesTtsSynth('voicevox', 'hi', {}).then(buf => {
+        _hermesTtsSynth('voicevox', 'hi', {}).then(buf => {
           results.synthReturnsArrayBuffer = (buf instanceof ArrayBuffer);
           // unregistered engine returns null
-          results.unregisteredNull = (window._hermesTtsSynth('ghost', 'hi', {}) === null);
+          results.unregisteredNull = (_hermesTtsSynth('ghost', 'hi', {}) === null);
           console.log(JSON.stringify(results));
         });
+        });
         """
-    ) % region
+    ) % repr(PUBLIC_INTERFACES.as_uri())
 
     out = subprocess.run(
         ["node", "-e", harness], capture_output=True, text=True, timeout=30

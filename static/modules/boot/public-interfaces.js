@@ -1,4 +1,3 @@
-window.HermesBoot.begin('publicInterfaces');
 // ── Default message mode eager default (#5167 / #5145) ──────────────────────
 // The Default message mode preference (queue/interrupt/steer) is read on the
 // send path via `window._defaultMessageMode||'steer'`. The authoritative value
@@ -31,11 +30,9 @@ function _readPersistedDefaultMessageMode(){
   }catch(_){}
   return _normalizeDefaultMessageMode(stored);
 }
-window._persistDefaultMessageMode=_persistDefaultMessageMode;
-window._readPersistedDefaultMessageMode=_readPersistedDefaultMessageMode;
 // Eager default set BEFORE the async settings fetch resolves so first sends in
 // the boot window honor the persisted preference instead of the raw default.
-window._defaultMessageMode=_readPersistedDefaultMessageMode();
+const eagerDefaultMessageMode=_readPersistedDefaultMessageMode();
 
 // ── Extension TTS-engine registry (registerHermesTtsEngine) ──────────────────
 // Defined at MODULE scope (not inside the voice-mode IIFE below) so the public
@@ -64,7 +61,7 @@ function _hermesAddTtsOption(id, label){
   opt.textContent=label;   // textContent — never innerHTML (no injection)
   sel.appendChild(opt);
 }
-window.registerHermesTtsEngine=function(desc){
+function registerHermesTtsEngine(desc){
   try{
     if(!desc||typeof desc!=='object') return false;
     var id=String(desc.id||'').toLowerCase();
@@ -76,16 +73,16 @@ window.registerHermesTtsEngine=function(desc){
     _hermesAddTtsOption(id, label);
     return true;
   }catch(_){ return false; }
-};
-window._hermesTtsIsRegistered=function(id){ return !!_HERMES_TTS_ENGINES[id]; };
+}
+function _hermesTtsIsRegistered(id){ return !!_HERMES_TTS_ENGINES[id]; }
 // List registered engines (for the settings panel to re-add options on render).
-window._hermesTtsEngineOptions=function(){
+function _hermesTtsEngineOptions(){
   return Object.keys(_HERMES_TTS_ENGINES).map(function(k){
     return { id:_HERMES_TTS_ENGINES[k].id, label:_HERMES_TTS_ENGINES[k].label };
   });
-};
+}
 // Returns a Promise<ArrayBuffer> or null if the engine isn't registered.
-window._hermesTtsSynth=function(id, text, opts){
+function _hermesTtsSynth(id, text, opts){
   var eng=_HERMES_TTS_ENGINES[id];
   if(!eng) return null;
   return Promise.resolve()
@@ -97,17 +94,17 @@ window._hermesTtsSynth=function(id, text, opts){
       if(out.buffer instanceof ArrayBuffer) return out.buffer;   // typed array
       throw new Error('TTS engine returned an unsupported type');
     });
-};
+}
 
 // ── Session-open hook (for extensions) ────────────────────────────────────
 var _HERMES_SESSION_OPEN_HANDLERS=[];
-window.registerHermesSessionOpenHandler=function(fn){
+function registerHermesSessionOpenHandler(fn){
   if(typeof fn!=='function') return false;
   if(_HERMES_SESSION_OPEN_HANDLERS.indexOf(fn)>=0) return false;
   _HERMES_SESSION_OPEN_HANDLERS.push(fn);
   return true;
-};
-window._hermesNotifySessionOpen=function(sid, data, opts){
+}
+function _hermesNotifySessionOpen(sid, data, opts){
   opts=opts||{};
   for(var i=0;i<_HERMES_SESSION_OPEN_HANDLERS.length;i++){
     try{
@@ -116,10 +113,10 @@ window._hermesNotifySessionOpen=function(sid, data, opts){
     }catch(_){}
   }
   return {};
-};
+}
 
 // ── Transcript renderer (for extensions) ───────────────────────────────────
-window.renderTranscript=function(container, messages, opts){
+function renderTranscript(container, messages, opts){
   if(!container||!Array.isArray(messages)) return container;
   opts=opts||{};
   container.innerHTML='';
@@ -159,6 +156,18 @@ window.renderTranscript=function(container, messages, opts){
     try{_rehydrateTransparentStreamDom(container);}catch(_){}
   }
   return container;
-};
+}
 
-window.HermesBoot.publish('publicInterfaces',{persistDefaultMessageMode:_persistDefaultMessageMode,readPersistedDefaultMessageMode:_readPersistedDefaultMessageMode,registerHermesTtsEngine:window.registerHermesTtsEngine,registerHermesSessionOpenHandler:window.registerHermesSessionOpenHandler,renderTranscript:window.renderTranscript});
+export {
+  _hermesNotifySessionOpen,
+  _hermesTtsEngineOptions,
+  _hermesTtsIsRegistered,
+  _hermesTtsSynth,
+  _normalizeDefaultMessageMode,
+  _persistDefaultMessageMode,
+  _readPersistedDefaultMessageMode,
+  eagerDefaultMessageMode,
+  registerHermesSessionOpenHandler,
+  registerHermesTtsEngine,
+  renderTranscript,
+};

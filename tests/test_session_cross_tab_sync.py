@@ -57,10 +57,10 @@ def test_api_helper_resolves_against_document_base_not_session_path():
 
 
 def test_long_lived_stream_urls_resolve_against_document_base():
-    for rel in ("static/messages.js", "static/boot.js", "static/terminal.js"):
+    for rel in ("static/messages.js", "static/modules/boot/index.js", "static/terminal.js"):
         family = {
             "static/messages.js": "messages",
-            "static/boot.js": "boot",
+            "static/modules/boot/index.js": "boot",
         }.get(rel)
         src = family_source(family) if family else (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "document.baseURI||location.href" in src

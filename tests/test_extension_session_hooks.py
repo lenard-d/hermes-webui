@@ -301,7 +301,7 @@ def test_canonical_sid_resolved_before_preload_notification():
 
 
 def test_preload_veto_only_on_preload_phase():
-    body = _extract_block(BOOT_JS, "window._hermesNotifySessionOpen=function")
+    body = _extract_block(BOOT_JS, "function _hermesNotifySessionOpen(")
     assert "opts.preload" in body
 
 
