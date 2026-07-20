@@ -1,6 +1,6 @@
 # Architecture modularization plan
 
-- **Status:** Proposed
+- **Status:** In progress
 - **Created:** 2026-07-20
 - **Scope:** Repository structure, module ownership, dependency direction,
   compatibility seams, frontend module loading, and architecture verification
@@ -388,6 +388,12 @@ are required to preserve the moved interface.
 
 ### Phase 0: establish guardrails
 
+**Status: Implemented, baseline refresh pending.** The repository now has an
+AST-based architecture checker and a reviewed legacy baseline. Package
+migrations have removed many baseline findings and exposed new public-interface
+and cycle findings; those must be resolved or narrowly re-baselined before this
+phase is considered current again.
+
 - record the package and domain vocabulary from this plan
 - inventory current package dependencies and cycles
 - add a lightweight architecture check for newly forbidden imports and cycles
@@ -423,6 +429,11 @@ entangled than routes, streaming, sessions, or configuration.
 
 ### Phase 2: configuration, profiles, and providers
 
+**Status: Package conversion implemented; boundary cleanup in progress.** The
+three domains are real packages without source assembly or facade binders.
+Remaining work is to replace cross-package private imports with deliberate
+public interfaces and finish removing upward dependencies and cycles.
+
 - convert each domain to the standard package pattern
 - separate configuration foundations from profile and provider behavior
 - pass resolved configuration snapshots into callers
@@ -434,6 +445,14 @@ profiles/providers, and profile switching, provider discovery, cache
 invalidation, and credential scoping remain behaviorally verified.
 
 ### Phase 3: runs and sessions
+
+**Status: Package conversion implemented; deepening in progress.** Run and
+session ownership now lives under `api/runs/` and `api/sessions/`. The session
+store compatibility surface has been reduced to a stateless facade while
+records, external projections, recovery, reconciliation, cache, cleanup, and
+state-db behavior have semantic owners. Remaining work includes migrating old
+facade-patching tests and moving route-owned projection/orchestration into the
+domain packages.
 
 - group the existing run owners under `api/runs/`
 - group session persistence, recovery, projection, sources, and events under
@@ -448,6 +467,12 @@ packages without entering the HTTP router.
 
 ### Phase 4: HTTP router and routes
 
+**Status: In progress.** Dispatch and several domain route groups have moved to
+`api/http/`, but `api/routes.py` and large modules under `api/routes_parts/`
+still contain domain orchestration. Current work extracts cohesive HTTP owners
+and moves session projection and anchor-scene behavior behind session-domain
+interfaces.
+
 - introduce the HTTP router and per-domain route adapters
 - move remaining domain behavior out of `routes.py` and `routes_parts/`
 - preserve authentication, authorization, CSRF, error, and response semantics
@@ -458,6 +483,11 @@ packages without entering the HTTP router.
 session, run, provider, workspace, or update state.
 
 ### Phase 5: streaming transport
+
+**Status: In progress.** Run execution and durable event ownership already have
+dedicated run modules. The remaining facade/parts implementation is being
+ported to a real `api/streaming/` package on top of the current run and session
+owners so the migration does not overwrite newer lifecycle work.
 
 - distinguish live transport from run execution and durable event ownership
 - move local/Gateway orchestration behind the run package interface
@@ -470,6 +500,12 @@ changing run admission, execution, journaling, or session persistence.
 
 ### Phase 6: frontend modules
 
+**Status: Native module graph implemented; deepening in progress.** Boot,
+commands, sessions, messages, panels, and UI now load as native ES-module
+graphs with a narrow compatibility surface and transitive service-worker asset
+inventory. Large orchestration modules are being reviewed for real semantic
+seams; coherent locale data remains intentionally unsplit.
+
 - choose one native ES-module loading pattern
 - migrate one bounded domain first, retaining a narrow compatibility adapter
 - move messages, sessions, workspace, boot, and panels incrementally
@@ -481,6 +517,11 @@ individual files parse independently, and page/service-worker asset order is
 derived from one source.
 
 ### Phase 7: test and compatibility cleanup
+
+**Status: In progress.** Source-shape checks and monkeypatches against stateless
+compatibility facades are being migrated in bounded owner-specific groups.
+Compatibility exports remain only where production or external callers still
+need them; their removal follows caller migration and broad-suite verification.
 
 - migrate remaining source-shape tests to behavior or architecture contracts
 - delete compatibility exports with no remaining callers
@@ -547,8 +588,15 @@ The architecture program is complete when:
 
 ## Immediate next step
 
-Implement Phase 0 and design the `updates` pilot as one focused change. Before
-moving files, inventory every current `api.updates` and `api.update_*` caller,
-record the existing public exports and test seams, and define the atomic rename
-sequence needed to replace `updates.py` with `updates/__init__.py` without a
-partially importable intermediate state.
+Finish the currently independent integration wave without widening its scope:
+
+1. port the streaming package onto the latest run/session owners rather than
+   replaying its historical monolith diff
+2. complete the remaining HTTP, session-projection, and anchor-scene owner
+   extractions
+3. replace cross-package private imports in the config/profile/provider stack
+   with deliberate public interfaces and then refresh the architecture
+   baseline
+4. migrate the remaining compatibility-facade tests to their actual owners
+5. run focused neighboring suites followed by the complete repository suite,
+   then update `ARCHITECTURE.md` to describe only the verified live structure
