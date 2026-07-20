@@ -130,7 +130,8 @@ def test_audit_reports_runtime_auxiliary_and_model_metadata_imports():
     classes = _class_by_id(_run_audit())
     anchors = _anchors(classes["runtime_auxiliary_model_metadata"])
 
-    assert ("api/streaming.py", "agent.auxiliary_client") in anchors
+    assert ("api/streaming_parts/attachments.py", "agent.auxiliary_client") in anchors
+    assert ("api/streaming_parts/title_generation.py", "agent.auxiliary_client") in anchors
     assert ("api/streaming.py", "agent.model_metadata") in anchors
     assert ("api/config.py", "hermes_cli.models") in anchors
     assert ("api/providers.py", "agent.account_usage") in anchors
@@ -184,7 +185,7 @@ def test_audit_keeps_client_package_candidates_visible():
     classes = _class_by_id(_run_audit())
     anchors = _anchors(classes["webui_local_or_client_package"])
 
-    assert ("api/streaming.py", "hermes_constants") in anchors
+    assert ("api/streaming_parts/webui_prefill.py", "hermes_constants") in anchors
     assert ("api/routes_parts/skills.py", "agent.skill_utils") in anchors
     assert ("api/routes.py", "hermes_cli.plugins") in anchors
     assert ("api/providers.py", "agent.credential_pool") in anchors
