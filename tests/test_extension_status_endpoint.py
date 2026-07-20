@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+from api.extensions import configuration as extensions_configuration
+
 
 class FakeHandler:
     def __init__(self):
@@ -54,9 +56,7 @@ def _use_extension_state_dir(monkeypatch, tmp_path):
     state_dir = tmp_path / "webui-state"
     state_dir.mkdir()
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
-    import api.extensions as extensions
-
-    monkeypatch.setattr(extensions, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
     return state_dir
 
 
@@ -395,7 +395,7 @@ def test_extension_status_reports_recursion_error_safely(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(root))
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "deep.json")
 
-    import api.extensions as extensions
+    from api.extensions import configuration as extensions
 
     def raise_recursion_error(_manifest_file):
         raise RecursionError("manifest nesting exceeded")
@@ -1151,7 +1151,7 @@ def test_extension_state_recursion_error_fails_safe(tmp_path, monkeypatch):
     state_file = state_dir / "extension-overrides.json"
     state_file.write_text('{"disabled_extensions":["templates"]}', encoding="utf-8")
 
-    import api.extensions as extensions
+    from api.extensions import configuration as extensions
 
     def raise_recursion_error(_text):
         raise RecursionError("state nesting exceeded")

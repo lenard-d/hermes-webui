@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from api.extensions import configuration as extensions_configuration
+
 
 @pytest.fixture(autouse=True)
 def _clear_extension_env(monkeypatch):
@@ -56,9 +58,7 @@ def test_extension_config_disabled_by_default(tmp_path, monkeypatch):
     monkeypatch.delenv("HERMES_WEBUI_EXTENSION_STYLESHEET_URLS", raising=False)
     # Point the managed state dir at an empty temp dir so the default extension
     # root does not exist yet — config stays disabled until the first install.
-    import api.extensions as extensions
-
-    monkeypatch.setattr(extensions, "_extension_state_dir", lambda: tmp_path)
+    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: tmp_path)
 
     from api.extensions import get_extension_config
 
@@ -408,7 +408,8 @@ def test_extension_manifest_url_list_shares_cap_with_env_urls(tmp_path, monkeypa
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "manifest.json")
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_SCRIPT_URLS", "/extensions/env.js")
 
-    from api.extensions import _MAX_URL_LIST, get_extension_config
+    from api.extensions import get_extension_config
+    from api.extensions.security import _MAX_URL_LIST
 
     config = get_extension_config()
     assert len(config["script_urls"]) == _MAX_URL_LIST
@@ -464,7 +465,7 @@ def test_extension_manifest_logs_oversize_distinctly(tmp_path, monkeypatch, capl
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(root))
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "manifest.json")
 
-    from api import extensions
+    from api.extensions import configuration as extensions
 
     (root / "manifest.json").write_text(
         '{"scripts":["pwn.js"]}' + (" " * extensions._MAX_MANIFEST_BYTES),
@@ -487,7 +488,7 @@ def test_extension_manifest_reads_only_bounded_size(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(root))
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "manifest.json")
 
-    from api import extensions
+    from api.extensions import configuration as extensions
 
     # If the bounded read/cap check is removed, this parses as valid JSON and
     # would inject /extensions/pwn.js. The trailing padding makes it oversize.
@@ -508,7 +509,7 @@ def test_extension_manifest_multibyte_payload_is_bounded_by_bytes(tmp_path, monk
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(root))
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "manifest.json")
 
-    from api import extensions
+    from api.extensions import configuration as extensions
 
     oversize_multibyte = '{"scripts":["pwn.js"]}' + ("€" * extensions._MAX_MANIFEST_BYTES)
     (root / "manifest.json").write_text(oversize_multibyte, encoding="utf-8")
@@ -537,7 +538,8 @@ def test_extension_manifest_cap_warning_logs_once_across_many_entries(tmp_path, 
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(root))
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_MANIFEST", "manifest.json")
 
-    from api.extensions import _MAX_URL_LIST, _warned_urls, get_extension_config
+    from api.extensions import get_extension_config
+    from api.extensions.security import _MAX_URL_LIST, _warned_urls
 
     _warned_urls.clear()
     caplog.set_level(logging.WARNING, logger="api.extensions")

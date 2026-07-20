@@ -7,6 +7,8 @@ import urllib.request
 
 import pytest
 
+from api.extensions import configuration as extensions_configuration
+
 
 class FakeHandler:
     def __init__(self, body: bytes = b""):
@@ -56,9 +58,7 @@ def _use_extension_state_dir(monkeypatch, tmp_path):
     state_dir = tmp_path / "webui-state"
     state_dir.mkdir()
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
-    import api.extensions as extensions
-
-    monkeypatch.setattr(extensions, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
     return state_dir
 
 

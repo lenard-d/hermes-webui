@@ -1,119 +1,25 @@
-"""Opt-in WebUI extension hooks.
-
-This module intentionally provides a small, self-hosted extension surface:
-configured same-origin script/style injection plus sandboxed static file serving.
-It is disabled by default and never executes or fetches third-party URLs.
-"""
+"""Extension roots, manifests, runtime configuration, and override state."""
 
 import json
 import math
 import logging
 import os
 import re
-import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
-from api.helpers import _security_headers, j  # noqa: F401 - late-bound part dependencies
-from api.extensions_parts.facade import bind_extensions_api
+from .errors import ExtensionToggleError
 
-
-bind_extensions_api(lambda: sys.modules[__name__])
-
-_log = logging.getLogger(__name__)
-
-# Sane bound on configured URLs — real extensions ship 1-3 files. Higher values
-# typically indicate a misconfiguration (one giant unsplit string, or a runaway
-# generator script that wrote an env-var template without filtering). Capping
-# avoids rendering tens of thousands of <script> tags into every page load.
-_MAX_URL_LIST = 32
+_log = logging.getLogger("api.extensions")
 
 # Keep extension manifests small and auditable. The manifest is a convenience for
 # bundling static assets, not a package manager or dependency lockfile.
 _MAX_MANIFEST_BYTES = 64 * 1024
 
-# Tracks rejected URL strings we've already warned about so a misconfigured env
-# var doesn't spam the log on every request that re-reads it.
-_warned_urls: set = set()
-
-
 class _ManifestTooLarge(ValueError):
     pass
-
-
-class ExtensionToggleError(Exception):
-    """Sanitized extension mutation error safe to return to the browser."""
-
-    def __init__(self, message: str, status: int = 400):
-        super().__init__(message)
-        self.status = status
-
-
-class ExtensionInstallError(Exception):
-    """Sanitized extension install/uninstall error safe to return to the browser."""
-
-    def __init__(self, message: str, status: int = 400):
-        super().__init__(message)
-        self.status = status
-
-
-class ExtensionSidecarProxyError(Exception):
-    """Sanitized sidecar proxy error safe to return to the browser."""
-
-    def __init__(self, message: str, status: int = 400):
-        super().__init__(message)
-        self.status = status
-
-
-from api.extensions_parts.gallery import (  # noqa: E402, F401 - compatibility exports
-    _GALLERY_INSTALL_STATE_FILENAME,
-    _MAX_INSTALL_MANIFEST_BYTES,
-    _MAX_GALLERY_INSTALLED_IDS,
-    _MAX_ZIP_DOWNLOAD_BYTES,
-    _REGISTRY_URL,
-    _REGISTRY_ALLOWED_DOWNLOAD_HOSTS,
-    _REGISTRY_CACHE,
-    _REGISTRY_LOCK,
-    _REGISTRY_TTL_SECONDS,
-    _AllowlistRedirectHandler,
-    _connect_ipv4_first,
-    _IPv4FirstHTTPSConnection,
-    _IPv4FirstHTTPSHandler,
-    _build_gallery_opener,
-    _safe_download,
-    _install_manifest_file,
-    _empty_install_manifest,
-    _load_install_manifest,
-    _write_install_manifest,
-    install_extension,
-    uninstall_extension,
-    get_extension_registry,
-)
-from api.extensions_parts.security import (  # noqa: E402, F401 - compatibility exports
-    _fully_unquote_path,
-    _is_safe_relative_path,
-    _is_safe_asset_url,
-    _warn_rejected_url,
-    _append_safe_asset_url,
-    _read_url_list,
-    inject_extension_tags,
-    _not_found,
-    serve_extension_static,
-)
-from api.extensions_parts.sidecars import (  # noqa: E402, F401 - compatibility exports
-    _normalize_loopback_sidecar_origin,
-    _normalize_sidecar_health_path,
-    _is_valid_sidecar_proxy_path,
-    _sidecar_from_manifest_entry,
-    _extension_sidecar_proxy_path,
-    _sidecar_proxy_public_status,
-    _extension_sidecar_records,
-    _normalize_sidecar_proxy_path,
-    set_extension_sidecar_proxy_consent,
-    resolve_extension_sidecar_proxy_target,
-)
 
 
 EXTENSION_ROUTE_PREFIX = "/extensions/"
@@ -121,10 +27,6 @@ _EXTENSION_DIR_ENV = "HERMES_WEBUI_EXTENSION_DIR"
 _EXTENSION_SCRIPT_URLS_ENV = "HERMES_WEBUI_EXTENSION_SCRIPT_URLS"
 _EXTENSION_STYLESHEET_URLS_ENV = "HERMES_WEBUI_EXTENSION_STYLESHEET_URLS"
 _EXTENSION_MANIFEST_ENV = "HERMES_WEBUI_EXTENSION_MANIFEST"
-_ALLOWED_ASSET_PREFIXES = ("/extensions/", "/static/")
-_SIDECAR_WARNING_SOURCE = "manifest:sidecars"
-_DEFAULT_SIDECAR_HEALTH_PATH = "/health"
-_LOOPBACK_SIDECAR_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _EXTENSION_STATE_FILENAME = "extension-overrides.json"
 _MAX_EXTENSION_STATE_BYTES = 32 * 1024
 _MAX_DISABLED_EXTENSION_IDS = 512
@@ -134,26 +36,6 @@ _EXTENSION_SETTINGS_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,63}$")
 _EXTENSION_STATE_WARNING_SOURCE = "extension_state"
 _EXTENSION_STATE_LOCK = threading.Lock()
 _EXTENSION_SETTING_TYPES = {"boolean", "string", "number", "integer", "enum"}
-
-_EXTENSION_MIME = {
-    "css": "text/css",
-    "js": "application/javascript",
-    "html": "text/html",
-    "svg": "image/svg+xml",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "jpeg": "image/jpeg",
-    "ico": "image/x-icon",
-    "gif": "image/gif",
-    "webp": "image/webp",
-    "woff": "font/woff",
-    "woff2": "font/woff2",
-    "ttf": "font/ttf",
-    "otf": "font/otf",
-    "wasm": "application/wasm",
-}
-_TEXT_MIME_TYPES = {"text/css", "application/javascript", "text/html", "image/svg+xml", "text/plain"}
-
 
 def _default_extension_root() -> Path:
     """WebUI-managed default extension directory under the state dir.
@@ -282,6 +164,8 @@ def _empty_extension_state() -> Dict[str, Any]:
 
 def _load_extension_state(diagnostics: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load UI-managed extension overrides, failing safe without path leaks."""
+    from .sidecars import _normalize_loopback_sidecar_origin
+
     state_file = _extension_state_file()
     try:
         if not state_file.exists() or not state_file.is_file():
@@ -369,6 +253,8 @@ def _load_extension_state(diagnostics: Optional[Dict[str, Any]] = None) -> Dict[
 
 def _write_extension_state(state: Dict[str, Any]) -> None:
     """Persist extension overrides with an atomic same-directory replace."""
+    from .sidecars import _normalize_loopback_sidecar_origin
+
     disabled_raw = state.get("disabled_extensions", [])
     disabled: List[str] = []
     seen: Set[str] = set()
@@ -422,6 +308,8 @@ def _write_extension_state(state: Dict[str, Any]) -> None:
 
 
 def _manifest_path_with_status(root: Path) -> Tuple[Optional[Path], str]:
+    from .security import _fully_unquote_path, _is_safe_relative_path
+
     raw = os.getenv(_EXTENSION_MANIFEST_ENV, "").strip()
     if not raw:
         return None, "not_configured"
@@ -681,6 +569,8 @@ def _gallery_installed_runtime_manifest(
     root: Path, diagnostics: Optional[Dict[str, Any]] = None
 ) -> Optional[Dict[str, object]]:
     """Build a runtime manifest from gallery-installed extension manifests."""
+    from .gallery import _load_install_manifest
+
     install_manifest = _load_install_manifest()
     installed = install_manifest.get("installed", {})
     if not isinstance(installed, dict):
@@ -887,6 +777,9 @@ def _read_manifest_urls_with_diagnostics(
     manifest_status: Optional[Dict[str, Any]] = None,
     state: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[str], List[str], List[Dict[str, Any]], Dict[str, Any]]:
+    from .security import _append_safe_asset_url
+    from .sidecars import _extension_sidecar_records
+
     disabled_ids = disabled_ids or set()
     if manifest is None or manifest_status is None:
         manifest, manifest_status = _load_manifest_with_status(root, diagnostics)
@@ -955,6 +848,8 @@ def _read_manifest_urls(
 
 def get_extension_config() -> Dict[str, Any]:
     """Return public extension config without exposing filesystem paths."""
+    from .security import _read_url_list
+
     root = _extension_root()
     if root is None:
         return {"enabled": False, "script_urls": [], "stylesheet_urls": []}
@@ -985,6 +880,9 @@ def get_extension_config() -> Dict[str, Any]:
 
 def get_extension_status() -> Dict[str, Any]:
     """Return sanitized extension diagnostics for administrators."""
+    from .gallery import _load_install_manifest
+    from .security import _read_url_list
+
     diagnostics = _new_diagnostics()
     root, dir_configured, dir_valid = _extension_root_status()
     state = _load_extension_state(diagnostics)

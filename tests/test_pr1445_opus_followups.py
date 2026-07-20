@@ -8,7 +8,6 @@ These tests pin the defense-in-depth additions from the Opus advisor review:
 """
 
 import logging
-from pathlib import Path
 from types import SimpleNamespace
 
 
@@ -44,7 +43,7 @@ def test_fully_unquote_handles_quadruple_encoded(monkeypatch):
     `..` so the segment-level safety check rejects it. The original 3-iteration
     cap stopped at `%2e%2e` and would have accepted the URL into the validator.
     """
-    from api.extensions import _fully_unquote_path
+    from api.extensions.security import _fully_unquote_path
 
     # Plain percent-encoding stops at `..` after 1 unquote
     assert _fully_unquote_path("/extensions/%2e%2e/api/session") == "/extensions/../api/session"
@@ -89,7 +88,8 @@ def test_url_list_caps_at_max(tmp_path, monkeypatch):
     urls = ", ".join(f"/extensions/script{i}.js" for i in range(100))
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_SCRIPT_URLS", urls)
 
-    from api.extensions import get_extension_config, _MAX_URL_LIST
+    from api.extensions import get_extension_config
+    from api.extensions.security import _MAX_URL_LIST
 
     config = get_extension_config()
     assert len(config["script_urls"]) == _MAX_URL_LIST
@@ -113,7 +113,7 @@ def test_url_list_logs_rejected_urls_once(tmp_path, monkeypatch, caplog):
 
     # Reset the per-process warning cache so the test doesn't accidentally
     # depend on state from other tests in the same run
-    from api.extensions import _warned_urls
+    from api.extensions.security import _warned_urls
     _warned_urls.clear()
 
     caplog.set_level(logging.WARNING, logger="api.extensions")

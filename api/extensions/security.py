@@ -7,10 +7,43 @@ value, keeping the security decision and point of use together.
 
 import html
 import json
+import logging
+import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import unquote, urlsplit
 
-from api.extensions_parts.facade import extensions_api
+from api.helpers import _security_headers, j
+
+from . import configuration
+
+_log = logging.getLogger("api.extensions")
+_MAX_URL_LIST = 32
+_ALLOWED_ASSET_PREFIXES = ("/extensions/", "/static/")
+_warned_urls: set = set()
+_EXTENSION_MIME = {
+    "css": "text/css",
+    "js": "application/javascript",
+    "html": "text/html",
+    "svg": "image/svg+xml",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "ico": "image/x-icon",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "woff": "font/woff",
+    "woff2": "font/woff2",
+    "ttf": "font/ttf",
+    "otf": "font/otf",
+    "wasm": "application/wasm",
+}
+_TEXT_MIME_TYPES = {
+    "text/css",
+    "application/javascript",
+    "text/html",
+    "image/svg+xml",
+    "text/plain",
+}
 
 
 def _fully_unquote_path(path: str) -> str:
@@ -36,7 +69,6 @@ def _is_safe_relative_path(rel: str) -> bool:
 
 def _is_safe_asset_url(value: str) -> bool:
     """Allow only same-origin extension/static asset URLs."""
-    ext = extensions_api()
     if not value or any(
         char in value for char in ('\x00', '\r', '\n', '"', "'", "<", ">", "\\")
     ):
@@ -44,19 +76,18 @@ def _is_safe_asset_url(value: str) -> bool:
     parsed = urlsplit(value)
     if parsed.scheme or parsed.netloc or parsed.fragment:
         return False
-    decoded_path = ext._fully_unquote_path(parsed.path)
-    for prefix in ext._ALLOWED_ASSET_PREFIXES:
+    decoded_path = _fully_unquote_path(parsed.path)
+    for prefix in _ALLOWED_ASSET_PREFIXES:
         if decoded_path.startswith(prefix):
-            return ext._is_safe_relative_path(decoded_path[len(prefix):])
+            return _is_safe_relative_path(decoded_path[len(prefix):])
     return False
 
 
 def _warn_rejected_url(value: str, source: str) -> None:
-    ext = extensions_api()
-    if value in ext._warned_urls:
+    if value in _warned_urls:
         return
-    ext._warned_urls.add(value)
-    ext._log.warning(
+    _warned_urls.add(value)
+    _log.warning(
         "Rejected extension URL %r from %s (not a same-origin "
         "/extensions/ or /static/ path, or contains unsafe chars)",
         value,
@@ -73,25 +104,24 @@ def _append_safe_asset_url(
     diagnostics: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Append one validated asset URL, preserving order and the global cap."""
-    ext = extensions_api()
     value = value.strip() if isinstance(value, str) else ""
     if not value:
         return True
-    if not ext._is_safe_asset_url(value):
-        ext._warn_rejected_url(value, source)
-        ext._add_diagnostic_warning(diagnostics, "asset_url_rejected", source)
+    if not _is_safe_asset_url(value):
+        _warn_rejected_url(value, source)
+        configuration._add_diagnostic_warning(diagnostics, "asset_url_rejected", source)
         return True
     if dedupe and value in urls:
         return True
-    if len(urls) >= ext._MAX_URL_LIST:
-        if source not in ext._warned_urls:
-            ext._warned_urls.add(source)
-            ext._log.warning(
+    if len(urls) >= _MAX_URL_LIST:
+        if source not in _warned_urls:
+            _warned_urls.add(source)
+            _log.warning(
                 "Extension URL list %s truncated at %d entries",
                 source,
-                ext._MAX_URL_LIST,
+                _MAX_URL_LIST,
             )
-        ext._add_diagnostic_warning(diagnostics, "asset_url_list_truncated", source)
+        configuration._add_diagnostic_warning(diagnostics, "asset_url_list_truncated", source)
         return False
     urls.append(value)
     return True
@@ -104,12 +134,11 @@ def _read_url_list(
     diagnostics: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
     """Read, validate, and cap a comma-separated environment URL list."""
-    ext = extensions_api()
-    raw = ext.os.getenv(env_name, "")
+    raw = os.getenv(env_name, "")
     urls = list(existing or [])
     dedupe = existing is not None
     for item in raw.split(","):
-        if not ext._append_safe_asset_url(
+        if not _append_safe_asset_url(
             urls,
             item,
             env_name,
@@ -122,8 +151,7 @@ def _read_url_list(
 
 def inject_extension_tags(index_html: str) -> str:
     """Inject only the sanitized runtime config and same-origin asset tags."""
-    ext = extensions_api()
-    config = ext.get_extension_config()
+    config = configuration.get_extension_config()
     if not config["enabled"]:
         return index_html
 
@@ -166,48 +194,46 @@ def inject_extension_tags(index_html: str) -> str:
 
 
 def _not_found(handler) -> bool:
-    ext = extensions_api()
-    ext.j(handler, {"error": "not found"}, status=404)
+    j(handler, {"error": "not found"}, status=404)
     return True
 
 
 def serve_extension_static(handler, parsed) -> bool:
     """Serve a contained extension asset or return one generic 404."""
-    ext = extensions_api()
-    root = ext._extension_root()
+    root = configuration._extension_root()
     if root is None:
-        return ext._not_found(handler)
+        return _not_found(handler)
 
-    rel = unquote(parsed.path[len(ext.EXTENSION_ROUTE_PREFIX):])
-    if not ext._is_safe_relative_path(rel):
-        return ext._not_found(handler)
+    rel = unquote(parsed.path[len(configuration.EXTENSION_ROUTE_PREFIX):])
+    if not _is_safe_relative_path(rel):
+        return _not_found(handler)
     static_file = (root / rel).resolve()
     try:
         static_file.relative_to(root)
     except ValueError:
-        return ext._not_found(handler)
+        return _not_found(handler)
     if not static_file.exists() or not static_file.is_file():
-        return ext._not_found(handler)
+        return _not_found(handler)
 
-    content_type = ext._EXTENSION_MIME.get(
+    content_type = _EXTENSION_MIME.get(
         static_file.suffix.lower().lstrip("."),
         "text/plain",
     )
     content_type_header = (
         f"{content_type}; charset=utf-8"
-        if content_type in ext._TEXT_MIME_TYPES
+        if content_type in _TEXT_MIME_TYPES
         else content_type
     )
     try:
         raw = static_file.read_bytes()
     except OSError:
-        return ext._not_found(handler)
+        return _not_found(handler)
 
     handler.send_response(200)
     handler.send_header("Content-Type", content_type_header)
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("Content-Length", str(len(raw)))
-    ext._security_headers(handler)
+    _security_headers(handler)
     handler.end_headers()
     handler.wfile.write(raw)
     return True

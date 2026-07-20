@@ -10,6 +10,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from api.extensions import configuration as extensions_configuration
+from api.extensions import gallery as gallery_owner
+
 
 def _make_zip(files: dict) -> bytes:
     """Build an in-memory zip containing the given {name: content} mapping."""
@@ -28,8 +31,7 @@ def _setup_ext_env(monkeypatch, tmp_path):
     state_dir.mkdir()
     monkeypatch.setenv("HERMES_WEBUI_EXTENSION_DIR", str(ext_dir))
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
-    import api.extensions as ext_mod
-    monkeypatch.setattr(ext_mod, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
     return ext_dir, state_dir
 
 
@@ -47,7 +49,7 @@ def test_install_valid(monkeypatch, tmp_path):
     mock_resp = MagicMock()
     mock_resp.read.return_value = zip_bytes
     mock_resp.close = MagicMock()
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     result = ext_mod.install_extension(
         "my-ext",
@@ -58,7 +60,7 @@ def test_install_valid(monkeypatch, tmp_path):
     assert result["id"] == "my-ext"
     assert result["version"] == "1.2.3"
     assert (ext_dir / "my-ext" / "index.js").exists()
-    manifest = ext_mod._load_install_manifest()
+    manifest = gallery_owner._load_install_manifest()
     assert "my-ext" in manifest["installed"]
     assert "index.js" in manifest["installed"]["my-ext"]["files"]
 
@@ -76,7 +78,7 @@ def test_install_prefixed_zip(monkeypatch, tmp_path):
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     result = ext_mod.install_extension(
         "my-ext",
@@ -90,7 +92,7 @@ def test_install_prefixed_zip(monkeypatch, tmp_path):
     assert (ext_dir / "my-ext" / "sub" / "style.css").exists()
     # Verify NO double-nested directory
     assert not (ext_dir / "my-ext" / "my-ext").exists()
-    manifest = ext_mod._load_install_manifest()
+    manifest = gallery_owner._load_install_manifest()
     assert "manifest.json" in manifest["installed"]["my-ext"]["files"]
 
 
@@ -122,7 +124,7 @@ def test_gallery_installed_extension_becomes_runtime_manifest(monkeypatch, tmp_p
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     ext_mod.install_extension(
         "my-ext",
@@ -172,7 +174,7 @@ def test_gallery_installed_settings_only_manifest_becomes_runtime_entry(monkeypa
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     ext_mod.install_extension(
         "my-ext",
@@ -222,7 +224,7 @@ def test_install_bootstraps_managed_default_root_without_env(monkeypatch, tmp_pa
     monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(state_dir))
     import api.extensions as ext_mod
 
-    monkeypatch.setattr(ext_mod, "_extension_state_dir", lambda: state_dir)
+    monkeypatch.setattr(extensions_configuration, "_extension_state_dir", lambda: state_dir)
 
     default_root = state_dir / "extensions"
     # Pre-install: nothing exists yet, gallery is "configured" but not valid.
@@ -250,7 +252,7 @@ def test_install_bootstraps_managed_default_root_without_env(monkeypatch, tmp_pa
     }
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     result = ext_mod.install_extension(
         "plug-ext",
@@ -292,7 +294,7 @@ def test_install_bad_hash(monkeypatch, tmp_path):
     zip_bytes = _make_zip({"index.js": "code"})
     wrong_sha = "a" * 64
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     with pytest.raises(ext_mod.ExtensionInstallError, match="SHA-256"):
         ext_mod.install_extension(
@@ -313,7 +315,7 @@ def test_install_zipslip(monkeypatch, tmp_path):
     zip_bytes = buf.getvalue()
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     with pytest.raises(ext_mod.ExtensionInstallError):
         ext_mod.install_extension(
@@ -332,7 +334,7 @@ def test_uninstall(monkeypatch, tmp_path):
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     ext_mod.install_extension(
         "rm-ext",
@@ -346,7 +348,7 @@ def test_uninstall(monkeypatch, tmp_path):
     assert not (ext_dir / "rm-ext" / "index.js").exists()
     assert not (ext_dir / "rm-ext" / "style.css").exists()
     assert not (ext_dir / "rm-ext").exists()
-    manifest = ext_mod._load_install_manifest()
+    manifest = gallery_owner._load_install_manifest()
     assert "rm-ext" not in manifest["installed"]
 
 
@@ -363,7 +365,7 @@ def test_uninstall_cleans_nested_dirs(monkeypatch, tmp_path):
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     ext_mod.install_extension(
         "deep-ext",
@@ -384,7 +386,7 @@ def test_install_rollback(monkeypatch, tmp_path):
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     write_count = [0]
     original_write_bytes = Path.write_bytes
@@ -419,8 +421,8 @@ def test_gallery_registry_list_format(monkeypatch, tmp_path):
     mock_resp = MagicMock()
     mock_resp.read.return_value = json.dumps(registry_data).encode("utf-8")
 
-    ext_mod._REGISTRY_CACHE.clear()
-    monkeypatch.setattr(ext_mod, "_build_gallery_opener", lambda: MagicMock(open=lambda *a, **kw: mock_resp))
+    gallery_owner._REGISTRY_CACHE.clear()
+    monkeypatch.setattr(gallery_owner, "_build_gallery_opener", lambda: MagicMock(open=lambda *a, **kw: mock_resp))
 
     result = ext_mod.get_extension_registry()
     assert "entries" in result
@@ -444,8 +446,8 @@ def test_gallery_registry_extensions_format(monkeypatch, tmp_path):
     mock_resp = MagicMock()
     mock_resp.read.return_value = json.dumps(registry_data).encode("utf-8")
 
-    ext_mod._REGISTRY_CACHE.clear()
-    monkeypatch.setattr(ext_mod, "_build_gallery_opener", lambda: MagicMock(open=lambda *a, **kw: mock_resp))
+    gallery_owner._REGISTRY_CACHE.clear()
+    monkeypatch.setattr(gallery_owner, "_build_gallery_opener", lambda: MagicMock(open=lambda *a, **kw: mock_resp))
 
     result = ext_mod.get_extension_registry()
     assert len(result["entries"]) == 1
@@ -469,7 +471,7 @@ def test_install_rejects_symlinked_ext_dir_outside_root(monkeypatch, tmp_path):
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     with pytest.raises(ext_mod.ExtensionInstallError):
         ext_mod.install_extension(
@@ -497,7 +499,7 @@ def test_install_rejects_symlinked_ext_dir_inside_root(monkeypatch, tmp_path):
     zip_bytes = _make_zip(files)
     sha = hashlib.sha256(zip_bytes).hexdigest()
 
-    monkeypatch.setattr(ext_mod, "_safe_download", lambda *a, **kw: zip_bytes)
+    monkeypatch.setattr(gallery_owner, "_safe_download", lambda *a, **kw: zip_bytes)
 
     with pytest.raises(ext_mod.ExtensionInstallError, match="symlink"):
         ext_mod.install_extension(
@@ -515,7 +517,7 @@ def test_install_rejects_redirect_to_disallowed_host(monkeypatch, tmp_path):
         raise ext_mod.ExtensionInstallError("Download redirected to disallowed host")
 
     ext_dir, state_dir = _setup_ext_env(monkeypatch, tmp_path)
-    monkeypatch.setattr(ext_mod, "_safe_download", fake_download)
+    monkeypatch.setattr(gallery_owner, "_safe_download", fake_download)
 
     with pytest.raises(ext_mod.ExtensionInstallError, match="disallowed host"):
         ext_mod.install_extension(
@@ -527,8 +529,6 @@ def test_install_rejects_redirect_to_disallowed_host(monkeypatch, tmp_path):
 
 def test_connect_ipv4_first_tries_inet_before_inet6(monkeypatch):
     """_connect_ipv4_first calls getaddrinfo with AF_INET before AF_INET6."""
-    import api.extensions as ext_mod
-
     call_order = []
 
     real_getaddrinfo = socket.getaddrinfo
@@ -542,7 +542,7 @@ def test_connect_ipv4_first_tries_inet_before_inet6(monkeypatch):
 
     # We don't actually need to connect; just verify family ordering.
     try:
-        ext_mod._connect_ipv4_first(("localhost", 80), timeout=None)
+        gallery_owner._connect_ipv4_first(("localhost", 80), timeout=None)
     except OSError:
         pass  # connection failure is fine — we only care about call order
 
@@ -553,14 +553,12 @@ def test_connect_ipv4_first_tries_inet_before_inet6(monkeypatch):
 
 def test_connect_ipv4_first_handles_global_default_timeout():
     """The _GLOBAL_DEFAULT_TIMEOUT sentinel is resolved correctly."""
-    import api.extensions as ext_mod
-
     # Should not raise TypeError when passed the stdlib sentinel.
     sentinel = socket._GLOBAL_DEFAULT_TIMEOUT
     # Force default timeout to None so no actual timeout is set on the socket.
     with patch.object(socket, "getdefaulttimeout", return_value=None):
         try:
-            ext_mod._connect_ipv4_first(("127.0.0.1", 1), timeout=sentinel)
+            gallery_owner._connect_ipv4_first(("127.0.0.1", 1), timeout=sentinel)
         except OSError:
             pass  # connection refused is fine
         except TypeError:
@@ -569,28 +567,24 @@ def test_connect_ipv4_first_handles_global_default_timeout():
 
 def test_gallery_opener_includes_ipv4_first_handler():
     """_build_gallery_opener produces an opener wired to the IPv4-first HTTPS handler."""
-    import api.extensions as ext_mod
-
-    opener = ext_mod._build_gallery_opener()
+    opener = gallery_owner._build_gallery_opener()
     # build_opener instantiates handler classes internally; find the one whose
     # https_open uses our IPv4-first connection class.
     handler_classes = [type(h) for h in opener.handlers]
-    assert ext_mod._IPv4FirstHTTPSHandler in handler_classes
+    assert gallery_owner._IPv4FirstHTTPSHandler in handler_classes
 
 
 def test_safe_download_uses_gallery_opener(monkeypatch):
     """_safe_download routes through _build_gallery_opener (which is IPv4-first)."""
-    import api.extensions as ext_mod
-
     fake_response = MagicMock()
     fake_response.read.return_value = b"file-content"
     fake_response.close = MagicMock()
     fake_opener = MagicMock(open=lambda url, timeout=None: fake_response)
 
     called = []
-    monkeypatch.setattr(ext_mod, "_build_gallery_opener", lambda: (called.append(True), fake_opener)[1])
+    monkeypatch.setattr(gallery_owner, "_build_gallery_opener", lambda: (called.append(True), fake_opener)[1])
 
-    result = ext_mod._safe_download("https://example.com/x.zip", 1024)
+    result = gallery_owner._safe_download("https://example.com/x.zip", 1024)
     assert result == b"file-content"
     assert called == [True]
 
@@ -604,11 +598,11 @@ def test_registry_fetch_uses_gallery_opener(monkeypatch):
         {"extensions": [{"id": "test-ext", "name": "Test"}]}
     ).encode("utf-8")
 
-    ext_mod._REGISTRY_CACHE.clear()
+    gallery_owner._REGISTRY_CACHE.clear()
 
     called = []
     fake_opener = MagicMock(open=lambda *a, **kw: mock_resp)
-    monkeypatch.setattr(ext_mod, "_build_gallery_opener", lambda: (called.append(True), fake_opener)[1])
+    monkeypatch.setattr(gallery_owner, "_build_gallery_opener", lambda: (called.append(True), fake_opener)[1])
 
     result = ext_mod.get_extension_registry()
     assert len(result["entries"]) == 1
