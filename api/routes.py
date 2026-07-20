@@ -17,6 +17,7 @@ import os
 import queue
 import re
 import platform
+import shlex
 import shutil
 import sqlite3
 import stat as _stat

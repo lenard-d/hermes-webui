@@ -83,6 +83,12 @@ def test_joplin_search_keeps_routes_monkeypatch_seams(monkeypatch):
     assert result["title"] == "Patched result"
 
 
+def test_script_path_parser_resolves_shlex_through_routes_facade():
+    assert routes._script_path_from_config_value("python /tmp/recall.py") == Path(
+        "/tmp/recall.py"
+    )
+
+
 def test_notes_implementation_is_file_backed_and_mcp_crud_stays_in_facade():
     part_source = Path(notes_sources.__file__).read_text(encoding="utf-8")
     facade_source = Path(routes.__file__).read_text(encoding="utf-8")
