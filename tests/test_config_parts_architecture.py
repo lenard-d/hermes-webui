@@ -6,6 +6,7 @@ import sys
 import api.config as config
 from api.config_parts import (
     config_io,
+    models_cache,
     model_settings,
     model_reasoning,
     path_env,
@@ -21,6 +22,22 @@ def test_model_settings_imports_without_importing_config_facade():
             sys.executable,
             "-c",
             "import sys; import api.config_parts.model_settings; "
+            "assert 'api.config' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_models_cache_imports_without_importing_config_facade():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import api.config_parts.models_cache; "
             "assert 'api.config' not in sys.modules",
         ],
         check=False,
@@ -86,6 +103,29 @@ def test_config_reexports_config_domain_implementations():
     )
     for name in model_settings_exports:
         assert getattr(config, name) is getattr(model_settings, name)
+    models_cache_exports = (
+        "_get_models_cache_path",
+        "_get_auth_store_path",
+        "_models_cache_file_fingerprint",
+        "_models_cache_catalog_fingerprint",
+        "_AUTH_FINGERPRINT_VOLATILE_KEYS",
+        "_strip_volatile_auth_fields",
+        "_auth_store_semantic_fingerprint",
+        "_models_cache_source_fingerprint",
+        "_delete_models_cache_on_disk",
+        "_is_valid_models_cache",
+        "_is_loadable_disk_cache",
+        "_load_models_cache_from_disk",
+        "_model_aliases_from_config",
+        "_load_stale_models_cache_from_disk",
+        "_save_models_cache_to_disk",
+        "_get_fresh_memory_models_cache",
+        "invalidate_models_cache",
+        "invalidate_credential_pool_cache",
+        "invalidate_provider_models_cache",
+    )
+    for name in models_cache_exports:
+        assert getattr(config, name) is getattr(models_cache, name)
 
 
 def test_config_io_resolves_patched_env_reader_at_call_time(monkeypatch):
@@ -199,3 +239,168 @@ def test_model_settings_does_not_own_persistent_or_catalog_cache_state():
     assert facade_owned_state <= vars(config).keys()
     assert facade_owned_state.isdisjoint(vars(model_settings))
     assert callable(config.get_available_models)
+
+
+def test_models_cache_does_not_own_mutable_cache_or_generation_state():
+    facade_owned_state = {
+        "_models_cache_path",
+        "_available_models_cache",
+        "_available_models_cache_ts",
+        "_available_models_live_rebuild_ts",
+        "_available_models_cache_source_fingerprint",
+        "_available_models_cache_lock",
+        "_cache_build_cv",
+        "_cache_build_in_progress",
+        "_models_cache_build_generation",
+        "_active_models_cache_build_generation",
+        "_models_cache_provenance",
+        "_advertised_model_ids_memo",
+        "_CREDENTIAL_POOL_CACHE",
+    }
+
+    assert facade_owned_state <= vars(config).keys()
+    assert facade_owned_state.isdisjoint(vars(models_cache))
+
+
+def test_models_cache_full_invalidation_publishes_before_revoking_generation(
+    monkeypatch,
+):
+    events = []
+    monkeypatch.setattr(config, "_available_models_cache", {"stale": True})
+    monkeypatch.setattr(config, "_available_models_cache_ts", 12.0)
+    monkeypatch.setattr(config, "_available_models_live_rebuild_ts", 13.0)
+    monkeypatch.setattr(
+        config, "_available_models_cache_source_fingerprint", {"stale": True}
+    )
+    monkeypatch.setattr(config, "_models_cache_provenance", ({"stale": True}, {}))
+    monkeypatch.setattr(config, "_models_cache_build_generation", 41)
+    monkeypatch.setattr(config, "_active_models_cache_build_generation", 41)
+    monkeypatch.setattr(config, "_cache_build_in_progress", True)
+    monkeypatch.setattr(config, "_CREDENTIAL_POOL_CACHE", {("profile", "p"): 1})
+
+    def observe(event):
+        events.append(
+            (
+                event,
+                config._available_models_cache,
+                config._available_models_cache_source_fingerprint,
+                config._models_cache_provenance,
+            )
+        )
+
+    original_sync = config._sync_models_cache_provenance
+    original_invalidate_build = config._invalidate_models_build_locked
+
+    def sync_provenance():
+        original_sync()
+        observe("provenance")
+
+    def invalidate_build():
+        original_invalidate_build()
+        observe("generation")
+
+    monkeypatch.setattr(config, "_sync_models_cache_provenance", sync_provenance)
+    monkeypatch.setattr(config, "_invalidate_models_build_locked", invalidate_build)
+    monkeypatch.setattr(config, "_delete_models_cache_on_disk", lambda: observe("disk"))
+    import api.plugin_providers as plugin_providers
+
+    monkeypatch.setattr(
+        plugin_providers,
+        "invalidate_plugin_model_provider_cache",
+        lambda: observe("plugin"),
+    )
+
+    config.invalidate_models_cache()
+
+    assert [event[0] for event in events] == [
+        "provenance",
+        "generation",
+        "disk",
+        "plugin",
+    ]
+    assert all(
+        snapshot is None and fingerprint is None and provenance is None
+        for _, snapshot, fingerprint, provenance in events
+    )
+    assert config._models_cache_build_generation == 42
+    assert config._active_models_cache_build_generation is None
+    assert config._cache_build_in_progress is False
+    assert config._CREDENTIAL_POOL_CACHE == {}
+
+
+def test_models_cache_provider_invalidation_uses_late_bound_profile_and_alias(
+    monkeypatch,
+):
+    events = []
+    monkeypatch.setattr(config, "_available_models_cache", {"stale": True})
+    monkeypatch.setattr(config, "_available_models_cache_ts", 12.0)
+    monkeypatch.setattr(config, "_available_models_live_rebuild_ts", 13.0)
+    monkeypatch.setattr(
+        config, "_available_models_cache_source_fingerprint", {"stale": True}
+    )
+    monkeypatch.setattr(config, "_models_cache_provenance", ({"stale": True}, {}))
+    monkeypatch.setattr(config, "_models_cache_build_generation", 17)
+    monkeypatch.setattr(config, "_active_models_cache_build_generation", 17)
+    monkeypatch.setattr(config, "_cache_build_in_progress", True)
+    monkeypatch.setattr(
+        config,
+        "_CREDENTIAL_POOL_CACHE",
+        {("patched-profile", "alias"): 1, ("patched-profile", "canonical"): 2},
+    )
+    monkeypatch.setattr(
+        config, "_credential_pool_profile_tag", lambda: "patched-profile"
+    )
+    monkeypatch.setattr(config, "_resolve_provider_alias", lambda _provider: "canonical")
+    original_sync = config._sync_models_cache_provenance
+    original_invalidate_build = config._invalidate_models_build_locked
+
+    def sync_provenance():
+        original_sync()
+        events.append("provenance")
+
+    def invalidate_build():
+        assert config._models_cache_provenance is None
+        original_invalidate_build()
+        events.append("generation")
+
+    monkeypatch.setattr(config, "_sync_models_cache_provenance", sync_provenance)
+    monkeypatch.setattr(config, "_invalidate_models_build_locked", invalidate_build)
+    monkeypatch.setattr(config, "_delete_models_cache_on_disk", lambda: events.append("disk"))
+
+    config.invalidate_provider_models_cache("alias")
+
+    assert events == ["provenance", "generation", "disk"]
+    assert config._available_models_cache is None
+    assert config._available_models_cache_source_fingerprint is None
+    assert config._models_cache_provenance is None
+    assert config._models_cache_build_generation == 18
+    assert config._active_models_cache_build_generation is None
+    assert config._cache_build_in_progress is False
+    assert config._CREDENTIAL_POOL_CACHE == {}
+
+
+def test_models_cache_credential_invalidation_uses_late_bound_facade(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        config,
+        "_CREDENTIAL_POOL_CACHE",
+        {("patched-profile", "alias"): 1, ("patched-profile", "canonical"): 2},
+    )
+    monkeypatch.setattr(
+        config, "_credential_pool_profile_tag", lambda: "patched-profile"
+    )
+    monkeypatch.setattr(config, "_resolve_provider_alias", lambda _provider: "canonical")
+    invalidated_usage = []
+    import api.providers as providers
+
+    monkeypatch.setattr(
+        providers,
+        "invalidate_account_usage_status_cache",
+        invalidated_usage.append,
+    )
+
+    config.invalidate_credential_pool_cache("alias")
+
+    assert config._CREDENTIAL_POOL_CACHE == {}
+    assert invalidated_usage == ["alias", "canonical"]
