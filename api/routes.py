@@ -4134,7 +4134,7 @@ def _normalize_provider_id(value: str | None) -> str:
             return normalized
     # Unknown prefix — return empty so callers treat it as "no match" and pass
     # the model through unchanged rather than incorrectly stripping it.
-    return "" 
+    return ""
 
 
 def _catalog_provider_id_sets(catalog: dict) -> tuple[set[str], set[str]]:
