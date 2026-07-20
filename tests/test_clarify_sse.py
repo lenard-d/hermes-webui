@@ -17,6 +17,14 @@ from tests.frontend_asset_contract import family_source
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 _ROUTES = os.path.join(os.path.dirname(__file__), "..", "api", "routes.py")
+_WORKSPACE_QUERY_ROUTES = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "api",
+    "http",
+    "routes",
+    "workspace_queries.py",
+)
 _CLARIFY = os.path.join(os.path.dirname(__file__), "..", "api", "clarify.py")
 _MESSAGES = os.path.join(os.path.dirname(__file__), "..", "static", "messages.js")
 
@@ -58,7 +66,7 @@ class TestClarifySSEBackendCode:
 
 class TestClarifySSERoutesCode:
     def test_route_registered(self):
-        src = _read(_ROUTES)
+        src = _read(_WORKSPACE_QUERY_ROUTES)
         assert '"/api/clarify/stream"' in src, "Missing /api/clarify/stream route"
 
     def test_handler_function_exists(self):

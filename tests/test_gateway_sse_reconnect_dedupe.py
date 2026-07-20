@@ -7,7 +7,7 @@ from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GATEWAY_WATCHER = ROOT / "api" / "gateway_watcher.py"
+GATEWAY_WATCHER = ROOT / "api" / "agent_ops" / "session_watcher.py"
 
 
 def _read(path: Path) -> str:

@@ -482,8 +482,14 @@ def test_session_context_lookup_keeps_base_url_when_custom_helper_is_missing(mon
 _STREAMING_SRC = (
     _Path(__file__).resolve().parent.parent
     / "api"
-    / "streaming_parts"
-    / "local_run.py"
+    / "runs"
+    / "local.py"
+).read_text(encoding="utf-8")
+_LIVE_USAGE_SRC = (
+    _Path(__file__).resolve().parent.parent
+    / "api"
+    / "runs"
+    / "local_usage.py"
 ).read_text(encoding="utf-8")
 
 
@@ -526,12 +532,12 @@ def test_live_snapshot_guard_broadened_to_any_model_window_mismatch():
     the old `_cc_cl_u == _cl_u` condition let it slip through to the live payload
     ('refresh shows 1M, send-a-message reverts to 168k'). Pin the broadened
     condition so it cannot silently revert to the narrow default-only form."""
-    assert "_real_u and _real_u != _cc_cl_u" in _STREAMING_SRC, (
+    assert "real_length != cached_length" in _LIVE_USAGE_SRC, (
         "live-snapshot guard must correct on ANY real-window != cached-window "
         "mismatch (#4618), not only the default-model exact-cap case"
     )
     # The narrow default-only signals must be GONE from the live-snapshot block.
-    assert "_model_matches_configured_default as _mmcd_u" not in _STREAMING_SRC, (
+    assert "_model_matches_configured_default" not in _LIVE_USAGE_SRC, (
         "the old default-only guard (_mmcd_u) must be removed from the "
         "live-snapshot path (#4618 broadened it)"
     )
@@ -543,18 +549,18 @@ def test_live_snapshot_reuses_hydration_context_length_helper():
     + get_model_context_length) so the streaming/SSE path and the hydration path
     land on an IDENTICAL value (honors nested per-model config overrides + custom
     providers). Pin the helper reuse against a hand-rolled flat-cap regression."""
-    assert "_context_length_lookup_inputs_for_model as _cli_u" in _STREAMING_SRC, (
+    assert "_context_length_lookup_inputs_for_model" in _LIVE_USAGE_SRC, (
         "live-snapshot guard must reuse the hydration lookup-inputs helper (#4618)"
     )
-    assert "from agent.model_metadata import get_model_context_length as _g_u" in _STREAMING_SRC
+    assert "from agent.model_metadata import get_model_context_length" in _LIVE_USAGE_SRC
 
 
 def test_live_snapshot_guard_has_legacy_two_arg_fallback():
     """#4618: a TypeError from the modern 6-arg get_model_context_length (older
     hermes-agent builds) must fall back to the legacy 2-arg form rather than
     raising, and the fallback must apply the SAME mismatch condition."""
-    assert "from agent.model_metadata import get_model_context_length as _g2_u" in _STREAMING_SRC
-    assert "_real_u = _g2_u(_sm_u, _base_u) or 0" in _STREAMING_SRC, (
+    assert "except TypeError:" in _LIVE_USAGE_SRC
+    assert "real_length = get_model_context_length(model, base_url) or 0" in _LIVE_USAGE_SRC, (
         "live-snapshot guard must keep a legacy 2-arg get_model_context_length "
         "fallback for older hermes-agent builds (#4618)"
     )
@@ -567,12 +573,12 @@ def test_live_snapshot_resolves_session_profile_config_not_ambient():
     non-default profile pinning a different per-model context_length, that would
     surface the WRONG profile's window in the live payload. The guard must
     resolve the SESSION's own profile config via get_config_for_profile_home."""
-    assert "from api.config import get_config_for_profile_home as _gch_u" in _STREAMING_SRC, (
+    assert "from api.config import get_config_for_profile_home" in _LIVE_USAGE_SRC, (
         "live-snapshot guard must read the session's profile config, not ambient "
         "get_config() (#3294 cross-profile leak class)"
     )
-    assert "get_hermes_home_for_profile as _ghp_u" in _STREAMING_SRC
-    assert "_ghp_u(getattr(_session_obj, 'profile', None))" in _STREAMING_SRC, (
+    assert "from api.profiles import get_hermes_home_for_profile" in _LIVE_USAGE_SRC
+    assert "getattr(session_obj, \"profile\", None)" in _LIVE_USAGE_SRC, (
         "profile home must derive from the live session object's profile"
     )
 
@@ -584,18 +590,17 @@ def test_live_snapshot_guard_honors_256k_clobber_acceptance_gate():
     mid-stream (which would reintroduce the 'drops to a smaller window' regression
     this guard exists to fix). Reuse the exact hydration acceptance helper on both
     the modern and legacy paths."""
-    assert "_should_accept_session_context_length_refresh as _accept_u" in _STREAMING_SRC, (
+    assert "_should_accept_session_context_length_refresh" in _LIVE_USAGE_SRC, (
         "live-snapshot guard must reuse the #4248 acceptance gate "
         "(_should_accept_session_context_length_refresh)"
     )
-    assert "and _accept_u(_cc_cl_u, _real_u)" in _STREAMING_SRC, (
+    assert "and accept_refresh(cached_length, real_length)" in _LIVE_USAGE_SRC, (
         "the correction must be gated by the 256k-clobber acceptance check (#4248)"
     )
     # Legacy 2-arg fallback must apply the same gate.
-    assert "_should_accept_session_context_length_refresh as _accept2_u" in _STREAMING_SRC
-    assert "and _accept2_u(_cc_cl_u, _real_u)" in _STREAMING_SRC, (
-        "the legacy 2-arg fallback must also honor the 256k acceptance gate"
-    )
+    assert _LIVE_USAGE_SRC.count(
+        "and accept_refresh(cached_length, real_length)"
+    ) == 2, "the legacy 2-arg fallback must also honor the 256k acceptance gate"
 
 
 def test_session_save_path_broadened_to_any_model_window_mismatch():
@@ -605,10 +610,10 @@ def test_session_save_path_broadened_to_any_model_window_mismatch():
     reload shows the wrong window. It must resolve the real window via the same
     helper and honor the #4248 acceptance gate before skipping the compressor
     value."""
-    assert "_context_length_lookup_inputs_for_model as _cli_cc" in _STREAMING_SRC, (
+    assert "_cli_cc = _context_length_lookup_inputs_for_model" in _STREAMING_SRC, (
         "save path must resolve the real per-model window via the hydration helper (#4618)"
     )
-    assert "_should_accept_session_context_length_refresh as _accept_cc" in _STREAMING_SRC
+    assert "_accept_cc = _should_accept_session_context_length_refresh" in _STREAMING_SRC
     assert "if _real_cc and _real_cc != _cc_cl and _accept_cc(_cc_cl, _real_cc):" in _STREAMING_SRC, (
         "save path must skip the compressor value on ANY accepted real-window "
         "mismatch, not only the default-model exact-cap case (#4618)"
@@ -621,10 +626,10 @@ def test_sse_done_path_broadened_to_any_model_window_mismatch():
     end (messages.js overwrites S.lastUsage with the done payload). It must
     resolve the real window via the same helper and honor the #4248 gate before
     dropping the compressor value."""
-    assert "_context_length_lookup_inputs_for_model as _cli_sse" in _STREAMING_SRC, (
+    assert "_cli_sse = _context_length_lookup_inputs_for_model" in _STREAMING_SRC, (
         "SSE done path must resolve the real per-model window via the hydration helper (#4618)"
     )
-    assert "_should_accept_session_context_length_refresh as _accept_sse" in _STREAMING_SRC
+    assert "_accept_sse = _should_accept_session_context_length_refresh" in _STREAMING_SRC
     assert "if _real_sse and _real_sse != _cc_cl_sse and _accept_sse(_cc_cl_sse, _real_sse):" in _STREAMING_SRC, (
         "SSE done path must drop the compressor value on ANY accepted real-window "
         "mismatch so the indicator can't snap back to a stale window at turn-end (#4618)"

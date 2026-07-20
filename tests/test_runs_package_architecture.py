@@ -33,7 +33,6 @@ def test_legacy_run_modules_reexport_canonical_symbols_without_aliasing_modules(
         "api.runtime_adapter": ("api.runs.adapter", "build_runtime_adapter"),
         "api.gateway_chat": ("api.runs.gateway", "gateway_chat_config_status"),
         "api.background": ("api.runs.background", "track_background"),
-        "api.streaming_parts.local_run": ("api.runs.local", "run_agent_streaming"),
     }
 
     for legacy_name, (owner_name, symbol) in pairs.items():
@@ -42,6 +41,10 @@ def test_legacy_run_modules_reexport_canonical_symbols_without_aliasing_modules(
         assert legacy is not owner
         assert legacy.__name__ == legacy_name
         assert getattr(legacy, symbol) is getattr(owner, symbol)
+
+
+def test_removed_streaming_parts_compatibility_package_is_not_importable():
+    assert importlib.util.find_spec("api.streaming_parts") is None
 
 
 def test_legacy_runtime_state_exports_share_owner_state():
@@ -101,15 +104,18 @@ def test_runs_package_exports_supported_cross_domain_interface():
     import api.runs as runs
 
     assert set(runs.__all__) == {
+        "LegacyJournalRuntimeAdapter",
         "LocalTurnRequest",
         "TurnExecution",
         "checkpoint_user_message",
         "delete_run_journal",
+        "get_background_results",
         "latest_run_summary",
         "prepare_session_for_turn",
         "read_run_events",
         "run_agent_streaming",
         "run_journal_path",
+        "runtime_adapter_enabled",
         "start_local_turn",
         "start_session_turn",
     }

@@ -32,8 +32,8 @@ def test_onboarding_codex_oauth_routes_use_post_start_cancel_and_get_poll():
 
     assert '"/api/onboarding/oauth/poll"' in get_body
     assert '"/api/onboarding/oauth/start"' not in get_body
-    assert '"/api/oauth/codex/start"' not in routes
-    assert '"/api/oauth/codex/poll"' not in routes
+    assert '"/api/oauth/codex/start"' not in routes + get_body + post_body
+    assert '"/api/oauth/codex/poll"' not in routes + get_body + post_body
     assert '"/api/onboarding/oauth/start"' in post_body
     assert '"/api/onboarding/oauth/cancel"' in post_body
 
@@ -512,7 +512,7 @@ def test_anthropic_link_clears_env_and_writes_secret_free_marker(monkeypatch, tm
 def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path):
     from api.auth import oauth
     import api.providers as providers
-    from api.streaming import _ENV_LOCK
+    from api.streaming.diagnostics import _ENV_LOCK
 
     monkeypatch.setenv("ANTHROPIC_TOKEN", "old-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "old-key")
@@ -551,13 +551,13 @@ def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path)
 
 
 def test_runtime_provider_reads_use_anthropic_env_lock():
-    streaming_src = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
-    routes_src = (REPO / "api" / "routes_parts" / "chat_runs.py").read_text(
-        encoding="utf-8"
-    )
+    local_run_src = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+    chat_routes_src = (
+        REPO / "api" / "routes_parts" / "chat_runs.py"
+    ).read_text(encoding="utf-8")
 
-    assert "resolve_runtime_provider_with_anthropic_env_lock" in streaming_src
-    assert "resolve_runtime_provider_with_anthropic_env_lock" in routes_src
+    assert "resolve_runtime_provider_with_anthropic_env_lock" in local_run_src
+    assert "resolve_runtime_provider_with_anthropic_env_lock" in chat_routes_src
 
 
 def test_anthropic_onboarding_setup_allows_linked_oauth_without_api_key(monkeypatch, tmp_path):

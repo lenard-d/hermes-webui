@@ -14,6 +14,8 @@ the misalignment.
 
 from pathlib import Path
 
+from api.streaming.transport import SSE_HEARTBEAT_INTERVAL_SECONDS
+
 
 REPO = Path(__file__).parent.parent
 
@@ -21,18 +23,8 @@ REPO = Path(__file__).parent.parent
 def test_sse_heartbeat_constant_below_kernel_keepalive_window():
     """The named constant exists and is at most half the kernel keepalive
     timeout (10 + 5*3 = 25s). 5s gives the kernel ~5x headroom."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-
-    # The constant must be defined.
-    assert "_SSE_HEARTBEAT_INTERVAL_SECONDS" in src, (
-        "Named SSE heartbeat constant must exist (#1623)"
-    )
-
-    # Pull the literal value.
     import re
-    m = re.search(r"_SSE_HEARTBEAT_INTERVAL_SECONDS\s*=\s*(\d+)", src)
-    assert m, "Could not parse _SSE_HEARTBEAT_INTERVAL_SECONDS literal"
-    heartbeat = int(m.group(1))
+    heartbeat = SSE_HEARTBEAT_INTERVAL_SECONDS
 
     # Reproduce the kernel-keepalive window from server.py setsockopt block.
     server_src = (REPO / "server.py").read_text(encoding="utf-8")
@@ -78,6 +70,7 @@ def test_no_sse_handler_uses_30s_or_higher_timeout():
 
 def test_each_named_sse_handler_uses_constant():
     """Each known SSE handler queue-poll site must reference the constant."""
+    routes_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
     route_src = (REPO / "api" / "routes_parts" / "stream_transport.py").read_text(
         encoding="utf-8"
     )
@@ -87,7 +80,8 @@ def test_each_named_sse_handler_uses_constant():
 
     expected_callers = [
         (route_src, "subscriber.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)"),
-        (terminal_src, "term.output.get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)"),
+        (terminal_src, "output.next_event(heartbeat_seconds)"),
+        (routes_src, "heartbeat_seconds=_SSE_HEARTBEAT_INTERVAL_SECONDS"),
     ]
     for source, caller in expected_callers:
         assert caller in source, (
@@ -95,11 +89,11 @@ def test_each_named_sse_handler_uses_constant():
             "If this assertion fails, the SSE heartbeat misalignment may have regressed."
         )
 
-    # Also: at least 3 sites should be using the constant overall (main agent,
-    # terminal, plus the gateway watcher and approval/clarify pollers).
+    # The stream transport owns the remaining long-lived queue polls. Terminal
+    # output receives the same value through its explicit heartbeat parameter.
     n_uses = sum(
         source.count("get(timeout=_SSE_HEARTBEAT_INTERVAL_SECONDS)")
-        for source in (route_src, terminal_src)
+        for source in (routes_src, route_src)
     )
     assert n_uses >= 4, (
         f"Expected at least 4 SSE/long-poll sites using the named constant; found {n_uses}. "

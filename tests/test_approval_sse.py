@@ -26,6 +26,9 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
 ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+WORKSPACE_QUERY_ROUTES_SRC = (
+    REPO_ROOT / "api" / "http" / "routes" / "workspace_queries.py"
+).read_text(encoding="utf-8")
 STREAM_TRANSPORT_SRC = (
     REPO_ROOT / "api" / "routes_parts" / "stream_transport.py"
 ).read_text(encoding="utf-8")
@@ -47,7 +50,7 @@ class TestSSEStaticAnalysis:
 
     def test_sse_route_registered(self):
         """The /api/approval/stream route must be registered."""
-        assert '"/api/approval/stream"' in ROUTES_SRC, \
+        assert '"/api/approval/stream"' in WORKSPACE_QUERY_ROUTES_SRC, \
             "Route /api/approval/stream must be registered in the URL dispatch"
 
     def test_sse_handler_function_exists(self):

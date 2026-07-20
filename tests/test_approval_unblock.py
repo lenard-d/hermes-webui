@@ -1,7 +1,7 @@
 """
 Tests for fix/approval-stuck-thinking:
 Verify that /api/approval/respond correctly unblocks gateway approval queues
-and that the approval module exports the symbols streaming.py and routes.py
+and that the approval module exports the symbols the local run owner and routes
 need to prevent the UI getting stuck in "Thinking…" during dangerous commands.
 """
 
@@ -47,7 +47,10 @@ from tests._pytest_port import BASE
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-STREAMING_SRC = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+LOCAL_RUN_SRC = (REPO_ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+LOCAL_EVENTS_SRC = (
+    REPO_ROOT / "api" / "runs" / "local_events.py"
+).read_text(encoding="utf-8")
 
 
 def get(path):
@@ -153,8 +156,8 @@ class TestGatewayApprovalUnblocking:
 
     def test_streaming_approval_integration(self):
         """
-        End-to-end unit simulation of the streaming.py fix:
-        1. streaming.py registers notify_cb
+        End-to-end unit simulation of the local-run fix:
+        1. The local run owner registers notify_cb
         2. check_all_command_guards fires notify_cb (pushing approval SSE)
         3. User responds — resolve_gateway_approval unblocks agent thread
         4. Agent thread sees choice and continues
@@ -162,7 +165,7 @@ class TestGatewayApprovalUnblocking:
         sid = f"unit-e2e-{uuid.uuid4().hex[:8]}"
         approval_events_sent = []
 
-        # Step 1: streaming.py registers the notify callback
+        # Step 1: the local run owner registers the notify callback
         def _approval_notify_cb(approval_data):
             approval_events_sent.append(approval_data)  # would be put('approval', ...)
         register_gateway_notify(sid, _approval_notify_cb)
@@ -199,7 +202,7 @@ class TestGatewayApprovalUnblocking:
 # ── Symbol existence tests ───────────────────────────────────────────────────
 
 class TestApprovalModuleExports:
-    """Verify the module exports all symbols that streaming.py and routes.py need."""
+    """Verify the module exports all symbols the local run and route owners need."""
 
     def test_register_gateway_notify_exported(self):
         import tools.approval as ap
@@ -222,16 +225,16 @@ class TestApprovalModuleExports:
             "tools.approval must export _ApprovalEntry"
 
     def test_streaming_fallback_uses_blocking_approval_contract(self):
-        assert "has_blocking_approval as _has_blocking_approval" in STREAMING_SRC, \
-            "streaming fallback must use has_blocking_approval from tools.approval"
-        assert "has_pending as _has_pending" not in STREAMING_SRC, \
-            "streaming fallback must not import removed has_pending"
+        assert "from tools.approval import has_blocking_approval" in LOCAL_EVENTS_SRC, \
+            "local event polling must use has_blocking_approval from tools.approval"
+        assert "has_pending" not in LOCAL_EVENTS_SRC, \
+            "local event polling must not import removed has_pending"
 
     def test_notify_callback_mirrors_polling_state_before_sse(self):
-        cb_start = STREAMING_SRC.find("def _approval_notify_cb(approval_data):")
+        cb_start = LOCAL_RUN_SRC.find("def _approval_notify_cb(approval_data):")
         assert cb_start != -1, "_approval_notify_cb must exist"
-        cb_end = STREAMING_SRC.find("_reg_notify(session_id, _approval_notify_cb)", cb_start)
-        cb_body = STREAMING_SRC[cb_start:cb_end]
+        cb_end = LOCAL_RUN_SRC.find("_reg_notify(session_id, _approval_notify_cb)", cb_start)
+        cb_body = LOCAL_RUN_SRC[cb_start:cb_end]
         assert "_submit_pending_for_polling(session_id, approval_data)" in cb_body, \
             "approval notify callback must mirror approval data into polling state"
         assert "put('approval', approval_data)" in cb_body, \
