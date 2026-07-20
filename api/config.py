@@ -354,8 +354,6 @@ def _resolve_cli_toolsets(cfg=None):
         # Fallback: read raw list from config (MCP toolsets will be missing)
         return _normalize_cli_toolsets(cfg.get("platform_toolsets", {}).get("cli", _DEFAULT_TOOLSETS))
 
-CLI_TOOLSETS = _resolve_cli_toolsets()
-
 # ── Model / provider discovery ───────────────────────────────────────────────
 
 from api.model_catalog import (
@@ -1281,6 +1279,11 @@ _strip_volatile_auth_fields = _models_cache_impl._strip_volatile_auth_fields
 _auth_store_semantic_fingerprint = _models_cache_impl._auth_store_semantic_fingerprint
 _models_cache_source_fingerprint = _models_cache_impl._models_cache_source_fingerprint
 _delete_models_cache_on_disk = _models_cache_impl._delete_models_cache_on_disk
+# Resolving CLI toolsets calls ``get_config()``, which may detect a profile-path
+# change and invalidate the on-disk model cache.  Do that only after the cache
+# owner above has installed its invalidation operation on the compatibility
+# facade; otherwise a cold import can observe a partially initialized module.
+CLI_TOOLSETS = _resolve_cli_toolsets()
 _is_valid_models_cache = _models_cache_impl._is_valid_models_cache
 _is_loadable_disk_cache = _models_cache_impl._is_loadable_disk_cache
 _load_models_cache_from_disk = _models_cache_impl._load_models_cache_from_disk
