@@ -103,6 +103,7 @@ def _activate_spawn_fake_agent(fake_agent_root: Path):
         "cron.jobs",
         "cron",
         "api.routes",
+        "api.cron.manual_runs",
         "api.profiles",
         "api.config",
     ):
@@ -167,9 +168,9 @@ def _large_cron_payload_runner(profile_home, result_queue):
         )
         _activate_restore = _activate_spawn_fake_agent(fake_agent_root)
         try:
-            import api.routes as routes
+            from api.cron.manual_runs import run_in_profile_subprocess
 
-            success, output, final_response, error = routes._run_cron_job_in_profile_subprocess(
+            success, output, final_response, error = run_in_profile_subprocess(
                 {"id": "large-payload"}, Path(profile_home)
             )
         finally:
@@ -193,9 +194,9 @@ def _selected_profile_home_runner(profile_home, result_queue):
         )
         _activate_restore = _activate_spawn_fake_agent(fake_agent_root)
         try:
-            import api.routes as routes
+            from api.cron.manual_runs import run_in_profile_subprocess
 
-            success, output, final_response, error = routes._run_cron_job_in_profile_subprocess(
+            success, output, final_response, error = run_in_profile_subprocess(
                 {"id": "job1574"}, Path(profile_home)
             )
         finally:
@@ -210,9 +211,9 @@ def _selected_profile_home_runner(profile_home, result_queue):
 def test_manual_cron_subprocess_uses_spawn_context():
     """Manual cron subprocesses must avoid fork-from-threaded-WebUI hazards."""
     import inspect
-    import api.routes as routes
+    from api.cron import manual_runs
 
-    body = inspect.getsource(routes._run_cron_job_in_profile_subprocess)
+    body = inspect.getsource(manual_runs.run_in_profile_subprocess)
 
     assert 'multiprocessing.get_context("spawn")' in body
     assert 'multiprocessing.get_context("fork")' not in body
@@ -335,7 +336,8 @@ def test_manual_cron_run_does_not_hold_profile_lock_for_job_duration(tmp_path, m
     writes, but the potentially minutes-long run_job body should execute outside
     that process-wide critical section.
     """
-    import api.routes as routes
+    from api.cron import manual_runs
+    from api.cron.profiles import CronExecutionIdentity
     from api.profiles import cron_profile_context_for_home
 
     events = []
@@ -349,16 +351,18 @@ def test_manual_cron_run_does_not_hold_profile_lock_for_job_duration(tmp_path, m
         return True, "output", "final", None
 
     _install_fake_cron(monkeypatch, lambda job: (True, "unused", "unused", None), events)
-    monkeypatch.setattr(routes, "_run_cron_job_in_profile_subprocess", fake_run_job_subprocess)
+    monkeypatch.setattr(manual_runs, "run_in_profile_subprocess", fake_run_job_subprocess)
 
     job_home = tmp_path / "owner"
     exec_home = tmp_path / "exec"
     other_home = tmp_path / "other"
 
-    routes._mark_cron_running("job1574")
     worker = threading.Thread(
-        target=routes._run_cron_tracked,
-        args=({"id": "job1574"}, job_home, exec_home),
+        target=manual_runs.run_tracked,
+        args=(
+            {"id": "job1574"},
+            CronExecutionIdentity(job_home, exec_home, None),
+        ),
     )
     worker.start()
     assert run_started.wait(2), "fake run_job did not start"
@@ -387,7 +391,7 @@ def test_manual_cron_run_does_not_hold_profile_lock_for_job_duration(tmp_path, m
     assert ("run", "job1574", str(exec_home)) in events
     assert ("save", "job1574", "output") in events
     assert ("mark", "job1574", True, None) in events
-    assert routes._is_cron_running("job1574") == (False, 0.0)
+    assert manual_runs.running_status("job1574") == (False, 0.0)
 
 
 @requires_fork

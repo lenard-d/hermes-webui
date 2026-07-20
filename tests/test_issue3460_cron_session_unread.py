@@ -16,6 +16,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from api.cron import completions as cron_completions
+
 
 REPO = Path(__file__).resolve().parents[1]
 SESSIONS_JS_PATH = REPO / "static" / "sessions.js"
@@ -102,7 +104,7 @@ def test_cron_recent_returns_latest_session_id_for_job(monkeypatch, tmp_path):
             "last_status": "success",
         }
     ]
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(cron_completions, "_active_state_db_path", lambda: db_path)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
 
@@ -149,7 +151,7 @@ def test_cron_recent_falls_back_to_id_order_when_started_at_missing(monkeypatch,
             "last_status": "success",
         }
     ]
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(cron_completions, "_active_state_db_path", lambda: db_path)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
 
@@ -196,7 +198,7 @@ def test_cron_recent_escapes_like_wildcards_in_job_id(monkeypatch, tmp_path):
             "last_status": "success",
         }
     ]
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(cron_completions, "_active_state_db_path", lambda: db_path)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
 
@@ -250,7 +252,7 @@ def test_cron_recent_does_not_cross_match_shared_job_prefixes(monkeypatch, tmp_p
             "last_status": "success",
         },
     ]
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(cron_completions, "_active_state_db_path", lambda: db_path)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
 
@@ -313,7 +315,7 @@ def test_cron_recent_does_not_steal_older_long_prefix_history_for_short_job(
             "last_status": "success",
         },
     ]
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(cron_completions, "_active_state_db_path", lambda: db_path)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
 
@@ -370,7 +372,7 @@ def test_cron_recent_does_not_cross_match_newer_long_prefix_session_when_only_sh
             "last_status": "success",
         },
     ]
-    monkeypatch.setattr(routes, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(cron_completions, "_active_state_db_path", lambda: db_path)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
 

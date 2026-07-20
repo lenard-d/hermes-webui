@@ -13,13 +13,13 @@ def _drop_cron_modules() -> None:
             sys.modules.pop(name, None)
 
 
-def _reset_cron_import_path_ready(routes) -> None:
-    routes._AGENT_CRON_IMPORT_PATH_READY = None
+def _reset_cron_import_path_ready(agent_package) -> None:
+    agent_package.reset_import_path_cache_for_tests()
 
 
 def test_agent_cron_import_path_prefers_agent_cron_over_plugin_shadow(monkeypatch, tmp_path):
     import api.config as config
-    import api.routes as routes
+    from api.cron import agent_package
 
     agent_dir = tmp_path / "hermes-agent"
     site_packages = tmp_path / "site-packages"
@@ -36,7 +36,7 @@ def test_agent_cron_import_path_prefers_agent_cron_over_plugin_shadow(monkeypatc
     (shadow_cron / "__init__.py").write_text("SHADOW_CRON = True\n", encoding="utf-8")
 
     monkeypatch.setattr(config, "_AGENT_DIR", agent_dir)
-    monkeypatch.setattr(routes, "_AGENT_CRON_IMPORT_PATH_READY", None)
+    agent_package.reset_import_path_cache_for_tests()
     monkeypatch.syspath_prepend(str(agent_dir))
     monkeypatch.syspath_prepend(str(site_packages))
     _drop_cron_modules()
@@ -44,7 +44,7 @@ def test_agent_cron_import_path_prefers_agent_cron_over_plugin_shadow(monkeypatc
         shadowed_cron = importlib.import_module("cron")
         assert Path(shadowed_cron.__file__).resolve() == shadow_cron / "__init__.py"
 
-        routes._ensure_agent_cron_import_path()
+        agent_package.ensure_agent_cron_import_path()
         cron_jobs = importlib.import_module("cron.jobs")
 
         assert Path(cron_jobs.__file__).resolve() == agent_cron / "jobs.py"
@@ -53,8 +53,8 @@ def test_agent_cron_import_path_prefers_agent_cron_over_plugin_shadow(monkeypatc
         ]
 
         sys_path_after_first_call = list(sys.path)
-        routes._ensure_agent_cron_import_path()
+        agent_package.ensure_agent_cron_import_path()
         assert sys.path == sys_path_after_first_call
     finally:
         _drop_cron_modules()
-        _reset_cron_import_path_ready(routes)
+        _reset_cron_import_path_ready(agent_package)

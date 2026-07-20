@@ -32,9 +32,14 @@ new shape.
 from __future__ import annotations
 
 import os
+import io
+import json
 import stat
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -92,46 +97,59 @@ def test_cron_history_rejects_traversal_in_job_id():
     """`_handle_cron_history` and `_handle_cron_run_detail` must regex-validate
     job_id at the parameter boundary. Mirrors the rollback regex shape from
     v0.50.255."""
-    src = (REPO / "api" / "routes_parts" / "cron.py").read_text(encoding="utf-8")
-    # Both handlers must call the validator
-    history_idx = src.find("def _handle_cron_history(")
-    detail_idx = src.find("def _handle_cron_run_detail(")
-    assert history_idx != -1, "_handle_cron_history missing"
-    assert detail_idx != -1, "_handle_cron_run_detail missing"
+    from api.cron.output_history import InvalidCronOutputPath, validate_job_id
 
-    history_body = src[history_idx : history_idx + 1500]
-    detail_body = src[detail_idx : detail_idx + 1500]
-
-    # Both must include the regex check
-    for body, name in [(history_body, "_handle_cron_history"), (detail_body, "_handle_cron_run_detail")]:
-        assert "_re.fullmatch" in body and "[A-Za-z0-9_-]" in body, (
-            f"{name} must validate job_id via regex — without this, "
-            f"`?job_id=../<other>` enumerates sibling directory contents."
-        )
-        assert 'job_id in (".", "..")' in body, (
-            f"{name} must explicitly reject `.` and `..` in addition to the regex."
-        )
+    for value in (".", "..", "../other", "job/other", ""):
+        with pytest.raises(InvalidCronOutputPath):
+            validate_job_id(value)
+    assert validate_job_id("job_safe-123") == "job_safe-123"
 
 
 # ── 3: int() bounds checking on offset/limit ────────────────────────────────
 
 
-def test_cron_history_clamps_offset_and_limit():
+def test_cron_history_clamps_offset_and_limit(monkeypatch):
     """`_handle_cron_history` must catch `ValueError` from int() and clamp
     `limit` to a sane upper bound. Without this, `?offset=foo` raises a
     ValueError that surfaces as a confusing 500 from `do_GET`'s exception
     handler, and `?limit=999999999` would slice through unbounded glob output."""
-    src = (REPO / "api" / "routes_parts" / "cron.py").read_text(encoding="utf-8")
-    history_idx = src.find("def _handle_cron_history(")
-    body = src[history_idx : history_idx + 1500]
-    assert "(ValueError, TypeError)" in body, (
-        "_handle_cron_history must catch ValueError from int() so malformed "
-        "offset/limit return a clean 400, not a generic 500."
+    from api.routes_parts import cron
+
+    class Handler:
+        def __init__(self):
+            self.wfile = io.BytesIO()
+            self.status = None
+
+        def send_response(self, status):
+            self.status = status
+
+        def send_header(self, *_args):
+            pass
+
+        def end_headers(self):
+            pass
+
+    calls = []
+
+    class Store:
+        def list_runs(self, job_id, *, offset, limit):
+            calls.append((job_id, offset, limit))
+            return [], 0
+
+    monkeypatch.setattr(cron, "active_output_store", lambda: Store())
+    malformed = Handler()
+    cron._handle_cron_history(
+        malformed, SimpleNamespace(query="job_id=job1&offset=nope&limit=10")
     )
-    assert "min(500, int(qs.get" in body, (
-        "_handle_cron_history must clamp `limit` to a sane upper bound (500 chosen) "
-        "to prevent DoS via `?limit=999999999`."
+    assert malformed.status == 400
+    assert "integers" in json.loads(malformed.wfile.getvalue())["error"]
+
+    bounded = Handler()
+    cron._handle_cron_history(
+        bounded, SimpleNamespace(query="job_id=job1&offset=-2&limit=999999999")
     )
+    assert bounded.status == 200
+    assert calls == [("job1", 0, 500)]
 
 
 

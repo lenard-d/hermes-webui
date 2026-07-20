@@ -35,10 +35,10 @@ def _payload(handler):
 
 
 def test_cron_api_serializes_legacy_profile_as_explicit_server_default():
-    from api.routes import _cron_job_for_api
+    from api.cron.profiles import job_for_api
 
     legacy = {"id": "legacy", "name": "Legacy job"}
-    payload = _cron_job_for_api(legacy)
+    payload = job_for_api(legacy)
 
     assert payload["profile"] is None
     assert "profile" not in legacy, "API serialization must not mutate stored legacy jobs"
@@ -46,7 +46,7 @@ def test_cron_api_serializes_legacy_profile_as_explicit_server_default():
 
 def test_cron_profile_value_validates_against_existing_profiles(monkeypatch):
     import api.profiles as profiles
-    from api.routes import _normalize_cron_profile_value
+    from api.cron.profiles import normalize_profile
 
     monkeypatch.setattr(
         profiles,
@@ -57,11 +57,11 @@ def test_cron_profile_value_validates_against_existing_profiles(monkeypatch):
         ],
     )
 
-    assert _normalize_cron_profile_value(" research ") == "research"
-    assert _normalize_cron_profile_value("") is None
-    assert _normalize_cron_profile_value(None) is None
+    assert normalize_profile(" research ") == "research"
+    assert normalize_profile("") is None
+    assert normalize_profile(None) is None
     with pytest.raises(ValueError, match="Unknown profile: missing"):
-        _normalize_cron_profile_value("missing")
+        normalize_profile("missing")
 
 
 def test_cron_create_api_persists_profile_and_returns_it(monkeypatch):
@@ -164,7 +164,8 @@ def test_cron_update_api_accepts_profile_clear_and_rejects_unknown(monkeypatch):
 
 def test_manual_cron_run_uses_execution_profile_but_persists_to_owning_store(monkeypatch):
     import api.profiles as profiles
-    import api.routes as routes
+    from api.cron import manual_runs
+    from api.cron.profiles import CronExecutionIdentity
 
     events = []
 
@@ -191,16 +192,18 @@ def test_manual_cron_run_uses_execution_profile_but_persists_to_owning_store(mon
         return True, "output", "final", None
 
     monkeypatch.setattr(profiles, "cron_profile_context_for_home", Ctx)
-    monkeypatch.setattr(routes, "_run_cron_job_in_profile_subprocess", fake_subprocess_run)
+    monkeypatch.setattr(manual_runs, "run_in_profile_subprocess", fake_subprocess_run)
     monkeypatch.setitem(sys.modules, "cron", cron_pkg)
     monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
     monkeypatch.setitem(sys.modules, "cron.scheduler", cron_scheduler)
 
-    routes._mark_cron_running("job617")
-    routes._run_cron_tracked(
+    manual_runs.run_tracked(
         {"id": "job617"},
-        profile_home="/hermes/default",
-        execution_profile_home="/hermes/profiles/research",
+        CronExecutionIdentity(
+            "/hermes/default",
+            "/hermes/profiles/research",
+            None,
+        ),
     )
 
     assert events == [
@@ -210,7 +213,7 @@ def test_manual_cron_run_uses_execution_profile_but_persists_to_owning_store(mon
         ("mark", "job617", True, None),
         ("exit", "/hermes/default"),
     ]
-    assert routes._is_cron_running("job617") == (False, 0.0)
+    assert manual_runs.running_status("job617") == (False, 0.0)
 
 
 def test_cron_profile_selector_source_hooks_present():

@@ -103,6 +103,13 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         plugins.py         Sanitized plugin visibility and dashboard enablement
         shell.py           App shell, manifest, saved prompts, restart, and shutdown controls
       insights.py          Usage aggregation across WebUI index and Hermes state.db
+      cron/                Scheduled-job domain owners behind the Tasks HTTP Adapter
+        agent_package.py   Hermes Agent cron-package resolution and shadow-package defense
+        profiles.py        Profile store ownership and captured execution identity
+        jobs.py            CRUD policy and selected-profile model snapshots
+        manual_runs.py     Atomic run admission, subprocess lifecycle, delivery, and persistence
+        output_history.py  Handle-anchored output history reads and markdown projections
+        completions.py     state.db-backed completion/session projection
       model_catalog.py     Compatibility exports for config/static_catalog.py
       models.py            Compatibility facade for the session/model public API
       models_parts/        Importable session, persistence, projection, CLI, and state.db domains
@@ -142,7 +149,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            GET + POST dispatch and compatibility facade for extracted route domains
       routes_parts/        Importable chat-run, projection, stream transport, media, model,
-                           workspace, git, cron, terminal, login, notes/wiki, TTS, security,
+                           workspace, Git, and thin Cron/terminal/login/notes/TTS HTTP Adapters,
                            compression, and response route owners
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
@@ -1346,6 +1353,8 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         config/               Config compatibility entrypoint and cohesive config/model domains
         helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
         insights.py           Transport-independent usage aggregation
+        cron/                 Profile/store resolution, CRUD policy, atomic manual-run lifecycle,
+                              secure output history, and completion projection owners
         model_catalog.py      Compatibility exports for config/static_catalog.py
         models.py             Session/model compatibility facade
         models_parts/         Session, persistence, projection, CLI, and state.db domains

@@ -197,7 +197,7 @@ def test_cron_output_snippet_helper(cleanup_test_sessions):
 
 
 def test_cron_output_usage_metadata_parses_optional_fields(cleanup_test_sessions):
-    from api.routes import _cron_output_usage_metadata
+    from api.cron.output_history import usage_metadata
 
     content = "\n".join([
         "# Cron Job: Nightly",
@@ -210,7 +210,7 @@ def test_cron_output_usage_metadata_parses_optional_fields(cleanup_test_sessions
         "Done",
     ])
 
-    usage = _cron_output_usage_metadata(content)
+    usage = usage_metadata(content)
 
     assert usage["model"] == "openai-codex/gpt-5.5"
     assert usage["input_tokens"] == 12345
@@ -232,7 +232,7 @@ def test_cron_output_usage_strip_render_hook(cleanup_test_sessions):
 
 def test_cron_output_window_preserves_response_after_large_prompt(cleanup_test_sessions):
     """Large skill dumps before ## Response must not hide the useful output."""
-    from api.routes import _cron_output_content_window
+    from api.cron.output_history import content_window
 
     content = (
         "Job metadata\n"
@@ -243,7 +243,7 @@ def test_cron_output_window_preserves_response_after_large_prompt(cleanup_test_s
         "actual useful cron result\n"
     )
 
-    window = _cron_output_content_window(content, limit=8000)
+    window = content_window(content, limit=8000)
 
     assert len(window) <= 8000
     assert "## Response" in window
@@ -253,11 +253,11 @@ def test_cron_output_window_preserves_response_after_large_prompt(cleanup_test_s
 
 def test_cron_output_window_without_response_uses_tail(cleanup_test_sessions):
     """Without a response marker, keep the newest tail rather than old prompt text."""
-    from api.routes import _cron_output_content_window
+    from api.cron.output_history import content_window
 
     content = "old prompt\n" + ("x" * 9000) + "tail result"
 
-    window = _cron_output_content_window(content, limit=8000)
+    window = content_window(content, limit=8000)
 
     assert len(window) == 8000
     assert window.endswith("tail result")

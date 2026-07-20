@@ -68,6 +68,7 @@ def _function_body(name: str) -> str:
 
 def test_cron_recent_marks_muted_jobs_without_requesting_toast(monkeypatch):
     import api.routes as routes
+    from api.cron import completions
 
     cron_pkg = types.ModuleType("cron")
     cron_pkg.__path__ = []
@@ -88,8 +89,8 @@ def test_cron_recent_marks_muted_jobs_without_requesting_toast(monkeypatch):
         },
     ]
     monkeypatch.setattr(
-        routes,
-        "_latest_cron_session_info_for_jobs",
+            completions,
+            "latest_session_info",
         lambda job_ids, completed_job_ids=None: {
             str(job_id): {
                 "session_id": f"cron_{job_id}_latest",

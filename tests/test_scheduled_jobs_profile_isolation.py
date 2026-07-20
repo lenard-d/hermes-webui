@@ -14,6 +14,7 @@ import os
 import pathlib
 import sys
 import threading
+import types
 import pytest
 
 # Ensure both repos are importable.
@@ -156,7 +157,7 @@ def test_cron_profile_context_serializes_concurrent_access(tmp_path):
     assert third[0] == "enter" and fourth[0] == "exit" and third[1] == fourth[1]
 
 
-def test_cron_run_does_not_silently_swallow_profile_resolution_errors():
+def test_cron_run_does_not_silently_swallow_profile_resolution_errors(monkeypatch):
     """_handle_cron_run must NOT silently fall through to profile_home=None
     when get_active_hermes_home() raises.
 
@@ -170,40 +171,35 @@ def test_cron_run_does_not_silently_swallow_profile_resolution_errors():
     Source-level assertion to catch any future re-introduction of the
     over-broad except clause.
     """
-    import inspect
-    import api.routes as routes
+    import api.profiles as profiles
+    from api.routes_parts.cron import _handle_cron_run
 
-    # Locate _handle_cron_run definition; assert the spawn block does NOT
-    # wrap get_active_hermes_home() in a bare except that falls back to None.
-    body = inspect.getsource(routes._handle_cron_run)
-
-    # The spawn site must call get_active_hermes_home() unguarded (no
-    # try/except around it specifically), because a silent fallback to None
-    # is exactly what would re-introduce #1573.
-    spawn_idx = body.find("threading.Thread(target=_run_cron_tracked")
-    assert spawn_idx != -1, "thread spawn not found in _handle_cron_run"
-
-    # Look at the 1500 chars before the spawn — should NOT contain the
-    # `_profile_home = None` fallback pattern.
-    pre_spawn = body[max(0, spawn_idx - 1500) : spawn_idx]
-    assert "_profile_home = None" not in pre_spawn, (
-        "_handle_cron_run silently falls back to _profile_home=None when "
-        "get_active_hermes_home() raises. That re-introduces bug #1573 — "
-        "the worker thread would run unpinned against the process-global "
-        "HERMES_HOME. Let the exception propagate (500 the request) rather "
-        "than corrupt cross-profile state silently."
+    cron_jobs = types.ModuleType("cron.jobs")
+    cron_jobs.get_job = lambda job_id: {"id": job_id}
+    monkeypatch.setitem(sys.modules, "cron.jobs", cron_jobs)
+    monkeypatch.setattr(
+        profiles,
+        "get_active_hermes_home",
+        lambda: (_ for _ in ()).throw(RuntimeError("profile lookup failed")),
     )
+
+    with pytest.raises(RuntimeError, match="profile lookup failed"):
+        _handle_cron_run(object(), {"job_id": "job1573"})
 
 
 def test_manual_cron_event_profile_uses_job_profile(monkeypatch):
-    from api import routes
+    from api.cron import profiles as cron_profiles
 
-    monkeypatch.setattr(routes, "_available_cron_profile_names", lambda: {"default", "research"})
+    monkeypatch.setattr(
+        cron_profiles,
+        "available_profile_names",
+        lambda: {"default", "research"},
+    )
 
-    assert routes._event_profile_for_cron_job({"profile": "research"}) == "research"
-    assert routes._event_profile_for_cron_job({"profile": " default "}) == "default"
-    assert routes._event_profile_for_cron_job({"profile": ""}) is None
-    assert routes._event_profile_for_cron_job({"profile": "deleted"}) is None
+    assert cron_profiles.event_profile_for_job({"profile": "research"}) == "research"
+    assert cron_profiles.event_profile_for_job({"profile": " default "}) == "default"
+    assert cron_profiles.event_profile_for_job({"profile": ""}) is None
+    assert cron_profiles.event_profile_for_job({"profile": "deleted"}) is None
 
 
 def test_webui_installs_profile_context_on_in_process_scheduler_run_job(tmp_path, monkeypatch):
@@ -297,7 +293,7 @@ def test_scheduler_run_job_wrapper_does_not_reenter_manual_cron_context(tmp_path
     assert events == [("run", "manual1575")]
 
 
-def test_cron_worker_does_not_silently_fall_back_on_profile_context_failure():
+def test_cron_worker_does_not_silently_fall_back_on_profile_context_failure(monkeypatch):
     """The subprocess target must not fall back to an unpinned cron run.
 
     A silent fallback would leave the job running against process-global
@@ -305,18 +301,40 @@ def test_cron_worker_does_not_silently_fall_back_on_profile_context_failure():
     as #1573. The child process may report the exception to the parent, but it
     must not continue into run_job outside the requested profile context.
     """
-    import inspect
-    import api.routes as routes
+    from api.cron import manual_runs
 
-    body = inspect.getsource(routes._cron_job_subprocess_main)
+    calls = []
+    cron_scheduler = types.ModuleType("cron.scheduler")
+    cron_scheduler.run_job = lambda job: calls.append(job) or (True, "", "", None)
+    monkeypatch.setitem(sys.modules, "cron.scheduler", cron_scheduler)
 
-    assert "with cron_profile_context_for_home(execution_profile_home):" in body
-    assert "result = _run()" in body
-    assert "ctx = None" not in body
-    assert "except Exception" not in body[:body.find("with cron_profile_context_for_home")], (
-        "cron subprocess target appears to catch profile-context setup before "
-        "entering the context; do not fall back to an unpinned run_job call."
+    import api.profiles as profiles
+
+    class BrokenContext:
+        def __init__(self, _home):
+            pass
+
+        def __enter__(self):
+            raise RuntimeError("profile context failed")
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(profiles, "cron_profile_context_for_home", BrokenContext)
+
+    queued = []
+
+    class Queue:
+        def put(self, value):
+            queued.append(value)
+
+    manual_runs._cron_job_subprocess_main(
+        {"id": "job-profile-failure"}, "/profile/home", Queue()
     )
+
+    assert calls == []
+    assert queued and queued[0][0] == "error"
+    assert "profile context failed" in queued[0][1]
 
 
 def test_streaming_cronjob_wrapper_uses_profile_context_only_for_tool_call(tmp_path, monkeypatch):

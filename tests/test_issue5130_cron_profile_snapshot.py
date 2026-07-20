@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from api.cron import jobs as cron_jobs_owner
+
 
 class _JSONHandler:
     def __init__(self):
@@ -81,7 +83,9 @@ def test_cron_create_recomputes_unpinned_provider_snapshot_under_selected_profil
 
     @contextmanager
     def fake_profile_env(profile, purpose, logger_override=None):
-        profile_events.append(("enter", profile, purpose, logger_override is routes.logger))
+        profile_events.append(
+            ("enter", profile, purpose, logger_override is cron_jobs_owner.logger)
+        )
         yield
         profile_events.append(("exit", profile, purpose))
 
@@ -311,7 +315,9 @@ def test_cron_create_with_explicit_provider_recomputes_only_model_snapshot(monke
 
     @contextmanager
     def fake_profile_env(profile, purpose, logger_override=None):
-        profile_events.append(("enter", profile, purpose, logger_override is routes.logger))
+        profile_events.append(
+            ("enter", profile, purpose, logger_override is cron_jobs_owner.logger)
+        )
         yield
         profile_events.append(("exit", profile, purpose))
 
@@ -369,7 +375,6 @@ def test_cron_create_with_explicit_provider_recomputes_only_model_snapshot(monke
 
 def test_selected_profile_snapshot_helper_never_repoints_cron_store_globals(monkeypatch):
     import api.profiles as profiles
-    from api.routes import _selected_profile_snapshot_updates
 
     profile_events = []
     cron_jobs = types.ModuleType("cron.jobs")
@@ -412,7 +417,7 @@ def test_selected_profile_snapshot_helper_never_repoints_cron_store_globals(monk
     monkeypatch.setattr(profiles, "profile_env_for_background_worker", fake_profile_env)
     _install_fake_cron_modules(monkeypatch, cron_jobs)
 
-    updates = _selected_profile_snapshot_updates(
+    updates = cron_jobs_owner._selected_profile_snapshot_updates(
         "research",
         provider=None,
         model=None,
@@ -455,7 +460,6 @@ def test_selected_profile_snapshot_helper_never_repoints_cron_store_globals(monk
 
 def test_selected_profile_snapshot_helper_holds_lock_across_profile_env_and_compute(monkeypatch):
     import api.profiles as profiles
-    import api.routes as routes
 
     events = []
     cron_jobs = types.ModuleType("cron.jobs")
@@ -473,17 +477,24 @@ def test_selected_profile_snapshot_helper_holds_lock_across_profile_env_and_comp
 
     @contextmanager
     def fake_profile_env(profile, purpose, logger_override=None):
-        events.append(("profile-enter", profile, purpose, logger_override is routes.logger))
+        events.append(
+            (
+                "profile-enter",
+                profile,
+                purpose,
+                logger_override is cron_jobs_owner.logger,
+            )
+        )
         yield
         events.append(("profile-exit", profile, purpose))
 
     cron_jobs._compute_provider_model_snapshots = compute_snapshots
 
-    monkeypatch.setattr(routes, "_CRON_CREATE_SNAPSHOT_LOCK", RecorderLock())
+    monkeypatch.setattr(cron_jobs_owner, "_SNAPSHOT_LOCK", RecorderLock())
     monkeypatch.setattr(profiles, "profile_env_for_background_worker", fake_profile_env)
     _install_fake_cron_modules(monkeypatch, cron_jobs)
 
-    updates = routes._selected_profile_snapshot_updates(
+    updates = cron_jobs_owner._selected_profile_snapshot_updates(
         "research",
         provider=None,
         model="gpt-5.4",

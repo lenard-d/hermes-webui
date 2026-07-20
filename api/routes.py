@@ -120,44 +120,17 @@ except Exception:
     logger.debug("Failed to register session list cache invalidation listener", exc_info=True)
 
 
-# ── Cron run tracking ────────────────────────────────────────────────────────
-# Track job IDs currently being executed so the frontend can poll status.
-from api.routes_parts import cron as _cron_routes_part
+# ── Cron tasks ───────────────────────────────────────────────────────────────
+from api.cron.agent_package import (
+    ensure_agent_cron_import_path as _ensure_agent_cron_import_path,
+)
+from api.cron.profiles import list_jobs_across_profiles as _cron_jobs_cross_profile
 from api.routes_parts.cron import (
-    _RUNNING_CRON_JOBS,
-    _RUNNING_CRON_LOCK,
-    _CRON_CREATE_SNAPSHOT_LOCK,
-    _CRON_OUTPUT_CONTENT_LIMIT,
-    _CRON_OUTPUT_HEADER_CONTEXT,
-    _normalize_cron_job_ids,
-    _latest_cron_session_info_for_jobs,
-    _mark_cron_running,
-    _mark_cron_done,
-    _is_cron_running,
-    _cron_response_marker_index,
-    _cron_output_content_window,
-    _cron_job_for_api,
-    _cron_jobs_for_api,
-    _AGENT_CRON_IMPORT_PATH_LOCK,
-    _AGENT_CRON_IMPORT_PATH_READY,
-    _ensure_agent_cron_import_path,
-    _cron_jobs_cross_profile,
-    _available_cron_profile_names,
-    _normalize_cron_profile_value,
-    _profile_home_for_cron_job,
-    _event_profile_for_cron_job,
-    _cron_job_subprocess_main,
-    _cron_subprocess_result_timeout_seconds,
-    _run_cron_job_in_profile_subprocess,
-    _run_cron_tracked,
     _handle_cron_history,
     _handle_cron_run_detail,
-    _cron_output_usage_metadata,
-    _cron_output_snippet,
     _handle_cron_output,
     _handle_cron_status,
     _handle_cron_recent,
-    _selected_profile_snapshot_updates,
     _handle_cron_create,
     _handle_cron_delivery_options,
     _handle_cron_update,
@@ -166,9 +139,6 @@ from api.routes_parts.cron import (
     _handle_cron_pause,
     _handle_cron_resume,
 )
-
-_install_routes_part(globals(), _cron_routes_part)
-del _cron_routes_part
 _MESSAGING_RAW_SOURCES = {str(s).strip().lower() for s in MESSAGING_SOURCES}
 _MESSAGING_SESSION_METADATA_CACHE: dict[str, object] = {
     "path": None,

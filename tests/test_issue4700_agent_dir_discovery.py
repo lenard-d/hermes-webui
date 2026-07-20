@@ -53,8 +53,8 @@ def _drop_cron_modules() -> None:
             sys.modules.pop(name, None)
 
 
-def _reset_agent_cron_import_path_state(routes) -> None:
-    routes._AGENT_CRON_IMPORT_PATH_READY = None
+def _reset_agent_cron_import_path_state(agent_package) -> None:
+    agent_package.reset_import_path_cache_for_tests()
 
 
 def test_discover_agent_dir_accepts_pip_style_root_without_run_agent(monkeypatch, tmp_path):
@@ -127,7 +127,7 @@ def test_routes_shadow_helper_can_recover_once_agent_dir_resolves(monkeypatch, t
     """Once `_AGENT_DIR` resolves, `_ensure_agent_cron_import_path()` drops shadow
     modules and rewires imports to the agent cron package."""
     import api.config as config
-    import api.routes as routes
+    from api.cron import agent_package
 
     agent_dir = _make_pip_style_agent_root(tmp_path / "hermes-agent")
     shadow_site_packages = tmp_path / "shadow-site-packages"
@@ -142,16 +142,15 @@ def test_routes_shadow_helper_can_recover_once_agent_dir_resolves(monkeypatch, t
     )
 
     monkeypatch.setattr(config, "_AGENT_DIR", agent_dir)
-    monkeypatch.setattr(routes, "_AGENT_CRON_IMPORT_PATH_READY", None)
     monkeypatch.setattr(sys, "path", [str(shadow_site_packages)])
-    _reset_agent_cron_import_path_state(routes)
+    _reset_agent_cron_import_path_state(agent_package)
 
     try:
         _drop_cron_modules()
         shadowed = importlib.import_module("cron")
         assert Path(shadowed.__file__).resolve() == (shadow_cron / "__init__.py").resolve()
 
-        routes._ensure_agent_cron_import_path()
+        agent_package.ensure_agent_cron_import_path()
         assert "cron" not in sys.modules
 
         cron_jobs = importlib.import_module("cron.jobs")
@@ -161,4 +160,4 @@ def test_routes_shadow_helper_can_recover_once_agent_dir_resolves(monkeypatch, t
         assert cron_jobs.list_jobs() == [{"id": "agent-cron"}]
     finally:
         _drop_cron_modules()
-        _reset_agent_cron_import_path_state(routes)
+        _reset_agent_cron_import_path_state(agent_package)

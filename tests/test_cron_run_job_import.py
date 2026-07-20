@@ -10,10 +10,20 @@ import inspect
 
 
 def _get_function_source(func_name: str) -> str:
-    """Read the implementation behind the stable ``api.routes`` facade."""
-    import api.routes as routes
+    """Read the manual-run owner's implementation."""
+    from api.cron import manual_runs
 
-    return inspect.getsource(getattr(routes, func_name))
+    names = {
+        "_cron_job_subprocess_main": "_cron_job_subprocess_main",
+        "_run_cron_tracked": "run_tracked",
+        "_handle_cron_run": None,
+    }
+    owner_name = names[func_name]
+    if owner_name is None:
+        from api.routes_parts import cron
+
+        return inspect.getsource(cron._handle_cron_run)
+    return inspect.getsource(getattr(manual_runs, owner_name))
 
 
 class TestRunCronTrackedImport:
@@ -66,7 +76,7 @@ class TestRunCronTrackedImport:
     def test_run_cron_tracked_calls_run_job_helper(self):
         """Sanity: the function still delegates to the cron job runner."""
         src = _get_function_source("_run_cron_tracked")
-        assert "_run_cron_job_in_profile_subprocess" in src
+        assert "run_in_profile_subprocess" in src
 
     def test_cron_subprocess_target_calls_run_job(self):
         """Sanity: the subprocess target still actually calls run_job."""
