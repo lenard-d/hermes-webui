@@ -167,3 +167,31 @@ def test_title_analysis_observes_facade_message_text_patch(monkeypatch):
         {"role": "user", "content": "question"},
         {"role": "assistant", "content": "answer"},
     ]) == ("visible:question", "visible:answer")
+
+
+def test_message_sanitizer_observes_facade_reasoning_patch(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "_is_reasoning_only_assistant_message",
+        lambda message: message.get("content") == "drop-me",
+    )
+
+    assert streaming._sanitize_messages_for_api([
+        {"role": "assistant", "content": "drop-me"},
+        {"role": "assistant", "content": "keep-me"},
+    ]) == [{"role": "assistant", "content": "keep-me"}]
+
+
+def test_context_dedupe_observes_facade_identity_patch(monkeypatch):
+    monkeypatch.setattr(streaming, "_is_context_compression_marker", lambda _msg: False)
+    monkeypatch.setattr(
+        streaming,
+        "_is_compressed_context_tool_result_summary_message",
+        lambda _msg: False,
+    )
+    monkeypatch.setattr(streaming, "_message_identity", lambda _msg: "same")
+
+    first = {"role": "user", "content": "first"}
+    second = {"role": "assistant", "content": "second"}
+
+    assert streaming._deduplicate_context_messages([first, second]) == [first]

@@ -101,7 +101,6 @@ class TestCancelStreamCleanup:
         block = self._get_cancel_block()
         # The S.activeStreamId=null and setBusy(false) must appear after the try/catch
         # Verify they are NOT only inside the try block by checking position relative to catch
-        try_idx = block.find("try{")
         catch_idx = block.find("}catch(")
         cleanup_idx = block.find("S.activeStreamId=null")
         if cleanup_idx == -1:
@@ -225,8 +224,8 @@ def test_cancel_marker_flagged_as_error_to_skip_in_api_history():
     cancelled...") — a behavioral regression introduced when this PR started
     persisting the marker to the session.
     """
-    src = read("api/streaming.py")
-    idx = src.find("'content': _cancelled_turn_content(message")
+    src = read("api/streaming_parts/terminal_outcomes.py")
+    idx = src.find("'content': api._cancelled_turn_content(message")
     assert idx != -1, "cancel marker content writer not found in cancel_stream()"
 
     # Walk back to the start of the dict literal (opening brace)
@@ -238,7 +237,7 @@ def test_cancel_marker_flagged_as_error_to_skip_in_api_history():
     assert "_error" in marker_dict and "True" in marker_dict, (
         "cancel marker is missing _error: True — it will leak into the agent's "
         "conversation_history via _sanitize_messages_for_api() on the next turn. "
-        "See line 591-593 of api/streaming.py for the error-marker filter."
+        "The API-message sanitizer must keep filtering persisted error markers."
     )
 
 

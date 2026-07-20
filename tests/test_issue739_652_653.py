@@ -9,6 +9,8 @@ All static tests (no live server required).
 import re
 import pathlib
 
+from api.streaming import _sanitize_messages_for_api
+
 STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
 TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'title_generation.py'
 MESSAGES_JS = pathlib.Path(__file__).parent.parent / 'static' / 'messages.js'
@@ -85,12 +87,14 @@ class TestErrorPersistence:
 
     def test_sanitize_skips_error_messages(self):
         """_sanitize_messages_for_api must not send _error messages to the LLM."""
-        assert "msg.get('_error')" in streaming_src or 'msg.get("_error")' in streaming_src
-        # The skip must come before the role/tool filtering logic
-        error_skip_pos = streaming_src.find("msg.get('_error')")
-        tool_filter_pos = streaming_src.find("if role == 'tool':")
-        assert error_skip_pos < tool_filter_pos, \
-            "_error skip must appear before the tool-role filter in _sanitize_messages_for_api"
+        messages = [
+            {'role': 'assistant', 'content': 'provider failure', '_error': True},
+            {'role': 'user', 'content': 'continue'},
+        ]
+
+        assert _sanitize_messages_for_api(messages) == [
+            {'role': 'user', 'content': 'continue'},
+        ]
 
 
 # ── #652/#653: Context compaction stream_end fix ──────────────────────────────
