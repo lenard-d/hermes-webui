@@ -3,15 +3,13 @@
 A completion that arrives while its session is active cannot start another
 turn.  This module owns that full lifecycle: persist it exactly once, atomically
 claim it when the session becomes idle, start one continuation outside locks,
-and re-defer on an admission race.  The facade is resolved late so established
-monkeypatch and import compatibility remains intact.
+and re-defer on an admission race.
 """
 
 from __future__ import annotations
 
 import logging
-
-from api.background_process_parts.bindings import background_process_api
+import threading
 
 
 logger = logging.getLogger("api.background_process")
@@ -94,15 +92,14 @@ def drain_for_session(session_id: str) -> int:
         return 0
     from api import config as _cfg
 
-    api = background_process_api()
     try:
-        if api._session_has_active_turn(session_id):
+        if session_has_active_turn(session_id):
             return 0
         with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
             if not _cfg.DEFERRED_PROCESS_WAKEUPS.get(session_id):
                 return 0
 
-        entries = api.claim_deferred_wakeups(session_id)
+        entries = claim_deferred_wakeups(session_id)
         if not entries:
             return 0
         try:
@@ -126,12 +123,12 @@ def drain_for_session(session_id: str) -> int:
         # Persist the tail before launch. If launch races a foreground turn or
         # fails after admission, no already-claimed continuation is lost.
         for entry in deliverable[1:]:
-            api.record_deferred_wakeup(
+            record_deferred_wakeup(
                 session_id,
                 str((entry or {}).get("process_id") or ""),
                 str((entry or {}).get("wakeup_prompt") or "").strip(),
             )
-        api._start_server_side_wakeup_turn(
+        start_server_side_turn(
             session_id,
             str((first or {}).get("wakeup_prompt") or "").strip(),
             process_id=str((first or {}).get("process_id") or ""),
@@ -158,8 +155,6 @@ def start_server_side_turn(
     process_id: str = "",
 ) -> None:
     """Start one wakeup turn asynchronously and re-defer admission races."""
-    api = background_process_api()
-
     def _runner() -> None:
         try:
             from api.routes import start_session_turn
@@ -181,7 +176,7 @@ def start_server_side_turn(
                 )
             elif status == 409:
                 if wakeup_prompt:
-                    api.record_deferred_wakeup(
+                    record_deferred_wakeup(
                         session_id,
                         process_id,
                         wakeup_prompt,
@@ -211,7 +206,7 @@ def start_server_side_turn(
                 exc_info=True,
             )
 
-    api.threading.Thread(
+    threading.Thread(
         target=_runner,
         name=f"hermes-webui-process-wakeup-{str(session_id)[:8]}",
         daemon=True,

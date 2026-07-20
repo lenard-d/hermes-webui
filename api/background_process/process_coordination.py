@@ -1,4 +1,4 @@
-"""Drain thread for terminal(notify_on_complete=true) agent wakeup.
+"""Route background-process completions to their owning WebUI sessions.
 
 The hermes-agent ``tools.process_registry.ProcessRegistry`` exposes a thread-safe
 ``completion_queue`` (a ``queue.Queue``) that any background process pushes onto
@@ -7,15 +7,14 @@ gateway adapter this queue is drained by the host's main loop; in WebUI the
 queue was never read, so the agent never woke up from a ``notify_on_complete``
 finish. This module restores that behavior.
 
-The drain thread:
-    1. blocks on ``completion_queue.get()`` in a worker thread,
-    2. looks up the WebUI session_id from ``PROCESS_SESSION_INDEX`` (keyed on
+The coordinator:
+    1. looks up the WebUI session_id from ``PROCESS_SESSION_INDEX`` (keyed on
        the per-process ``session_key`` env var captured at spawn time),
-    3. formats a synthetic ``[IMPORTANT: ...]`` wakeup prompt, identical in
+    2. formats a synthetic ``[IMPORTANT: ...]`` wakeup prompt, identical in
        intent to ``cli._format_process_notification`` and
        ``gateway.run._format_gateway_process_notification`` so the agent sees
        the same payload regardless of host,
-    4. emits a canonical ``bg_task_complete`` SSE event (plus a temporary
+    3. emits a canonical ``bg_task_complete`` SSE event (plus a temporary
        ``process_complete`` alias for the migration window) on the active
        stream(s) for that session (DEMOTED to pure live-view — an open tab
        streams the turn live), records a server-side marker in
@@ -34,25 +33,27 @@ human-typed prompt". It also lets the PR #2279 next-turn drain deliver the
 wakeup when a turn was active at completion time; the marker drains harmlessly
 on the next turn for the session.
 
-Watch-pattern events share the same queue but produce a different SSE payload;
-this module routes them to the same listener so the frontend's single
-``process_complete`` handler can re-POST either flavor verbatim.
+Watch-pattern events share the same queue but produce a different SSE payload.
+Thread start/stop and queue draining live in :mod:`.lifecycle`; this module is
+deliberately synchronous apart from the continuation turns it commissions.
 """
 
 from __future__ import annotations
 
 import logging
-import queue
 import threading
-import time
-import uuid  # noqa: F401 -- completion-events owner resolves this facade for monkeypatching.
-from typing import Any  # noqa: F401 -- historical public facade export.
-from typing import Optional
+from typing import Any
 
-from api.background_process_parts import completion_events as _completion_events
-from api.background_process_parts import deferred_wakeups as _deferred_wakeups
-from api.background_process_parts.bindings import (
-    bind_background_process_api as _bind_background_process_api,
+from .completion_events import (
+    build_payload,
+    emit_coalesced,
+    format_wakeup_prompt,
+    mark_registry_completion_consumed,
+)
+from .deferred_wakeups import (
+    record_deferred_wakeup,
+    session_has_active_turn,
+    start_server_side_turn,
 )
 from api.process_event_utils import (
     ASYNC_DELIVERY_ROUTING_RETRY_SECONDS,
@@ -63,167 +64,11 @@ from api.process_event_utils import (
     requeue_async_delegation_event,
     schedule_async_delegation_claim_retry,
 )
-from api import session_channel as _session_channel
-
-
-# Compatibility facade: routes and existing integrations historically import
-# these names from ``api.background_process``.  Keep them bound to the focused
-# owner's exact objects so there is only one registry/lock generation.
-SESSION_CHANNELS = _session_channel.SESSION_CHANNELS
-SESSION_CHANNELS_LOCK = _session_channel.SESSION_CHANNELS_LOCK
-SessionChannel = _session_channel.SessionChannel
-active_stream_id_for_session = _session_channel.active_stream_id_for_session
-collect_expired_session_channels = _session_channel.collect_expired_session_channels
-get_or_create_session_channel = _session_channel.get_or_create_session_channel
-get_session_channel = _session_channel.get_session_channel
-persisted_message_count_for_session = (
-    _session_channel.persisted_message_count_for_session
-)
-should_emit_session_updated = _session_channel.should_emit_session_updated
-subscribe_to_session_channel = _session_channel.subscribe_to_session_channel
-
-# Completion-event delivery compatibility surface. State aliases deliberately
-# share the owner's exact objects; function implementations resolve this facade
-# late so monkeypatches applied here remain authoritative.
-_EMIT_COALESCE_WINDOW_SECS = _completion_events.EMIT_COALESCE_WINDOW_SECS
-_EMIT_COALESCE_LOCK = _completion_events.EMIT_COALESCE_LOCK
-_LAST_EMIT_TS = _completion_events.LAST_EMIT_TS
-_PENDING_EMIT_PAYLOADS = _completion_events.PENDING_EMIT_PAYLOADS
-_PENDING_EMIT_TIMERS = _completion_events.PENDING_EMIT_TIMERS
-_REGISTRY_CONSUMED_CONTRACT = _completion_events.REGISTRY_CONSUMED_CONTRACT
-_truncate = _bind_background_process_api(globals(), _completion_events.truncate)
-format_wakeup_prompt = _bind_background_process_api(
-    globals(), _completion_events.format_wakeup_prompt
-)
-_build_payload = _bind_background_process_api(
-    globals(), _completion_events.build_payload
-)
-_emit_to_session_streams = _bind_background_process_api(
-    globals(), _completion_events.emit_to_session_streams
-)
-_emit_bg_task_complete_events_now = _bind_background_process_api(
-    globals(), _completion_events.emit_now
-)
-_flush_coalesced_bg_task_complete = _bind_background_process_api(
-    globals(), _completion_events.flush_coalesced
-)
-_emit_bg_task_complete_events_coalesced = _bind_background_process_api(
-    globals(), _completion_events.emit_coalesced
-)
-_mark_registry_completion_consumed = _bind_background_process_api(
-    globals(), _completion_events.mark_registry_completion_consumed
-)
-
-# Deferred-wakeup compatibility surface. The owner keeps claim, launch, and
-# re-defer behavior together; callers retain their historical import names.
-record_deferred_wakeup = _bind_background_process_api(
-    globals(), _deferred_wakeups.record_deferred_wakeup
-)
-claim_deferred_wakeups = _bind_background_process_api(
-    globals(), _deferred_wakeups.claim_deferred_wakeups
-)
-drain_deferred_wakeups_for_session = _bind_background_process_api(
-    globals(), _deferred_wakeups.drain_for_session
-)
-_session_has_active_turn = _bind_background_process_api(
-    globals(), _deferred_wakeups.session_has_active_turn
-)
-_start_server_side_wakeup_turn = _bind_background_process_api(
-    globals(), _deferred_wakeups.start_server_side_turn
-)
 
 logger = logging.getLogger(__name__)
-
-_DRAIN_THREAD: Optional[threading.Thread] = None
-_DRAIN_STOP = threading.Event()
 _PROCESS_RECOVERY_DONE = False
 _PROCESS_CHECKPOINT_RECOVERED = False
 _PROCESS_RECOVERY_LOCK = threading.Lock()
-
-_REAPER_THREAD: Optional[threading.Thread] = None
-_REAPER_STOP = threading.Event()
-_REAPER_INTERVAL_SECS = 60.0
-
-# Serializes the check-then-start of the module's daemon threads
-# (``start_drain_thread`` / ``start_session_channel_reaper``). Without it two
-# concurrent callers can both observe ``is_alive() == False`` and each spawn a
-# thread; the loser's thread is never referenced by the module global and runs
-# forever, un-joinable. A dedicated lock (not the purpose-bound
-# ``SESSION_CHANNELS_LOCK`` / ``_EMIT_COALESCE_LOCK``) keeps this narrow.
-_THREAD_LIFECYCLE_LOCK = threading.Lock()
-
-def _reaper_loop() -> None:
-    logger.info("SessionChannel reaper thread started")
-    while not _REAPER_STOP.is_set():
-        try:
-            collected = collect_expired_session_channels(time.time())
-            if collected:
-                # Prune the per-session coalesce timestamp map for any collected
-                # session so _LAST_EMIT_TS does not grow one permanent entry per
-                # session that ever fired a bg task (greptile flag). The pending
-                # payload/timer maps self-clean when their timers fire, but
-                # _LAST_EMIT_TS is only ever written, never deleted — sweep it
-                # here alongside the channel it belongs to. A session that fires
-                # again after collection simply re-seeds its entry (first emit in
-                # the new window fires immediately, which is correct).
-                with _EMIT_COALESCE_LOCK:
-                    for sid in collected:
-                        _LAST_EMIT_TS.pop(sid, None)
-                logger.debug("SessionChannel reaper collected: %s", collected)
-            # Sweep the per-session completion-dedup map by DELIVERY lifecycle,
-            # not channel collection. ``BG_TASK_COMPLETE_EVENTS_SEEN`` gains a
-            # ``session_id -> set[process_id]`` entry the first time a bg task
-            # completes for a session — in ``_process_one``, whether or not any
-            # tab/SSE channel ever existed — and is otherwise never deleted, so it
-            # grows unbounded. Coupling the prune to channel collection (an
-            # earlier version of this fix) missed the dominant case: a headless
-            # completion (task fires, tab closed or never opened) has no channel
-            # to collect. Instead, once a completion has been drained (its
-            # ``session_id`` removed from ``PENDING_BG_TASK_COMPLETIONS``), the
-            # short ``_move_to_finished`` dedup window is closed and the entry is
-            # pure leak — so sweep every delivered (not-pending) session here,
-            # every tick. The registry's own per-``process_id``
-            # ``_completion_consumed`` gate remains the primary idempotency
-            # backstop, so sweeping a delivered session's set can never resurrect
-            # an already-delivered completion (even in the tiny window between
-            # this module's ``SEEN.add`` and ``PENDING.add`` in ``_process_one``).
-            from api import config as _cfg
-
-            with _cfg.BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
-                for sid in [
-                    s
-                    for s in _cfg.BG_TASK_COMPLETE_EVENTS_SEEN
-                    if s not in _cfg.PENDING_BG_TASK_COMPLETIONS
-                ]:
-                    _cfg.BG_TASK_COMPLETE_EVENTS_SEEN.pop(sid, None)
-        except Exception:
-            logger.warning("SessionChannel reaper iteration failed", exc_info=True)
-        # Wait but wake up promptly on stop.
-        if _REAPER_STOP.wait(_REAPER_INTERVAL_SECS):
-            break
-
-
-def start_session_channel_reaper() -> bool:
-    """Start the SessionChannel reaper thread. Idempotent; returns True on first start."""
-    global _REAPER_THREAD
-    with _THREAD_LIFECYCLE_LOCK:
-        if _REAPER_THREAD is not None and _REAPER_THREAD.is_alive():
-            return False
-        _REAPER_STOP.clear()
-        _REAPER_THREAD = threading.Thread(
-            target=_reaper_loop,
-            name="hermes-webui-session-channel-reaper",
-            daemon=True,
-        )
-        _REAPER_THREAD.start()
-        return True
-
-
-def stop_session_channel_reaper(timeout: float = 2.0) -> None:
-    _REAPER_STOP.set()
-    th = _REAPER_THREAD
-    if th is not None and th.is_alive():
-        th.join(timeout=timeout)
 
 
 # ── xsession wakeup misroute defense-in-depth (Option 3) ───────────────────
@@ -307,6 +152,7 @@ def _requeue_async_delegation_event(
     *,
     claim=None,
     delay: float = 0.5,
+    stop_event: threading.Event | None = None,
 ) -> bool:
     """Retry without enqueueing new work once drain shutdown has started."""
     completion_queue = getattr(process_registry, "completion_queue", None)
@@ -314,12 +160,17 @@ def _requeue_async_delegation_event(
         evt,
         completion_queue,
         delay=delay,
-        stop_event=_DRAIN_STOP,
+        stop_event=stop_event,
         durable=(bool(getattr(claim, "durable", False)) if claim is not None else None),
     )
 
 
-def _retry_unmapped_async_delegation_event(process_registry, evt: dict) -> None:
+def _retry_unmapped_async_delegation_event(
+    process_registry,
+    evt: dict,
+    *,
+    stop_event: threading.Event | None = None,
+) -> None:
     """Retry durable routing, or one bounded best-effort legacy routing pass."""
     completion_queue = getattr(process_registry, "completion_queue", None)
     if schedule_async_delegation_claim_retry(
@@ -336,6 +187,7 @@ def _retry_unmapped_async_delegation_event(process_registry, evt: dict) -> None:
         process_registry,
         retry_evt,
         delay=ASYNC_DELIVERY_ROUTING_RETRY_SECONDS,
+        stop_event=stop_event,
     )
 
 
@@ -348,9 +200,9 @@ def _record_async_delegation_accepted(
     """ACK durable delivery and publish live-view state after turn acceptance."""
 
     complete_async_delegation_delivery(evt, claim)
-    payload = _build_payload(evt, session_id)
+    payload = build_payload(evt, session_id)
     try:
-        _emit_bg_task_complete_events_coalesced(session_id, payload)
+        emit_coalesced(session_id, payload)
     except Exception:
         logger.debug(
             "async delegation live-view emit failed for session %s",
@@ -367,6 +219,7 @@ def _start_async_delegation_wakeup_turn(
     evt: dict,
     claim,
     process_registry,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Start one autonomous delegation turn and ACK only after acceptance."""
 
@@ -399,7 +252,12 @@ def _start_async_delegation_wakeup_turn(
                 return
 
             release_async_delegation_delivery(evt, claim)
-            _requeue_async_delegation_event(process_registry, evt, claim=claim)
+            _requeue_async_delegation_event(
+                process_registry,
+                evt,
+                claim=claim,
+                stop_event=stop_event,
+            )
             if status == 409 and (resp or {}).get("error") == "process_wakeup_paused":
                 logger.info(
                     "async delegation wakeup paused for session %s; delivery remains retryable",
@@ -415,7 +273,12 @@ def _start_async_delegation_wakeup_turn(
                 )
         except Exception:
             release_async_delegation_delivery(evt, claim)
-            _requeue_async_delegation_event(process_registry, evt, claim=claim)
+            _requeue_async_delegation_event(
+                process_registry,
+                evt,
+                claim=claim,
+                stop_event=stop_event,
+            )
             logger.warning(
                 "async delegation wakeup turn failed for session %s; requeued",
                 session_id,
@@ -435,13 +298,18 @@ def _process_async_delegation_event(
     session_id: str,
     delegation_id: str,
     process_registry,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Claim and route one async completion without private registry markers."""
 
     try:
         claim = claim_async_delegation_delivery(evt, "webui-background")
     except Exception:
-        _requeue_async_delegation_event(process_registry, evt)
+        _requeue_async_delegation_event(
+            process_registry,
+            evt,
+            stop_event=stop_event,
+        )
         return
     if claim is None:
         completion_queue = getattr(process_registry, "completion_queue", None)
@@ -457,22 +325,37 @@ def _process_async_delegation_event(
         # Do not persist async results in the process-local deferred list. If a
         # foreground turn owns the session, release the durable claim and retry
         # from the shared queue; the core record therefore remains restart-safe.
-        if _session_has_active_turn(session_id):
+        if session_has_active_turn(session_id):
             release_async_delegation_delivery(evt, claim)
-            _requeue_async_delegation_event(process_registry, evt, claim=claim)
+            _requeue_async_delegation_event(
+                process_registry,
+                evt,
+                claim=claim,
+                stop_event=stop_event,
+            )
             return
 
+        launch_kwargs: dict[str, Any] = {
+            "delegation_id": delegation_id,
+            "evt": evt,
+            "claim": claim,
+            "process_registry": process_registry,
+        }
+        if stop_event is not None:
+            launch_kwargs["stop_event"] = stop_event
         _start_async_delegation_wakeup_turn(
             session_id,
             wakeup_prompt,
-            delegation_id=delegation_id,
-            evt=evt,
-            claim=claim,
-            process_registry=process_registry,
+            **launch_kwargs,
         )
     except Exception:
         release_async_delegation_delivery(evt, claim)
-        _requeue_async_delegation_event(process_registry, evt, claim=claim)
+        _requeue_async_delegation_event(
+            process_registry,
+            evt,
+            claim=claim,
+            stop_event=stop_event,
+        )
         logger.warning(
             "server-side async delegation dispatch failed for session %s",
             session_id,
@@ -506,7 +389,11 @@ def _resolve_completion_target(
     return owner
 
 
-def _process_one(evt: dict) -> None:
+def process_one(
+    evt: dict,
+    *,
+    stop_event: threading.Event | None = None,
+) -> None:
     """Route a single completion_queue event to the matching WebUI session."""
     from api import config as _cfg
 
@@ -555,7 +442,11 @@ def _process_one(evt: dict) -> None:
             process_id,
         )
         if evt.get("type") == "async_delegation":
-            _retry_unmapped_async_delegation_event(_process_registry, evt)
+            _retry_unmapped_async_delegation_event(
+                _process_registry,
+                evt,
+                stop_event=stop_event,
+            )
         return
     session_id = ""
     if session_key:
@@ -568,7 +459,11 @@ def _process_one(evt: dict) -> None:
         # registered shortly after process restore.
         logger.debug("process_complete drop: no session mapping for key=%r", session_key)
         if evt.get("type") == "async_delegation":
-            _retry_unmapped_async_delegation_event(_process_registry, evt)
+            _retry_unmapped_async_delegation_event(
+                _process_registry,
+                evt,
+                stop_event=stop_event,
+            )
         return
     # ── xsession wakeup misroute defense-in-depth (Option 3) ──────────────
     # First retain the process-registry spawn-owner cross-check for legacy
@@ -597,7 +492,11 @@ def _process_one(evt: dict) -> None:
         # the bounded retry instead (arms a durable retry / one best-effort
         # legacy requeue), so it stays retryable without a spurious ACK.
         if evt.get("type") == "async_delegation":
-            _retry_unmapped_async_delegation_event(_process_registry, evt)
+            _retry_unmapped_async_delegation_event(
+                _process_registry,
+                evt,
+                stop_event=stop_event,
+            )
         return
     # ── THE SEAM: async delegations take the durable-claim delivery path,
     # routed to the origin-resolved session. The claim/complete/release
@@ -610,6 +509,7 @@ def _process_one(evt: dict) -> None:
             session_id=session_id,
             delegation_id=process_id,
             process_registry=_process_registry,
+            stop_event=stop_event,
         )
         return
     # ── Idempotency vs the REAL merged upstream #2279 (shared dedupe key) ──
@@ -643,8 +543,8 @@ def _process_one(evt: dict) -> None:
             return
         if process_id:
             seen.add(process_id)
-    payload = _build_payload(evt, session_id)
-    _emit_bg_task_complete_events_coalesced(session_id, payload)
+    payload = build_payload(evt, session_id)
+    emit_coalesced(session_id, payload)
     _cfg.PENDING_BG_TASK_COMPLETIONS.add(session_id)
     # Mark the event consumed in the agent's process registry so the REAL
     # merged PR #2279's next-turn drain
@@ -653,7 +553,7 @@ def _process_one(evt: dict) -> None:
     # This is the SHARED upstream dedupe key (see _mark_registry_completion_
     # consumed for the coupling contract + why a future rename now fails loud).
     if process_id:
-        _mark_registry_completion_consumed(process_id)
+        mark_registry_completion_consumed(process_id)
 
     # ── Option Z (PRIMARY): server-side wakeup, NO browser round-trip ──────
     # The SSE emit above is now demoted to a pure live-view layer (an open tab
@@ -686,7 +586,7 @@ def _process_one(evt: dict) -> None:
         wakeup_prompt_raw = format_wakeup_prompt(evt)
         wakeup_prompt = wakeup_prompt_raw.strip() if wakeup_prompt_raw else ""
         if wakeup_prompt:
-            if _session_has_active_turn(session_id):
+            if session_has_active_turn(session_id):
                 # Defer-path fix: persist the prompt so a turn-teardown
                 # idle-hook can redeliver it once the session goes idle.
                 # The OLD behavior only logged + left a bare
@@ -714,53 +614,13 @@ def _process_one(evt: dict) -> None:
                 # guard (``if process_id and any(...)``) live on that re-defer
                 # path so a second 409 race cannot accumulate a duplicate
                 # deferred entry (which would deliver the same wakeup twice).
-                _start_server_side_wakeup_turn(
+                start_server_side_turn(
                     session_id, wakeup_prompt, process_id=process_id
                 )
     except Exception:
         logger.warning(
             "server-side wakeup dispatch failed for session %s", session_id, exc_info=True
         )
-
-
-def _drain_loop() -> None:
-    try:
-        from tools import process_registry as _pr_mod  # noqa: F401
-        from tools.process_registry import process_registry
-    except Exception as exc:
-        logger.warning("bg_task_complete drain unavailable: %s", exc)
-        return
-    logger.info("bg_task_complete drain thread started")
-    while not _DRAIN_STOP.is_set():
-        # Read the queue defensively: a rebuilt/partially-initialized registry
-        # may not expose ``completion_queue`` (mirrors streaming.py's
-        # ``getattr(process_registry, 'completion_queue', None)`` guard). Direct
-        # attribute access here would raise AttributeError, which the old broad
-        # ``except Exception: continue`` swallowed silently and re-tried with no
-        # backoff — a 100%-CPU tight loop. Back off on the stop event instead.
-        q = getattr(process_registry, "completion_queue", None)
-        if q is None:
-            _DRAIN_STOP.wait(1.0)
-            continue
-        try:
-            evt = q.get(timeout=1.0)
-        except queue.Empty:
-            # Nothing to drain this second — re-check the stop flag and loop.
-            continue
-        except Exception:
-            # Unexpected queue failure: log it (not silent) and back off on the
-            # stop event so a persistent error can't spin the thread hot.
-            logger.warning(
-                "bg_task_complete drain queue read failed", exc_info=True
-            )
-            _DRAIN_STOP.wait(1.0)
-            continue
-        if not isinstance(evt, dict):
-            continue
-        try:
-            _process_one(evt)
-        except Exception:
-            logger.warning("bg_task_complete event handling failed", exc_info=True)
 
 
 def recover_processes_for_webui(process_registry=None, get_session_fn=None) -> int:
@@ -853,32 +713,3 @@ def forget_bg_task_completion_dedup(session_id: str) -> None:
 
     with _cfg.BG_TASK_COMPLETE_EVENTS_SEEN_LOCK:
         _cfg.BG_TASK_COMPLETE_EVENTS_SEEN.pop(str(session_id), None)
-
-
-def start_drain_thread() -> bool:
-    """Start the background drain thread idempotently. Returns True on first start."""
-    global _DRAIN_THREAD
-    with _THREAD_LIFECYCLE_LOCK:
-        if _DRAIN_THREAD is not None and _DRAIN_THREAD.is_alive():
-            return False
-        try:
-            recover_processes_for_webui()
-        except Exception:
-            # Recovery is best-effort. A corrupt checkpoint or transient I/O
-            # error must not disable notifications for newly spawned tasks.
-            logger.warning("background process recovery failed", exc_info=True)
-        _DRAIN_STOP.clear()
-        _DRAIN_THREAD = threading.Thread(
-            target=_drain_loop,
-            name="hermes-webui-bg-task-complete-drain",
-            daemon=True,
-        )
-        _DRAIN_THREAD.start()
-        return True
-
-
-def stop_drain_thread(timeout: float = 2.0) -> None:
-    _DRAIN_STOP.set()
-    th = _DRAIN_THREAD
-    if th is not None and th.is_alive():
-        th.join(timeout=timeout)

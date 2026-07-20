@@ -45,6 +45,7 @@ def test_concurrent_start_creates_exactly_one_thread(
     monkeypatch, start_name, stop_name, loop_attr, thread_attr, name_frag
 ):
     from api import background_process as bp
+    from api.background_process import lifecycle
 
     release = threading.Event()
 
@@ -53,9 +54,9 @@ def test_concurrent_start_creates_exactly_one_thread(
         # started thread reads as is_alive()==True deterministically.
         release.wait(5.0)
 
-    monkeypatch.setattr(bp, loop_attr, _blocking_loop, raising=True)
+    monkeypatch.setattr(lifecycle, loop_attr, _blocking_loop, raising=True)
     # Fresh slate: no pre-existing thread reference.
-    monkeypatch.setattr(bp, thread_attr, None, raising=True)
+    monkeypatch.setattr(lifecycle, thread_attr, None, raising=True)
 
     start_fn = getattr(bp, start_name)
     n = 12
@@ -88,7 +89,7 @@ def test_concurrent_start_creates_exactly_one_thread(
         ]
         assert len(live) == 1, f"expected 1 live {name_frag} thread, got {len(live)}"
         # The module global points at that one live thread.
-        assert getattr(bp, thread_attr) is live[0]
+        assert getattr(lifecycle, thread_attr) is live[0]
     finally:
         release.set()
         getattr(bp, stop_name)()

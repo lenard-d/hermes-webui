@@ -2,7 +2,7 @@
 is tearing down must still wake an autonomous agent.
 
 Root cause (proven by source, not speculation):
-  - api/background_process.py:_process_one defer branch — when a completion
+  - api/background_process/process_coordination.py:process_one defer branch — when a completion
     arrives and _session_has_active_turn(session_id) is True (ACTIVE_RUNS has
     a row), Option Z CANNOT start a turn (start_session_turn would 409). Before
     this fix it only logged + left a bare PENDING_BG_TASK_COMPLETIONS session
@@ -38,17 +38,13 @@ import types
 
 def test_deferred_wakeup_owner_and_background_facade_share_interface():
     from api import background_process as bp
-    from api.background_process_parts import deferred_wakeups as owner
+    from api.background_process import deferred_wakeups as owner
 
-    assert bp.record_deferred_wakeup.__wrapped__ is owner.record_deferred_wakeup
-    assert bp.claim_deferred_wakeups.__wrapped__ is owner.claim_deferred_wakeups
-    assert (
-        bp.drain_deferred_wakeups_for_session.__wrapped__ is owner.drain_for_session
-    )
-    assert bp._session_has_active_turn.__wrapped__ is owner.session_has_active_turn
-    assert (
-        bp._start_server_side_wakeup_turn.__wrapped__ is owner.start_server_side_turn
-    )
+    assert bp.record_deferred_wakeup is owner.record_deferred_wakeup
+    assert bp.claim_deferred_wakeups is owner.claim_deferred_wakeups
+    assert bp.drain_deferred_wakeups_for_session is owner.drain_for_session
+    assert bp._session_has_active_turn is owner.session_has_active_turn
+    assert bp._start_server_side_wakeup_turn is owner.start_server_side_turn
 
 
 # --------------------------------------------------------------------------
@@ -510,6 +506,7 @@ def test_paused_process_wakeup_409_does_not_requeue(monkeypatch):
     so re-queueing would recreate the same provider-unavailable loop.
     """
     from api import background_process as bp, config as cfg
+    from api.background_process import deferred_wakeups as owner
     import api.routes as routes
 
     _reset_cfg_state()
@@ -539,7 +536,7 @@ def test_paused_process_wakeup_409_does_not_requeue(monkeypatch):
             "[IMPORTANT: Background process completed while credentials were unavailable.]",
         )
         monkeypatch.setattr(routes, "start_session_turn", _paused_start_session_turn)
-        monkeypatch.setattr(bp, "record_deferred_wakeup", _unexpected_requeue)
+        monkeypatch.setattr(owner, "record_deferred_wakeup", _unexpected_requeue)
 
         assert bp.drain_deferred_wakeups_for_session(sid) == 1
         assert holder["event"].wait(timeout=1.0)

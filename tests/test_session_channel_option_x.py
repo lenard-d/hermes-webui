@@ -240,7 +240,7 @@ def test_subscribe_to_session_channel_is_atomic_get_create_subscribe():
 
 
 def test_subscribe_to_session_channel_survives_concurrent_reaper():
-    """Regression for PR #2971 Greptile P1 (background_process.py:215).
+    """Regression for PR #2971 Greptile P1 (background_process lifecycle).
 
     Reproduces the reaper TOCTOU: an idle, past-grace channel exists in the
     registry; a subscriber arrives while the reaper sweeps concurrently. With
@@ -847,7 +847,7 @@ def test_backend_emitter_stamps_event_id_on_every_bg_task_complete():
     event_id; the consumer's ring-buffer dedupe is keyed on it. Source-grep
     the payload builder to confirm event_id is stamped."""
     src = (
-        REPO_ROOT / "api" / "background_process_parts" / "completion_events.py"
+        REPO_ROOT / "api" / "background_process" / "completion_events.py"
     ).read_text()
     # Locate the canonical payload builder and confirm event_id is in the dict.
     fn_ix = src.index("def build_payload")

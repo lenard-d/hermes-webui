@@ -74,6 +74,7 @@ class _ManualTimer:
 
 def _install_emit_harness(monkeypatch, *, session_id: str = "sess-throttle"):
     from api import background_process as bp
+    from api.background_process import completion_events, process_coordination
 
     fake = _FakeProcessRegistry()
     _install_fake_registry(monkeypatch, fake)
@@ -86,12 +87,20 @@ def _install_emit_harness(monkeypatch, *, session_id: str = "sess-throttle"):
         emits.append((event, dict(data)))
         return 1
 
-    monkeypatch.setattr(bp, "_emit_to_session_streams", _capture_emit)
-    monkeypatch.setattr(bp, "_start_server_side_wakeup_turn", lambda sid, prompt: None)
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda sid: False)
+    monkeypatch.setattr(completion_events, "emit_to_session_streams", _capture_emit)
+    monkeypatch.setattr(
+        process_coordination,
+        "start_server_side_turn",
+        lambda sid, prompt, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        process_coordination,
+        "session_has_active_turn",
+        lambda sid: False,
+    )
 
     clock = _FakeClock()
-    monkeypatch.setattr(bp.time, "time", clock.time)
+    monkeypatch.setattr(completion_events.time, "time", clock.time)
 
     timers: list[_ManualTimer] = []
 
@@ -99,7 +108,7 @@ def _install_emit_harness(monkeypatch, *, session_id: str = "sess-throttle"):
         assert kwargs in (None, {})
         return _ManualTimer(timers, delay, callback, args)
 
-    monkeypatch.setattr(bp.threading, "Timer", _timer_factory)
+    monkeypatch.setattr(completion_events.threading, "Timer", _timer_factory)
     return bp, fake, emits, clock, timers
 
 

@@ -53,11 +53,11 @@ class _CountingStop:
 
 
 def _run_drain_with_stop(monkeypatch, fake_registry, stop) -> threading.Thread:
-    from api import background_process as bp
+    from api.background_process import lifecycle
 
     install_fake_registry(monkeypatch, fake_registry)
-    monkeypatch.setattr(bp, "_DRAIN_STOP", stop, raising=True)
-    t = threading.Thread(target=bp._drain_loop, name="test-drain", daemon=True)
+    monkeypatch.setattr(lifecycle, "_DRAIN_STOP", stop, raising=True)
+    t = threading.Thread(target=lifecycle._drain_loop, name="test-drain", daemon=True)
     t.start()
     return t
 

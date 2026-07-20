@@ -238,6 +238,7 @@ def test_emit_uses_new_event_name_with_trimmed_payload_and_event_id(monkeypatch)
     _reset_cfg_state()
 
     from api import background_process as bp
+    from api.background_process import completion_events
 
     bp.register_process_session("sess-evt-1", "sess-evt-1")
 
@@ -248,7 +249,7 @@ def test_emit_uses_new_event_name_with_trimmed_payload_and_event_id(monkeypatch)
         emits.append((event, data))
         return 1
 
-    monkeypatch.setattr(bp, "_emit_to_session_streams", _capture)
+    monkeypatch.setattr(completion_events, "emit_to_session_streams", _capture)
 
     evt = {
         "type": "completion",
@@ -299,9 +300,10 @@ def test_event_id_is_unique_per_emit(monkeypatch):
     _reset_cfg_state()
 
     from api import background_process as bp
+    from api.background_process import completion_events
 
     bp.register_process_session("sess-evt-2", "sess-evt-2")
-    monkeypatch.setattr(bp, "_EMIT_COALESCE_WINDOW_SECS", 0.0)
+    monkeypatch.setattr(completion_events, "EMIT_COALESCE_WINDOW_SECS", 0.0)
 
     emits: list[tuple[str, dict]] = []
 
@@ -309,7 +311,7 @@ def test_event_id_is_unique_per_emit(monkeypatch):
         emits.append((event, data))
         return 1
 
-    monkeypatch.setattr(bp, "_emit_to_session_streams", _capture)
+    monkeypatch.setattr(completion_events, "emit_to_session_streams", _capture)
 
     bp._process_one({"type": "completion", "session_id": "task-a", "session_key": "sess-evt-2", "exit_code": 0})
     bp._process_one({"type": "completion", "session_id": "task-b", "session_key": "sess-evt-2", "exit_code": 0})

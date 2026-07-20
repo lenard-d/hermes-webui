@@ -20,6 +20,7 @@ import types
 import pytest
 
 from api import background_process as bp
+from api.background_process import process_coordination as coordination
 from api import config as cfg
 from api import process_event_utils as peu
 from api import streaming
@@ -181,11 +182,11 @@ def test_background_wakeup_claims_and_completes_without_registry_growth(monkeypa
             claim=claim,
         )
 
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda session_id: False)
-    monkeypatch.setattr(bp, "_start_async_delegation_wakeup_turn", _accept)
+    monkeypatch.setattr(coordination, "session_has_active_turn", lambda session_id: False)
+    monkeypatch.setattr(coordination, "_start_async_delegation_wakeup_turn", _accept)
     monkeypatch.setattr(
-        bp,
-        "_emit_bg_task_complete_events_coalesced",
+        coordination,
+        "emit_coalesced",
         lambda session_id, payload: emitted.append((session_id, payload)) or 1,
     )
 
@@ -254,6 +255,7 @@ def test_requeue_put_failure_arms_durable_restore_sweep(monkeypatch):
     delivery["pending_ids"].add(evt["delegation_id"])
 
     try:
+        bp._DRAIN_STOP.clear()
         bp._requeue_async_delegation_event(registry, evt)
         assert peu.async_delivery_retry_timer_count() == 1
     finally:
@@ -275,7 +277,7 @@ def test_background_unmapped_legacy_event_is_requeued_best_effort(monkeypatch):
     _reset_wakeup_state()
     registry = _install_fake_process_registry(monkeypatch)
     _install_fake_durable_delivery_api(monkeypatch)
-    monkeypatch.setattr(bp, "ASYNC_DELIVERY_ROUTING_RETRY_SECONDS", 0.01)
+    monkeypatch.setattr(coordination, "ASYNC_DELIVERY_ROUTING_RETRY_SECONDS", 0.01)
     evt = _async_delegation_event(
         delegation_id=None,
         session_id="proc_legacy_retry",
@@ -299,10 +301,10 @@ def test_background_wakeup_releases_claim_when_dispatch_fails(monkeypatch):
     delivery = _install_fake_durable_delivery_api(monkeypatch)
     cfg.PROCESS_SESSION_INDEX["webui-session-1"] = "webui-session-1"
 
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda session_id: False)
-    monkeypatch.setattr(bp, "_emit_bg_task_complete_events_coalesced", lambda *_args: 1)
+    monkeypatch.setattr(coordination, "session_has_active_turn", lambda session_id: False)
+    monkeypatch.setattr(coordination, "emit_coalesced", lambda *_args: 1)
     monkeypatch.setattr(
-        bp,
+        coordination,
         "_start_async_delegation_wakeup_turn",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("dispatch failed")),
     )
@@ -320,9 +322,9 @@ def test_background_active_turn_releases_and_requeues_without_in_memory_defer(mo
     registry = _install_fake_process_registry(monkeypatch)
     delivery = _install_fake_durable_delivery_api(monkeypatch)
     cfg.PROCESS_SESSION_INDEX["webui-session-1"] = "webui-session-1"
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda _session_id: True)
+    monkeypatch.setattr(coordination, "session_has_active_turn", lambda _session_id: True)
     monkeypatch.setattr(
-        bp,
+        coordination,
         "_start_async_delegation_wakeup_turn",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must stay deferred")),
     )
@@ -408,7 +410,7 @@ def test_autonomous_wakeup_acks_after_successful_turn_acceptance(monkeypatch):
         "start_session_turn",
         lambda *_args, **_kwargs: {"_status": 200, "stream_id": "stream-1"},
     )
-    monkeypatch.setattr(bp, "_emit_bg_task_complete_events_coalesced", lambda *_args: 1)
+    monkeypatch.setattr(coordination, "emit_coalesced", lambda *_args: 1)
     evt = _async_delegation_event()
     claim = peu.claim_async_delegation_delivery(evt, "webui-background")
     assert claim is not None
@@ -439,9 +441,9 @@ def test_background_and_next_turn_consumers_share_one_atomic_claim(monkeypatch):
     notes = []
     barrier = threading.Barrier(2)
 
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda _session_id: False)
+    monkeypatch.setattr(coordination, "session_has_active_turn", lambda _session_id: False)
     monkeypatch.setattr(
-        bp,
+        coordination,
         "_start_async_delegation_wakeup_turn",
         lambda *_args, **_kwargs: starts.append("background"),
     )
@@ -1008,10 +1010,10 @@ def test_origin_ui_session_id_overrides_index_and_still_acks(monkeypatch):
         started.append((session_id, prompt, delegation_id))
         bp._record_async_delegation_accepted(evt, session_id=session_id, claim=claim)
 
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda session_id: False)
-    monkeypatch.setattr(bp, "_start_async_delegation_wakeup_turn", _accept)
+    monkeypatch.setattr(coordination, "session_has_active_turn", lambda session_id: False)
+    monkeypatch.setattr(coordination, "_start_async_delegation_wakeup_turn", _accept)
     monkeypatch.setattr(
-        bp, "_emit_bg_task_complete_events_coalesced", lambda session_id, payload: 1
+        coordination, "emit_coalesced", lambda session_id, payload: 1
     )
 
     # ... but the event carries the exact origin return address "session-A".
@@ -1038,10 +1040,10 @@ def test_origin_only_completion_without_session_key_routes_and_acks(monkeypatch)
         started.append(session_id)
         bp._record_async_delegation_accepted(evt, session_id=session_id, claim=claim)
 
-    monkeypatch.setattr(bp, "_session_has_active_turn", lambda session_id: False)
-    monkeypatch.setattr(bp, "_start_async_delegation_wakeup_turn", _accept)
+    monkeypatch.setattr(coordination, "session_has_active_turn", lambda session_id: False)
+    monkeypatch.setattr(coordination, "_start_async_delegation_wakeup_turn", _accept)
     monkeypatch.setattr(
-        bp, "_emit_bg_task_complete_events_coalesced", lambda session_id, payload: 1
+        coordination, "emit_coalesced", lambda session_id, payload: 1
     )
 
     evt = _async_delegation_event(origin_ui_session_id="session-A")
@@ -1061,9 +1063,9 @@ def test_async_completion_with_unresolvable_target_retries_not_silent_drop(monke
     delivery = _install_fake_durable_delivery_api(monkeypatch)
     retried: list[dict] = []
     monkeypatch.setattr(
-        bp,
+        coordination,
         "_retry_unmapped_async_delegation_event",
-        lambda process_registry, evt: retried.append(dict(evt)),
+        lambda process_registry, evt, **_kwargs: retried.append(dict(evt)),
     )
 
     # No session_key index entry and no origin_ui_session_id → empty target.
@@ -1107,5 +1109,3 @@ def test_next_turn_drain_respects_origin_over_session_key_index(monkeypatch):
     assert [consumer for _evt, consumer in delivery["claim"]] == ["webui-next-turn"]
     assert len(delivery["complete"]) == 1
     assert delivery["release"] == []
-
-

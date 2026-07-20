@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from api import background_process as bp
+from api.background_process import lifecycle, process_coordination
 
 
 class _FakeThread:
@@ -27,9 +28,13 @@ class _FakeProcessSession:
 
 def test_start_drain_thread_invokes_recovery(monkeypatch):
     calls = []
-    monkeypatch.setattr(bp, "_DRAIN_THREAD", None)
-    monkeypatch.setattr(bp, "recover_processes_for_webui", lambda: calls.append("recover") or 0)
-    monkeypatch.setattr(bp.threading, "Thread", _FakeThread)
+    monkeypatch.setattr(lifecycle, "_DRAIN_THREAD", None)
+    monkeypatch.setattr(
+        lifecycle,
+        "recover_processes_for_webui",
+        lambda: calls.append("recover") or 0,
+    )
+    monkeypatch.setattr(lifecycle.threading, "Thread", _FakeThread)
 
     assert bp.start_drain_thread() is True
     assert calls == ["recover"]
@@ -39,13 +44,13 @@ def test_start_drain_thread_survives_recovery_failure(monkeypatch):
     def fail_recovery():
         raise OSError("corrupt checkpoint")
 
-    monkeypatch.setattr(bp, "_DRAIN_THREAD", None)
-    monkeypatch.setattr(bp, "recover_processes_for_webui", fail_recovery)
-    monkeypatch.setattr(bp.threading, "Thread", _FakeThread)
+    monkeypatch.setattr(lifecycle, "_DRAIN_THREAD", None)
+    monkeypatch.setattr(lifecycle, "recover_processes_for_webui", fail_recovery)
+    monkeypatch.setattr(lifecycle.threading, "Thread", _FakeThread)
 
     assert bp.start_drain_thread() is True
-    assert bp._DRAIN_THREAD is not None
-    assert bp._DRAIN_THREAD.is_alive()
+    assert lifecycle._DRAIN_THREAD is not None
+    assert lifecycle._DRAIN_THREAD.is_alive()
 
 
 def test_recovery_runs_once_and_rebuilds_session_mapping(monkeypatch):
@@ -67,10 +72,10 @@ def test_recovery_runs_once_and_rebuilds_session_mapping(monkeypatch):
             return _FakeProcessSession("webui-session")
 
     fake_registry = FakeRegistry()
-    monkeypatch.setattr(bp, "_PROCESS_CHECKPOINT_RECOVERED", False)
-    monkeypatch.setattr(bp, "_PROCESS_RECOVERY_DONE", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_CHECKPOINT_RECOVERED", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_RECOVERY_DONE", False)
     monkeypatch.setattr(
-        bp,
+        process_coordination,
         "register_process_session",
         lambda key, sid: calls["registered"].append((key, sid)),
     )
@@ -78,8 +83,8 @@ def test_recovery_runs_once_and_rebuilds_session_mapping(monkeypatch):
     def get_session(sid, metadata_only=False):
         return SimpleNamespace(id=sid)
 
-    assert bp.recover_processes_for_webui(fake_registry, get_session) == 1
-    assert bp.recover_processes_for_webui(fake_registry, get_session) == 0
+    assert process_coordination.recover_processes_for_webui(fake_registry, get_session) == 1
+    assert process_coordination.recover_processes_for_webui(fake_registry, get_session) == 0
     assert calls == {
         "recover": 1,
         "registered": [("webui-session", "webui-session")],
@@ -101,13 +106,13 @@ def test_partial_recovery_retry_does_not_repeat_checkpoint_adoption(monkeypatch)
             return []
 
     registry = FlakyRegistry()
-    monkeypatch.setattr(bp, "_PROCESS_CHECKPOINT_RECOVERED", False)
-    monkeypatch.setattr(bp, "_PROCESS_RECOVERY_DONE", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_CHECKPOINT_RECOVERED", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_RECOVERY_DONE", False)
 
     with pytest.raises(OSError, match="transient list failure"):
-        bp.recover_processes_for_webui(registry, lambda *_args, **_kwargs: None)
+        process_coordination.recover_processes_for_webui(registry, lambda *_args, **_kwargs: None)
 
-    assert bp.recover_processes_for_webui(registry, lambda *_args, **_kwargs: None) == 0
+    assert process_coordination.recover_processes_for_webui(registry, lambda *_args, **_kwargs: None) == 0
     assert calls == {"recover": 1, "list": 2}
 
 
@@ -123,8 +128,8 @@ def test_concurrent_direct_recovery_runs_once(monkeypatch):
         def list_sessions(self):
             return []
 
-    monkeypatch.setattr(bp, "_PROCESS_CHECKPOINT_RECOVERED", False)
-    monkeypatch.setattr(bp, "_PROCESS_RECOVERY_DONE", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_CHECKPOINT_RECOVERED", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_RECOVERY_DONE", False)
     registry = FakeRegistry()
     barrier = threading.Barrier(8)
     results = []
@@ -132,7 +137,7 @@ def test_concurrent_direct_recovery_runs_once(monkeypatch):
     def recover():
         barrier.wait()
         results.append(
-            bp.recover_processes_for_webui(registry, lambda *_args, **_kwargs: None)
+            process_coordination.recover_processes_for_webui(registry, lambda *_args, **_kwargs: None)
         )
 
     workers = [threading.Thread(target=recover) for _ in range(8)]
@@ -153,9 +158,9 @@ def test_recovery_is_fail_soft_without_agent(monkeypatch):
             raise ImportError("Hermes Agent not installed")
         return real_import(name, *args, **kwargs)
 
-    monkeypatch.setattr(bp, "_PROCESS_CHECKPOINT_RECOVERED", False)
-    monkeypatch.setattr(bp, "_PROCESS_RECOVERY_DONE", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_CHECKPOINT_RECOVERED", False)
+    monkeypatch.setattr(process_coordination, "_PROCESS_RECOVERY_DONE", False)
     monkeypatch.setattr("builtins.__import__", fake_import)
 
-    assert bp.recover_processes_for_webui() == 0
-    assert bp._PROCESS_RECOVERY_DONE is False
+    assert process_coordination.recover_processes_for_webui() == 0
+    assert process_coordination._PROCESS_RECOVERY_DONE is False

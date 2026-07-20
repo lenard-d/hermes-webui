@@ -20,7 +20,7 @@ tautology:
     clears it on exit. Under a simulated env race across two concurrent turns,
     the REAL ``get_current_session_key`` must return each turn's OWN id.
 
-  Option 3 (defense-in-depth, background_process.py) —
+  Option 3 (defense-in-depth, background_process package) —
     ``_resolve_wakeup_target`` cross-checks the (possibly env-contaminated)
     session_key-resolved session against the spawn-time owner persisted in the
     process registry's ``ProcessSession.spawn_session_id`` (an env-immune
@@ -186,7 +186,7 @@ def test_turn_identity_binder_restores_previous_value():
 def test_background_process_exposes_wakeup_target_resolver():
     bp = importlib.import_module("api.background_process")
     assert hasattr(bp, "_resolve_wakeup_target"), (
-        "Option 3 missing: background_process.py must expose _resolve_wakeup_target "
+        "Option 3 missing: background_process must expose _resolve_wakeup_target "
         "to cross-check the session_key-resolved target against the env-immune "
         "spawn-time owner"
     )

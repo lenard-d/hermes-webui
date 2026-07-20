@@ -3,18 +3,20 @@
 This module owns the complete browser-observation transition for a process
 completion: normalize the agent event, create the stable public payload, fan it
 out without cross-session leakage, coalesce bursts, and mark the upstream
-registry dedup key.  The facade remains the late-bound compatibility seam so
-existing integrations and tests can replace collaborators without duplicating
-state.
+registry dedup key.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
+import uuid
 from typing import Any
 
-from api.background_process_parts.bindings import background_process_api
+from api.process_event_utils import completion_delivery_id
+from api.session_channel import get_session_channel
+
 # Preserve the established operational category during the facade split.
 logger = logging.getLogger("api.background_process")
 
@@ -40,7 +42,6 @@ def format_wakeup_prompt(evt: object) -> str | None:
     if not isinstance(evt, dict) or not evt:
         return None
 
-    api = background_process_api()
     evt_type = evt.get("type", "completion")
     process_id = str(evt.get("session_id") or "").strip()
     command = str(evt.get("command") or "").strip()
@@ -52,7 +53,7 @@ def format_wakeup_prompt(evt: object) -> str | None:
         return f"[IMPORTANT: {message}]" if message else None
     if evt_type == "watch_match":
         pattern = evt.get("pattern", "?")
-        output = api._truncate(evt.get("output", ""), 4000)
+        output = truncate(evt.get("output", ""), 4000)
         suppressed = evt.get("suppressed", 0)
         body = (
             f'[IMPORTANT: Background process {process_id} matched watch pattern "{pattern}".\n'
@@ -88,7 +89,7 @@ def format_wakeup_prompt(evt: object) -> str | None:
         return None
 
     exit_code = evt.get("exit_code", "?")
-    output = api._truncate(evt.get("output", ""), 4000)
+    output = truncate(evt.get("output", ""), 4000)
     return (
         f"[IMPORTANT: Background process {process_id} completed "
         f"(exit_code={exit_code}).\nCommand: {command}\nOutput:\n{output}]"
@@ -97,16 +98,15 @@ def format_wakeup_prompt(evt: object) -> str | None:
 
 def build_payload(evt: dict, session_id: str) -> dict:
     """Build the minimal public completion-event payload."""
-    api = background_process_api()
-    process_id = api.completion_delivery_id(evt)
+    process_id = completion_delivery_id(evt)
     payload: dict[str, Any] = {
         "session_id": str(session_id),
         "task_id": process_id,
-        "completed_at": api.time.time(),
-        "event_id": api.uuid.uuid4().hex,
+        "completed_at": time.time(),
+        "event_id": uuid.uuid4().hex,
     }
     try:
-        wakeup_body = api.format_wakeup_prompt(evt)
+        wakeup_body = format_wakeup_prompt(evt)
         if wakeup_body:
             first_line = next(
                 (
@@ -117,7 +117,7 @@ def build_payload(evt: dict, session_id: str) -> dict:
                 "",
             )
             if first_line:
-                payload["summary"] = api._truncate(first_line, 200)
+                payload["summary"] = truncate(first_line, 200)
     except Exception:
         logger.debug("summary derivation failed", exc_info=True)
     return payload
@@ -127,7 +127,6 @@ def emit_to_session_streams(session_id: str, event: str, data: dict) -> int:
     """Push one event only to active transports owned by ``session_id``."""
     from api import config as _cfg
 
-    api = background_process_api()
     emitted = 0
     if hasattr(_cfg, "ACTIVE_RUNS") and hasattr(_cfg, "ACTIVE_RUNS_LOCK"):
         with _cfg.ACTIVE_RUNS_LOCK:
@@ -158,7 +157,7 @@ def emit_to_session_streams(session_id: str, event: str, data: dict) -> int:
                 exc_info=True,
             )
 
-    session_channel = api.get_session_channel(session_id)
+    session_channel = get_session_channel(session_id)
     if session_channel is not None:
         try:
             emitted += session_channel.emit(event, data)
@@ -173,30 +172,24 @@ def emit_to_session_streams(session_id: str, event: str, data: dict) -> int:
 
 def emit_now(session_id: str, payload: dict) -> int:
     """Emit the canonical completion event and its temporary legacy alias."""
-    api = background_process_api()
     return (
-        api._emit_to_session_streams(
-            session_id, "bg_task_complete", dict(payload)
-        )
-        + api._emit_to_session_streams(
-            session_id, "process_complete", dict(payload)
-        )
+        emit_to_session_streams(session_id, "bg_task_complete", dict(payload))
+        + emit_to_session_streams(session_id, "process_complete", dict(payload))
     )
 
 
 def flush_coalesced(session_id: str) -> None:
     """Flush the latest pending payload for one session."""
-    api = background_process_api()
     payload: dict | None = None
-    with api._EMIT_COALESCE_LOCK:
-        payload = api._PENDING_EMIT_PAYLOADS.pop(session_id, None)
-        api._PENDING_EMIT_TIMERS.pop(session_id, None)
+    with EMIT_COALESCE_LOCK:
+        payload = PENDING_EMIT_PAYLOADS.pop(session_id, None)
+        PENDING_EMIT_TIMERS.pop(session_id, None)
         if payload is not None:
-            api._LAST_EMIT_TS[session_id] = api.time.time()
+            LAST_EMIT_TS[session_id] = time.time()
     if payload is None:
         return
     try:
-        api._emit_bg_task_complete_events_now(session_id, payload)
+        emit_now(session_id, payload)
     except Exception:
         logger.debug(
             "coalesced bg_task_complete flush failed for session %s",
@@ -210,19 +203,18 @@ def emit_coalesced(session_id: str, payload: dict) -> int:
     if not session_id:
         return 0
 
-    api = background_process_api()
     should_emit_now = False
-    now = api.time.time()
-    window = api._EMIT_COALESCE_WINDOW_SECS
-    with api._EMIT_COALESCE_LOCK:
-        last = api._LAST_EMIT_TS.get(session_id)
-        has_pending = session_id in api._PENDING_EMIT_TIMERS
+    now = time.time()
+    window = EMIT_COALESCE_WINDOW_SECS
+    with EMIT_COALESCE_LOCK:
+        last = LAST_EMIT_TS.get(session_id)
+        has_pending = session_id in PENDING_EMIT_TIMERS
         if last is None or (now - last) >= window:
-            api._LAST_EMIT_TS[session_id] = now
+            LAST_EMIT_TS[session_id] = now
             should_emit_now = True
             if has_pending:
-                api._PENDING_EMIT_PAYLOADS.pop(session_id, None)
-                old_timer = api._PENDING_EMIT_TIMERS.pop(session_id, None)
+                PENDING_EMIT_PAYLOADS.pop(session_id, None)
+                old_timer = PENDING_EMIT_TIMERS.pop(session_id, None)
                 if old_timer is not None:
                     try:
                         old_timer.cancel()
@@ -234,10 +226,10 @@ def emit_coalesced(session_id: str, payload: dict) -> int:
                             exc_info=True,
                         )
         else:
-            api._PENDING_EMIT_PAYLOADS[session_id] = payload
+            PENDING_EMIT_PAYLOADS[session_id] = payload
 
         if not should_emit_now:
-            old_timer = api._PENDING_EMIT_TIMERS.get(session_id)
+            old_timer = PENDING_EMIT_TIMERS.get(session_id)
             if old_timer is not None:
                 try:
                     old_timer.cancel()
@@ -248,17 +240,17 @@ def emit_coalesced(session_id: str, payload: dict) -> int:
                         session_id,
                         exc_info=True,
                     )
-            timer = api.threading.Timer(
+            timer = threading.Timer(
                 window,
-                api._flush_coalesced_bg_task_complete,
+                flush_coalesced,
                 args=(session_id,),
             )
             timer.daemon = True
-            api._PENDING_EMIT_TIMERS[session_id] = timer
+            PENDING_EMIT_TIMERS[session_id] = timer
             timer.start()
 
     if should_emit_now:
-        return api._emit_bg_task_complete_events_now(session_id, payload)
+        return emit_now(session_id, payload)
     return 0
 
 
@@ -287,7 +279,7 @@ def mark_registry_completion_consumed(process_id: str) -> None:
         logger.error(
             "ProcessRegistry coupling contract VIOLATED: expected private attrs "
             "%s for cross-A/B wakeup dedupe are missing; wakeups may double-fire",
-            background_process_api()._REGISTRY_CONSUMED_CONTRACT,
+            REGISTRY_CONSUMED_CONTRACT,
             exc_info=True,
         )
         return

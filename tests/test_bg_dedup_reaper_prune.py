@@ -16,30 +16,16 @@ it too, covering a session deleted while a completion is still pending.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import pytest
 
+def test_reaper_lifecycle_is_owned_by_background_package():
+    """The public lifecycle interface delegates to one canonical owner."""
+    from api import background_process as bp
+    from api.background_process import lifecycle
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_reaper_source_sweeps_dedup_map_by_delivery():
-    """The reaper cleanup must sweep BG_TASK_COMPLETE_EVENTS_SEEN under its lock,
-    gated on PENDING_BG_TASK_COMPLETIONS (delivery), not channel collection."""
-    src = (REPO_ROOT / "api" / "background_process.py").read_text(encoding="utf-8")
-    reaper = src[src.index("def _reaper_loop("):]
-    reaper = reaper[: reaper.index("\ndef ", 1)]
-    assert "BG_TASK_COMPLETE_EVENTS_SEEN_LOCK" in reaper, (
-        "reaper must take the dedup-map lock"
-    )
-    assert "BG_TASK_COMPLETE_EVENTS_SEEN.pop(" in reaper, (
-        "reaper must pop dedup entries"
-    )
-    assert "PENDING_BG_TASK_COMPLETIONS" in reaper, (
-        "the sweep must be gated on delivery (PENDING_BG_TASK_COMPLETIONS), "
-        "not on channel collection — otherwise headless completions leak"
-    )
+    assert bp.start_session_channel_reaper is lifecycle.start_session_channel_reaper
+    assert bp.stop_session_channel_reaper is lifecycle.stop_session_channel_reaper
 
 
 def _run_reaper_once(bp, cfg):

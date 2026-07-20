@@ -38,41 +38,36 @@ from tests._wakeup_helpers import FakeProcessRegistry as _FakeProcessRegistry
 from tests._wakeup_helpers import install_fake_registry as _install_fake_registry
 
 
+def test_background_process_is_a_real_package_without_legacy_parts():
+    from pathlib import Path
+
+    from api import background_process as bp
+
+    package_dir = Path(bp.__file__).resolve().parent
+    assert Path(bp.__file__).name == "__init__.py"
+    assert (package_dir / "completion_events.py").is_file()
+    assert (package_dir / "deferred_wakeups.py").is_file()
+    assert (package_dir / "lifecycle.py").is_file()
+    assert (package_dir / "process_coordination.py").is_file()
+    assert not (package_dir.parent / "background_process_parts").exists()
+
+
 def test_completion_event_owner_and_background_facade_share_delivery_state():
     from api import background_process as bp
-    from api.background_process_parts import completion_events as owner
+    from api.background_process import completion_events as owner
 
     assert bp._LAST_EMIT_TS is owner.LAST_EMIT_TS
     assert bp._PENDING_EMIT_PAYLOADS is owner.PENDING_EMIT_PAYLOADS
     assert bp._PENDING_EMIT_TIMERS is owner.PENDING_EMIT_TIMERS
-    assert bp._build_payload.__wrapped__ is owner.build_payload
-    assert (
-        bp._emit_bg_task_complete_events_coalesced.__wrapped__
-        is owner.emit_coalesced
-    )
+    assert bp._build_payload is owner.build_payload
+    assert bp._emit_bg_task_complete_events_coalesced is owner.emit_coalesced
 
 
-def test_fresh_background_facades_resolve_their_own_truncate_patch(monkeypatch):
-    """Owner callbacks must not fall back to the canonical module object."""
-    import importlib.util
-    from pathlib import Path
+def test_completion_owner_uses_direct_dependency_not_facade_patch(monkeypatch):
+    """Compatibility exports must not steer internal package dispatch."""
+    from api import background_process as facade
+    from api.background_process import completion_events as owner
 
-    from api import background_process as canonical
-
-    source = Path(canonical.__file__)
-
-    def _load(name: str):
-        spec = importlib.util.spec_from_file_location(name, source)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-
-    first = _load("_test_background_process_facade_first")
-    second = _load("_test_background_process_facade_second")
-    monkeypatch.setattr(canonical, "_truncate", lambda *_args: "canonical")
-    first._truncate = lambda *_args: "first-facade"
-    second._truncate = lambda *_args: "second-facade"
     event = {
         "type": "watch_match",
         "session_id": "proc-1",
@@ -81,10 +76,11 @@ def test_fresh_background_facades_resolve_their_own_truncate_patch(monkeypatch):
         "output": "raw-output",
     }
 
-    assert "Matched output:\nfirst-facade" in first.format_wakeup_prompt(event)
-    assert "Matched output:\nsecond-facade" in second.format_wakeup_prompt(event)
-    # Re-enter the first binding after the second to catch sticky global rebinding.
-    assert "Matched output:\nfirst-facade" in first.format_wakeup_prompt(event)
+    monkeypatch.setattr(facade, "_truncate", lambda *_args: "facade")
+    assert "Matched output:\nraw-output" in facade.format_wakeup_prompt(event)
+
+    monkeypatch.setattr(owner, "truncate", lambda *_args: "owner")
+    assert "Matched output:\nowner" in facade.format_wakeup_prompt(event)
 
 
 def test_background_process_preserves_historical_typing_any_export():
@@ -117,7 +113,7 @@ def _reset_cfg_state():
 
 def _capture_emits(monkeypatch):
     """Replace the per-session emit fan-out with a capturing list."""
-    from api import background_process as bp
+    from api.background_process import completion_events as owner
 
     emits: list[tuple[str, dict]] = []
 
@@ -125,11 +121,11 @@ def _capture_emits(monkeypatch):
         emits.append((event, data))
         return 1
 
-    monkeypatch.setattr(bp, "_emit_to_session_streams", _capture)
+    monkeypatch.setattr(owner, "emit_to_session_streams", _capture)
     # Run the coalesce gate in pass-through mode so a single completion
     # exercises the immediate-emit branch (the throttle behaviour itself is
     # covered exhaustively by tests/test_bg_task_complete_throttle.py).
-    monkeypatch.setattr(bp, "_EMIT_COALESCE_WINDOW_SECS", 0.0)
+    monkeypatch.setattr(owner, "EMIT_COALESCE_WINDOW_SECS", 0.0)
     return emits
 
 
@@ -144,10 +140,15 @@ def test_bg_task_complete_wakeup_emits_canonical_event_with_event_id(monkeypatch
     _reset_cfg_state()
 
     from api import background_process as bp
+    from api.background_process import process_coordination as coordination
 
     bp.register_process_session("sess-wakeup-1", "sess-wakeup-1")
     emits = _capture_emits(monkeypatch)
-    monkeypatch.setattr(bp, "_start_server_side_wakeup_turn", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        coordination,
+        "start_server_side_turn",
+        lambda *_args, **_kwargs: None,
+    )
 
     evt = {
         "type": "completion",

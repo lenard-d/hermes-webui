@@ -543,7 +543,7 @@ def test_emit_to_session_streams_skip_unknown_owner_documented_in_source():
     form (`if owner_sid != session_id: continue`), not the old
     broadcast-on-unknown fallback (`if owner_sid and owner_sid != ...`)."""
     src = (
-        REPO_ROOT / "api" / "background_process_parts" / "completion_events.py"
+        REPO_ROOT / "api" / "background_process" / "completion_events.py"
     ).read_text()
     fn_ix = src.index("def emit_to_session_streams")
     fn_src = src[fn_ix:fn_ix + 2600]

@@ -1505,7 +1505,7 @@ def invalidate_gateway_caps(base_url: str | None = None) -> None:
 # ── notify_on_complete agent-wakeup wiring ─────────────────────────────────
 # When terminal(notify_on_complete=true, background=true) fires, the process
 # registry pushes a completion event onto tools.process_registry.completion_queue.
-# A drain task spawned at WebUI startup (api/background_process.py) reads that
+# A drain task spawned at WebUI startup (api.background_process) reads that
 # queue and emits an SSE `process_complete` event to the matching session.
 # PROCESS_SESSION_INDEX maps the per-process "session_key" (set in the spawned
 # subprocess via HERMES_SESSION_KEY) back to the WebUI session_id that owns it,
