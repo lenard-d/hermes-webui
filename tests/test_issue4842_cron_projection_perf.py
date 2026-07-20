@@ -28,7 +28,8 @@ import sqlite3
 import time
 from unittest import mock
 
-import api.sessions.store as models
+import api.sessions.external as external_sessions
+import api.sessions.records as session_records
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -89,7 +90,7 @@ def test_sidecar_metadata_cached_across_rebuilds(tmp_path):
     is exactly what happens when the state.db fingerprint busts the 5s cache on
     every streamed token). The second build must NOT re-read sidecars.
     """
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     db = tmp_path / "state.db"
     _make_cron_state_db(db, cron_count=30)
 
@@ -108,7 +109,7 @@ def test_sidecar_metadata_cached_across_rebuilds(tmp_path):
         )
     conn.close()
 
-    real_prefix = models._read_metadata_json_prefix
+    real_prefix = session_records._read_metadata_json_prefix
     reads = {"n": 0}
 
     def _counting_prefix(p, *a, **k):
@@ -116,15 +117,16 @@ def test_sidecar_metadata_cached_across_rebuilds(tmp_path):
         return real_prefix(p, *a, **k)
 
     with (
-        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.store.get_last_workspace", return_value=str(tmp_path)),
-        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-pid"),
-        mock.patch("api.sessions.store.SESSION_DIR", session_dir),
-        mock.patch("api.sessions.store._read_metadata_json_prefix", side_effect=_counting_prefix),
+        mock.patch("api.sessions.external.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.external.get_last_workspace", return_value=str(tmp_path)),
+        mock.patch("api.sessions.external.ensure_cron_project", return_value="cron-pid"),
+        mock.patch("api.sessions.external.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.records.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.records._read_metadata_json_prefix", side_effect=_counting_prefix),
     ):
-        first = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        first = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
         cold_reads = reads["n"]
-        second = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        second = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 
     # Cold build read each sidecar (at least once per unique file).
     assert cold_reads >= len(sids)
@@ -143,7 +145,7 @@ def test_sidecar_metadata_cached_across_rebuilds(tmp_path):
 
 def test_sidecar_cache_invalidates_on_rename(tmp_path):
     """A sidecar rename/archive bumps the stat signature → fresh read, fresh title."""
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     sid = "cron_jobAAAA_111"
@@ -154,8 +156,11 @@ def test_sidecar_cache_invalidates_on_rename(tmp_path):
         encoding="utf-8",
     )
 
-    with mock.patch("api.sessions.store.SESSION_DIR", session_dir):
-        first = models._state_projection_sidecar_metadata(sid)
+    with (
+        mock.patch("api.sessions.external.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.records.SESSION_DIR", session_dir),
+    ):
+        first = external_sessions._state_projection_sidecar_metadata(sid)
         assert first["title"] == "First"
         assert first["archived"] is False
 
@@ -166,7 +171,7 @@ def test_sidecar_cache_invalidates_on_rename(tmp_path):
             ' "updated_at": 3.0, "archived": true, "messages": []}' % sid,
             encoding="utf-8",
         )
-        second = models._state_projection_sidecar_metadata(sid)
+        second = external_sessions._state_projection_sidecar_metadata(sid)
 
     assert second["title"] == "Renamed"
     assert second["archived"] is True
@@ -174,7 +179,7 @@ def test_sidecar_cache_invalidates_on_rename(tmp_path):
 
 def test_sidecar_metadata_returns_independent_copies(tmp_path):
     """A caller mutating the returned dict must not corrupt the cached entry."""
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     sid = "cron_jobBBBB_222"
@@ -183,30 +188,33 @@ def test_sidecar_metadata_returns_independent_copies(tmp_path):
         ' "updated_at": 2.0, "archived": false, "messages": []}' % sid,
         encoding="utf-8",
     )
-    with mock.patch("api.sessions.store.SESSION_DIR", session_dir):
-        first = models._state_projection_sidecar_metadata(sid)
+    with (
+        mock.patch("api.sessions.external.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.records.SESSION_DIR", session_dir),
+    ):
+        first = external_sessions._state_projection_sidecar_metadata(sid)
         first["title"] = "MUTATED"
         first["archived"] = True
-        second = models._state_projection_sidecar_metadata(sid)
+        second = external_sessions._state_projection_sidecar_metadata(sid)
     assert second["title"] == "Keep"
     assert second["archived"] is False
 
 
 def test_missing_sidecar_returns_default_without_caching_growth(tmp_path):
     """A pure state.db row with no sidecar returns the default and is cheap."""
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    with mock.patch("api.sessions.store.SESSION_DIR", session_dir):
-        meta = models._state_projection_sidecar_metadata("cron_nope_999")
+    with mock.patch("api.sessions.external.SESSION_DIR", session_dir):
+        meta = external_sessions._state_projection_sidecar_metadata("cron_nope_999")
     assert meta == {"title": None, "archived": False}
     # No file → nothing cached (so the cache can't be poisoned by absent files).
-    assert len(models._SIDECAR_METADATA_CACHE) == 0
+    assert len(external_sessions._SIDECAR_METADATA_CACHE) == 0
 
 
 def test_jobs_json_parsed_once_per_build(tmp_path):
     """cron/jobs.json is read+parsed once per build, not once per untitled row."""
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     db = tmp_path / "state.db"
     _make_cron_state_db(db, cron_count=25)
 
@@ -225,13 +233,13 @@ def test_jobs_json_parsed_once_per_build(tmp_path):
         return real_read_text(self, *a, **k)
 
     with (
-        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.store.get_last_workspace", return_value=str(tmp_path)),
-        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-pid"),
-        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.external.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.external.get_last_workspace", return_value=str(tmp_path)),
+        mock.patch("api.sessions.external.ensure_cron_project", return_value="cron-pid"),
+        mock.patch("api.sessions.external.Session.load_metadata_only", return_value=None),
         mock.patch.object(pathlib.Path, "read_text", _counting_read_text),
     ):
-        result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        result = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 
     # jobs.json read at most once despite 25 untitled cron rows across both passes.
     assert jobs_reads["n"] <= 1, f"jobs.json read {jobs_reads['n']} times (expected <=1)"
@@ -242,7 +250,7 @@ def test_jobs_json_parsed_once_per_build(tmp_path):
 
 def test_get_last_workspace_called_once_per_build(tmp_path):
     """get_last_workspace() is resolved once, not once per projected row."""
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     db = tmp_path / "state.db"
     _make_cron_state_db(db, cron_count=20)
 
@@ -253,12 +261,12 @@ def test_get_last_workspace_called_once_per_build(tmp_path):
         return str(tmp_path)
 
     with (
-        mock.patch("api.sessions.store.get_claude_code_sessions", return_value=[]),
-        mock.patch("api.sessions.store.get_last_workspace", side_effect=_counting_ws),
-        mock.patch("api.sessions.store.ensure_cron_project", return_value="cron-pid"),
-        mock.patch("api.sessions.store.Session.load_metadata_only", return_value=None),
+        mock.patch("api.sessions.external.get_claude_code_sessions", return_value=[]),
+        mock.patch("api.sessions.external.get_last_workspace", side_effect=_counting_ws),
+        mock.patch("api.sessions.external.ensure_cron_project", return_value="cron-pid"),
+        mock.patch("api.sessions.external.Session.load_metadata_only", return_value=None),
     ):
-        result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
+        result = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None)
 
     assert len(result) > 0
     # One resolve for the whole build (lazy, memoized) regardless of row count.
@@ -269,7 +277,7 @@ def test_get_last_workspace_called_once_per_build(tmp_path):
 
 def test_clear_cli_sessions_cache_also_clears_sidecar_cache(tmp_path):
     """The lifecycle reset clears the sidecar projection cache too."""
-    models.clear_sidecar_metadata_cache()
+    external_sessions.clear_sidecar_metadata_cache()
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     sid = "cron_jobCCCC_333"
@@ -278,8 +286,11 @@ def test_clear_cli_sessions_cache_also_clears_sidecar_cache(tmp_path):
         ' "updated_at": 2.0, "archived": false, "messages": []}' % sid,
         encoding="utf-8",
     )
-    with mock.patch("api.sessions.store.SESSION_DIR", session_dir):
-        models._state_projection_sidecar_metadata(sid)
-        assert len(models._SIDECAR_METADATA_CACHE) == 1
-        models.clear_cli_sessions_cache()
-        assert len(models._SIDECAR_METADATA_CACHE) == 0
+    with (
+        mock.patch("api.sessions.external.SESSION_DIR", session_dir),
+        mock.patch("api.sessions.records.SESSION_DIR", session_dir),
+    ):
+        external_sessions._state_projection_sidecar_metadata(sid)
+        assert len(external_sessions._SIDECAR_METADATA_CACHE) == 1
+        external_sessions.clear_cli_sessions_cache()
+        assert len(external_sessions._SIDECAR_METADATA_CACHE) == 0

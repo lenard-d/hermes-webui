@@ -4,8 +4,8 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlparse
 
-import api.agent_sessions as agent_sessions
-import api.sessions.store as models
+import api.agent_ops.session_discovery as session_discovery
+import api.sessions.external as external_sessions
 import api.profiles as profiles
 import api.routes as routes
 
@@ -133,14 +133,14 @@ def test_read_importable_agent_session_rows_uses_parameterized_include_filter(mo
     db = tmp_path / "state.db"
     _make_state_db(db)
     executed = []
-    real_connect = agent_sessions.sqlite3.connect
+    real_connect = session_discovery.sqlite3.connect
 
     def recording_connect(*args, **kwargs):
         return _RecordingConnection(real_connect(*args, **kwargs), executed)
 
-    monkeypatch.setattr(agent_sessions.sqlite3, "connect", recording_connect)
+    monkeypatch.setattr(session_discovery.sqlite3, "connect", recording_connect)
 
-    rows = agent_sessions.read_importable_agent_session_rows(
+    rows = session_discovery.read_importable_agent_session_rows(
         db,
         limit=None,
         exclude_sources=None,
@@ -162,8 +162,8 @@ def test_get_cli_sessions_source_filter_uses_distinct_cache_key(monkeypatch, tmp
     hermes_home.mkdir()
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    models.clear_cli_sessions_cache()
+    monkeypatch.setattr(external_sessions, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    external_sessions.clear_cli_sessions_cache()
 
     seen = []
 
@@ -171,11 +171,11 @@ def test_get_cli_sessions_source_filter_uses_distinct_cache_key(monkeypatch, tmp
         seen.append(source_filter)
         return [{"session_id": f"session-{source_filter or 'all'}", "title": "cached"}]
 
-    monkeypatch.setattr(models, "_load_cli_sessions_uncached", fake_loader)
+    monkeypatch.setattr(external_sessions, "_load_cli_sessions_uncached", fake_loader)
 
-    first = models.get_cli_sessions()
-    filtered = models.get_cli_sessions(source_filter="tui")
-    filtered_again = models.get_cli_sessions(source_filter="tui")
+    first = external_sessions.get_cli_sessions()
+    filtered = external_sessions.get_cli_sessions(source_filter="tui")
+    filtered_again = external_sessions.get_cli_sessions(source_filter="tui")
 
     assert seen == [None, "tui"]
     assert first[0]["session_id"] == "session-all"
@@ -192,15 +192,15 @@ def test_get_cli_sessions_all_profiles_pushes_source_filter_to_every_context(mon
     hermes_home.mkdir()
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    models.clear_cli_sessions_cache()
+    monkeypatch.setattr(external_sessions, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    external_sessions.clear_cli_sessions_cache()
 
     # Two profile contexts; cache key derived from a stable token.
     contexts = [
         (hermes_home, hermes_home / "state.db", "default"),
         (hermes_home / "p2", hermes_home / "p2" / "state.db", "haku"),
     ]
-    monkeypatch.setattr(models, "_all_profiles_cli_contexts", lambda: (contexts, "ctx-key"))
+    monkeypatch.setattr(external_sessions, "_all_profiles_cli_contexts", lambda: (contexts, "ctx-key"))
 
     seen = []
 
@@ -208,9 +208,9 @@ def test_get_cli_sessions_all_profiles_pushes_source_filter_to_every_context(mon
         seen.append(source_filter)
         return [{"session_id": f"s-{_cli_profile}-{source_filter or 'all'}", "title": "x"}]
 
-    monkeypatch.setattr(models, "_load_cli_sessions_uncached", fake_loader)
+    monkeypatch.setattr(external_sessions, "_load_cli_sessions_uncached", fake_loader)
 
-    models.get_cli_sessions(source_filter="tui", all_profiles=True)
+    external_sessions.get_cli_sessions(source_filter="tui", all_profiles=True)
 
     # Every context must receive the "tui" filter, not None.
     assert seen == ["tui", "tui"], seen
@@ -239,20 +239,20 @@ def test_load_cli_sessions_uncached_pushes_specific_source_into_state_db_scan(mo
             }
         ]
 
-    monkeypatch.setattr(models, "get_claude_code_sessions", lambda: claude_calls.append(True) or [])
-    monkeypatch.setattr(models, "read_importable_agent_session_rows", fake_read_rows)
-    monkeypatch.setattr(models, "get_last_workspace", lambda: tmp_path)
-    monkeypatch.setattr(models, "_profile_has_user_projects", lambda: False)
-    monkeypatch.setattr(models, "ensure_cron_project", lambda **_: "cron-project-id")
-    monkeypatch.setattr(models.Session, "load_metadata_only", lambda _sid: None)
+    monkeypatch.setattr(external_sessions, "get_claude_code_sessions", lambda: claude_calls.append(True) or [])
+    monkeypatch.setattr(external_sessions, "read_importable_agent_session_rows", fake_read_rows)
+    monkeypatch.setattr(external_sessions, "get_last_workspace", lambda: tmp_path)
+    monkeypatch.setattr(external_sessions, "_profile_has_user_projects", lambda: False)
+    monkeypatch.setattr(external_sessions, "ensure_cron_project", lambda **_: "cron-project-id")
+    monkeypatch.setattr(external_sessions.Session, "load_metadata_only", lambda _sid: None)
 
-    result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None, source_filter="tui")
+    result = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None, source_filter="tui")
 
     assert claude_calls == []
     assert calls == [
         {
-            "limit": models.CLI_VISIBLE_SESSION_LIMIT,
-            "log": models.logger,
+            "limit": external_sessions.CLI_VISIBLE_SESSION_LIMIT,
+            "log": external_sessions.logger,
             "exclude_sources": None,
             "include_sources": ("tui",),
         }
@@ -282,18 +282,18 @@ def test_cron_source_filter_uses_cron_rescue_limit(monkeypatch, tmp_path):
             }
         ]
 
-    monkeypatch.setattr(models, "read_importable_agent_session_rows", fake_read_rows)
-    monkeypatch.setattr(models, "get_last_workspace", lambda: tmp_path)
-    monkeypatch.setattr(models, "_profile_has_user_projects", lambda: False)
-    monkeypatch.setattr(models, "ensure_cron_project", lambda **_: "cron-project-id")
-    monkeypatch.setattr(models.Session, "load_metadata_only", lambda _sid: None)
+    monkeypatch.setattr(external_sessions, "read_importable_agent_session_rows", fake_read_rows)
+    monkeypatch.setattr(external_sessions, "get_last_workspace", lambda: tmp_path)
+    monkeypatch.setattr(external_sessions, "_profile_has_user_projects", lambda: False)
+    monkeypatch.setattr(external_sessions, "ensure_cron_project", lambda **_: "cron-project-id")
+    monkeypatch.setattr(external_sessions.Session, "load_metadata_only", lambda _sid: None)
 
-    result = models._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None, source_filter="cron")
+    result = external_sessions._load_cli_sessions_uncached(tmp_path, db, _cli_profile=None, source_filter="cron")
 
     assert calls == [
         {
-            "limit": models.CRON_PROJECT_CHIP_LIMIT,
-            "log": models.logger,
+            "limit": external_sessions.CRON_PROJECT_CHIP_LIMIT,
+            "log": external_sessions.logger,
             "exclude_sources": None,
             "include_sources": ("cron",),
         }

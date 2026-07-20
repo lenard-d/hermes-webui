@@ -13,7 +13,7 @@ cap (enrich all), (4) lists at/under the cap probe everything.
 """
 from __future__ import annotations
 
-import api.sessions.store as models
+import api.sessions.state_db as state_db
 
 
 def _capture_probed_ids(monkeypatch):
@@ -24,8 +24,8 @@ def _capture_probed_ids(monkeypatch):
         seen["ids"] = set(id_set)
         return {}
 
-    monkeypatch.setattr(models, "read_session_lineage_metadata", _fake_read)
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: ":memory:")
+    monkeypatch.setattr(state_db, "read_session_lineage_metadata", _fake_read)
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: ":memory:")
     return seen
 
 
@@ -38,7 +38,7 @@ def _sessions(n):
 def test_caps_enrichment_to_top_n_default_300(monkeypatch):
     seen = _capture_probed_ids(monkeypatch)
     monkeypatch.delenv("HERMES_WEBUI_LINEAGE_TOP_N", raising=False)
-    models._enrich_sidebar_lineage_metadata(_sessions(1000))
+    state_db._enrich_sidebar_lineage_metadata(_sessions(1000))
     assert seen["ids"] == {f"s{i}" for i in range(300)}, (
         "Default cap must probe exactly the top-300 (paint-priority) sessions"
     )
@@ -47,7 +47,7 @@ def test_caps_enrichment_to_top_n_default_300(monkeypatch):
 def test_env_override_changes_cap(monkeypatch):
     seen = _capture_probed_ids(monkeypatch)
     monkeypatch.setenv("HERMES_WEBUI_LINEAGE_TOP_N", "50")
-    models._enrich_sidebar_lineage_metadata(_sessions(1000))
+    state_db._enrich_sidebar_lineage_metadata(_sessions(1000))
     assert seen["ids"] == {f"s{i}" for i in range(50)}, (
         "HERMES_WEBUI_LINEAGE_TOP_N must bound the probed set"
     )
@@ -56,14 +56,14 @@ def test_env_override_changes_cap(monkeypatch):
 def test_non_positive_cap_disables_capping(monkeypatch):
     seen = _capture_probed_ids(monkeypatch)
     monkeypatch.setenv("HERMES_WEBUI_LINEAGE_TOP_N", "0")
-    models._enrich_sidebar_lineage_metadata(_sessions(500))
+    state_db._enrich_sidebar_lineage_metadata(_sessions(500))
     assert len(seen["ids"]) == 500, "cap<=0 must enrich all sessions (cap disabled)"
 
 
 def test_unparseable_cap_falls_back_to_default(monkeypatch):
     seen = _capture_probed_ids(monkeypatch)
     monkeypatch.setenv("HERMES_WEBUI_LINEAGE_TOP_N", "not-a-number")
-    models._enrich_sidebar_lineage_metadata(_sessions(1000))
+    state_db._enrich_sidebar_lineage_metadata(_sessions(1000))
     assert seen["ids"] == {f"s{i}" for i in range(300)}, (
         "An unparseable cap must fall back to the default 300, not crash"
     )
@@ -72,7 +72,7 @@ def test_unparseable_cap_falls_back_to_default(monkeypatch):
 def test_list_under_cap_probes_everything(monkeypatch):
     seen = _capture_probed_ids(monkeypatch)
     monkeypatch.delenv("HERMES_WEBUI_LINEAGE_TOP_N", raising=False)
-    models._enrich_sidebar_lineage_metadata(_sessions(120))
+    state_db._enrich_sidebar_lineage_metadata(_sessions(120))
     assert seen["ids"] == {f"s{i}" for i in range(120)}, (
         "A list at/under the cap must enrich every session"
     )
@@ -83,7 +83,7 @@ def test_enrichment_failure_is_swallowed(monkeypatch):
     def _boom(db_path, id_set):
         raise RuntimeError("db down")
 
-    monkeypatch.setattr(models, "read_session_lineage_metadata", _boom)
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: ":memory:")
+    monkeypatch.setattr(state_db, "read_session_lineage_metadata", _boom)
+    monkeypatch.setattr(state_db, "_active_state_db_path", lambda: ":memory:")
     # Must not raise.
-    models._enrich_sidebar_lineage_metadata(_sessions(10))
+    state_db._enrich_sidebar_lineage_metadata(_sessions(10))
