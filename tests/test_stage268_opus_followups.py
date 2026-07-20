@@ -6,12 +6,13 @@ Pin the three SHOULD-FIX items applied during stage-268 review:
 - SF-2 (#1462): duplicate carries personality / enabled_toolsets / context_length / threshold_tokens.
 - SF-3 (#1462): duplicate handles legacy null title via `(session.title or 'Untitled')` fallback.
 """
-from tests.frontend_asset_contract import family_source
-from pathlib import Path
 import re
+from types import SimpleNamespace
 
-REPO_ROOT = Path(__file__).parent.parent
-ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+import pytest
+
+from tests.frontend_asset_contract import family_source
+
 SESSIONS_JS = family_source("sessions")
 I18N_JS = family_source("i18n")
 
@@ -50,55 +51,93 @@ def test_sf1_session_meta_children_present_in_all_locales():
 
 # --- SF-2 (#1462): duplicate carries per-session settings ---
 
-def test_sf2_duplicate_carries_personality():
+@pytest.fixture(scope="module")
+def duplicated_legacy_session(tmp_path_factory):
+    """Duplicate a legacy null-title record through the actual route owner."""
+    import api.routes as route_facade
+    from api.http.routes import session_creation_mutations
+
+    source = route_facade.Session(
+        session_id="stage268-source",
+        title=None,
+        workspace=str(tmp_path_factory.mktemp("stage268-duplicate")),
+        model="provider/model",
+        model_provider="provider",
+        messages=[{"role": "user", "content": "retain settings"}],
+        personality="focused",
+        enabled_toolsets=["web", "terminal"],
+        context_length=32768,
+        threshold_tokens=24576,
+    )
+    materialized = []
+    responses = []
+    errors = []
+
+    class SessionForDuplicate(route_facade.Session):
+        @classmethod
+        def load(cls, session_id):
+            return source if session_id == source.session_id else None
+
+    def publish_materialized(session, *, persist):
+        materialized.append((session, persist))
+
+    def json_response(_handler, payload, status=200, **_kwargs):
+        responses.append((payload, status))
+        return True
+
+    def bad_response(_handler, message, status=400):
+        errors.append((message, status))
+        return True
+
+    ctx = dict(vars(route_facade))
+    ctx.update(
+        Session=SessionForDuplicate,
+        _publish_materialized_session=publish_materialized,
+        _session_is_subagent_view_only=lambda _session_id: False,
+        publish_session_list_changed=lambda *_args, **_kwargs: None,
+        j=json_response,
+        bad=bad_response,
+    )
+
+    result = session_creation_mutations.handle_post(
+        object(),
+        SimpleNamespace(path="/api/session/duplicate"),
+        {"session_id": source.session_id},
+        None,
+        ctx,
+    )
+
+    assert result is True
+    assert errors == []
+    assert len(materialized) == 1
+    duplicate, persist = materialized[0]
+    assert persist is True
+    assert responses == [
+        ({"session": duplicate.compact() | {"messages": duplicate.messages}}, 200)
+    ]
+    return duplicate
+
+
+def test_sf2_duplicate_carries_personality(duplicated_legacy_session):
     """The duplicate must propagate `personality` from source to copy."""
-    duplicate_start = ROUTES_PY.find('if parsed.path == "/api/session/duplicate":')
-    assert duplicate_start != -1
-    block = ROUTES_PY[duplicate_start:duplicate_start + 3000]
-    assert 'personality=session.personality' in block, (
-        "duplicate must carry over personality — without it, customized "
-        "personalities silently revert to default in the copy"
-    )
+    assert duplicated_legacy_session.personality == "focused"
 
 
-def test_sf2_duplicate_carries_enabled_toolsets():
+def test_sf2_duplicate_carries_enabled_toolsets(duplicated_legacy_session):
     """The duplicate must propagate `enabled_toolsets` (per-session toolset overrides)."""
-    duplicate_start = ROUTES_PY.find('if parsed.path == "/api/session/duplicate":')
-    block = ROUTES_PY[duplicate_start:duplicate_start + 3000]
-    assert 'enabled_toolsets=getattr(session, "enabled_toolsets", None)' in block, (
-        "duplicate must carry enabled_toolsets — without it, per-session "
-        "toolset overrides silently revert to defaults in the copy"
-    )
+    assert duplicated_legacy_session.enabled_toolsets == ["web", "terminal"]
 
 
-def test_sf2_duplicate_carries_context_settings():
+def test_sf2_duplicate_carries_context_settings(duplicated_legacy_session):
     """The duplicate must propagate context_length + threshold_tokens."""
-    duplicate_start = ROUTES_PY.find('if parsed.path == "/api/session/duplicate":')
-    block = ROUTES_PY[duplicate_start:duplicate_start + 3000]
-    assert 'context_length=getattr(session, "context_length", None)' in block
-    assert 'threshold_tokens=getattr(session, "threshold_tokens", None)' in block
+    assert duplicated_legacy_session.context_length == 32768
+    assert duplicated_legacy_session.threshold_tokens == 24576
 
 
 # --- SF-3 (#1462): None-title fallback ---
 
-def test_sf3_duplicate_handles_none_title():
+def test_sf3_duplicate_handles_none_title(duplicated_legacy_session):
     """The duplicate handler must guard `session.title or 'Untitled'` to avoid
     `TypeError: unsupported operand type(s) for +: 'NoneType' and 'str'`
     on legacy sessions with title=null."""
-    duplicate_start = ROUTES_PY.find('if parsed.path == "/api/session/duplicate":')
-    assert duplicate_start != -1
-    block = ROUTES_PY[duplicate_start:duplicate_start + 3000]
-    # Must use the (session.title or "Untitled") form, not raw session.title
-    assert '(session.title or "Untitled") + " (copy)"' in block, (
-        "duplicate must guard against None title — `session.title + ' (copy)'` "
-        "TypeErrors when legacy JSON has title=null"
-    )
-    # Negative: the unguarded form must be gone
-    # Allow it inside comment text but not as actual code
-    code_lines = [
-        ln for ln in block.split('\n')
-        if not ln.lstrip().startswith('#') and 'title=session.title + " (copy)"' in ln
-    ]
-    assert not code_lines, (
-        f"unguarded `session.title + ' (copy)'` still present in duplicate handler: {code_lines}"
-    )
+    assert duplicated_legacy_session.title == "Untitled (copy)"
