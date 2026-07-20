@@ -81,7 +81,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       turn_execution.py    Shared Local/Gateway worker resource startup and teardown
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
       routes.py            GET + POST dispatch and compatibility facade for extracted route domains
-      routes_parts/        Importable workspace, git, cron, terminal, security, compression, and response routes
+      routes_parts/        Importable workspace, git, cron, terminal, TTS, security, compression, and response routes
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
       streaming.py         SSE orchestration and compatibility facade for extracted stream domains
