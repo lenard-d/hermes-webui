@@ -94,7 +94,7 @@ def test_cron_history_rejects_traversal_in_job_id():
     """`_handle_cron_history` and `_handle_cron_run_detail` must regex-validate
     job_id at the parameter boundary. Mirrors the rollback regex shape from
     v0.50.255."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "routes_parts" / "cron.py").read_text(encoding="utf-8")
     # Both handlers must call the validator
     history_idx = src.find("def _handle_cron_history(")
     detail_idx = src.find("def _handle_cron_run_detail(")
@@ -123,7 +123,7 @@ def test_cron_history_clamps_offset_and_limit():
     `limit` to a sane upper bound. Without this, `?offset=foo` raises a
     ValueError that surfaces as a confusing 500 from `do_GET`'s exception
     handler, and `?limit=999999999` would slice through unbounded glob output."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "routes_parts" / "cron.py").read_text(encoding="utf-8")
     history_idx = src.find("def _handle_cron_history(")
     body = src[history_idx : history_idx + 1500]
     assert "(ValueError, TypeError)" in body, (

@@ -227,7 +227,9 @@ def test_cancel_marker_flagged_as_error_to_skip_in_api_history():
     """
     src = read("api/streaming_parts/terminal_outcomes.py")
     idx = src.find("'content': api._cancelled_turn_content(message")
-    assert idx != -1, "cancel marker content writer not found in cancel_stream()"
+    assert idx != -1, (
+        "cancel marker content writer not found in the streaming terminal-outcome owner"
+    )
 
     # Walk back to the start of the dict literal (opening brace)
     brace_open = src.rfind("{", 0, idx)
