@@ -1,4 +1,3 @@
-from tests.frontend_asset_contract import family_source
 import json
 import queue
 import sys
@@ -6,9 +5,20 @@ import types
 from pathlib import Path
 
 from api import config
-from api.sessions import store as models
-from api import streaming
-from api.sessions.store import Session
+import api.sessions as sessions_pkg
+from api.runs import local_entrypoint, runtime_state
+from api.runs.terminal_outcomes import (
+    _MAX_ITERATION_SUMMARY_REQUEST,
+    _agent_result_tool_limit_reached,
+    _drop_synthetic_max_iteration_summary_requests,
+    _is_synthetic_max_iteration_summary_request,
+    _mark_latest_assistant_tool_limit_status,
+    _maybe_inject_max_iteration_summary_fallback,
+    _session_lacks_final_assistant_answer,
+)
+from api.runs.transcript import _merge_display_messages_after_agent_result
+from api.sessions import records
+from api.sessions.records import Session
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,15 +34,15 @@ def _run_streaming_with_fake_agent(
 ):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
-    models.SESSIONS.clear()
-    streaming.SESSIONS.clear()
-    streaming.STREAMS.clear()
-    streaming.AGENT_INSTANCES.clear()
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(sessions_pkg, "SESSION_DIR", session_dir)
+    records.SESSIONS.clear()
+    config.SESSIONS.clear()
+    runtime_state.STREAMS.clear()
+    runtime_state.AGENT_INSTANCES.clear()
     config.SESSION_AGENT_LOCKS.clear()
-    streaming.PENDING_GOAL_CONTINUATION.clear()
+    config.PENDING_GOAL_CONTINUATION.clear()
     try:
         from api.config import SESSION_AGENT_CACHE
 
@@ -54,10 +64,10 @@ def _run_streaming_with_fake_agent(
     session.pending_user_message = "Do the long task."
     session.pending_started_at = 1.0
     session.save()
-    models.SESSIONS[session_id] = session
-    streaming.SESSIONS[session_id] = session
+    records.SESSIONS[session_id] = session
+    config.SESSIONS[session_id] = session
     event_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = event_queue
+    runtime_state.STREAMS[stream_id] = event_queue
 
     class FakeAgent:
         def __init__(self, **kwargs):
@@ -83,13 +93,13 @@ def _run_streaming_with_fake_agent(
     fake_hermes_state.SessionDB = lambda *_args, **_kwargs: object()
 
     with monkeypatch.context() as m:
-        m.setattr(streaming, "get_session", lambda _sid: session)
-        m.setattr(streaming, "_get_ai_agent", lambda: FakeAgent)
-        m.setattr(streaming, "resolve_model_provider", lambda *_args, **_kwargs: ("gpt-4o", "openai", None))
+        m.setattr(local_entrypoint, "get_session", lambda _sid: session)
+        m.setattr(local_entrypoint, "_get_ai_agent", lambda: FakeAgent)
+        m.setattr(local_entrypoint, "resolve_model_provider", lambda *_args, **_kwargs: ("gpt-4o", "openai", None))
         m.setattr("api.config.get_config", lambda *_args, **_kwargs: {})
         m.setattr("api.config._resolve_cli_toolsets", lambda *_args, **_kwargs: [])
         m.setitem(sys.modules, "hermes_state", fake_hermes_state)
-        streaming._run_agent_streaming(
+        local_entrypoint.run_agent_streaming(
             session_id=session_id,
             msg_text="Do the long task.",
             model="gpt-4o",
@@ -107,7 +117,7 @@ def _run_streaming_with_fake_agent(
 def test_synthetic_max_iteration_summary_request_is_dropped_from_agent_result():
     synthetic = {
         "role": "user",
-        "content": streaming._MAX_ITERATION_SUMMARY_REQUEST,
+        "content": _MAX_ITERATION_SUMMARY_REQUEST,
     }
     messages = [
         {"role": "user", "content": "Do the long task."},
@@ -121,11 +131,11 @@ def test_synthetic_max_iteration_summary_request_is_dropped_from_agent_result():
         "messages": messages,
     }
 
-    assert streaming._agent_result_tool_limit_reached(result) is True
+    assert _agent_result_tool_limit_reached(result) is True
 
-    cleaned = streaming._drop_synthetic_max_iteration_summary_requests(
+    cleaned = _drop_synthetic_max_iteration_summary_requests(
         result["messages"],
-        enabled=streaming._agent_result_tool_limit_reached(result),
+        enabled=_agent_result_tool_limit_reached(result),
     )
 
     assert synthetic not in cleaned
@@ -134,13 +144,13 @@ def test_synthetic_max_iteration_summary_request_is_dropped_from_agent_result():
 
 
 def test_tool_limit_detection_uses_explicit_boolean_grouping():
-    assert streaming._agent_result_tool_limit_reached({
+    assert _agent_result_tool_limit_reached({
         "turn_exit_reason": "maximum tool-calling iterations reached",
     }) is True
-    assert streaming._agent_result_tool_limit_reached({
+    assert _agent_result_tool_limit_reached({
         "turn_exit_reason": "tool-calling iterations stopped",
     }) is False
-    assert streaming._agent_result_tool_limit_reached({
+    assert _agent_result_tool_limit_reached({
         "turn_exit_reason": "maximum response size reached",
     }) is False
 
@@ -149,13 +159,13 @@ def test_historical_synthetic_summary_prompt_does_not_mark_normal_result_as_tool
     result = {
         "messages": [
             {"role": "user", "content": "Earlier task."},
-            {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+            {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
             {"role": "user", "content": "Current normal task."},
             {"role": "assistant", "content": "Current task completed normally."},
         ],
     }
 
-    assert streaming._agent_result_tool_limit_reached(result) is False
+    assert _agent_result_tool_limit_reached(result) is False
 
 
 def test_tool_limit_with_final_answer_marks_latest_assistant_status_card():
@@ -164,8 +174,8 @@ def test_tool_limit_with_final_answer_marks_latest_assistant_status_card():
         {"role": "assistant", "content": "I reached the limit; here is the summary."},
     ]
 
-    assert streaming._session_lacks_final_assistant_answer(messages) is False
-    assert streaming._mark_latest_assistant_tool_limit_status(messages) is True
+    assert _session_lacks_final_assistant_answer(messages) is False
+    assert _mark_latest_assistant_tool_limit_status(messages) is True
 
     assistant = messages[-1]
     assert assistant["_terminal_state"] == "tool_limit_reached"
@@ -178,16 +188,16 @@ def test_tool_limit_without_final_answer_is_no_final_terminal_state_after_filter
         {"role": "user", "content": "Do the long task."},
         {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
         {"role": "tool", "tool_call_id": "call_1", "content": "result"},
-        {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+        {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
     ]
 
-    cleaned = streaming._drop_synthetic_max_iteration_summary_requests(messages)
+    cleaned = _drop_synthetic_max_iteration_summary_requests(messages)
 
     assert all(
-        not streaming._is_synthetic_max_iteration_summary_request(message)
+        not _is_synthetic_max_iteration_summary_request(message)
         for message in cleaned
     )
-    assert streaming._session_lacks_final_assistant_answer(cleaned) is True
+    assert _session_lacks_final_assistant_answer(cleaned) is True
 
 
 def test_display_merge_does_not_render_synthetic_summary_prompt():
@@ -196,15 +206,15 @@ def test_display_merge_does_not_render_synthetic_summary_prompt():
     result_messages = previous_context + [
         {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
         {"role": "tool", "tool_call_id": "call_1", "content": "result"},
-        {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+        {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
         {"role": "assistant", "content": "I reached the limit; here is the summary."},
     ]
-    result_messages = streaming._drop_synthetic_max_iteration_summary_requests(
+    result_messages = _drop_synthetic_max_iteration_summary_requests(
         result_messages,
         enabled=True,
     )
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = _merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
         result_messages,
@@ -212,7 +222,7 @@ def test_display_merge_does_not_render_synthetic_summary_prompt():
     )
 
     assert all(
-        message.get("content") != streaming._MAX_ITERATION_SUMMARY_REQUEST
+        message.get("content") != _MAX_ITERATION_SUMMARY_REQUEST
         for message in merged
     )
     assert merged[-1]["role"] == "assistant"
@@ -220,9 +230,11 @@ def test_display_merge_does_not_render_synthetic_summary_prompt():
 
 
 def test_frontend_handles_tool_limit_apperror_label():
-    messages_js = family_source("messages")
+    messages_js = (
+        ROOT / "static" / "modules" / "messages" / "stream.js"
+    ).read_text(encoding="utf-8")
     start = messages_js.find("source.addEventListener('apperror'")
-    end = messages_js.find("source.addEventListener('warning'", start)
+    end = messages_js.find("source.addEventListener('error'", start)
     assert start != -1 and end != -1
     block = messages_js[start:end]
 
@@ -238,7 +250,7 @@ def test_streaming_tool_limit_with_final_answer_persists_clean_done_state(tmp_pa
             {"role": "user", "content": "Do the long task."},
             {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
             {"role": "tool", "tool_call_id": "call_1", "content": "result"},
-            {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+            {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
             {"role": "assistant", "content": "I reached the limit; here is the summary."},
         ],
     }
@@ -250,11 +262,11 @@ def test_streaming_tool_limit_with_final_answer_persists_clean_done_state(tmp_pa
     assert done_payloads[-1]["terminal_state"] == "tool_limit_reached"
     assert done_payloads[-1]["terminal_reason"] == "max_iterations"
     assert all(
-        message.get("content") != streaming._MAX_ITERATION_SUMMARY_REQUEST
+        message.get("content") != _MAX_ITERATION_SUMMARY_REQUEST
         for message in payload["messages"]
     )
     assert all(
-        message.get("content") != streaming._MAX_ITERATION_SUMMARY_REQUEST
+        message.get("content") != _MAX_ITERATION_SUMMARY_REQUEST
         for message in payload["context_messages"]
     )
     assistant = payload["messages"][-1]
@@ -271,7 +283,7 @@ def test_streaming_tool_limit_partial_without_final_answer_emits_no_final_apperr
             {"role": "user", "content": "Do the long task."},
             {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
             {"role": "tool", "tool_call_id": "call_1", "content": "result"},
-            {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+            {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
         ],
     }
 
@@ -284,7 +296,7 @@ def test_streaming_tool_limit_partial_without_final_answer_emits_no_final_apperr
     assert payload["messages"][-1]["_error"] is True
     assert "Tool iteration limit reached" in payload["messages"][-1]["content"]
     assert all(
-        message.get("content") != streaming._MAX_ITERATION_SUMMARY_REQUEST
+        message.get("content") != _MAX_ITERATION_SUMMARY_REQUEST
         for message in payload["messages"]
     )
 
@@ -307,7 +319,7 @@ def test_streaming_tool_limit_with_fallback_final_response_surfaces_closure_text
             {"role": "user", "content": "Do the long task."},
             {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
             {"role": "tool", "tool_call_id": "call_1", "content": "result"},
-            {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+            {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
         ],
     }
 
@@ -334,7 +346,7 @@ def test_streaming_tool_limit_with_fallback_final_response_surfaces_closure_text
     assert assistant["_statusCard"]["title"] == "Tool iteration limit reached"
     # Synthetic scaffolding turn was still dropped, even after fallback injection.
     assert all(
-        message.get("content") != streaming._MAX_ITERATION_SUMMARY_REQUEST
+        message.get("content") != _MAX_ITERATION_SUMMARY_REQUEST
         for message in payload["messages"]
     )
 
@@ -352,7 +364,7 @@ def test_streaming_tool_limit_with_fallback_does_not_double_inject_when_assistan
             {"role": "user", "content": "Do the long task."},
             {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
             {"role": "tool", "tool_call_id": "call_1", "content": "result"},
-            {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+            {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
             {"role": "assistant", "content": summary},
         ],
     }
@@ -379,7 +391,7 @@ def test_maybe_inject_max_iteration_summary_fallback_unit():
     graceful = "I reached the iteration limit and couldn't generate a summary."
     result = {"final_response": graceful}
 
-    injected = streaming._maybe_inject_max_iteration_summary_fallback(messages, result)
+    injected = _maybe_inject_max_iteration_summary_fallback(messages, result)
 
     assert injected[-1]["role"] == "assistant"
     assert injected[-1]["content"] == graceful
@@ -393,7 +405,7 @@ def test_maybe_inject_max_iteration_summary_fallback_skips_when_assistant_presen
     ]
     result = {"final_response": "fallback text"}
 
-    out = streaming._maybe_inject_max_iteration_summary_fallback(messages, result)
+    out = _maybe_inject_max_iteration_summary_fallback(messages, result)
     assert out == messages
 
 
@@ -403,15 +415,15 @@ def test_maybe_inject_max_iteration_summary_fallback_skips_when_no_fallback():
         {"role": "assistant", "content": "", "tool_calls": [{"id": "call_1"}]},
     ]
 
-    out = streaming._maybe_inject_max_iteration_summary_fallback(messages, {})
+    out = _maybe_inject_max_iteration_summary_fallback(messages, {})
     assert out == messages
 
-    out = streaming._maybe_inject_max_iteration_summary_fallback(
+    out = _maybe_inject_max_iteration_summary_fallback(
         messages, {"final_response": "   "}
     )
     assert out == messages
 
-    out = streaming._maybe_inject_max_iteration_summary_fallback(messages, None)
+    out = _maybe_inject_max_iteration_summary_fallback(messages, None)
     assert out == messages
 
 
@@ -451,7 +463,7 @@ def test_streaming_historical_synthetic_prompt_normal_result_does_not_emit_tool_
     result = {
         "messages": [
             {"role": "user", "content": "Earlier task."},
-            {"role": "user", "content": streaming._MAX_ITERATION_SUMMARY_REQUEST},
+            {"role": "user", "content": _MAX_ITERATION_SUMMARY_REQUEST},
             {"role": "user", "content": "Do the long task."},
             {"role": "assistant", "content": "Current task completed normally."},
         ],
