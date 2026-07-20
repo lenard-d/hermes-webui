@@ -1,7 +1,8 @@
 """Tests for skill toggle (enable/disable) API and frontend."""
-from tests.frontend_asset_contract import family_source
-from pathlib import Path
+from collections import defaultdict
+from types import SimpleNamespace
 
+from tests.frontend_asset_contract import family_source
 
 PANELS_JS = family_source("panels")
 I18N_JS = family_source("i18n")
@@ -15,9 +16,32 @@ def test_toggle_endpoint_signature_in_routes():
 
 
 def test_toggle_path_registered():
-    """Verify /api/skills/toggle path is registered in POST routing."""
-    routes_source = (Path(__file__).resolve().parent.parent / "api" / "routes.py").read_text("utf-8")
-    assert '/api/skills/toggle' in routes_source
+    """The automation mutation owner dispatches /api/skills/toggle."""
+    from api.http.routes import automation_mutations
+
+    seen = {}
+    marker = object()
+
+    def unused(*_args, **_kwargs):
+        return None
+
+    def handle_toggle(handler, body):
+        seen.update(handler=handler, body=body)
+        return marker
+
+    handler = object()
+    body = {"name": "research", "enabled": False}
+    context = defaultdict(lambda: unused)
+    context["_handle_skill_toggle"] = handle_toggle
+
+    assert automation_mutations.handle_post(
+        handler,
+        SimpleNamespace(path="/api/skills/toggle"),
+        body,
+        None,
+        context,
+    ) is marker
+    assert seen == {"handler": handler, "body": body}
 
 
 def test_skills_list_includes_disabled_flag(tmp_path, monkeypatch):

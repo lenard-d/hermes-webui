@@ -71,14 +71,43 @@ def test_login_page_cache_busts_login_script():
     assert "static/login.js?v={{WEBUI_VERSION}}" in routes._LOGIN_PAGE_HTML
 
 
-def test_login_route_injects_webui_version_for_login_script():
-    """The /login route should replace the login.js version placeholder."""
+def test_login_route_injects_webui_version_for_login_script(monkeypatch):
+    """The public route owner injects the encoded version into login.js."""
+    import html
+    from collections import defaultdict
     from pathlib import Path
+    from types import SimpleNamespace
 
-    src = Path(__file__).resolve().parents[1].joinpath("api", "routes.py").read_text(encoding="utf-8")
-    login_block = src[src.find('if parsed.path == "/login"'):src.find('if parsed.path == "/api/auth/status"')]
-    assert "WEBUI_VERSION" in login_block
-    assert "{{WEBUI_VERSION}}" in login_block
+    import api.updates as updates
+    from api.http.routes import public
+    from api.routes_parts import login
+
+    def unused(*_args, **_kwargs):
+        return None
+
+    rendered = {}
+    context = defaultdict(lambda: unused)
+    context.update(
+        {
+            "Path": Path,
+            "_LOGIN_LOCALE": login._LOGIN_LOCALE,
+            "_LOGIN_PAGE_HTML": login._LOGIN_PAGE_HTML,
+            "__file__": public.__file__,
+            "_html": html,
+            "_oidc_login_html": lambda _parsed: "",
+            "_resolve_login_locale_key": login._resolve_login_locale_key,
+            "load_settings": lambda: {"bot_name": "Hermes", "language": "en"},
+            "t": lambda _handler, page, **_kwargs: rendered.setdefault("page", page)
+            or True,
+        }
+    )
+    monkeypatch.setattr(updates, "WEBUI_VERSION", "release/test +1")
+
+    assert public.handle_get(
+        object(), SimpleNamespace(path="/login"), context
+    ) == rendered["page"]
+    assert "static/login.js?v=release%2Ftest%20%2B1" in rendered["page"]
+    assert "{{WEBUI_VERSION}}" not in rendered["page"]
 
 
 # ── Security headers ─────────────────────────────────────────────────────

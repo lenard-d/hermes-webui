@@ -6,12 +6,25 @@ Covers:
 """
 
 import json
-import re
-from pathlib import Path
+from collections import defaultdict
+from types import SimpleNamespace
 
 from api.skill_usage import read_skill_usage
 
-_ROUTES = Path(__file__).resolve().parent.parent / "api" / "routes.py"
+
+def _usage_route_context(skills_dir, response):
+    def unused(*_args, **_kwargs):
+        return None
+
+    context = defaultdict(lambda: unused)
+    context.update(
+        {
+            "_active_skills_dir": lambda: skills_dir,
+            "_skills_list_from_dir": lambda _root: {"skills": []},
+            "j": lambda _handler, payload, **_kwargs: response.update(payload) or True,
+        }
+    )
+    return context
 
 
 class TestReadSkillUsage:
@@ -53,22 +66,63 @@ class TestReadSkillUsage:
 
 
 class TestApiSkillsUsageRoute:
-    def test_route_handler_present(self):
-        """routes.py contains a handler for GET /api/skills/usage."""
-        src = _ROUTES.read_text(encoding="utf-8")
-        assert '"/api/skills/usage"' in src, (
-            "Missing /api/skills/usage route in api/routes.py"
-        )
-        assert "read_skill_usage" in src, (
-            "read_skill_usage import missing in api/routes.py"
-        )
+    def test_route_handler_present(self, tmp_path):
+        """The automation query owner handles GET /api/skills/usage."""
+        from api.http.routes import automation_queries
 
-    def test_route_returns_usage_structure(self):
-        """The route response shape includes usage/skill_names/total_invocations."""
-        src = _ROUTES.read_text(encoding="utf-8")
-        # Find the /api/skills/usage handler block and check for key fields
-        block_match = re.search(r'if parsed\.path == "/api/skills/usage":.*?(?=\n    if parsed|$)', src, re.DOTALL)
-        assert block_match, "Missing /api/skills/usage handler block"
-        block = block_match.group()
-        assert '"usage"' in block and '"skill_names"' in block, "Missing usage or skill_names in response"
-        assert '"total_invocations"' in block and '"unique_skills_used"' in block, "Missing total_invocations or unique_skills_used"
+        response = {}
+
+        assert automation_queries.handle_get(
+            object(),
+            SimpleNamespace(path="/api/skills/usage"),
+            _usage_route_context(tmp_path, response),
+        ) is True
+        assert response == {
+            "usage": {},
+            "skill_names": [],
+            "total_invocations": 0,
+            "unique_skills_used": 0,
+        }
+
+    def test_route_returns_usage_structure(self, tmp_path):
+        """The observable response includes normalized usage and aggregate fields."""
+        from api.http.routes import automation_queries
+
+        (tmp_path / ".usage.json").write_text(
+            json.dumps(
+                {
+                    "alpha": {
+                        "use_count": "2",
+                        "view_count": 1,
+                        "state": "active",
+                    },
+                    "broken": "not-a-mapping",
+                }
+            ),
+            encoding="utf-8",
+        )
+        response = {}
+        context = _usage_route_context(tmp_path, response)
+        context["_skills_list_from_dir"] = lambda _root: {
+            "skills": [{"name": "zeta"}, {"name": "alpha"}]
+        }
+
+        assert automation_queries.handle_get(
+            object(),
+            SimpleNamespace(path="/api/skills/usage"),
+            context,
+        ) is True
+        assert response == {
+            "usage": {
+                "alpha": {
+                    "use_count": 2,
+                    "view_count": 1,
+                    "patch_count": 0,
+                    "state": "active",
+                },
+                "broken": {"use_count": 0, "view_count": 0, "patch_count": 0},
+            },
+            "skill_names": ["alpha", "zeta"],
+            "total_invocations": 3,
+            "unique_skills_used": 1,
+        }
