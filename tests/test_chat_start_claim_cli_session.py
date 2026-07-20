@@ -28,7 +28,7 @@ from api.sessions import foreign_session_access, materialization
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CHAT_RUNS_PY = ROOT / "api" / "routes_parts" / "chat_runs.py"
+CHAT_RUNS_PY = ROOT / "api" / "routes_parts" / "chat_turns.py"
 SESSION_QUERIES_PY = ROOT / "api" / "http" / "routes" / "session_queries.py"
 
 

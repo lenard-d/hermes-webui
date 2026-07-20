@@ -4,7 +4,15 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from typing import Any
+
+from api.config import SESSION_DIR
+from api.sessions.store import Session, new_session
+
+from .channels import create_stream_channel
+from .local_entrypoint import run_agent_streaming
+from .runtime_state import register_runtime_stream, runtime_stream_alive
 
 logger = logging.getLogger(__name__)
 
@@ -85,3 +93,173 @@ def cleanup_btw(parent_sid: str) -> dict[str, Any] | None:
     """Remove and return btw tracking for a parent session."""
     with _lock:
         return _BTW_TRACKING.pop(parent_sid, None)
+
+
+def start_btw(parent_session, question: str) -> dict:
+    """Start one ephemeral side-question run without mutating the parent."""
+    current_stream_id = getattr(parent_session, "active_stream_id", None)
+    if current_stream_id:
+        if runtime_stream_alive(current_stream_id):
+            return {
+                "error": "session already has an active stream",
+                "_status": 409,
+            }
+        parent_session.active_stream_id = None
+
+    model_provider = getattr(parent_session, "model_provider", None)
+    ephemeral = new_session(
+        workspace=parent_session.workspace,
+        model=parent_session.model,
+        model_provider=model_provider,
+        profile=getattr(parent_session, "profile", None),
+    )
+    ephemeral.messages = list(parent_session.messages or [])
+    ephemeral.title = f"btw: {question[:60]}"
+    ephemeral.save()
+    stream_id = uuid.uuid4().hex
+    ephemeral.active_stream_id = stream_id
+    ephemeral.save()
+    register_runtime_stream(
+        stream_id,
+        ephemeral.session_id,
+        create_stream_channel(),
+    )
+    track_btw(
+        parent_session.session_id,
+        ephemeral.session_id,
+        stream_id,
+        question,
+    )
+    threading.Thread(
+        target=run_agent_streaming,
+        args=(
+            ephemeral.session_id,
+            question,
+            parent_session.model,
+            parent_session.workspace,
+            stream_id,
+            None,
+        ),
+        kwargs={"ephemeral": True, "model_provider": model_provider},
+        daemon=True,
+    ).start()
+    return {
+        "stream_id": stream_id,
+        "session_id": ephemeral.session_id,
+        "parent_session_id": parent_session.session_id,
+    }
+
+
+def _last_assistant_answer(session_id: str) -> str:
+    reloaded = Session.load(session_id)
+    for message in reversed((reloaded.messages if reloaded else None) or []):
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        if message.get("_error"):
+            continue
+        content = str(message.get("content") or "").strip()
+        if content:
+            return content
+    return ""
+
+
+def _run_background_and_complete(
+    *,
+    parent_session_id: str,
+    background_session_id: str,
+    task_id: str,
+    prompt: str,
+    model,
+    model_provider,
+    workspace,
+    stream_id: str,
+) -> None:
+    try:
+        run_agent_streaming(
+            background_session_id,
+            prompt,
+            model,
+            workspace,
+            stream_id,
+            None,
+            model_provider=model_provider,
+        )
+        try:
+            answer = _last_assistant_answer(background_session_id)
+        except Exception:
+            complete_background(
+                parent_session_id,
+                task_id,
+                "(background task failed)",
+            )
+            answer = None
+        if answer is not None:
+            complete_background(
+                parent_session_id,
+                task_id,
+                answer or "(no answer produced)",
+            )
+        try:
+            (SESSION_DIR / f"{background_session_id}.json").unlink(
+                missing_ok=True
+            )
+        except Exception:
+            logger.debug(
+                "failed to remove hidden background session %s",
+                background_session_id,
+                exc_info=True,
+            )
+    except Exception:
+        complete_background(
+            parent_session_id,
+            task_id,
+            "(background task failed)",
+        )
+
+
+def start_background(parent_session, prompt: str) -> dict:
+    """Create, register, and run one tracked background task."""
+    model_provider = getattr(parent_session, "model_provider", None)
+    background = new_session(
+        workspace=parent_session.workspace,
+        model=parent_session.model,
+        model_provider=model_provider,
+        profile=getattr(parent_session, "profile", None),
+    )
+    background.title = f"bg: {prompt[:60]}"
+    background.save()
+    stream_id = uuid.uuid4().hex
+    background.active_stream_id = stream_id
+    background.save()
+    register_runtime_stream(
+        stream_id,
+        background.session_id,
+        create_stream_channel(),
+    )
+    task_id = uuid.uuid4().hex[:8]
+    track_background(
+        parent_session.session_id,
+        background.session_id,
+        stream_id,
+        task_id,
+        prompt,
+    )
+    threading.Thread(
+        target=_run_background_and_complete,
+        kwargs={
+            "parent_session_id": parent_session.session_id,
+            "background_session_id": background.session_id,
+            "task_id": task_id,
+            "prompt": prompt,
+            "model": parent_session.model,
+            "model_provider": model_provider,
+            "workspace": parent_session.workspace,
+            "stream_id": stream_id,
+        },
+        daemon=True,
+    ).start()
+    return {
+        "task_id": task_id,
+        "stream_id": stream_id,
+        "session_id": background.session_id,
+    }

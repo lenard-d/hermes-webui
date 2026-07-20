@@ -7,11 +7,8 @@ fallback cases the maintainer asked about.
 """
 import base64
 import os
-import struct
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
-import pytest
 
 from api.runs.attachments import _attachment_name, _build_native_multimodal_message, _NATIVE_IMAGE_MAX_BYTES
 from api.runs.message_sanitization import _sanitize_messages_for_api
@@ -352,7 +349,7 @@ class TestBuildNativeMultimodalMessage:
 
     def test_sync_chat_history_sanitizer_receives_config(self):
         """#2398: fallback POST /api/chat must use the text-mode history sanitizer too."""
-        src = Path('api/routes_parts/chat_runs.py').read_text()
+        src = Path('api/runs/synchronous.py').read_text()
         assert 'conversation_history=_sanitize_messages_for_api(' in src, (
             'The legacy synchronous /api/chat endpoint must sanitize history through '
             '_sanitize_messages_for_api.'

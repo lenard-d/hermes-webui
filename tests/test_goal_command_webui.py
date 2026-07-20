@@ -18,10 +18,10 @@ SESSION_MUTATIONS_PY = (
     REPO_ROOT / "api" / "http" / "routes" / "session_mutations.py"
 ).read_text(encoding="utf-8")
 CHAT_RUNS_PY = (
-    REPO_ROOT / "api" / "routes_parts" / "chat_runs.py"
+    REPO_ROOT / "api" / "routes_parts" / "chat_controls.py"
 ).read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
-    REPO_ROOT / "api" / "runs" / "local.py"
+    REPO_ROOT / "api" / "runs" / "local_success.py"
 ).read_text(encoding="utf-8")
 
 
@@ -548,25 +548,25 @@ def test_chat_start_forwards_goal_related_to_gateway_worker(monkeypatch, tmp_pat
 
 def test_streaming_post_turn_goal_hook_surfaces_and_continues():
     assert "evaluate_goal_after_turn" in LOCAL_RUN_PY
-    assert "put('goal'" in LOCAL_RUN_PY
-    assert "decision.get('should_continue')" in LOCAL_RUN_PY
+    assert 'publish(\n                "goal"' in LOCAL_RUN_PY
+    assert 'decision.get("should_continue")' in LOCAL_RUN_PY
     assert "continuation_prompt" in LOCAL_RUN_PY
-    assert "put('goal_continue'" in LOCAL_RUN_PY
+    assert 'publish(\n                "goal_continue"' in LOCAL_RUN_PY
     goal_idx = LOCAL_RUN_PY.find("evaluate_goal_after_turn")
-    done_idx = LOCAL_RUN_PY.find("put('done'", goal_idx)
-    assert goal_idx != -1 and done_idx != -1
-    assert goal_idx < done_idx, "goal status should be emitted before the terminal done payload"
+    continuation_idx = LOCAL_RUN_PY.find('"goal_continue"', goal_idx)
+    assert goal_idx != -1 and continuation_idx != -1
+    assert goal_idx < continuation_idx
 
 
 def test_streaming_goal_hook_emits_evaluating_state_before_judge():
-    evaluating_idx = LOCAL_RUN_PY.find("'state': 'evaluating'")
-    judge_idx = LOCAL_RUN_PY.find("_goal_decision = evaluate_goal_after_turn")
-    done_idx = LOCAL_RUN_PY.find("put('done'", judge_idx)
+    evaluating_idx = LOCAL_RUN_PY.find('"state": "evaluating"')
+    judge_idx = LOCAL_RUN_PY.find("decision = evaluate_goal_after_turn")
+    continuation_idx = LOCAL_RUN_PY.find('"goal_continue"', judge_idx)
     assert evaluating_idx != -1, "goal hook should emit an evaluating state before judge round-trip"
-    assert judge_idx != -1 and done_idx != -1
-    assert evaluating_idx < judge_idx < done_idx
+    assert judge_idx != -1 and continuation_idx != -1
+    assert evaluating_idx < judge_idx < continuation_idx
     assert "Evaluating goal progress…" in LOCAL_RUN_PY
-    assert "'state': 'continuing' if decision.get('should_continue') else 'idle'" in LOCAL_RUN_PY
+    assert '"state": "continuing" if decision.get("should_continue") else "idle"' in LOCAL_RUN_PY
 
 
 def test_frontend_has_goal_slash_command_and_status_event_handler():

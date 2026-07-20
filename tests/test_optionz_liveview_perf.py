@@ -279,7 +279,7 @@ def test_sse_write_deadline_env_override(monkeypatch):
 
 
 def test_start_session_turn_emits_server_turn_started():
-    src = (REPO_ROOT / "api" / "routes_parts" / "chat_runs.py").read_text()
+    src = (REPO_ROOT / "api" / "runs" / "server_turn.py").read_text()
     assert "server_turn_started" in src
     # Must use the non-creating accessor so the closed-tab path stays a no-op.
     assert "get_session_channel" in src

@@ -151,6 +151,9 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       routes_parts/        Importable chat-run, projection, stream transport, media, model,
                            workspace, Git, and thin Cron/terminal/login/notes/TTS HTTP Adapters,
                            compression, and response route owners
+        chat_runs.py       Thin compatibility/composition facade for chat-run HTTP exports
+        chat_turns.py      Browser chat-start, input normalization, and synchronous HTTP handlers
+        chat_controls.py   Background acknowledgement, compression recovery, and goal controls
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
       streaming/           Public streaming interface plus semantic transport, replay,
@@ -168,6 +171,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
           policy.py        Exchange selection, prompts, validation, and local fallback
           provider_invocation.py Auxiliary/active-agent routing, retries, and response normalization
           lifecycle.py     Background scheduling, owner-locked writes, and title events
+        turn_start.py      Prepared-turn backend selection and Local/Gateway admission interface
+        server_turn.py     Autonomous server-turn composition and live-channel publication
+        process_wakeup.py  Serialized provider-pause revalidation and wakeup suppression
+        turn_input.py      Workspace repair and attachment normalization policy
+        synchronous.py     Legacy synchronous chat execution and transcript persistence
+        background.py      Ephemeral/background run lifecycle and result tracking
       model_context.py     Shared context-window lookup and refresh policy
       workspace_context.py Shared workspace display/prefix and runtime-path policy
       updates/             Self-update package with a small public interface

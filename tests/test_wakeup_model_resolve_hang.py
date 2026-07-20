@@ -283,14 +283,13 @@ def test_get_available_models_has_prefer_cache_param():
 
 
 def test_start_session_turn_uses_cached_catalog():
-    src = (REPO_ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
+    src = (REPO_ROOT / "api" / "runs" / "server_turn.py").read_text(
         encoding="utf-8"
     )
     # The wakeup entrypoint must resolve with the cache-only flag.
-    i = src.find("def start_session_turn(")
+    i = src.find("def start_prepared_session_turn(")
     assert i != -1
-    j = src.find("def _handle_process_complete_ack", i)
-    body = src[i:j]
+    body = src[i:]
     assert "prefer_cached_catalog=True" in body, (
         "start_session_turn must pass prefer_cached_catalog=True"
     )

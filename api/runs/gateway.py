@@ -490,8 +490,14 @@ def _run_gateway_chat_streaming(
             release_gateway_run(stream_id)
 
 
+# Public run-owner interface.  The private name remains as a compatibility
+# alias for established imports while routes migrate onto api.runs.
+run_gateway_chat_streaming = _run_gateway_chat_streaming
+
+
 __all__ = [
     "gateway_chat_config_status",
+    "run_gateway_chat_streaming",
     "webui_chat_backend_mode",
     "webui_gateway_chat_enabled",
 ]

@@ -116,7 +116,7 @@ def test_moa_config_is_per_turn_not_persisted():
         Path(__file__).resolve().parent.parent
         / "api"
         / "runs"
-        / "local.py"
+        / "local_conversation.py"
     )
     source = streaming_path.read_text(encoding="utf-8")
     # moa_config is threaded into the live agent turn as a per-turn kwarg. It is
@@ -131,7 +131,7 @@ def test_moa_config_is_per_turn_not_persisted():
         Path(__file__).resolve().parent.parent
         / "api"
         / "routes_parts"
-        / "chat_runs.py"
+        / "chat_turns.py"
     )
     routes_source = routes_path.read_text(encoding="utf-8")
     assert re.search(r"if body\.get\(\"moa_config\"\):[\s\S]*?moa_config = resolve_moa_config\(\)", routes_source), \
@@ -180,7 +180,11 @@ def test_moa_gateway_chat_start_fails_closed(monkeypatch, tmp_path):
     def resolve_moa_config():  # pragma: no cover - should fail before resolving MoA
         raise AssertionError("gateway-backed /moa must fail before resolving MoA config")
 
-    monkeypatch.setattr(routes, "get_session", lambda _sid: _Session())
+    monkeypatch.setattr(
+        routes,
+        "_get_or_materialize_session",
+        lambda _sid, **_kwargs: _Session(),
+    )
     monkeypatch.setattr(routes, "_resolve_chat_workspace_with_recovery", lambda _s, _w: str(tmp_path))
     monkeypatch.setattr(routes, "_start_run", start_run)
     monkeypatch.setattr(routes, "get_config", lambda: {"chat_backend": "gateway"})

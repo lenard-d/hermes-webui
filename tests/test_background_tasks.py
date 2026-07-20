@@ -20,10 +20,8 @@ tracker until they resolve.
 """
 from __future__ import annotations
 
-import os
 import pathlib
 import sys
-import time
 import unittest
 from unittest.mock import patch
 
@@ -113,37 +111,36 @@ class TestGetResultsKeepsRunningTasks(unittest.TestCase):
         self.assertNotIn(parent, self.bg._BACKGROUND_TASKS)
 
 
-class TestBackgroundCompletionHookWiring(unittest.TestCase):
-    """Static check: the _handle_background worker thread must call
-    complete_background() after _run_agent_streaming returns.  Without this,
-    running tasks stay forever-running and the user never sees the result.
-    """
+class TestBackgroundCompletionOwner(unittest.TestCase):
+    """The run owner must settle tracking after execution returns."""
 
-    def test_run_bg_and_notify_calls_complete_background(self):
-        """_handle_background must wrap _run_agent_streaming in a function
-        that subsequently invokes complete_background(parent_sid, task_id, answer)."""
-        routes_src = (REPO_ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
-            encoding="utf-8"
-        )
-        # Locate the _handle_background function
-        idx = routes_src.find("def _handle_background(")
-        self.assertGreater(idx, -1, "_handle_background() not found in routes.py")
-        # Take a generous window around the function body
-        end = routes_src.find("\ndef ", idx + 1)
-        body = routes_src[idx:end if end > 0 else idx + 3000]
+    def test_worker_completes_with_the_persisted_assistant_answer(self):
+        import api.runs.background as owner
 
-        self.assertIn("complete_background", body, (
-            "_handle_background worker must call complete_background() after "
-            "_run_agent_streaming returns — otherwise the tracker never "
-            "transitions the task to status='done' and /api/background/status "
-            "returns nothing forever. See api/background.py:complete_background."
-        ))
-        # Must extract the last assistant message content from the bg session
-        self.assertIn("_run_agent_streaming", body)
-        self.assertIn("Session.load", body, (
-            "_run_bg_and_notify must reload the bg session to extract the "
-            "final assistant reply so complete_background gets an actual answer"
-        ))
+        completed = []
+        with (
+            patch.object(owner, "run_agent_streaming", return_value=None),
+            patch.object(owner, "_last_assistant_answer", return_value="answer!"),
+            patch.object(
+                owner,
+                "complete_background",
+                side_effect=lambda parent, task, answer: completed.append(
+                    (parent, task, answer)
+                ),
+            ),
+        ):
+            owner._run_background_and_complete(
+                parent_session_id="parent",
+                background_session_id="background",
+                task_id="task",
+                prompt="slow task",
+                model="model",
+                model_provider="provider",
+                workspace="/tmp",
+                stream_id="stream",
+            )
+
+        self.assertEqual(completed, [("parent", "task", "answer!")])
 
 
 if __name__ == "__main__":

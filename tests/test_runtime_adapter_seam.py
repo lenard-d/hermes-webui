@@ -1,7 +1,6 @@
 import importlib
 import io
 import os
-import queue
 from pathlib import Path
 
 from tests.conftest import requires_agent_modules
@@ -297,9 +296,9 @@ def test_approval_and_clarify_routes_use_adapter_only_when_flag_enabled():
 
 def test_goal_route_uses_adapter_only_when_flag_enabled():
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
+    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_controls.py").read_text(encoding="utf-8")
     goal_idx = src.index("def _handle_goal_command")
-    goal_body = src[goal_idx:src.index("def _handle_chat_start", goal_idx)]
+    goal_body = src[goal_idx:]
 
     assert "runtime_adapter_enabled()" in goal_body
     assert "LegacyJournalRuntimeAdapter(goal_delegate=_legacy_goal_update)" in goal_body
@@ -363,10 +362,8 @@ def test_approval_respond_approves_from_gateway_queues_when_pending_empty() -> N
     pattern_keys when _pending has no matching entry, and calls
     approve_session() even though pending is None (the real streaming case).
     """
-    import threading
     from api.routes import _resolve_approval_legacy
 
-    routes = importlib.import_module("api.routes")
     approval_mod = importlib.import_module("tools.approval")
 
     test_sid = "__test_gateway_approval_sid__"
@@ -409,25 +406,27 @@ def test_approval_respond_approves_from_gateway_queues_when_pending_empty() -> N
 
 def test_chat_start_route_selects_adapter_only_when_flag_enabled():
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
+    repo = routes.Path(__file__).parent.parent
+    helper_src = (repo / "api" / "runs" / "turn_start.py").read_text(encoding="utf-8")
+    route_src = (repo / "api" / "routes_parts" / "chat_turns.py").read_text(encoding="utf-8")
     # NOTE: T-2979-fix factored the adapter-selection block out of
     # _handle_chat_start into the shared `_start_run` helper (used by both
     # /api/chat/start and start_session_turn — Q-2979-A2 / Copilot
     # r3305864087/r3305864173). Scan the helper body for the contract; the
     # route body only needs to delegate to it.
-    helper_idx = src.index("def _start_run(")
-    helper_body = src[helper_idx:src.index("def start_session_turn(", helper_idx)]
-    start_idx = src.index("def _handle_chat_start")
-    start_body = src[start_idx:src.index("def _resolve_chat_workspace_with_recovery", start_idx)]
+    helper_idx = helper_src.index("def start_run(")
+    helper_body = helper_src[helper_idx:]
+    start_idx = route_src.index("def _handle_chat_start")
+    start_body = route_src[start_idx:route_src.index("def _resolve_chat_workspace_with_recovery", start_idx)]
 
     # Contract enforced in the shared helper:
-    assert "runtime_adapter_enabled()" in helper_body
-    assert "runtime_adapter_runner_enabled()" in helper_body
-    assert "build_runtime_adapter(" in helper_body
-    assert "legacy_adapter_factory=_legacy_adapter_factory" in helper_body
-    assert "runner_client_factory=_runtime_runner_client_factory" in helper_body
+    assert "runtime_adapter.runtime_adapter_enabled()" in helper_body
+    assert "runtime_adapter.runtime_adapter_runner_enabled()" in helper_body
+    assert "runtime_adapter.build_runtime_adapter(" in helper_body
+    assert "legacy_adapter_factory=legacy_adapter_factory" in helper_body
+    assert "runner_client_factory=runner_client_factory" in helper_body
     assert "LegacyJournalRuntimeAdapter" in helper_body
-    assert "_start_chat_stream_for_session(" in helper_body
+    assert "start_stream(" in helper_body
     # Route delegates to the helper instead of inlining env checks:
     assert "_start_run(" in start_body
     assert "HERMES_WEBUI_RUNTIME_ADAPTER" not in start_body, "route should use runtime_adapter_enabled() via _start_run, not inline env checks"
@@ -436,35 +435,39 @@ def test_chat_start_route_selects_adapter_only_when_flag_enabled():
 
 def test_runner_local_chat_start_selection_does_not_fallback_to_legacy():
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
+    repo = routes.Path(__file__).parent.parent
+    helper_src = (repo / "api" / "runs" / "turn_start.py").read_text(encoding="utf-8")
+    route_src = (repo / "api" / "routes_parts" / "chat_turns.py").read_text(encoding="utf-8")
+    compatibility_src = (repo / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
     # See note in test_chat_start_route_selects_adapter_only_when_flag_enabled
     # — adapter selection moved into the shared `_start_run` helper.
-    helper_idx = src.index("def _start_run(")
-    helper_body = src[helper_idx:src.index("def start_session_turn(", helper_idx)]
-    start_idx = src.index("def _handle_chat_start")
-    start_body = src[start_idx:src.index("def _resolve_chat_workspace_with_recovery", start_idx)]
+    helper_idx = helper_src.index("def start_run(")
+    helper_body = helper_src[helper_idx:]
+    start_idx = route_src.index("def _handle_chat_start")
+    start_body = route_src[start_idx:route_src.index("def _resolve_chat_workspace_with_recovery", start_idx)]
 
-    flag_branch = "if runtime_adapter_enabled() or runtime_adapter_runner_enabled():"
-    assert flag_branch in helper_body
+    assert "runtime_adapter.runtime_adapter_enabled()" in helper_body
+    assert "runtime_adapter.runtime_adapter_runner_enabled()" in helper_body
     assert "except NotImplementedError as exc:" in helper_body
     # The helper returns {"error": str(exc), "_status": 501}; the route then
     # maps that onto the legacy j(handler, {...}, status=501) response shape
     # to keep the public contract identical to pre-refactor behavior.
     assert 'return {"error": str(exc), "_status": 501}' in helper_body
     assert 'return j(handler, {"error": response["error"]}, status=501)' in start_body
-    assert "runner-local chat backend is not configured" in src
+    assert "def _runtime_runner_client_factory" in compatibility_src
+    assert "runner_client_factory=runner_client_factory" in helper_body
     # The adapter branch inside the helper still calls _start_chat_stream_for_session
     # through the _legacy_start_run delegate before the trailing legacy-direct
     # fallthrough (the function returns the legacy direct call when the flag
     # is off — no `else:` keyword anymore since each branch returns).
-    adapter_branch_start = helper_body.index(flag_branch)
+    adapter_branch_start = helper_body.index("if (")
     # Slice up to the final (post-flag) return _start_chat_stream_for_session
     # — there are two occurrences: one inside _legacy_start_run, one at the
     # fallthrough; we want both inside the branch slice.
-    fallthrough = helper_body.rindex("return _start_chat_stream_for_session(")
+    fallthrough = helper_body.rindex("return start_stream(")
     adapter_branch = helper_body[adapter_branch_start:fallthrough]
-    assert "_start_chat_stream_for_session(" in adapter_branch, "legacy-journal delegate should still call the legacy path"
-    assert "runtime_adapter_runner_enabled()" in adapter_branch or "runtime_adapter_runner_enabled()" in helper_body
+    assert "start_stream(" in adapter_branch, "legacy-journal delegate should still call the legacy path"
+    assert "runtime_adapter.runtime_adapter_runner_enabled()" in helper_body
 
 
 def test_chat_start_adapter_path_preserves_legacy_response_shape():
@@ -474,9 +477,9 @@ def test_chat_start_adapter_path_preserves_legacy_response_shape():
     route must not add fields that the legacy-direct response does not expose.
     """
     routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes_parts" / "chat_runs.py").read_text(encoding="utf-8")
-    helper_idx = src.index("def _chat_start_response_from_run_start")
-    helper_body = src[helper_idx:src.index("def _runtime_adapter_goal_action", helper_idx)]
+    src = (routes.Path(__file__).parent.parent / "api" / "runs" / "turn_start.py").read_text(encoding="utf-8")
+    helper_idx = src.index("def chat_start_response_from_run_start")
+    helper_body = src[helper_idx:src.index("def runtime_adapter_goal_action", helper_idx)]
 
     assert '"stream_id",' in helper_body
     assert '"session_id",' in helper_body
