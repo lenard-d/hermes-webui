@@ -6,7 +6,7 @@ import pytest
 
 import api.config as config
 import api.sessions.store as models
-import api.sessions.pending_recovery as session_pending_recovery
+import api.sessions.pending_recovery.sidecar_recovery as session_pending_recovery
 import api.sessions.records as session_records
 import api.sessions.recovery as session_recovery
 from api.runs import compression_anchors, transcript, turn_context

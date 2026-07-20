@@ -22,7 +22,7 @@ import pytest
 import api.sessions.store as models
 import api.sessions.cache as session_cache
 import api.sessions.external_sidebar as session_external
-import api.sessions.pending_recovery as session_pending_recovery
+import api.sessions.pending_recovery.sidecar_recovery as session_pending_recovery
 import api.sessions.projects as session_projects
 import api.sessions.records as session_records
 import api.sessions.session_index as session_index

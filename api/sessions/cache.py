@@ -46,12 +46,12 @@ from .state_db import (  # noqa: F401 - compatibility re-exports
     get_state_db_session_summary,
 )
 from .message_identity import _message_content_text
-from .pending_recovery import (
-    _repair_stale_pending,
+from .pending_recovery.journal_retry import (
     _session_has_pending_journal_retry,
-    _sync_sidecar_from_state_db_if_newer,
     _try_retry_journal_recovery_in_place,
 )
+from .pending_recovery.sidecar_recovery import _repair_stale_pending
+from .pending_recovery.state_db_recovery import _sync_sidecar_from_state_db_if_newer
 from .process_wakeup import _get_profile_home
 from .reconciliation import reconciled_state_db_messages_for_session
 

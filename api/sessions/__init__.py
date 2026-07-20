@@ -49,7 +49,7 @@ from .cache import get_session, new_session
 from .anchor_scene import AnchorSceneMessageNotFound, persist_anchor_activity_scene
 from .focused_continuation import start_or_get_focused_continuation
 from .external import clear_cli_sessions_cache
-from .pending_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
+from .pending_recovery.sidecar_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 from .process_wakeup import clear_process_wakeup_pause
 from .projects import load_projects, title_from
 from .reconciliation import merge_session_messages_append_only

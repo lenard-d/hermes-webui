@@ -101,7 +101,7 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     import api.config as config
     import api.sessions.cache as session_cache
     import api.sessions.external_sidebar as session_external
-    import api.sessions.pending_recovery as pending_recovery
+    import api.sessions.pending_recovery.sidecar_recovery as pending_recovery
     import api.sessions.projects as session_projects
     import api.sessions.records as session_records
     import api.sessions.sidebar as session_sidebar

@@ -20,6 +20,8 @@ from api.sessions.store import (
 )
 import api.config as config
 import api.sessions.records as session_records
+import api.sessions.pending_recovery.journal_retry as pending_journal_retry
+import api.sessions.pending_recovery.sidecar_recovery as pending_sidecar_recovery
 from api.runs import agent_cache, message_sanitization, turn_context
 import api.profiles as profiles
 from api.run_journal import append_run_event
@@ -36,6 +38,8 @@ def _isolate_session_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(pending_sidecar_recovery, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(pending_sidecar_recovery, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
 
@@ -1411,13 +1415,13 @@ class TestRetryJournalRecoveryInPlace:
         ])
         s.save()
         spy = []
-        original = models._append_journaled_partial_output
+        original = pending_journal_retry._append_journaled_partial_output
 
         def _spy(*a, **kw):
             spy.append(1)
             return original(*a, **kw)
 
-        monkeypatch.setattr(models, "_append_journaled_partial_output", _spy)
+        monkeypatch.setattr(pending_journal_retry, "_append_journaled_partial_output", _spy)
         ok = models._retry_journal_recovery_in_place(s)
         assert ok is False
         assert spy == [], "no pending marker → must not call recovery"
@@ -1551,9 +1555,9 @@ class TestLazyRetryBackwardsCompat:
         s.save()
         models.SESSIONS.pop(sid, None)
         spy = []
-        original = models._append_journaled_partial_output
+        original = pending_journal_retry._append_journaled_partial_output
         monkeypatch.setattr(
-            models, "_append_journaled_partial_output",
+            pending_journal_retry, "_append_journaled_partial_output",
             lambda *a, **kw: spy.append(1) or original(*a, **kw),
         )
         models.get_session(sid)

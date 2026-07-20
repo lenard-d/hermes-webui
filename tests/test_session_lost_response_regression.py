@@ -25,7 +25,9 @@ import pytest
 
 import api.sessions.store as models
 import api.sessions.cache as session_cache
-import api.sessions.pending_recovery as pending_recovery
+import api.sessions.pending_recovery.journal_retry as pending_journal_retry
+import api.sessions.pending_recovery.sidecar_recovery as pending_sidecar_recovery
+import api.sessions.pending_recovery.state_db_recovery as pending_state_db_recovery
 import api.sessions.records as session_records
 import api.config as config
 import api.profiles as profiles
@@ -46,7 +48,7 @@ def _isolate_session_dir(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    for module in (models, session_cache, pending_recovery, session_records):
+    for module in (models, session_cache, pending_sidecar_recovery, session_records):
         monkeypatch.setattr(module, "SESSION_DIR", session_dir)
         monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_file)
     models.SESSIONS.clear()
@@ -632,7 +634,7 @@ def test_concurrent_get_session_serializes_lazy_journal_retry(hermes_home, monke
         assert release.wait(timeout=2), "test timed out waiting to release retry body"
         return False
 
-    monkeypatch.setattr(pending_recovery, "_retry_journal_recovery_in_place", slow_retry)
+    monkeypatch.setattr(pending_journal_retry, "_retry_journal_recovery_in_place", slow_retry)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         first = executor.submit(models.get_session, sid)
@@ -652,12 +654,12 @@ def test_still_arriving_journal_does_not_consume_retry_budget(hermes_home, monke
     models.SESSIONS[sid] = s
 
     monkeypatch.setattr(
-        pending_recovery,
+        pending_journal_retry,
         "_append_journaled_partial_output",
         lambda *a, **kw: False,
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_journal_retry,
         "_journal_is_still_arriving",
         lambda *a, **kw: True,
     )
@@ -705,7 +707,7 @@ def test_marker_demotes_after_max_attempts_with_sealed_empty_journal(hermes_home
 
 def test_marker_demotes_after_giveup_seconds(hermes_home, monkeypatch):
     base = 1_779_000_000
-    monkeypatch.setattr(pending_recovery.time, "time", lambda: base)
+    monkeypatch.setattr(pending_journal_retry.time, "time", lambda: base)
     sid = "retry_age_sid"
     stream_id = "retry_age_stream"
     s = _make_pending_retry_session(sid, stream_id=stream_id)
@@ -722,7 +724,7 @@ def test_marker_demotes_after_giveup_seconds(hermes_home, monkeypatch):
         return False
 
     monkeypatch.setattr(
-        pending_recovery,
+        pending_journal_retry,
         "_append_journaled_partial_output",
         append_should_not_run,
     )
@@ -812,12 +814,12 @@ def test_get_session_syncs_sidecar_from_newer_state_db_even_when_stream_not_term
         {"role": "assistant", "content": "latest live progress", "timestamp": 105.0},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": 105.0},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
@@ -866,12 +868,12 @@ def test_get_session_does_not_sync_while_stream_is_still_live(monkeypatch):
         {"role": "assistant", "content": "partial live text", "timestamp": 103.0},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": 103.0},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
@@ -921,12 +923,12 @@ def test_sync_save_failure_does_not_mutate_session(monkeypatch):
         {"role": "assistant", "content": "recovered text", "timestamp": 103.0},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": 103.0},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
@@ -937,7 +939,7 @@ def test_sync_save_failure_does_not_mutate_session(monkeypatch):
 
     monkeypatch.setattr(Session, "save", boom)
 
-    result = pending_recovery._sync_sidecar_from_state_db_if_newer(s)
+    result = pending_state_db_recovery._sync_sidecar_from_state_db_if_newer(s)
 
     # Sync reports failure and the live object is NOT mutated.
     assert result is False
@@ -974,17 +976,17 @@ def test_sync_persists_recovered_state_db_tail_when_stream_dead(monkeypatch):
         {"role": "assistant", "content": "recovered tail", "timestamp": 103.0},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": 103.0},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
 
-    result = pending_recovery._sync_sidecar_from_state_db_if_newer(s)
+    result = pending_state_db_recovery._sync_sidecar_from_state_db_if_newer(s)
 
     assert result is True
     assert s.active_stream_id is None
@@ -1032,12 +1034,12 @@ def test_sync_skips_during_registration_window_recent_pending(monkeypatch):
         {"role": "assistant", "content": "first streamed token", "timestamp": time.time()},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": time.time()},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
@@ -1045,7 +1047,7 @@ def test_sync_skips_during_registration_window_recent_pending(monkeypatch):
     config.STREAMS.pop(stream_id, None)
     config.ACTIVE_RUNS.pop(stream_id, None)
 
-    result = pending_recovery._sync_sidecar_from_state_db_if_newer(s)
+    result = pending_state_db_recovery._sync_sidecar_from_state_db_if_newer(s)
 
     # Self-heal must back off: the turn is still starting up.
     assert result is False
@@ -1089,12 +1091,12 @@ def test_sync_backs_off_when_session_lock_is_held(monkeypatch):
         {"role": "assistant", "content": "recovered tail", "timestamp": 103.0},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": 103.0},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
@@ -1104,7 +1106,7 @@ def test_sync_backs_off_when_session_lock_is_held(monkeypatch):
     lock = models._get_session_agent_lock(sid)
     assert lock.acquire(blocking=False)
     try:
-        result = pending_recovery._sync_sidecar_from_state_db_if_newer(s)
+        result = pending_state_db_recovery._sync_sidecar_from_state_db_if_newer(s)
     finally:
         lock.release()
 
@@ -1150,12 +1152,12 @@ def test_sync_revalidates_against_concurrent_disk_write_under_lock(monkeypatch):
         {"role": "assistant", "content": "recovered tail", "timestamp": 103.0},
     ]
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_summary",
         lambda sid_arg, profile=None: {"message_count": len(state_messages), "last_message_at": 103.0},
     )
     monkeypatch.setattr(
-        pending_recovery,
+        pending_state_db_recovery,
         "get_state_db_session_messages",
         lambda sid_arg, **kwargs: list(state_messages),
     )
@@ -1168,7 +1170,7 @@ def test_sync_revalidates_against_concurrent_disk_write_under_lock(monkeypatch):
     disk.active_stream_id = "rotated_stream_after_compression"
     disk.save(touch_updated_at=False)
 
-    result = pending_recovery._sync_sidecar_from_state_db_if_newer(s)
+    result = pending_state_db_recovery._sync_sidecar_from_state_db_if_newer(s)
 
     assert result is False
     # On-disk record keeps the concurrent writer's value — not overwritten.

@@ -96,6 +96,7 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         claude_code.py     Bounded read-only Claude Code JSONL discovery and parse cache
         external_sidebar.py Profile-aware CLI/cron/webhook projection and single-flight cache
         gateway_identity.py Gateway registry identity projection and stat-keyed cache
+        pending_recovery/  Interrupted-turn marker, journal replay/retry, sidecar, and state.db owners
         state_db.py        Read-only Agent state queries, transcript readers, and cache fingerprints
       providers/           Provider compatibility package plus credential, cost-history,
                            and account/quota owners
@@ -400,6 +401,19 @@ larger migration remains incremental:
   `record_recovery.py` owns recovered message/context projections; and
   `record_projection.py` builds compact sidebar records. These owners receive
   the active sidecar paths explicitly where profile or test isolation matters.
+- `api/sessions/pending_recovery/` owns interrupted-turn read-side repair while
+  keeping its state layers explicit. `interruption.py` classifies the observed
+  failure and builds user-visible terminal markers; `journal_replay.py`
+  idempotently projects emitted journal evidence into transcript, context, and
+  tool metadata; `journal_retry.py` owns the bounded per-session lazy-retry
+  locks and marker lifecycle; `sidecar_recovery.py` reconciles pending ownership
+  against the core transcript and compression lineage under the session lock;
+  and `state_db_recovery.py` performs the separate fail-closed recovery from a
+  newer Hermes state transcript. The package interface preserves legacy
+  imports, while runtime callers use the specific owner they consume. Repair
+  clears pending ownership only after its selected transcript projection is
+  durably saved, never treats maintenance as fresh activity, and never resumes
+  provider execution.
 - Foreign-session reads are organized by their authoritative store.
   `api/sessions/gateway_identity.py` owns Gateway registry path resolution and
   cached identity lookup; `api/sessions/claude_code.py` owns defensive JSONL

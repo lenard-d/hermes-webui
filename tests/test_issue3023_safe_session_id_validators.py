@@ -76,7 +76,7 @@ def test_session_worktree_remove_validator_accepts_hyphenated_ids():
 def test_repair_stale_pending_validator_accepts_hyphenated_ids(monkeypatch, tmp_path):
     """``_repair_stale_pending`` in models.py must accept hyphens (#3023)."""
     import threading
-    import api.sessions.pending_recovery as models
+    import api.sessions.pending_recovery.sidecar_recovery as models
     from api.sessions.records import Session
 
     session = Session(

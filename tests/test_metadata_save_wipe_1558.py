@@ -31,7 +31,7 @@ def temp_session_dir(tmp_path, monkeypatch):
     # api.models reads SESSION_DIR at import time; patch the module-level binding.
     import api.sessions.store as _m
     import api.sessions.cache as session_cache
-    import api.sessions.pending_recovery as pending_recovery
+    import api.sessions.pending_recovery.sidecar_recovery as pending_recovery
     import api.sessions.records as session_records
     from collections import OrderedDict
     sessions = OrderedDict()

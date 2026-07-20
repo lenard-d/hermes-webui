@@ -241,7 +241,7 @@ def isolated_share_route_session_store(tmp_path, monkeypatch):
     """Keep direct route race tests out of the shared HTTP server state."""
     from api import config, routes
     import api.sessions.cache as session_cache
-    import api.sessions.pending_recovery as pending_recovery
+    import api.sessions.pending_recovery.sidecar_recovery as pending_recovery
     import api.sessions.records as session_records
     from api.sessions import store as models
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import api.sessions.pending_recovery as pending_recovery
+import api.sessions.pending_recovery.sidecar_recovery as pending_recovery
 import api.sessions.store as models
 
 

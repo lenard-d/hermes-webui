@@ -16,7 +16,7 @@ from api.sessions.lifecycle import (
     has_uncommitted_work,
     unregister_agent,
 )
-from api.sessions.pending_recovery import (
+from api.sessions.pending_recovery.sidecar_recovery import (
     _apply_core_sync_or_error_marker as apply_core_sync_or_error_marker,
 )
 from api.sessions.process_wakeup import _get_profile_home as get_profile_home
