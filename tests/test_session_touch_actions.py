@@ -1,9 +1,10 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 
 
 def _block(source: str, start_marker: str, end_marker: str) -> str:
@@ -96,7 +97,7 @@ def test_nested_fork_mobile_menu_uses_long_press_fallback():
 
 
 def test_open_session_menu_consumes_next_row_activation():
-    context_menu = _sessions_block("el.oncontextmenu=(e)=>{", "// Use release events")
+    context_menu = _sessions_block("el.oncontextmenu=(e)=>{", "\n\n  if(!readOnly){")
     assert SESSIONS_JS.count("el.oncontextmenu=(e)=>{") == 1
     assert "if(e.pointerType==='touch'||e.pointerType==='pen') return;" in context_menu
     assert "_openSessionActionMenu(s, actions||el);" in context_menu

@@ -22,6 +22,7 @@ re-binding a function reference onto `window` (`window.foo = foo;` or
 `window.foo = function(){...};`) — this is the normal "expose to global"
 pattern.
 """
+from tests.frontend_asset_contract import family_source
 import re
 from pathlib import Path
 
@@ -130,7 +131,7 @@ def test_inflight_state_limits_no_longer_collides_with_window_config():
 
     Confirms the function rename landed and the old colliding name is gone.
     """
-    ui_js = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     boot_js = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 
     # The window-attached config still exists (we deliberately kept this name).

@@ -18,6 +18,7 @@ These tests lock in:
      (#2782). A genuine CLI-origin session still returns 200 after its sidecar
      is gone.
 """
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,8 +29,8 @@ import re
 
 REPO = Path(__file__).parent.parent
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 
 
 def _api_body() -> str:

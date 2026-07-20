@@ -31,11 +31,11 @@ runtime check at a real viewport, use the private workspace tool
 `scripts/layout_scroll_probe.py`.
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import re
-from pathlib import Path
 
-CSS = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 # Values that, on overflow-x, coerce overflow-y -> auto (making a scroll
 # container). `clip` and `visible` do not coerce.

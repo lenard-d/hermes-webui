@@ -1,10 +1,11 @@
 """Regression coverage for settings navigation and master-detail refresh state."""
+from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 class TestSettingsNavigationGuard:

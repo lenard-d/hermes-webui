@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,7 +10,7 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 def test_ensure_messages_loaded_hydrates_session_todo_state_sidecar():
-    src = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     assert "if(data.session.todo_state !== undefined)" in src
     assert "S.session.todo_state = data.session.todo_state" in src
@@ -19,7 +20,7 @@ def test_ensure_messages_loaded_hydrates_session_todo_state_sidecar():
 
 
 def test_load_todos_renders_single_source_of_truth_before_legacy_scan():
-    src = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    src = family_source("panels")
     start = src.find("function loadTodos()")
     end = src.find("function _legacyTodosFromMessages()")
 
@@ -34,7 +35,7 @@ def test_load_todos_renders_single_source_of_truth_before_legacy_scan():
 
 
 def test_legacy_todos_fallback_still_uses_raw_session_messages():
-    src = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    src = family_source("panels")
 
     assert "function _legacyTodosFromMessages()" in src
     assert "const sourceMessages = (S.session && Array.isArray(S.session.messages) && S.session.messages.length) ? S.session.messages : S.messages;" in src
@@ -59,8 +60,8 @@ def test_workspace_todos_tab_prefers_live_sse_snapshot_before_cold_load_sidecar(
 
 
 def test_todo_panels_delegate_rendering_to_shared_helpers():
-    ui = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-    panels = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    ui = family_source("ui")
+    panels = family_source("panels")
     workspace = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
 
     assert "const TODO_STATUS_RENDERING=Object.freeze({" in ui
@@ -113,7 +114,7 @@ def test_workspace_files_and_artifacts_paths_stay_outside_todo_render_change():
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for shared todo renderer behavior test")
 def test_shared_todo_renderer_outputs_consistent_status_markup(tmp_path):
-    ui = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    ui = family_source("ui")
     start = ui.find("const TODO_STATUS_RENDERING=Object.freeze({")
     end = ui.find("function _todosPanelIsActive()", start)
 

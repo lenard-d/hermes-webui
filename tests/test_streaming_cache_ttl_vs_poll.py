@@ -15,6 +15,7 @@ regression these constants were added to prevent.
 This test derives the poll interval from the single source of truth (the JS
 constant) so the invariant can never silently drift when either side is retuned.
 """
+from tests.frontend_asset_contract import family_source
 
 import re
 from pathlib import Path
@@ -34,7 +35,7 @@ def _streaming_poll_seconds() -> float:
     Kept as the single source of the poll magic number so the test never encodes
     a second, drift-prone copy of it.
     """
-    source = _SESSIONS_JS.read_text(encoding="utf-8")
+    source = family_source("sessions")
     match = re.search(r"\bconst\s+_streamingPollMs\s*=\s*(\d+)\s*;", source)
     assert match, "could not find `const _streamingPollMs = <int>;` in static/sessions.js"
     poll_ms = int(match.group(1))

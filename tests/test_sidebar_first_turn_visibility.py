@@ -1,4 +1,5 @@
 """Regressions for first-turn sessions appearing in the sidebar immediately."""
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
@@ -11,7 +12,7 @@ def read(rel: str) -> str:
 
 class TestSidebarFirstTurnVisibility:
     def test_messages_send_optimistically_upserts_active_sidebar_row(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         assert "upsertActiveSessionForLocalTurn" in src, (
             "send() must optimistically upsert the active session into the sidebar "
             "as soon as the local user message is pushed."
@@ -30,8 +31,8 @@ class TestSidebarFirstTurnVisibility:
         )
 
     def test_messages_send_renders_pending_assistant_placeholder_before_chat_start(self):
-        messages = read("static/messages.js")
-        ui = read("static/ui.js")
+        messages = family_source("messages")
+        ui = family_source("ui")
         send_start = messages.index("async function send()")
         push_idx = messages.index("appendThinking('',{pending:true})", send_start)
         start_idx = messages.index("api('/api/chat/start'", send_start)
@@ -50,7 +51,7 @@ class TestSidebarFirstTurnVisibility:
         assert "(!S.activeStreamId&&!allowPendingPlaceholder)" in append_body.replace(" ", "")
 
     def test_sessions_js_has_local_turn_upsert_helper(self):
-        src = read("static/sessions.js")
+        src = family_source("sessions")
         assert "function upsertActiveSessionForLocalTurn" in src
         start = src.index("function upsertActiveSessionForLocalTurn")
         end = src.index("function renderSessionListFromCache", start)
@@ -66,13 +67,13 @@ class TestSidebarFirstTurnVisibility:
         )
 
     def test_messages_comments_document_why_each_optimistic_upsert_stays_separate(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         assert "First optimistic pass" in src and "before /api/chat/start" in src
         assert "Second optimistic pass" in src and "provisional title" in src
         assert "Third optimistic pass" in src and "stream_id is now known" in src
 
     def test_chat_start_failure_clears_optimistic_streaming_state(self):
-        messages = read("static/messages.js")
+        messages = family_source("messages")
         catch_start = messages.index("}catch(e){", messages.index("api('/api/chat/start'"))
         failure_start = messages.index("S.messages.push({role:'assistant',content:`**Error:** ${errMsg}`});", catch_start)
         catch_body = messages[failure_start:messages.index("return;", failure_start)]
@@ -86,7 +87,7 @@ class TestSidebarFirstTurnVisibility:
             "with whatever the server persisted before failing."
         )
 
-        sessions = read("static/sessions.js")
+        sessions = family_source("sessions")
         assert "function clearOptimisticSessionStreaming" in sessions
         clear_start = sessions.index("function clearOptimisticSessionStreaming")
         clear_end = sessions.index("function renderSessionListFromCache", clear_start)
@@ -135,7 +136,7 @@ class TestSidebarFirstTurnVisibility:
         assert [item["session_id"] for item in result] == [sid]
 
     def test_session_refresh_preserves_optimistic_first_turn_rows_when_server_lags(self):
-        src = read("static/sessions.js")
+        src = family_source("sessions")
         assert "function _mergeOptimisticFirstTurnSessions" in src, (
             "renderSessionList() must merge locally optimistically inserted first-turn rows "
             "back into the fetched /api/sessions result. A session switch can re-fetch before "

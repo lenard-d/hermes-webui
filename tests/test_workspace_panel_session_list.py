@@ -13,12 +13,13 @@
    moves `.session-time` from `position:absolute` to flex flow so the
    title's `flex:1` bound stops at the timestamp's left edge.
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
 REPO = pathlib.Path(__file__).parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 
 
 def _extract_js_function_body(src: str, name: str) -> str:

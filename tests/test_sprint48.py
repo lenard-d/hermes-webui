@@ -7,6 +7,7 @@ Covers:
           is configured or the directory is empty.
   - #704: Notification settings description uses "app" instead of "tab".
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -96,7 +97,7 @@ class TestXmlToolCallStrip:
         )
 
     def test_client_side_strip_in_messages_js(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert '_stripXmlToolCalls' in src, (
             "Client-side _stripXmlToolCalls must exist in static/messages.js"
         )
@@ -105,13 +106,13 @@ class TestXmlToolCallStrip:
         )
 
     def test_client_side_strip_in_ui_js(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert '_stripXmlToolCallsDisplay' in src, (
             "_stripXmlToolCallsDisplay must exist in static/ui.js"
         )
 
     def test_thinking_card_text_is_sanitized(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert '_sanitizeThinkingDisplayText' in src, (
             "Thinking card text sanitizer must exist in static/ui.js"
         )
@@ -128,13 +129,13 @@ class TestXmlToolCallStrip:
 class TestWorkspaceEmptyState:
 
     def test_i18n_no_path_string_present(self):
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         assert 'workspace_empty_no_path' in src, (
             "i18n key workspace_empty_no_path must be defined in i18n.js"
         )
 
     def test_i18n_no_path_mentions_settings(self):
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         # Extract the value of the key
         m = re.search(r"workspace_empty_no_path:\s*'([^']+)'", src)
         assert m, "workspace_empty_no_path value not found in i18n.js"
@@ -143,7 +144,7 @@ class TestWorkspaceEmptyState:
         )
 
     def test_i18n_empty_dir_string_present(self):
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         assert 'workspace_empty_dir' in src, (
             "i18n key workspace_empty_dir must be defined in i18n.js"
         )
@@ -155,7 +156,7 @@ class TestWorkspaceEmptyState:
         )
 
     def test_render_file_tree_shows_empty_state(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'wsEmptyState' in src, (
             "renderFileTree in ui.js must reference wsEmptyState"
         )
@@ -172,7 +173,7 @@ class TestWorkspaceEmptyState:
 class TestNotificationDescriptionText:
 
     def test_english_uses_app_not_tab(self):
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         # Find the English locale block (appears before other locales)
         # The English block starts at line 1 (it's the first locale object).
         # We look for the settings_desc_notifications in the English section.
@@ -192,14 +193,14 @@ class TestNotificationDescriptionText:
         )
 
     def test_new_wording_exact(self):
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         expected = 'while the app is in the background'
         assert expected in src, (
             f"Exact phrase {expected!r} must appear in i18n.js"
         )
 
     def test_old_wording_removed_from_english(self):
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         old_phrase = 'while the tab is in the background'
         # The old phrase must not appear in the English locale section
         es_marker = "settings_desc_notifications: 'Muestra"

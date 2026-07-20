@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 from collections import OrderedDict
 import base64
 from email.message import Message
@@ -224,7 +225,7 @@ def test_gateway_http_401_with_key_suggests_key_mismatch():
 
 
 def test_frontend_renders_gateway_auth_error_with_specific_label():
-    src = Path("static/messages.js").read_text(encoding="utf-8")
+    src = family_source("messages")
     start = src.find("source.addEventListener('apperror'")
     end = src.find("source.addEventListener('warning'", start)
     assert start != -1 and end != -1, "apperror handler not found"
@@ -240,7 +241,7 @@ def test_frontend_renders_gateway_auth_error_with_specific_label():
 
 
 def test_gateway_auth_label_i18n_key_exists_for_every_locale():
-    src = Path("static/i18n.js").read_text(encoding="utf-8")
+    src = family_source("i18n")
     locale_names = [
         match.group("quoted") or match.group("plain")
         for match in re.finditer(

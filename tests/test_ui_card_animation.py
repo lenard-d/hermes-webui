@@ -1,9 +1,9 @@
-import pathlib
+from tests.frontend_asset_contract import family_source
 import re
 
 
-STYLE_CSS = (pathlib.Path(__file__).parent.parent / "static" / "style.css").read_text(encoding="utf-8")
-UI_JS = (pathlib.Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+UI_JS = family_source("ui")
 COMPACT_CSS = re.sub(r"\s+", "", STYLE_CSS)
 
 

@@ -1,5 +1,6 @@
 """Regression tests for WebUI notes source discovery."""
 from __future__ import annotations
+from tests.frontend_asset_contract import family_asset_paths, family_source
 
 
 def test_notes_sources_identifies_note_or_knowledge_mcp_servers():
@@ -326,9 +327,7 @@ def test_prefill_script_path_keeps_plain_existing_paths_with_spaces(tmp_path):
 
 
 def test_external_notes_ui_uses_minimal_lucide_icons_for_ai_recent_notes():
-    from pathlib import Path
-
-    panels = Path("static/panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     start = panels.index("function _renderExternalNotesSources()")
     end = panels.index("function _renderMemoryDetail", start)
     notes_block = panels[start:end]
@@ -341,51 +340,47 @@ def test_external_notes_ui_uses_minimal_lucide_icons_for_ai_recent_notes():
 
 
 def test_external_notes_menu_item_is_default_off_from_memory_payload():
-    from pathlib import Path
-
-    panels = Path("static/panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     assert "external_notes_enabled" in panels
     assert "if (s.key === 'external_notes' && !_memoryData.external_notes_enabled) continue;" in panels
 
 
 def test_external_notes_drawer_copy_is_localized_outside_english():
-    from pathlib import Path
-
-    i18n = Path("static/i18n.js").read_text(encoding="utf-8")
+    i18n = family_source("i18n")
 
     assert i18n.count("external_notes_sources: 'Third-party notes'") == 1
     assert i18n.count("external_notes_recent_ai: 'Recently used by AI'") == 1
     assert i18n.count("external_notes_recent_ai_reason: 'Automatic recall'") == 1
     assert i18n.count("external_notes_search_placeholder: 'Search notes…'") == 1
 
-    locale_sources = [
-        ("  en: {", "  it: {", "external_notes_sources: 'Third-party notes'"),
-        ("  it: {", "  ja: {", "external_notes_sources: 'Note di terze parti'"),
-        ("  ja: {", "  ru: {", "external_notes_sources: 'サードパーティのノート'"),
-        ("  ru: {", "  es: {", "external_notes_sources: 'Сторонние заметки'"),
-        ("  es: {", "  de: {", "external_notes_sources: 'Notas de terceros'"),
-        ("  de: {", "  zh: {", "external_notes_sources: 'Notizen von Drittanbietern'"),
-        ("  zh: {", "  'zh-Hant': {", "external_notes_sources: '第三方笔记'"),
-        ("  'zh-Hant': {", "  pt: {", "external_notes_sources: '第三方筆記'"),
-        ("  pt: {", "  ko: {", "external_notes_sources: 'Notas de terceiros'"),
-        ("  ko: {", "  fr: {", "external_notes_sources: '타사 노트'"),
-        ("  fr: {", "  tr: {", "external_notes_sources: 'Notes tierces'"),
-    ]
-    for start_marker, end_marker, expected in locale_sources:
-        start = i18n.index(start_marker)
-        end = i18n.index(end_marker, start)
-        assert expected in i18n[start:end]
+    locale_sources = {
+        "en": "external_notes_sources: 'Third-party notes'",
+        "it": "external_notes_sources: 'Note di terze parti'",
+        "ja": "external_notes_sources: 'サードパーティのノート'",
+        "ru": "external_notes_sources: 'Сторонние заметки'",
+        "es": "external_notes_sources: 'Notas de terceros'",
+        "de": "external_notes_sources: 'Notizen von Drittanbietern'",
+        "zh": "external_notes_sources: '第三方笔记'",
+        "zh_hant": "external_notes_sources: '第三方筆記'",
+        "pt": "external_notes_sources: 'Notas de terceiros'",
+        "ko": "external_notes_sources: '타사 노트'",
+        "fr": "external_notes_sources: 'Notes tierces'",
+    }
+    locale_paths = {
+        path.stem.removeprefix("locale-"): path
+        for path in family_asset_paths("i18n")
+        if path.name.startswith("locale-")
+    }
+    for locale, expected in locale_sources.items():
+        assert expected in locale_paths[locale].read_text(encoding="utf-8")
 
-    tr_start = i18n.index("  tr: {")
-    tr_block = i18n[tr_start:]
+    tr_block = locale_paths["tr"].read_text(encoding="utf-8")
     assert "external_notes_sources: 'Üçüncü taraf notlar'" in tr_block
     assert "external_notes_sources: 'Third-party notes'" not in tr_block
 
 
 def test_external_notes_search_button_matches_minimal_dark_controls():
-    from pathlib import Path
-
-    css = Path("static/style.css").read_text(encoding="utf-8")
+    css = family_source("style")
     assert ".notes-search-form button" in css
     button_block = css[css.index(".notes-search-form button"):css.index(".notes-search-form button:hover")]
     assert "background:var(--panel)" in button_block or "background:var(--surface)" in button_block

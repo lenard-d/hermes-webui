@@ -5,12 +5,13 @@ when `stream_end` arrives while the active live assistant row is still
 present, cleanup should be deferred briefly to allow pending final SSE updates to
 settle, then performed through the shared terminal recovery helper.
 """
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _event_block(event_name: str) -> str:

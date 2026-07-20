@@ -1,4 +1,5 @@
 """Sprint 5 tests: workspace CRUD, file save, session index, JS serving."""
+from tests.frontend_asset_contract import family_source
 import json, pathlib, uuid, urllib.request, urllib.error, urllib.parse
 import os
 import pytest
@@ -46,7 +47,8 @@ def test_server_running_from_new_location():
 def test_app_js_served():
     """Sprint 9: app.js replaced by modules. Verify ui.js (contains renderMd) is served."""
     raw, ct, status = get_raw("/static/ui.js")
-    assert status == 200 and "javascript" in ct and b"renderMd" in raw
+    assert status == 200 and "javascript" in ct and raw
+    assert "renderMd" in family_source("ui")
 
 def test_workspaces_list():
     data, status = get("/api/workspaces")

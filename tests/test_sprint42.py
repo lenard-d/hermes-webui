@@ -8,6 +8,7 @@ Covers:
 - streaming.py: SessionDB init failure prints a WARNING (not silently swallowed)
 - streaming.py: SessionDB init is placed before AIAgent construction
 """
+from tests.frontend_asset_contract import family_source
 import ast
 import threading
 import pathlib
@@ -31,7 +32,7 @@ _MESSAGES_JS = REPO_ROOT / 'static' / 'messages.js'
 _UI_JS = REPO_ROOT / 'static' / 'ui.js'
 
 def _read_sessions_js():
-    return _SESSIONS_JS.read_text(encoding='utf-8')
+    return family_source("sessions")
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -637,7 +638,7 @@ class TestModelCustomInput(unittest.TestCase):
             return f.read()
 
     def _renderModelDropdown_body(self):
-        src = self._read('ui.js')
+        src = family_source("ui")
         start = src.find('function renderModelDropdown()')
         end = src.find('\nasync function selectModelFromDropdown', start)
         return src[start:end]
@@ -653,14 +654,14 @@ class TestModelCustomInput(unittest.TestCase):
                       '_applyCustom function must be defined in renderModelDropdown')
 
     def test_model_custom_css_defined(self):
-        css = self._read('style.css')
+        css = family_source("style")
         self.assertIn('.model-custom-row', css,
                       '.model-custom-row must be defined in style.css')
         self.assertIn('.model-custom-input', css,
                       '.model-custom-input must be defined in style.css')
 
     def test_model_custom_i18n_keys(self):
-        i18n = self._read('i18n.js')
+        i18n = family_source("i18n")
         # Find en locale block (appears first before es)
         en_block_start = i18n.find("'en'")
         es_block_start = i18n.find("'es'")
@@ -761,7 +762,7 @@ def test_streaming_persists_reasoning_in_session():
 
 def test_done_handler_patches_reasoning_field():
     """messages.js done SSE handler must patch reasoningText onto the last assistant message."""
-    src = (REPO / 'static' / 'messages.js').read_text(encoding="utf-8")
+    src = family_source("messages")
 
     # The persistence comment must be present inside the done handler
     assert "Persist reasoning trace for Worklog Thinking Cards" in src, \
@@ -787,7 +788,7 @@ def test_done_handler_patches_reasoning_field():
 
 def test_rendermessages_keeps_reasoning_metadata_out_of_worklog_display():
     """ui.js renderMessages must not promote provider reasoning metadata into Worklog prose."""
-    src = (REPO / 'static' / 'ui.js').read_text(encoding="utf-8")
+    src = family_source("ui")
 
     sig_fn = src.split("function _messageHasReasoningPayload(m)", 1)[1].split("function", 1)[0]
     assert 'm.reasoning' in sig_fn, \

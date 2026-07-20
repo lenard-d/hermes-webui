@@ -1,4 +1,5 @@
 """Sidebar tooltip contract tests."""
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
@@ -6,7 +7,7 @@ SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
 
 
 def _sessions_js() -> str:
-    return SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    return family_source("sessions")
 
 
 def test_session_title_hover_shows_full_title_not_rename_hint():

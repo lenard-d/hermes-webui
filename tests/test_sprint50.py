@@ -4,6 +4,7 @@ Covers:
   - #633: slash command autocomplete dropdown should be constrained to the
           composer width rather than the full chat panel width.
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
@@ -27,7 +28,7 @@ def test_cmd_dropdown_moved_inside_composer_box():
 
 
 def test_cmd_dropdown_css_scoped_to_composer_width():
-    src = read("static/style.css")
+    src = family_source("style")
     assert ".cmd-dropdown{display:none;position:absolute;left:0;right:0;" in src, (
         "cmdDropdown should be absolutely positioned with left/right anchors"
     )

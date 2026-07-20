@@ -1,8 +1,9 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def test_workspace_file_name_click_does_not_immediately_bubble():

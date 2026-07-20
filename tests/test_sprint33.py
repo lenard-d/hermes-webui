@@ -4,6 +4,7 @@ Sprint 33 Tests: Shared app dialogs replace native confirm/prompt usage.
 These tests verify the static assets expose the reusable confirm/input modal
 and that browser-native confirm/prompt calls are no longer used in the Web UI.
 """
+from tests.frontend_asset_contract import family_asset_paths, family_source
 
 import pathlib
 import re
@@ -28,7 +29,7 @@ def test_index_has_shared_app_dialog_markup():
 
 
 def test_app_dialog_css_rules_exist():
-    css = read("static/style.css")
+    css = family_source("style")
     for selector in (
         ".app-dialog-overlay",
         ".app-dialog",
@@ -41,21 +42,21 @@ def test_app_dialog_css_rules_exist():
 
 
 def test_ui_js_exposes_shared_dialog_helpers():
-    src = read("static/ui.js")
+    src = family_source("ui")
     assert "function showConfirmDialog(opts={})" in src
     assert "function showPromptDialog(opts={})" in src
     assert "document.addEventListener('keydown'" in src
 
 
 def test_prompt_dialog_honors_custom_label_and_danger_state():
-    src = read("static/ui.js")
+    src = family_source("ui")
     assert "confirmBtn.textContent=opts.confirmLabel||t('create')" in src
     assert "confirmBtn.classList.toggle('danger',!!opts.danger)" in src
     assert "opts.danger?'alertdialog':'dialog'" in src
 
 
 def test_disable_auth_prompt_uses_destructive_label_not_create():
-    src = read("static/panels.js")
+    src = family_source("panels")
     match = re.search(r"async function disableAuth\(\)\{(.*?)\n\}", src, re.DOTALL)
     assert match, "disableAuth() not found"
     body = match.group(1)
@@ -70,7 +71,7 @@ def test_disable_auth_prompt_uses_destructive_label_not_create():
 
 
 def test_auth_disabled_warning_uses_status_payload_without_extra_settings_fetch():
-    src = read("static/panels.js")
+    src = family_source("panels")
     match = re.search(r"function _updateAuthDisabledWarning\(authStatus\)\{(.*?)\n\}", src, re.DOTALL)
     assert match, "_updateAuthDisabledWarning(authStatus) not found"
     body = match.group(1)
@@ -79,7 +80,7 @@ def test_auth_disabled_warning_uses_status_payload_without_extra_settings_fetch(
 
 
 def test_acknowledgement_save_failure_uses_i18n_toast():
-    src = read("static/panels.js")
+    src = family_source("panels")
     match = re.search(r"async function _setAuthDisabledAck\(checked\)\{(.*?)\n\}", src, re.DOTALL)
     assert match, "_setAuthDisabledAck(checked) not found"
     body = match.group(1)
@@ -88,7 +89,7 @@ def test_acknowledgement_save_failure_uses_i18n_toast():
 
 
 def test_save_settings_password_change_preflights_current_password_before_api():
-    src = read("static/panels.js")
+    src = family_source("panels")
     match = re.search(r"async function saveSettings\([^)]*\)\{(.*?)\n\}", src, re.DOTALL)
     assert match, "saveSettings() not found"
     body = match.group(1)
@@ -98,10 +99,10 @@ def test_save_settings_password_change_preflights_current_password_before_api():
 
 
 def test_disable_auth_typed_confirm_locales_show_literal_phrase():
-    src = read("static/i18n.js")
+    src = family_source("i18n")
     values = re.findall(r"disable_auth_typed_confirm:\s*'([^']*)'", src)
     assert values, "disable_auth_typed_confirm keys missing"
-    assert len(values) == len(_i18n_locale_blocks(src)), (
+    assert len(values) == len(_i18n_locale_blocks()), (
         "Every locale must define disable_auth_typed_confirm exactly once"
     )
     missing_literal = [value for value in values if "DISABLE AUTH" not in value]
@@ -127,20 +128,18 @@ AUTH_SAFETY_LOCALE_KEYS = (
 )
 
 
-def _i18n_locale_blocks(src):
-    heads = list(re.finditer(r"^  (?:(?:'([^']+)')|([A-Za-z][A-Za-z0-9_]*)):\s*\{", src, re.M))
+def _i18n_locale_blocks():
     blocks = {}
-    for i, head in enumerate(heads):
-        locale = head.group(1) or head.group(2)
-        end = heads[i + 1].start() if i + 1 < len(heads) else src.find("\n};", head.end())
-        assert end != -1, f"could not find end of locale block {locale}"
-        blocks[locale] = src[head.end():end]
+    for path in family_asset_paths("i18n"):
+        if not path.name.startswith("locale-"):
+            continue
+        locale = path.stem.removeprefix("locale-").replace("zh_hant", "zh-Hant")
+        blocks[locale] = path.read_text(encoding="utf-8")
     return blocks
 
 
 def test_auth_safety_keys_exist_once_per_locale():
-    src = read("static/i18n.js")
-    blocks = _i18n_locale_blocks(src)
+    blocks = _i18n_locale_blocks()
     assert "pt" in blocks
     assert "zh-Hant" in blocks
     for locale, block in blocks.items():
@@ -154,8 +153,7 @@ def test_auth_safety_keys_exist_once_per_locale():
 
 
 def test_auth_safety_pt_and_zh_hant_strings_stay_in_correct_locale_blocks():
-    src = read("static/i18n.js")
-    blocks = _i18n_locale_blocks(src)
+    blocks = _i18n_locale_blocks()
     zh_hant = blocks["zh-Hant"]
     pt = blocks["pt"]
     assert "目前密碼" in zh_hant

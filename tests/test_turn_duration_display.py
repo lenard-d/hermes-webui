@@ -3,15 +3,16 @@
 The WebUI should expose how long an agent turn took, using backend timing so
 reload/reconnect does not lose the measurement.
 """
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
+CSS = family_source("style")
 
 
 def test_streaming_done_payload_includes_backend_turn_duration():
@@ -133,8 +134,8 @@ def test_processed_elapsed_anchor_is_i18n_driven():
     assert "return _i18nProcessedElapsed('已处理', duration);" in I18N_JS
     assert "function _i18nProcessedElapsedZhHant(duration)" in I18N_JS
     assert "return _i18nProcessedElapsed('已處理', duration);" in I18N_JS
-    assert "processed_elapsed: _i18nProcessedElapsedEn" in I18N_JS
-    assert "processed_elapsed: _i18nProcessedElapsedZh" in I18N_JS
-    assert "processed_elapsed: _i18nProcessedElapsedZhHant" in I18N_JS
+    assert "processed_elapsed: helpers._i18nProcessedElapsedEn" in I18N_JS
+    assert "processed_elapsed: helpers._i18nProcessedElapsedZh" in I18N_JS
+    assert "processed_elapsed: helpers._i18nProcessedElapsedZhHant" in I18N_JS
     assert "t('processed_elapsed','')" in UI_JS
     assert "`已处理 ${" not in UI_JS

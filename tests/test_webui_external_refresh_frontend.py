@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import json
 import re
 import subprocess
@@ -5,10 +6,10 @@ import textwrap
 from pathlib import Path
 
 
-SESSIONS_JS = Path("static/sessions.js").read_text(encoding="utf-8")
-UI_JS = Path("static/ui.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+UI_JS = family_source("ui")
 BOOT_JS = Path("static/boot.js").read_text(encoding="utf-8")
-PANELS_JS = Path("static/panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -445,7 +446,10 @@ def test_same_session_force_reload_keeps_loaded_transcript_width_hint():
     reset_pos = load_body.index("S.messages = [];", clear_pos)
     assert capture_pos < clear_pos < reset_pos
     assert "const sameSessionForceReload = forceReload && currentSid===sid;" in load_body
-    assert "renderMessages(sameSessionForceReload?{preserveScroll:true}:undefined)" in load_body
+    assert "_restoreLoadedSession({" in load_body
+    assert "sameSessionForceReload," in load_body
+    restore_body = _function_body(SESSIONS_JS, "_restoreLoadedSession")
+    assert "renderMessages(sameSessionForceReload?{preserveScroll:true}:undefined)" in restore_body
 
 
 def test_same_width_force_reload_invalidates_visible_message_cache():

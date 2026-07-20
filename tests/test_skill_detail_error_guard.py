@@ -1,8 +1,9 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def test_skill_detail_api_error_renders_in_detail_pane():

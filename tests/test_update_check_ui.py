@@ -1,9 +1,10 @@
 """Source-level guards for update-check UI status handling."""
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+UI_JS = family_source("ui")
 
 
 def test_manual_update_check_displays_api_errors_before_up_to_date():

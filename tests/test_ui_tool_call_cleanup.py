@@ -4,16 +4,17 @@ These tests intentionally follow the repo's existing pytest style: read static
 source files, isolate the relevant function/rule, and assert implementation
 invariants before changing the UI.
 """
+from tests.frontend_asset_contract import family_source
 import json
 import pathlib
 import re
 import subprocess
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+CSS = family_source("style")
+MESSAGES_JS = family_source("messages")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -157,7 +158,7 @@ class TestToolCallGroupingStatic:
         assert "settingsSimplifiedToolCalling" not in (REPO / "static" / "index.html").read_text(encoding="utf-8"), (
             "Settings should no longer expose the deprecated Compact tool activity checkbox."
         )
-        panels = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+        panels = family_source("panels")
         assert "settingsSimplifiedToolCalling" not in panels, (
             "Settings panel should not load or save the deprecated simplified_tool_calling setting."
         )
@@ -167,7 +168,7 @@ class TestToolCallGroupingStatic:
         assert "window._simplifiedToolCalling=true" in boot, (
             "Boot should keep the Compact Worklog renderer enabled regardless of legacy saved values."
         )
-        panels = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+        panels = family_source("panels")
         fn = _function_body(panels, "_autosavePreferencesSettings")
         assert "simplified_tool_calling" not in fn and "window._simplifiedToolCalling" not in fn, (
             "Preferences autosave should no longer hot-apply the deprecated renderer switch."
@@ -406,7 +407,7 @@ class TestToolCallGroupingStatic:
         render_fn = _function_body(UI_JS, "renderMessages")
         live_fn = _function_body(UI_JS, "appendLiveToolCard")
         thinking_fn = _function_body(UI_JS, "appendThinking")
-        done_fn = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+        done_fn = family_source("messages")
         assert "hermes-activity-disclosure:" in UI_JS, (
             "Activity disclosure state should use a dedicated localStorage namespace."
         )

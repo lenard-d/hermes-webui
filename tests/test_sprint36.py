@@ -19,6 +19,7 @@ Covers:
   7. cancel_failed i18n key is still defined in all locales (key exists, just not used in
      the catch-path anymore — kept for potential future use)
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -156,7 +157,7 @@ def test_sse_cancel_handler_still_present():
     provides additional cleanup (removes 'Task cancelled.' message, clears
     tool cards, etc.) when the connection is still alive.
     """
-    src = read("static/messages.js")
+    src = family_source("messages")
     assert "addEventListener('cancel'" in src or 'addEventListener("cancel"' in src, (
         "SSE cancel event handler missing from messages.js — "
         "live cancellation cleanup path is broken"
@@ -165,7 +166,7 @@ def test_sse_cancel_handler_still_present():
 
 def test_sse_cancel_handler_calls_set_busy():
     """The SSE cancel handler must still call setBusy(false)."""
-    src = read("static/messages.js")
+    src = family_source("messages")
     idx = src.find("addEventListener('cancel'")
     if idx == -1:
         idx = src.find('addEventListener("cancel"')
@@ -202,7 +203,7 @@ def test_sse_cancel_handler_calls_set_busy():
 
 def test_cancel_failed_i18n_key_exists_in_all_locales():
     """cancel_failed key must still exist in i18n.js for all locales."""
-    src = read("static/i18n.js")
+    src = family_source("i18n")
     # Should appear once per locale (en, es, de, ru, zh, zh-Hant)
     locale_count = _locale_count(src)
     count = src.count("cancel_failed:")

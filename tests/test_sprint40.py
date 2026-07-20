@@ -8,6 +8,7 @@ Covers:
 - apply_onboarding_setup with unsupported provider marks onboarding complete directly
 - i18n.js contains all required OAuth onboarding keys in both English and Spanish
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 import unittest
@@ -16,7 +17,7 @@ from unittest.mock import patch
 import api.onboarding as mod
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 ONBOARDING_JS = (REPO_ROOT / "static" / "onboarding.js").read_text(encoding="utf-8")
 
 
@@ -152,7 +153,7 @@ class TestOAuthOnboardingJs(unittest.TestCase):
 
     def test_style_css_has_oauth_card_rules(self):
         """style.css must contain the .onboarding-oauth-card rules."""
-        css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+        css = family_source("style")
         self.assertIn("onboarding-oauth-card", css)
         self.assertIn("onboarding-oauth-ready", css)
         self.assertIn("onboarding-oauth-pending", css)

@@ -1,10 +1,11 @@
 """Regression: workspace file preview must survive background file-tree refresh on chat done."""
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
 
 

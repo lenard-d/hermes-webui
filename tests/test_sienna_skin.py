@@ -1,9 +1,10 @@
 """Sienna skin: warm clay/sand earth palette, opt-in via Settings → Skin."""
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 

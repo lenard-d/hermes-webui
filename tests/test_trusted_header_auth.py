@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import io
 import json
@@ -16,7 +17,7 @@ import api.profiles as profiles
 from tests.js_source_extract import extract_function
 
 
-PANELS_JS = (Path(__file__).resolve().parents[1] / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 NODE = shutil.which("node")
 
 

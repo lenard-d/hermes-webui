@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import json
 import subprocess
 from pathlib import Path
@@ -22,7 +23,7 @@ def _extract_js_function(src: str, name: str) -> str:
 
 
 def test_mark_session_completed_in_list_dedupes_old_and_new_sid_rows():
-    sessions_src = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    sessions_src = family_source("sessions")
     fn_src = _extract_js_function(sessions_src, "_markSessionCompletedInList")
     script = f"""
 let _allSessions = [

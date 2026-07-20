@@ -26,12 +26,13 @@ Fix verified by these tests:
   - ``canBrowse`` and ``openWorkspacePanel()`` include
     ``S._profileDefaultWorkspace`` so the toggle stays enabled.
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 
 REPO = pathlib.Path(__file__).parent.parent
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 
 
 def _html_tag_by_id(element_id: str) -> str:

@@ -7,6 +7,7 @@ their active turn the same way cross-tab churn used to do. Adds the guard.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def test_popstate_handler_guards_busy_state():
     active turn — exactly the regression the storage-event guard was added to
     prevent.
     """
-    src = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     popstate_idx = src.find("addEventListener('popstate'")
     assert popstate_idx != -1, "popstate handler missing from sessions.js"
     # Look at the next ~600 chars of the handler body.

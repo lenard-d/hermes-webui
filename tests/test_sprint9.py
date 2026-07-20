@@ -2,13 +2,21 @@
 Sprint 9 Tests: app.js module split verification, tool cards, todo panel.
 Run: ./scripts/test.sh tests/test_sprint9.py -v
 """
+from tests.frontend_asset_contract import family_source
 import json, pathlib, urllib.error, urllib.request
 
 from tests._pytest_port import BASE
 
 def get_text(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
-        return r.read().decode()
+        served = r.read().decode()
+    family = {
+        "/static/ui.js": "ui",
+        "/static/sessions.js": "sessions",
+        "/static/messages.js": "messages",
+        "/static/panels.js": "panels",
+    }.get(path)
+    return family_source(family) if family else served
 
 def get(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:

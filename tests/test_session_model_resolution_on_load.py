@@ -5,11 +5,12 @@ after the active runtime moved to OpenAI Codex ``gpt-5.5``.  The UI still needs
 to repair those stale values, but session switching first paint must not pay the
 model catalog cost synchronously.
 """
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _extract_function(src: str, signature: str) -> str:

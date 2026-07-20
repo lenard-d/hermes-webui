@@ -1,6 +1,7 @@
 """
 Sprint 8 Tests: Edit/regenerate, clear conversation, truncate, reconnect banner fix, syntax highlight.
 """
+from tests.frontend_asset_contract import family_source
 import json, pathlib, urllib.error, urllib.parse, urllib.request
 
 from tests._pytest_port import BASE
@@ -89,27 +90,29 @@ def test_session_truncate_returns_messages(cleanup_test_sessions):
 
 # ── Static files contain new features ─────────────────────────────
 
+def _served_family_source(path, family):
+    with urllib.request.urlopen(BASE + path, timeout=10) as response:
+        response.read()
+    return family_source(family)
+
+
 def test_app_js_contains_edit_message(cleanup_test_sessions):
     """Verify editMessage function is present in ui.js (Sprint 9: module split)."""
-    with urllib.request.urlopen(BASE + "/static/ui.js", timeout=10) as r:
-        src = r.read().decode()
+    src = _served_family_source("/static/ui.js", "ui")
     assert "editMessage" in src
     assert "msg-edit-area" in src
 
 def test_app_js_contains_regenerate(cleanup_test_sessions):
-    with urllib.request.urlopen(BASE + "/static/ui.js", timeout=10) as r:
-        src = r.read().decode()
+    src = _served_family_source("/static/ui.js", "ui")
     assert "regenerateResponse" in src
 
 def test_app_js_contains_clear_conversation(cleanup_test_sessions):
-    with urllib.request.urlopen(BASE + "/static/panels.js", timeout=10) as r:
-        src = r.read().decode()
+    src = _served_family_source("/static/panels.js", "panels")
     assert "clearConversation" in src
     assert "api/session/clear" in src
 
 def test_app_js_contains_highlight_code(cleanup_test_sessions):
-    with urllib.request.urlopen(BASE + "/static/ui.js", timeout=10) as r:
-        src = r.read().decode()
+    src = _served_family_source("/static/ui.js", "ui")
     assert "highlightCode" in src
     assert "Prism" in src
 

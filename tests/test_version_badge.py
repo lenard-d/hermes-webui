@@ -10,6 +10,7 @@ Covers:
   6. static/panels.js: loadSettingsPanel() populates both version badges from settings
   7. server.py: server_version is not the old hardcoded string
 """
+from tests.frontend_asset_contract import family_source
 import importlib
 import subprocess
 import sys
@@ -386,7 +387,7 @@ class TestIndexHTMLBadge:
 class TestPanelsJSVersionBadge:
 
     def _read_js(self):
-        return (REPO_ROOT / 'static' / 'panels.js').read_text(encoding='utf-8')
+        return family_source("panels")
 
     def test_panels_js_reads_webui_version(self):
         """loadSettingsPanel must reference settings.webui_version to populate the badge."""

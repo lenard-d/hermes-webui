@@ -25,10 +25,11 @@ static/messages.js, strip whitespace, and assert the staged-retry shape exists
 and that the terminal `_handleStreamError` call sits AFTER the
 "schedule the next probe" guard inside the reconnect block.
 """
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def _compact(text: str) -> str:

@@ -3,19 +3,17 @@
 Validates that renderSkills() produces collapsible category headers
 with chevron toggles, click handlers, and persisted collapse state.
 """
-import os
+from tests.frontend_asset_contract import family_source
 import re
 import pytest
 
 
 def _readpanels():
-    with open(os.path.join('static', 'panels.js')) as f:
-        return f.read()
+    return family_source("panels")
 
 
 def _readcss():
-    with open(os.path.join('static', 'style.css')) as f:
-        return f.read()
+    return family_source("style")
 
 
 # ── State variable ──────────────────────────────────────────────────────────

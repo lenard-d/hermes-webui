@@ -27,12 +27,13 @@ Two invariants flagged in review are protected here and MUST NOT regress:
       renderSessionListFromCache(), which recomputes each row's aggregated
       unread authoritatively rather than doing ad-hoc DOM surgery (concern b).
 """
+from tests.frontend_asset_contract import family_source
 import json
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _load_session_block() -> str:

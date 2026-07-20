@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import re
 import subprocess
 from pathlib import Path
@@ -7,11 +8,11 @@ CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_tex
     encoding="utf-8"
 )
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+MESSAGES_JS = family_source("messages")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 FADE_SETTING = "fade_text_effect"
 FADE_CHECKBOX_ID = "settingsFadeTextEffect"
@@ -128,9 +129,10 @@ def test_preferences_ui_exposes_and_saves_fade_text_effect():
     assert_contains_all(payload_block, [f"$('{FADE_CHECKBOX_ID}')", f"payload.{FADE_SETTING}="])
 
     load_block = function_block(PANELS_JS, "loadSettingsPanel")
-    fade_load = load_block[load_block.index(f"$('{FADE_CHECKBOX_ID}')") :]
+    assert "_loadSettingsPreferences(settings,resolvedLanguage)" in load_block
+    fade_load = function_block(PANELS_JS, "_loadSettingsPreferences")
     assert_contains_all(
-        fade_load[:700],
+        fade_load,
         [f"settings.{FADE_SETTING}", FADE_RUNTIME_FLAG, "addEventListener('change',_schedulePreferencesAutosave"],
     )
 

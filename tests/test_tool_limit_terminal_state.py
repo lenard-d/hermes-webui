@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import json
 import queue
 import sys
@@ -218,7 +219,7 @@ def test_display_merge_does_not_render_synthetic_summary_prompt():
 
 
 def test_frontend_handles_tool_limit_apperror_label():
-    messages_js = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+    messages_js = family_source("messages")
     start = messages_js.find("source.addEventListener('apperror'")
     end = messages_js.find("source.addEventListener('warning'", start)
     assert start != -1 and end != -1

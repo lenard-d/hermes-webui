@@ -1,9 +1,10 @@
 """Regression tests for session id rotation URL sync."""
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 import re
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def test_stream_completion_syncs_rotated_session_id_to_tab_state():

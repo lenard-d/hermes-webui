@@ -15,6 +15,7 @@ Fixes:
 - _wireSSE: reset accumulators when (re)opening source, unless stream already finalized
 - error handler: bail if _streamFinalized (same as _terminalStateReached)
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 
@@ -29,19 +30,19 @@ class TestStreamFinalized:
     """_streamFinalized flag and rAF cancellation."""
 
     def test_stream_finalized_declared(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert '_streamFinalized' in src, (
             "_streamFinalized must be declared in attachLiveStream"
         )
 
     def test_pending_raf_handle_declared(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert '_pendingRafHandle' in src, (
             "_pendingRafHandle must be declared to enable rAF cancellation"
         )
 
     def test_schedule_render_guards_on_stream_finalized(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r'function _scheduleRender\([^)]*\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_scheduleRender not found"
         fn = m.group(0)
@@ -50,7 +51,7 @@ class TestStreamFinalized:
         )
 
     def test_raf_handle_stored_in_schedule_render(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert '_pendingRafHandle=_pendingRafFrameHandle' in src or \
                '_pendingRafHandle = _pendingRafFrameHandle' in src or \
                '_pendingRafHandle=requestAnimationFrame' in src or \
@@ -59,7 +60,7 @@ class TestStreamFinalized:
         )
 
     def test_done_sets_stream_finalized(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r"source\.addEventListener\('done'.*?\}\);", src, re.DOTALL)
         assert m, "'done' handler not found"
         fn = m.group(0)
@@ -81,7 +82,7 @@ class TestStreamFinalized:
         and overwrites S.messages with stale server data (assistant text between
         tool-call blocks vanishes on switching back to a settled session).
         """
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r"source\.addEventListener\('done'.*?\}\);", src, re.DOTALL)
         assert m, "'done' handler not found"
         fn = m.group(0)
@@ -97,7 +98,7 @@ class TestStreamFinalized:
         )
 
     def test_apperror_sets_stream_finalized(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r"source\.addEventListener\('apperror'.*?\}\);", src, re.DOTALL)
         assert m, "'apperror' handler not found"
         fn = m.group(0)
@@ -107,7 +108,7 @@ class TestStreamFinalized:
         assert 'cancelAnimationFrame' in fn
 
     def test_cancel_sets_stream_finalized(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r"source\.addEventListener\('cancel'.*?\}\);", src, re.DOTALL)
         assert m, "'cancel' handler not found"
         fn = m.group(0)
@@ -148,7 +149,7 @@ class TestReconnectAccumulatorPreservation:
         interim_assistant) are intentional (#2565) and not covered by
         this guard — they prevent reasoning from accumulating across
         multi-turn agent sessions."""
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r'function _wireSSE\(source\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_wireSSE not found"
         fn = m.group(0)
@@ -171,7 +172,7 @@ class TestReconnectAccumulatorPreservation:
         the closure scope in attachLiveStream, not inside _wireSSE.  That
         covers the first call; reconnects must preserve whatever was
         accumulated before the drop."""
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(
             r'function attachLiveStream\(.*?function _closeSource',
             src,
@@ -194,7 +195,7 @@ class TestReconnectAccumulatorPreservation:
         """`error` must still bail out when `_streamFinalized` is true —
         otherwise a trailing network 'error' event after `done` would
         attempt a reconnect against a stream that already completed."""
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r"source\.addEventListener\('error'.*?\}\);", src, re.DOTALL)
         assert m, "'error' handler not found"
         fn = m.group(0)
@@ -206,7 +207,7 @@ class TestReconnectAccumulatorPreservation:
         """Opus review Q1: _handleStreamError is called after the reconnect fails.
         It calls renderMessages() which settles the DOM. Any pending rAF must be
         cancelled before that renderMessages call — same as done/apperror/cancel."""
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r'function _handleStreamError\(source\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_handleStreamError(source) not found"
         fn = m.group(0)
@@ -220,7 +221,7 @@ class TestReconnectAccumulatorPreservation:
     def test_deferred_stream_recovery_bails_after_session_switch(self):
         """Deferred hidden-tab recovery must not reattach an old stream after
         the user has switched to a different session in the same tab."""
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(r'function _reattachOrRestoreAfterDeferredStreamError\(source\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_reattachOrRestoreAfterDeferredStreamError(source) not found"
         fn = m.group(0)

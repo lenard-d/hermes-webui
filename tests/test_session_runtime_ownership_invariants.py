@@ -5,6 +5,7 @@ stream transports are keyed by stream_id/session_id, while the active pane is on
 one projection. Background terminal events must update session/sidebar metadata
 without tearing down the currently viewed pane's runtime state.
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -56,7 +57,7 @@ class TestSessionOwnedRuntimeInvariants:
         )
 
     def test_done_event_does_not_clear_unrelated_active_pane_busy_state(self):
-        messages = read("static/messages.js")
+        messages = family_source("messages")
         done = _event_handler(messages, "done")
         unconditional = "_queueDrainSid=activeSid;renderSessionList();setBusy(false);setStatus('');"
         assert unconditional not in done, (
@@ -73,7 +74,7 @@ class TestSessionOwnedRuntimeInvariants:
         )
 
     def test_server_session_finalize_does_not_idle_unrelated_active_pane(self):
-        messages = read("static/messages.js")
+        messages = family_source("messages")
         finalize = _function_body(messages, "_restoreSettledSession")
         assert "_queueDrainSid=activeSid;renderSessionList();setBusy(false);setComposerStatus('');" not in finalize, (
             "The fallback server-finalize path must not idle the active pane for a "
@@ -88,7 +89,7 @@ class TestSessionOwnedRuntimeInvariants:
         )
 
     def test_approval_and_clarify_pollers_are_stopped_by_owner_session(self):
-        messages = read("static/messages.js")
+        messages = family_source("messages")
         assert "let _approvalPollingSessionId = null" in messages
         assert "let _clarifyPollingSessionId = null" in messages
         assert "function stopApprovalPollingForSession" in messages
@@ -118,7 +119,7 @@ class TestSessionOwnedRuntimeInvariants:
         )
 
     def test_clarify_sse_fallback_preserves_owner_session_id(self):
-        messages = read("static/messages.js")
+        messages = family_source("messages")
         start_clarify = _function_body(messages, "startClarifyPolling")
         fallback = _function_body(messages, "_startClarifyFallbackPoll")
 
@@ -136,7 +137,7 @@ class TestSessionOwnedRuntimeInvariants:
         )
 
     def test_live_stream_transport_and_inflight_state_remain_session_keyed(self):
-        messages = read("static/messages.js")
+        messages = family_source("messages")
         close_live = _function_body(messages, "closeLiveStream")
         attach_start = messages.index("function attachLiveStream")
         attach_live = messages[attach_start:messages.index("function _isActiveSession", attach_start)]

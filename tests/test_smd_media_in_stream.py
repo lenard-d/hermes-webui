@@ -29,6 +29,7 @@ notes head-on:
   finishes the token on the second call).
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import json
 import pathlib
@@ -38,8 +39,8 @@ import subprocess
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 NODE = shutil.which("node")
 
 

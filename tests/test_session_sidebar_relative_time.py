@@ -1,12 +1,13 @@
+from tests.frontend_asset_contract import family_source
 import json
 import pathlib
 import subprocess
 import textwrap
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 def _extract_function(source: str, name: str) -> str:

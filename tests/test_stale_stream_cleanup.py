@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import queue
 import threading
 import time
@@ -12,7 +13,7 @@ import api.turn_admission as turn_admission
 
 REPO = Path(__file__).resolve().parents[1]
 ROUTES_SRC = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_SRC = family_source("sessions")
 SW_SRC = (REPO / "static" / "sw.js").read_text(encoding="utf-8")
 
 

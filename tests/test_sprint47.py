@@ -9,14 +9,15 @@ Covers:
 - boot.js primes the async skill load when typing '/'
 - the dropdown marks skill-backed entries visually
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+STYLE_CSS = family_source("style")
 
 
 def _function_body(source, name):

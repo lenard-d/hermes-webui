@@ -7,6 +7,7 @@ Covers:
 - streaming.py: sessions titled 'Untitled' (original guard) still trigger
 - streaming.py: sessions with a user-set title do NOT trigger auto-title
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 import unittest
@@ -14,9 +15,9 @@ import unittest
 from api.streaming import _sanitize_generated_title
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 TITLE_GENERATION_PY = (
     REPO_ROOT / "api" / "streaming_parts" / "title_generation.py"

@@ -15,6 +15,7 @@ The scenario this test pins down:
    assistant text/tools into the transcript in the correct chronological
    position.
 """
+from tests.frontend_asset_contract import family_source
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
@@ -495,7 +496,7 @@ def test_interrupted_marker_distinguishes_lost_worker_bookkeeping(monkeypatch):
 
 def test_messages_js_names_browser_sse_disconnect_separately():
     repo = models.Path(__file__).parent.parent
-    js = (repo / "static" / "messages.js").read_text(encoding="utf-8")
+    js = family_source("messages")
 
     assert "Connection interrupted" in js
     assert "browser lost the live SSE connection" in js

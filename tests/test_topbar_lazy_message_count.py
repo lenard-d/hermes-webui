@@ -1,7 +1,8 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def test_topbar_uses_session_total_for_lazy_loaded_transcripts():
@@ -28,7 +29,7 @@ def test_sync_topbar_does_not_count_only_loaded_tail_messages():
     assert "document.title='● '+document.title;" in block
     assert "const pendingPrefix=(typeof activeSessionHasPendingPromptAttention==='function'&&activeSessionHasPendingPromptAttention())?'● ':'';" not in block
 
-    sessions_js = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    sessions_js = family_source("sessions")
     fn = sessions_js[
         sessions_js.index("async function _ensureMessagesLoaded") :
         sessions_js.index("function _messageComparableText", sessions_js.index("async function _ensureMessagesLoaded"))

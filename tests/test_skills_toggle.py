@@ -1,10 +1,11 @@
 """Tests for skill toggle (enable/disable) API and frontend."""
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
-PANELS_JS = (Path(__file__).resolve().parent.parent / "static" / "panels.js").read_text("utf-8")
-I18N_JS = (Path(__file__).resolve().parent.parent / "static" / "i18n.js").read_text("utf-8")
-STYLE_CSS = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text("utf-8")
+PANELS_JS = family_source("panels")
+I18N_JS = family_source("i18n")
+STYLE_CSS = family_source("style")
 
 
 def test_toggle_endpoint_signature_in_routes():

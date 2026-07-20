@@ -1,8 +1,8 @@
 """Regression coverage for immediate sidebar pin/unpin reordering."""
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-SESSIONS_JS = (Path(__file__).resolve().parents[1] / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def test_pin_action_updates_local_cache_and_renders_before_refetch():

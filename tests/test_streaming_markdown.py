@@ -18,6 +18,7 @@ library (https://github.com/nicholasgasior/streaming-markdown):
 
 Tests are static (regex / AST-level) — no browser required.
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -25,8 +26,8 @@ import json
 import subprocess
 
 REPO = pathlib.Path(__file__).parent.parent
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 
 

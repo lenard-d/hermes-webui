@@ -1,4 +1,5 @@
 """Frontend regression coverage for Update Now apply failures (#1321)."""
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import json
 from pathlib import Path
 import re
@@ -13,7 +14,7 @@ NODE = shutil.which("node")
 
 
 def _ui_js() -> str:
-    return UI_JS.read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 def _run_apply_updates_harness(update_data, responses):
@@ -23,8 +24,7 @@ def _run_apply_updates_harness(update_data, responses):
 const fs = require('fs');
 const updateData = JSON.parse(process.argv[1]);
 const responses = JSON.parse(process.argv[2]);
-const uiPath = process.argv[3];
-const src = fs.readFileSync(uiPath, 'utf8');
+const src = JSON.parse(process.argv[3]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
 const start = src.indexOf('async function applyUpdates()');
 const end = src.indexOf('function _showUpdateError', start);
 const snippet = src.slice(start, end);
@@ -110,7 +110,14 @@ eval(snippet);
 });
 """
     result = subprocess.run(
-        [NODE, "-e", js, json.dumps(update_data), json.dumps(responses), str(UI_JS)],
+        [
+            NODE,
+            "-e",
+            js,
+            json.dumps(update_data),
+            json.dumps(responses),
+            json.dumps([str(path) for path in family_asset_paths("ui")]),
+        ],
         capture_output=True,
         text=True,
         timeout=30,

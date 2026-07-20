@@ -6,13 +6,14 @@ Pin the three SHOULD-FIX items applied during stage-268 review:
 - SF-2 (#1462): duplicate carries personality / enabled_toolsets / context_length / threshold_tokens.
 - SF-3 (#1462): duplicate handles legacy null title via `(session.title or 'Untitled')` fallback.
 """
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 import re
 
 REPO_ROOT = Path(__file__).parent.parent
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+I18N_JS = family_source("i18n")
 
 
 # --- SF-1 (#1450): child-count UI uses i18n key ---

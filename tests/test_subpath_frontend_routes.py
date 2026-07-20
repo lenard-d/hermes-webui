@@ -1,4 +1,5 @@
 """Regression tests for frontend routing under subpath mounts like /hermes/."""
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
@@ -20,7 +21,7 @@ def test_workspace_api_401_redirect_uses_relative_login_path():
 
 
 def test_ui_401_redirect_helper_uses_relative_login_path():
-    src = read("static/ui.js")
+    src = family_source("ui")
     assert "function _redirectIfUnauth" in src
     assert "window.location.href='login?next='" in src, (
         "UI auth-expiry redirect must stay under the current subpath mount."
@@ -37,17 +38,21 @@ def test_server_auth_redirect_uses_relative_login_path_with_encoded_next():
 
 def test_direct_frontend_fetches_are_relative_to_current_mount():
     for path in ("static/boot.js", "static/sessions.js", "static/ui.js"):
-        src = read(path)
+        family = {
+            "static/sessions.js": "sessions",
+            "static/ui.js": "ui",
+        }.get(path)
+        src = family_source(family) if family else read(path)
         assert "fetch('/api/" not in src, (
             f"{path} must not fetch root /api/* because /hermes/ is subpath mounted."
         )
         assert 'fetch("/api/' not in src
-    assert "fetch('/health'" not in read("static/ui.js")
-    assert "new URL('health'" in read("static/ui.js")
+    assert "fetch('/health'" not in family_source("ui")
+    assert "new URL('health'" in family_source("ui")
 
 
 def test_direct_frontend_event_sources_are_relative_to_current_mount():
-    src = read("static/messages.js")
+    src = family_source("messages")
     assert "EventSource('/api/" not in src
     assert 'EventSource("/api/' not in src
     # #3913 removed the approval/clarify-stream EventSources (they were 2 of the

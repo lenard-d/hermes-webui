@@ -5,12 +5,13 @@ frontend cleared `_renamingSid` before `/api/session/rename` completed. That
 let normal session-list refreshes re-render stale cached data and destroy the
 input while the save was still in flight.
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
 
 REPO = pathlib.Path(__file__).parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _session_rename_block():

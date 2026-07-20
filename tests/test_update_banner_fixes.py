@@ -11,6 +11,7 @@ Covers:
   - UI: success toast says 'Restarting' not 'Reloading' (#814)
   - UI: reload timeout bumped to 2500 ms to allow server restart (#814)
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -83,7 +84,7 @@ def _stub_pycache_purge(monkeypatch):
 
 
 def _extract_summary_cache_js():
-    src = read('static/ui.js')
+    src = family_source("ui")
     function_names = [
         '_summaryStorageByteLength',
         '_summaryCacheEntriesSortedByRecency',
@@ -1795,20 +1796,20 @@ class TestUiJsUpdateBanner:
     """#813 + #814 — UI must show persistent error, force button, and correct toast."""
 
     def test_show_update_error_function_exists(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'function _showUpdateError' in src, (
             "_showUpdateError() must be defined in ui.js"
         )
 
     def test_force_update_function_exists(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'function forceUpdate' in src or 'async function forceUpdate' in src, (
             "forceUpdate() must be defined in ui.js"
         )
 
     def test_force_update_uses_confirm_dialog_not_native(self):
         """forceUpdate() must use showConfirmDialog(), not the banned native confirm()."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function forceUpdate\b.*?\n\}', src, re.DOTALL)
         assert m, "forceUpdate() not found"
         fn = m.group(0)
@@ -1821,7 +1822,7 @@ class TestUiJsUpdateBanner:
         )
 
     def test_force_update_calls_api_updates_force(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function forceUpdate\b.*?\n\}', src, re.DOTALL)
         assert m, "forceUpdate() not found"
         fn = m.group(0)
@@ -1830,7 +1831,7 @@ class TestUiJsUpdateBanner:
         )
 
     def test_success_toast_says_restarting(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function applyUpdates\b.*?\n\}', src, re.DOTALL)
         assert m, "applyUpdates() not found"
         fn = m.group(0)
@@ -1848,7 +1849,7 @@ class TestUiJsUpdateBanner:
         that return 502 immediately when the upstream socket is down.
         The polling approach retries until /health responds OK.
         """
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function applyUpdates\b.*?\n\}', src, re.DOTALL)
         assert m, "applyUpdates() not found"
         fn = m.group(0)
@@ -1865,7 +1866,7 @@ class TestUiJsUpdateBanner:
         """_waitForServerThenReload() must actually exist — the original PR
         referenced it from applyUpdates()/forceUpdate() without defining it,
         which would have thrown ReferenceError on 'Update Now'."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert re.search(r'(async\s+)?function\s+_waitForServerThenReload\b', src), (
             "_waitForServerThenReload() is called but not defined — this breaks "
             "the Update Now flow entirely (ReferenceError at runtime)."
@@ -1873,7 +1874,7 @@ class TestUiJsUpdateBanner:
 
     def test_wait_for_server_polls_health(self):
         """_waitForServerThenReload() must fetch health to determine readiness."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function\s+_waitForServerThenReload\b.*?\n\}', src, re.DOTALL)
         assert m, "_waitForServerThenReload() not found"
         fn = m.group(0)
@@ -1886,7 +1887,7 @@ class TestUiJsUpdateBanner:
         )
 
     def test_wait_for_server_requires_new_process_identity(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         fn = extract_js_function(src, '_waitForServerThenReload')
         assert 'baselineServerIdentity' in fn, (
             "_waitForServerThenReload() should capture and compare a baseline process identity"
@@ -1911,7 +1912,7 @@ class TestUiJsUpdateBanner:
         without it the user is stranded on the restart banner until they manually
         reload. The >=2 threshold + outage reset on a healthy old-server response
         prevent a single transient network blip from reloading onto the old process."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         fn = extract_js_function(src, '_waitForServerThenReload')
         compact = re.sub(r'\s+', '', fn)
         # Outage counter incremented on thrown fetch errors AND non-OK responses.
@@ -1939,7 +1940,7 @@ class TestUiJsUpdateBanner:
 
     def test_wait_for_server_fallbacks_to_ready_on_missing_baseline(self):
         """Healthy /health should reload immediately when baseline identity is missing."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -1979,7 +1980,7 @@ global.fetch = async () => {{
 
     def test_wait_for_server_ignores_old_identity_and_reloads_on_new_identity(self):
         """Healthy /health from the old process should not reload until identity changes."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -2020,7 +2021,7 @@ global.fetch = async () => {{
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_wait_for_server_falls_back_to_uptime_when_started_at_is_missing(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -2060,7 +2061,7 @@ global.fetch = async () => {{
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_wait_for_server_accepts_new_started_at_when_baseline_lacked_one(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -2099,7 +2100,7 @@ global.fetch = async () => {{
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_wait_for_server_reloads_when_replacement_health_has_no_identity_fields(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -2138,7 +2139,7 @@ global.fetch = async () => {{
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_wait_for_server_reloads_when_full_baseline_loses_all_identity_fields(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -2177,7 +2178,7 @@ global.fetch = async () => {{
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_wait_for_server_reloads_when_baseline_started_at_degrades_to_uptime_only(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
         wait_fn = extract_js_function(src, '_waitForServerThenReload')
@@ -2216,7 +2217,7 @@ global.fetch = async () => {{
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_apply_and_force_updates_capture_identity(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         apply_fn = re.search(r'function\s+applyUpdates\b.*?\n\}', src, re.DOTALL)
         force_fn = re.search(r'function\s+forceUpdate\b.*?\n\}', src, re.DOTALL)
         assert apply_fn, "applyUpdates() not found"
@@ -2243,7 +2244,7 @@ global.fetch = async () => {{
         )
 
     def test_health_identity_helper_prefers_server_started_at_and_keeps_uptime_fallback(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         normalize_fn = extract_js_function(src, '_normalizeHealthServerIdentity')
         identity_fn = extract_js_function(src, '_healthResponseServerIdentity')
 
@@ -2271,7 +2272,7 @@ if (_healthResponseServerIdentity({{ server_started_at: null, uptime_seconds: nu
         """When _restartingForUpdate flag is set, refreshSession() must do a
         full page reload rather than hit /api/session (which will 502 while
         the server is down)."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'async function refreshSession\b.*?\n\}', src, re.DOTALL)
         assert m, "refreshSession() not found"
         fn = m.group(0)
@@ -2281,7 +2282,7 @@ if (_healthResponseServerIdentity({{ server_started_at: null, uptime_seconds: nu
         )
 
     def test_conflict_response_shows_force_button(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function _showUpdateError\b.*?\n\}', src, re.DOTALL)
         assert m, "_showUpdateError() not found"
         fn = m.group(0)
@@ -2293,7 +2294,7 @@ if (_healthResponseServerIdentity({{ server_started_at: null, uptime_seconds: nu
         )
 
     def test_error_displayed_persistently_not_just_toast(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'function _showUpdateError\b.*?\n\}', src, re.DOTALL)
         assert m
         fn = m.group(0)
@@ -2304,7 +2305,7 @@ if (_healthResponseServerIdentity({{ server_started_at: null, uptime_seconds: nu
 
 class TestUpdateBannerUx:
     def test_update_banner_includes_release_labels(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'function _formatUpdateTargetStatus' in src
         assert 'info.release_based' in src
         assert 'info.current_version' in src
@@ -2313,7 +2314,7 @@ class TestUpdateBannerUx:
         assert "_formatUpdateTargetStatus('Agent',data.agent)" in src
 
     def test_settings_update_check_uses_same_repo_branch_formatter(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'async function checkUpdatesNow\b.*?\n\}', src, re.DOTALL)
         assert m, "checkUpdatesNow() not found"
         fn = m.group(0)
@@ -2323,7 +2324,7 @@ class TestUpdateBannerUx:
         assert "data.webui&&data.webui.no_git&&!data.webui.manual_update" in fn
 
     def test_manual_webui_no_git_updates_are_bannerable_but_plain_no_git_stays_hidden(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         format_fn = extract_js_function(src, '_formatUpdateTargetStatus')
         instruction_fn = extract_js_function(src, '_formatManualUpdateInstruction')
         script = fr"""
@@ -2350,7 +2351,7 @@ if(_formatUpdateTargetStatus('WebUI', {{ no_git: true, behind: 1 }}) !== null) t
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_manual_webui_banner_hides_apply_button(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         format_fn = extract_js_function(src, '_formatUpdateTargetStatus')
         instruction_fn = extract_js_function(src, '_formatManualUpdateInstruction')
         show_fn = extract_js_function(src, '_showUpdateBanner')
@@ -2398,8 +2399,8 @@ if(state.updateBanner.classList.added !== true) throw new Error('manual update m
         subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
 
     def test_settings_manual_webui_update_includes_pull_guidance(self):
-        ui_src = read('static/ui.js')
-        panels_src = read('static/panels.js')
+        ui_src = family_source("ui")
+        panels_src = family_source("panels")
         format_fn = extract_js_function(ui_src, '_formatUpdateTargetStatus')
         instruction_fn = extract_js_function(ui_src, '_formatManualUpdateInstruction')
         error_fn = extract_js_function(ui_src, '_formatUpdateCheckError')
@@ -2618,7 +2619,7 @@ class TestUpdateCompareSource:
         assert 'id="updateWhatsNew"' not in src
 
     def test_update_banner_frontend_uses_data_driven_compare_helpers(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'function _isSafeUpdateCompareUrl(url)' in src
         assert 'function _updateCompareUrl(info)' in src
         assert 'function _updateWhatsNewTargets(data)' in src
@@ -2632,7 +2633,7 @@ class TestUpdateCompareSource:
         assert "$('updateWhatsNew')" not in src
 
     def test_update_banner_clears_stale_links_when_no_updates_remain(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         start = src.find('function _showUpdateBanner(data)')
         assert start != -1, "_showUpdateBanner not found"
         fn = src[start:src.find('function dismissUpdate()', start)]
@@ -2643,7 +2644,7 @@ class TestUpdateCompareSource:
         assert "classList.remove('visible')" in empty_block
 
     def test_manual_up_to_date_check_clears_update_banner(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         up_to_date_idx = src.find("settings_up_to_date")
         assert up_to_date_idx != -1, "manual update up-to-date branch not found"
         block = src[up_to_date_idx:up_to_date_idx + 300]
@@ -2671,7 +2672,7 @@ class TestWhatsNewSummaryToggle:
         assert 'settings_desc_whats_new_summary' in nearby
 
     def test_settings_js_loads_saves_and_boots_summary_toggle(self):
-        panels = read('static/panels.js')
+        panels = family_source("panels")
         boot = read('static/boot.js')
         assert "$('settingsWhatsNewSummary')" in panels
         assert 'payload.whats_new_summary_enabled' in panels
@@ -2681,7 +2682,7 @@ class TestWhatsNewSummaryToggle:
         assert 'whats_new_summary_enabled' in boot
 
     def test_update_banner_summary_flow_keeps_diff_links_after_summary(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'function _renderUpdateSummaryPanel' in src
         assert 'async function showWhatsNewSummary' in src
         assert "api('/api/updates/summary'" in src
@@ -2709,7 +2710,7 @@ class TestWhatsNewSummaryToggle:
         assert 'window._whatsNewSummaryEnabled' in src
 
     def test_update_banner_summary_cache_has_byte_cap_constant_within_bounds(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert "const WHATS_NEW_SUMMARY_STORAGE_KEY='hermes-whats-new-generated-summaries';" in src
         cap_match = re.search(r"const WHATS_NEW_SUMMARY_STORAGE_MAX_BYTES\s*=\s*([^;\n]+)", src)
         assert cap_match, "cap constant should be declared in static/ui.js"
@@ -3036,7 +3037,7 @@ if(!window._whatsNewGeneratedSummaries || !window._whatsNewGeneratedSummaries.we
         ]
 
     def test_update_summary_panel_is_scrollable_for_long_summaries(self):
-        style = read('static/style.css')
+        style = family_source("style")
 
         assert '#updateSummaryScroll{max-height:min(34vh,260px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--accent) transparent;}' in style
         assert '#updateSummaryPanel.update-summary-expanded #updateSummaryScroll{max-height:min(75vh,560px);}' in style
@@ -3202,7 +3203,7 @@ class TestForceButtonResetOnRetry:
     pointing at the wrong target."""
 
     def test_apply_updates_resets_force_button_at_start(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'async function applyUpdates\b.*?\n\}', src, re.DOTALL)
         assert m, "applyUpdates() not found"
         fn = m.group(0)
@@ -3221,7 +3222,7 @@ class TestForceButtonResetOnRetry:
 
 def test_force_update_confirm_discloses_untracked_file_deletion():
     """#4310: destructive force-update copy must include untracked files."""
-    src = read('static/ui.js')
+    src = family_source("ui")
     m = re.search(r'async function forceUpdate\b.*?\n\}', src, re.DOTALL)
     assert m, "forceUpdate() not found"
     fn = m.group(0)
@@ -3238,7 +3239,7 @@ class TestCheckForUpdatesButton:
 
     def test_checkUpdatesNow_defined_in_panels(self):
         """checkUpdatesNow() function must exist in panels.js."""
-        src = read('static/panels.js')
+        src = family_source("panels")
         assert 'function checkUpdatesNow' in src or 'async function checkUpdatesNow' in src, (
             "checkUpdatesNow() not found in panels.js"
         )
@@ -3252,7 +3253,7 @@ class TestCheckForUpdatesButton:
 
     def test_checkUpdatesBlock_css_exists(self):
         """CSS rules for #checkUpdatesBlock and .btn-tiny must exist in style.css."""
-        src = read('static/style.css')
+        src = family_source("style")
         assert '#checkUpdatesBlock' in src, (
             "#checkUpdatesBlock CSS selector not found in style.css"
         )
@@ -3262,7 +3263,7 @@ class TestCheckForUpdatesButton:
 
     def test_check_now_i18n_key_exists(self):
         """settings_check_now i18n key must exist in all locale blocks."""
-        src = read('static/i18n.js')
+        src = family_source("i18n")
         count = src.count('settings_check_now')
         assert count >= 5, (
             f"settings_check_now found in only {count} locale blocks (expected ≥5: en, ru, es, zh, zh-Hant)"

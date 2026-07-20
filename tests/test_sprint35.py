@@ -11,6 +11,7 @@ Covers:
   7. breadcrumbBar element exists in index.html
   8. Breadcrumb CSS rules exist in style.css
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -44,7 +45,7 @@ def test_panel_max_is_not_500():
 
 def test_messages_inner_has_responsive_breakpoints():
     """style.css must have @media breakpoints for .messages-inner."""
-    css = read("static/style.css")
+    css = family_source("style")
     assert "min-width:1400px" in css or "min-width: 1400px" in css, (
         "Missing @media(min-width:1400px) breakpoint for .messages-inner"
     )
@@ -55,7 +56,7 @@ def test_messages_inner_has_responsive_breakpoints():
 
 def test_messages_inner_no_hardcoded_800px():
     """The base .messages-inner rule must not hardcode max-width:800px."""
-    css = read("static/style.css")
+    css = family_source("style")
     # Find the .messages-inner base rule (not inside a @media block)
     # It should not have max-width:800px on the same line
     for line in css.splitlines():
@@ -68,7 +69,7 @@ def test_messages_inner_no_hardcoded_800px():
 
 def test_messages_inner_breakpoint_values():
     """The breakpoints should expand max-width at 1400px and 1800px."""
-    css = read("static/style.css")
+    css = family_source("style")
     assert "max-width:1100px" in css or "max-width: 1100px" in css, (
         "Expected max-width:1100px at 1400px breakpoint"
     )
@@ -141,6 +142,6 @@ def test_breadcrumb_bar_in_index_html():
 
 def test_breadcrumb_css_rules_exist():
     """style.css must have breadcrumb CSS rules."""
-    css = read("static/style.css")
+    css = family_source("style")
     for selector in (".breadcrumb-seg", ".breadcrumb-link", ".breadcrumb-current"):
         assert selector in css, f"Missing CSS rule: {selector}"

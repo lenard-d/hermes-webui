@@ -5,6 +5,7 @@ These tests verify the static assets contain the correct HTML structure,
 CSS rules, and JS logic for the mic feature — all of which runs purely in
 the browser with no server-side component.
 """
+from tests.frontend_asset_contract import family_source
 import re
 import urllib.request
 import json
@@ -16,6 +17,11 @@ from tests._pytest_port import BASE
 def get_text(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
         return r.read().decode(), r.status
+
+
+def get_family_text(family, path):
+    _, status = get_text(path)
+    return family_source(family), status
 
 
 # ── index.html ────────────────────────────────────────────────────────────
@@ -112,20 +118,20 @@ def test_mic_button_inside_composer_left():
 
 def test_mic_btn_css_rule_exists():
     """style.css must define .mic-btn rule."""
-    css, status = get_text("/static/style.css")
+    css, status = get_family_text("style", "/static/style.css")
     assert status == 200
     assert '.mic-btn' in css
 
 
 def test_mic_btn_recording_state_css():
     """.mic-btn.recording must be defined for active recording visual state."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert '.mic-btn.recording' in css
 
 
 def test_mic_recording_color_error():
     """.mic-btn.recording must use the error color variable or red."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     recording_idx = css.find('.mic-btn.recording')
     # Find the rule block after the selector
     brace_open = css.find('{', recording_idx)
@@ -136,7 +142,7 @@ def test_mic_recording_color_error():
 
 def test_mic_recording_has_animation():
     """.mic-btn.recording must use an animation for the pulse effect."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     recording_idx = css.find('.mic-btn.recording')
     brace_open = css.find('{', recording_idx)
     brace_close = css.find('}', brace_open)
@@ -146,20 +152,20 @@ def test_mic_recording_has_animation():
 
 def test_mic_pulse_keyframes_defined():
     """@keyframes mic-pulse must be defined for the pulsing animation."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert 'mic-pulse' in css
     assert '@keyframes' in css
 
 
 def test_mic_status_css_rule_exists():
     """style.css must define .mic-status rule."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert '.mic-status' in css
 
 
 def test_mic_dot_css_rule_exists():
     """style.css must define .mic-dot rule with animation."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert '.mic-dot' in css
     dot_idx = css.find('.mic-dot')
     brace_open = css.find('{', dot_idx)
@@ -170,7 +176,7 @@ def test_mic_dot_css_rule_exists():
 
 def test_mic_btn_has_transition():
     """.mic-btn must define a transition for smooth state changes."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     mic_btn_idx = css.find('.mic-btn{')
     if mic_btn_idx == -1:
         mic_btn_idx = css.find('.mic-btn ')
@@ -294,7 +300,7 @@ def test_boot_js_mic_status_toggle():
 def test_boot_js_send_stops_mic():
     """btnSend primary action path must stop mic before sending."""
     boot_js, _ = get_text("/static/boot.js")
-    ui_js, _ = get_text("/static/ui.js")
+    ui_js, _ = get_family_text("ui", "/static/ui.js")
     send_onclick_idx = boot_js.find("$('btnSend').onclick")
     assert send_onclick_idx != -1
     assert 'handleComposerPrimaryAction' in boot_js[send_onclick_idx:send_onclick_idx + 200]

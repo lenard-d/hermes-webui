@@ -4,6 +4,7 @@ The sidebar must fail visibly when the sessions API times out, must not let
 optional project metadata blank the conversations list, and must not return
 bulky session-detail fields in /api/sessions rows.
 """
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
@@ -12,7 +13,7 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 def _sessions_js() -> str:
-    return (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    return family_source("sessions")
 
 
 def _workspace_js() -> str:

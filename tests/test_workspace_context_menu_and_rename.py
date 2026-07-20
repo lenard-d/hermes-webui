@@ -23,6 +23,7 @@ Run: ./scripts/test.sh tests/test_workspace_context_menu_and_rename.py -v
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import os
 import re
@@ -35,6 +36,10 @@ SESSIONS_JS = os.path.join(BASE_DIR, "static", "sessions.js")
 
 
 def _read(path: str) -> str:
+    if path == UI_JS:
+        return family_source("ui")
+    if path == SESSIONS_JS:
+        return family_source("sessions")
     with open(path, encoding="utf-8") as fh:
         return fh.read()
 

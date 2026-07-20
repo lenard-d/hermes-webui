@@ -1,5 +1,7 @@
 from __future__ import annotations
+from tests.frontend_asset_contract import family_asset_paths, family_source
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,6 +13,12 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 def _read_static(path: str) -> str:
+    family = {
+        "static/ui.js": "ui",
+        "static/messages.js": "messages",
+    }.get(path)
+    if family:
+        return family_source(family)
     return (REPO_ROOT / path).read_text(encoding="utf-8")
 
 
@@ -59,7 +67,7 @@ def test_schedule_todos_refresh_fans_out_without_breaking_sidebar_path(tmp_path)
     script = r'''
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
 const start = src.indexOf('let _todosLastRenderedHash=null;');
 const end = src.indexOf('function _resetTodosRenderCache()', start);
 if (start < 0 || end < 0) throw new Error('todo scheduler block not found');
@@ -90,7 +98,7 @@ assert(inactive.workspace === 1, 'workspace helper remains responsible for works
     script_path = tmp_path / "todo_scheduler_test.js"
     script_path.write_text(script, encoding="utf-8")
     result = subprocess.run(
-        ["node", str(script_path), str(REPO_ROOT / "static" / "ui.js")],
+        ["node", str(script_path), json.dumps([str(path) for path in family_asset_paths("ui")])],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -154,7 +162,7 @@ assert(run({panelHidden:true}) === 0, 'hidden workspace Todos panel must not ref
 def test_todo_state_listener_replaces_snapshot_filters_session_and_rejects_older_ts(tmp_path):
     script = r'''
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
 function extractTodoStateHandler(source) {
   const start = source.indexOf("source.addEventListener('todo_state'");
   if (start < 0) throw new Error('todo_state listener not found');
@@ -204,7 +212,7 @@ assert(S.todos[0].id === 'a', 'malformed event must be swallowed');
     script_path = tmp_path / "todo_listener_test.js"
     script_path.write_text(script, encoding="utf-8")
     result = subprocess.run(
-        ["node", str(script_path), str(REPO_ROOT / "static" / "messages.js")],
+        ["node", str(script_path), json.dumps([str(path) for path in family_asset_paths("messages")])],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

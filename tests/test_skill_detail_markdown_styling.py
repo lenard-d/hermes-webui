@@ -1,9 +1,7 @@
 """Skills detail markdown must use the shared preview-md styling pipeline."""
+from tests.frontend_asset_contract import family_source
 
-from pathlib import Path
-
-
-PANELS_JS = Path("static/panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def _function_block(name: str) -> str:

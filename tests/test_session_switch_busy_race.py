@@ -7,13 +7,14 @@ the newly opened session as locally streaming while messages are still loading.
 Switching back to a streaming session must restore the snapshotted live turn
 instead of rebuilding thinking/worklog chrome from scratch.
 """
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO = Path(__file__).resolve().parents[1]
 SESSIONS_SRC = SESSIONS_SOURCE
-UI_SRC = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_SRC = family_source("ui")
 
 
 def _function_body(src: str, signature: str) -> str:

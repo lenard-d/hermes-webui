@@ -6,6 +6,7 @@ Fixes:
 - boot.js reads default_workspace from /api/settings and sets S._profileDefaultWorkspace
 - promptNewFile/promptNewFolder auto-create a session bound to default workspace
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 import re
 
@@ -20,7 +21,7 @@ class TestSyncWorkspaceDisplaysFallback:
     """syncWorkspaceDisplays must show default workspace when no session."""
 
     def test_uses_profile_default_workspace_as_fallback(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'function syncWorkspaceDisplays\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "syncWorkspaceDisplays not found"
         fn = m.group(0)
@@ -30,7 +31,7 @@ class TestSyncWorkspaceDisplaysFallback:
         )
 
     def test_has_workspace_not_has_session_for_chip_disable(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'function syncWorkspaceDisplays\(\)\{.*?\n\}', src, re.DOTALL)
         assert m
         fn = m.group(0)
@@ -95,7 +96,7 @@ class TestPromptNewFileNoSession:
     """promptNewFile/promptNewFolder must auto-create a session on blank page."""
 
     def test_prompt_new_file_auto_creates_session(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'async function promptNewFile\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m, "promptNewFile not found"
         fn = m.group(0)
@@ -110,7 +111,7 @@ class TestPromptNewFileNoSession:
         )
 
     def test_prompt_new_folder_auto_creates_session(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'async function promptNewFolder\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m, "promptNewFolder not found"
         fn = m.group(0)
@@ -123,7 +124,7 @@ class TestPromptNewFileNoSession:
 
     def test_prompt_new_file_still_returns_early_without_default(self):
         """If no default workspace, the function should return early (not crash)."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'async function promptNewFile\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m
         fn = m.group(0)
@@ -137,7 +138,7 @@ class TestWorkspaceSwitcherBlankPage:
     """Opus review Q6: workspace switcher dropdown must not silently fail on blank page."""
 
     def test_switch_to_workspace_auto_creates_session(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'async function switchToWorkspace\(.*?\n\}', src, re.DOTALL)
         assert m, "switchToWorkspace not found"
         fn = m.group(0)
@@ -149,7 +150,7 @@ class TestWorkspaceSwitcherBlankPage:
         )
 
     def test_switch_to_workspace_keeps_busy_guard_after_blank_page_create(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         start = src.find('async function switchToWorkspace(')
         assert start != -1, "switchToWorkspace not found"
         fn = src[start:src.find('async function toggleWorktreePanel', start)]
@@ -165,7 +166,7 @@ class TestWorkspaceSwitcherBlankPage:
         )
 
     def test_prompt_workspace_path_auto_creates_session(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'async function promptWorkspacePath\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "promptWorkspacePath not found"
         fn = m.group(0)
@@ -174,7 +175,7 @@ class TestWorkspaceSwitcherBlankPage:
         )
 
     def test_sync_workspace_displays_dropdown_close_uses_has_workspace(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'function syncWorkspaceDisplays\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "syncWorkspaceDisplays not found"
         fn = m.group(0)
@@ -192,7 +193,7 @@ class TestWorkspaceDropdownBlankPageCurrentWs:
     """Blank-page workspace dropdown must highlight profile default (#5169)."""
 
     def test_render_workspace_dropdown_uses_profile_default_on_blank_page(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         assert re.search(
             r"renderWorkspaceDropdownInto\([^,]+,\s*[^,]+,\s*"
             r"S\.session\?\.workspace\|\|S\._profileDefaultWorkspace\|\|data\.last\|\|''\)",
@@ -217,7 +218,7 @@ class TestNewChatOnWorkspaceSwitchOptIn:
         )
 
     def test_switch_to_workspace_has_gated_new_chat_branch(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         start = src.find('async function switchToWorkspace(')
         assert start != -1
         fn = src[start:src.find('async function toggleWorktreePanel', start)]
@@ -244,7 +245,7 @@ class TestNewChatOnWorkspaceSwitchOptIn:
 
     def test_boot_and_panels_wire_the_flag(self):
         boot = read('static/boot.js')
-        panels = read('static/panels.js')
+        panels = family_source("panels")
         assert 'window._newChatOnWorkspaceSwitch=!!s.new_chat_on_workspace_switch' in boot, (
             "boot.js must set window._newChatOnWorkspaceSwitch from the loaded settings"
         )
@@ -260,7 +261,7 @@ class TestNewChatOnWorkspaceSwitchOptIn:
         assert 'id="settingsNewChatOnWorkspaceSwitch"' in html, (
             "the Settings checkbox for the opt-in must exist"
         )
-        i18n = read('static/i18n.js')
+        i18n = family_source("i18n")
         for key in (
             'settings_label_new_chat_on_workspace_switch',
             'settings_desc_new_chat_on_workspace_switch',

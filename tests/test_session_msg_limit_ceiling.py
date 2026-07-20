@@ -12,6 +12,7 @@ direct test coverage (driving the handler end-to-end would require a live
 session + state.db; the helper is the unit under test).
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 from api.routes import _MAX_MSG_LIMIT, _parse_msg_limit
 
@@ -72,7 +73,7 @@ def test_parse_msg_limit_zero_and_negative_clamp_to_one():
 from pathlib import Path
 
 _ROUTES_SRC = (Path(__file__).resolve().parents[1] / "api" / "routes.py").read_text(encoding="utf-8")
-_SESSIONS_JS = (Path(__file__).resolve().parents[1] / "static" / "sessions.js").read_text(encoding="utf-8")
+_SESSIONS_JS = family_source("sessions")
 
 
 def test_backend_exposes_msg_limit_max_in_session_response():

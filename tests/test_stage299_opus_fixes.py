@@ -12,6 +12,7 @@ These tests pin the defenses applied per Opus advisor on stage-299:
 - Bounded behavior: if WIKI_PATH points at a forbidden root, both
   functions return 0/empty without iterating
 """
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROUTES_PY = Path(__file__).parent.parent / "api" / "routes.py"
@@ -72,7 +73,7 @@ def test_count_files_returns_zero_for_forbidden_root(tmp_path, monkeypatch):
 
 def test_render_llm_wiki_status_uses_url_scheme_guard():
     """Opus SHOULD-FIX #1: docs_url interpolated into href must be scheme-guarded."""
-    panels_js = (Path(__file__).parent.parent / "static" / "panels.js").read_text()
+    panels_js = family_source("panels")
     # Find the _renderLlmWikiStatus function body
     start = panels_js.find("function _renderLlmWikiStatus")
     end = panels_js.find("\nfunction ", start + 1)

@@ -1,6 +1,7 @@
 """
 Sprint 46 Tests: manual session compression with optional focus topic.
 """
+from tests.frontend_asset_contract import family_source
 
 import contextlib
 import io
@@ -731,9 +732,6 @@ def test_static_commands_js_prefers_persisted_reference_message(cleanup_test_ses
 
 
 def test_static_session_load_resumes_manual_compression_polling(cleanup_test_sessions):
-    from pathlib import Path
-
-    with open(Path(__file__).resolve().parents[1] / "static" / "sessions.js", encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
 
     assert "resumeManualCompressionForSession" in src

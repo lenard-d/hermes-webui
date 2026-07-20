@@ -4,11 +4,12 @@ Sprint 38 Tests: Think-tag stripping with leading whitespace (PR #327).
 Covers the static render path (ui.js regex logic, verified against the JS source)
 and the streaming render path (messages.js _streamDisplay logic).
 """
+from tests.frontend_asset_contract import family_source
 import pathlib
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS     = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MSG_JS    = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS     = family_source("ui")
+MSG_JS    = family_source("messages")
 
 
 # ── ui.js: static render path ────────────────────────────────────────────────

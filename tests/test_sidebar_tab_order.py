@@ -1,11 +1,12 @@
 """Regression tests for configurable sidebar tab ordering."""
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 def _function_body(source: str, name: str, limit: int = 5000) -> str:

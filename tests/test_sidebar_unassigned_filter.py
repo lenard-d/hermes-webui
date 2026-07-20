@@ -22,6 +22,7 @@ break the chip.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
@@ -30,11 +31,11 @@ CSS = pathlib.Path(__file__).parent.parent / "static" / "style.css"
 
 
 def _js() -> str:
-    return JS.read_text(encoding="utf-8")
+    return family_source("sessions")
 
 
 def _css() -> str:
-    return CSS.read_text(encoding="utf-8")
+    return family_source("style")
 
 
 def test_no_project_filter_sentinel_declared():

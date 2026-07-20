@@ -8,6 +8,7 @@ Covers:
   - last assistant turn keeps cumulative usage visible and reveals time/actions on hover
   - unchanged historical messages preserve their original timestamps across turns
 """
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -16,8 +17,8 @@ from api.streaming import _restore_reasoning_metadata, _sanitize_messages_for_ap
 
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-UI_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+UI_CSS = family_source("style")
 
 
 def test_footer_timestamp_is_not_limited_to_user_messages():

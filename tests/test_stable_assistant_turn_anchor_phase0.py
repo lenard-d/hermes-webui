@@ -4,6 +4,7 @@ The first implementation slice was intentionally non-visual. Later slices keep
 the same inventory contract while adding narrow, tested wiring points.
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import json
 import shutil
@@ -22,6 +23,12 @@ NODE = shutil.which("node")
 
 
 def _read(path: Path) -> str:
+    if path == UI_JS:
+        return family_source("ui")
+    if path == SESSIONS_JS:
+        return family_source("sessions")
+    if path == MESSAGES_JS:
+        return family_source("messages")
     return path.read_text(encoding="utf-8")
 
 

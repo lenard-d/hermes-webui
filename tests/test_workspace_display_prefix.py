@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
@@ -9,7 +10,7 @@ def _read(relpath: str) -> str:
 
 
 def test_workspace_display_prefix_helper_strips_leading_metadata_only():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _stripWorkspaceDisplayPrefix")
     assert start != -1, "workspace display prefix stripper not found"
     end = src.find("function _renderUserFencedBlocks", start)
@@ -28,7 +29,7 @@ def test_workspace_display_prefix_helper_strips_leading_metadata_only():
 
 
 def test_user_render_uses_stripped_display_content_without_preempting_context_cards():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     loop_start = src.find("for(let vi=0;vi<visWithIdx.length;vi++)")
     assert loop_start != -1, "message render loop not found"
     loop_end = src.find("if(!currentAssistantTurn)", loop_start)

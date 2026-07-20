@@ -3,6 +3,7 @@
 Covers backend validation round-trip, frontend static contracts,
 i18n coverage, and the key integration points that have broken before.
 """
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import json
 import shutil
 import subprocess
@@ -14,14 +15,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PY = (ROOT / "api" / "config.py").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+UI_JS = family_source("ui")
 PANELS_PATH = ROOT / "static" / "panels.js"
 UI_PATH = ROOT / "static" / "ui.js"
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 NODE = shutil.which("node")
 requires_node = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
@@ -120,8 +121,8 @@ _PANELS_DASHBOARD_DRIVER = textwrap.dedent(
     const priorMode = process.argv[4] || '';
     const forceNoRestore = process.argv[5] === '1';
     const failSave = process.argv[6] === '1';
-    const panelsSrc = fs.readFileSync(process.argv[7], 'utf8');
-    const uiSrc = fs.readFileSync(process.argv[8], 'utf8');
+    const panelsSrc = JSON.parse(process.argv[7]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
+    const uiSrc = JSON.parse(process.argv[8]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
 
     const container = makeEl();
     const modeEl = makeEl();
@@ -283,8 +284,8 @@ def _run_panels_driver(
                 prior_mode,
                 "1" if force_no_restore else "0",
                 "1" if fail_save else "0",
-                str(PANELS_PATH),
-                str(UI_PATH),
+                json.dumps([str(path) for path in family_asset_paths("panels")]),
+                json.dumps([str(path) for path in family_asset_paths("ui")]),
             ],
             cwd=ROOT,
             text=True,

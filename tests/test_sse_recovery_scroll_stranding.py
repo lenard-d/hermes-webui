@@ -28,6 +28,7 @@ Two distinct "jump back" classes, both verified live this session:
 These are structural source-locks (the behavioral A/B was verified live via
 Playwright: OLD stranded the reader 470-580px from bottom, FIX landed at 1px).
 """
+from tests.frontend_asset_contract import family_source
 import json
 import shutil
 import subprocess
@@ -37,8 +38,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 
 
 def _compact(s: str) -> str:

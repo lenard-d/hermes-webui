@@ -1,6 +1,7 @@
 """
 Sprint 10 Tests: server.py split, cancel endpoint, cron history, tool card polish.
 """
+from tests.frontend_asset_contract import family_source
 import json, pathlib, urllib.error, urllib.request, urllib.parse
 from io import BytesIO
 
@@ -17,6 +18,10 @@ def get(path):
 def get_text(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
         return r.read().decode(), r.status
+
+def get_family_text(family, path):
+    _, status = get_text(path)
+    return family_source(family), status
 
 def post(path, body=None):
     data = json.dumps(body or {}).encode()
@@ -173,14 +178,14 @@ def test_crons_output_still_returns_valid_job_outputs(monkeypatch, tmp_path):
     assert body["outputs"] == [{"filename": "run.md", "content": "# Cron Job\n\n## Response\nexpected output\n"}]
 
 def test_cron_history_button_in_panels_js(cleanup_test_sessions):
-    src, _ = get_text("/static/panels.js")
+    src, _ = get_family_text("panels", "/static/panels.js")
     # After the main-view refactor, cron runs load inline into the detail card
     # via _loadCronDetailRuns() instead of a separate "All runs" button.
     assert "_loadCronDetailRuns" in src
     assert "cron_last_output" in src  # i18n key used by the runs card
 
 def test_cron_output_snippet_helper(cleanup_test_sessions):
-    src, _ = get_text("/static/panels.js")
+    src, _ = get_family_text("panels", "/static/panels.js")
     assert "_cronOutputSnippet" in src
 
 
@@ -209,8 +214,8 @@ def test_cron_output_usage_metadata_parses_optional_fields(cleanup_test_sessions
 
 
 def test_cron_output_usage_strip_render_hook(cleanup_test_sessions):
-    src, _ = get_text("/static/panels.js")
-    css, _ = get_text("/static/style.css")
+    src, _ = get_family_text("panels", "/static/panels.js")
+    css, _ = get_family_text("style", "/static/style.css")
 
     assert "_formatCronRunUsageStrip(run.usage)" in src
     assert "_formatCronRunUsageStrip(data.usage)" in src
@@ -254,24 +259,24 @@ def test_cron_output_window_without_response_uses_tail(cleanup_test_sessions):
 # ── Tool card polish ───────────────────────────────────────────────────────
 
 def test_tool_card_running_dot_in_css(cleanup_test_sessions):
-    src, _ = get_text("/static/style.css")
+    src, _ = get_family_text("style", "/static/style.css")
     assert "tool-card-running-dot" in src
 
 def test_tool_card_show_more_in_ui_js(cleanup_test_sessions):
-    src, _ = get_text("/static/ui.js")
+    src, _ = get_family_text("ui", "/static/ui.js")
     assert "Show more" in src
     assert "tool-card-more" in src
 
 def test_tool_card_smart_truncation_in_ui_js(cleanup_test_sessions):
-    src, _ = get_text("/static/ui.js")
+    src, _ = get_family_text("ui", "/static/ui.js")
     assert "displaySnippet" in src
     assert "lastBreak" in src
 
 def test_cancel_sse_event_handler_in_messages_js(cleanup_test_sessions):
-    src, _ = get_text("/static/messages.js")
+    src, _ = get_family_text("messages", "/static/messages.js")
     assert "addEventListener('cancel'" in src
     assert "Task cancelled" in src
 
 def test_active_stream_id_tracked(cleanup_test_sessions):
-    src, _ = get_text("/static/messages.js")
+    src, _ = get_family_text("messages", "/static/messages.js")
     assert "S.activeStreamId" in src

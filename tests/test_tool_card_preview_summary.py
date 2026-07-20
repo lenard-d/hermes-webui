@@ -5,6 +5,7 @@ Collapsed tool rows are transcript metadata.  They should summarize the action
 body; otherwise long tool-heavy turns visually turn into raw debug logs.
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_asset_paths
 
 import json
 import shutil
@@ -21,7 +22,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const lines = fs.readFileSync(process.argv[2], 'utf8').split('\n');
+const lines = JSON.parse(process.argv[2]).map((path)=>fs.readFileSync(path, 'utf8')).join('').split('\n');
 let startIdx = -1, endIdx = lines.length;
 for (let i = 0; i < lines.length; i++) {
   if (/^function _toolArgPreviewValue\(/.test(lines[i]) && startIdx < 0) startIdx = i;
@@ -48,7 +49,7 @@ def driver_path(tmp_path_factory):
 def _preview(driver_path: str, tc: dict, display_snippet: str = "") -> str:
     assert NODE is not None
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH)],
+        [NODE, driver_path, json.dumps([str(path) for path in family_asset_paths("ui")])],
         input=json.dumps({"tc": tc, "displaySnippet": display_snippet}),
         capture_output=True,
         text=True,

@@ -2,6 +2,7 @@
 Sprint 21 Tests: Send button polish — hidden until content, pop-in animation,
 icon-only circle design.
 """
+from tests.frontend_asset_contract import family_source
 import re
 import urllib.request
 
@@ -11,6 +12,11 @@ from tests._pytest_port import BASE
 def get_text(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
         return r.read().decode(), r.status
+
+
+def get_family_text(family, path):
+    _, status = get_text(path)
+    return family_source(family), status
 
 
 def _find_global_selector(css, selector):
@@ -110,7 +116,7 @@ def test_send_button_svg_arrow_up():
 
 def test_send_btn_is_circle():
     """send-btn must use border-radius:50% for the circle shape."""
-    css, status = get_text("/static/style.css")
+    css, status = get_family_text("style", "/static/style.css")
     assert status == 200
     send_idx = _find_global_selector(css, '.send-btn{')
     brace_open = css.find('{', send_idx)
@@ -121,7 +127,7 @@ def test_send_btn_is_circle():
 
 def test_send_btn_fixed_dimensions():
     """send-btn must have explicit width and height (icon-circle, not text-padded)."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     send_idx = _find_global_selector(css, '.send-btn{')
     brace_open = css.find('{', send_idx)
     brace_close = css.find('}', brace_open)
@@ -132,7 +138,7 @@ def test_send_btn_fixed_dimensions():
 
 def test_send_btn_no_old_padding():
     """send-btn must not use text padding layout (old pill style removed)."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     send_idx = _find_global_selector(css, '.send-btn{')
     brace_open = css.find('{', send_idx)
     brace_close = css.find('}', brace_open)
@@ -143,7 +149,7 @@ def test_send_btn_no_old_padding():
 
 def test_send_btn_accent_background():
     """send-btn background must use the accent color variable."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     send_idx = _find_global_selector(css, '.send-btn{')
     brace_open = css.find('{', send_idx)
     brace_close = css.find('}', brace_open)
@@ -153,7 +159,7 @@ def test_send_btn_accent_background():
 
 def test_send_btn_has_transition():
     """send-btn must have transition for smooth hover/active states."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     send_idx = _find_global_selector(css, '.send-btn{')
     brace_open = css.find('{', send_idx)
     brace_close = css.find('}', brace_open)
@@ -163,7 +169,7 @@ def test_send_btn_has_transition():
 
 def test_send_btn_has_box_shadow():
     """send-btn must have a box-shadow glow effect."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     send_idx = _find_global_selector(css, '.send-btn{')
     brace_open = css.find('{', send_idx)
     brace_close = css.find('}', brace_open)
@@ -173,7 +179,7 @@ def test_send_btn_has_box_shadow():
 
 def test_send_btn_hover_has_scale():
     """send-btn:hover must use transform:scale for a satisfying hover effect."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     hover_idx = _find_global_selector(css, '.send-btn:hover{')
     brace_open = css.find('{', hover_idx)
     brace_close = css.find('}', brace_open)
@@ -183,7 +189,7 @@ def test_send_btn_hover_has_scale():
 
 def test_send_btn_active_shrinks():
     """send-btn:active must scale down slightly for tactile press feedback."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     active_idx = _find_global_selector(css, '.send-btn:active{')
     brace_open = css.find('{', active_idx)
     brace_close = css.find('}', brace_open)
@@ -193,19 +199,19 @@ def test_send_btn_active_shrinks():
 
 def test_send_btn_disabled_rule_exists():
     """send-btn:disabled must still be styled."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert '.send-btn:disabled' in css
 
 
 def test_send_btn_visible_class_defined():
     """.send-btn.visible class must be defined for the pop-in animation."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert '.send-btn.visible' in css
 
 
 def test_send_pop_in_keyframes_defined():
     """@keyframes send-pop-in must be defined."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     assert 'send-pop-in' in css
     assert '@keyframes' in css
 
@@ -231,21 +237,21 @@ def _extract_keyframe(css, name):
 
 def test_send_pop_in_uses_scale():
     """send-pop-in keyframe must animate from a scaled-down state."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     kf_rule = _extract_keyframe(css, 'send-pop-in')
     assert 'scale' in kf_rule
 
 
 def test_send_pop_in_uses_opacity():
     """send-pop-in keyframe must fade in (opacity transition)."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     kf_rule = _extract_keyframe(css, 'send-pop-in')
     assert 'opacity' in kf_rule
 
 
 def test_send_btn_mobile_override_no_padding():
     """Mobile override for send-btn must not add text padding (keeps circle shape)."""
-    css, _ = get_text("/static/style.css")
+    css, _ = get_family_text("style", "/static/style.css")
     # Find the @media block
     media_idx = css.find('@media')
     send_mobile_idx = css.find('.send-btn', media_idx)
@@ -262,14 +268,14 @@ def test_send_btn_mobile_override_no_padding():
 
 def test_ui_js_update_send_btn_function():
     """ui.js must define updateSendBtn() function."""
-    js, status = get_text("/static/ui.js")
+    js, status = get_family_text("ui", "/static/ui.js")
     assert status == 200
     assert 'function updateSendBtn' in js
 
 
 def test_update_send_btn_checks_content():
     """Composer primary action helper must check textarea value length."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     fn_idx = js.find('function _composerHasContent')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -280,7 +286,7 @@ def test_update_send_btn_checks_content():
 
 def test_update_send_btn_checks_pending_files():
     """Composer primary action helper must also count attached files as content."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     fn_idx = js.find('function _composerHasContent')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -289,7 +295,7 @@ def test_update_send_btn_checks_pending_files():
 
 def test_update_send_btn_uses_visible_class():
     """updateSendBtn must add .visible class to trigger the pop-in animation."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     fn_idx = js.find('function updateSendBtn')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -298,7 +304,7 @@ def test_update_send_btn_uses_visible_class():
 
 def test_update_send_btn_uses_disabled():
     """updateSendBtn must disable the button when no content or busy."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     fn_idx = js.find('function updateSendBtn')
     fn_end = js.find('\n}', fn_idx) + 2
     fn_body = js[fn_idx:fn_end]
@@ -307,7 +313,7 @@ def test_update_send_btn_uses_disabled():
 
 def test_set_busy_calls_update_send_btn():
     """setBusy must call updateSendBtn() so button hides while agent is responding."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     busy_idx = js.find('function setBusy')
     busy_end = js.find('\n}', busy_idx) + 2
     busy_body = js[busy_idx:busy_end]
@@ -316,7 +322,7 @@ def test_set_busy_calls_update_send_btn():
 
 def test_render_tray_calls_update_send_btn():
     """renderTray must call updateSendBtn() so button appears when files are attached."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     tray_idx = js.find('function renderTray')
     tray_end = js.find('\n}', tray_idx) + 2
     tray_body = js[tray_idx:tray_end]
@@ -338,7 +344,7 @@ def test_boot_js_input_calls_update_send_btn():
 
 def test_auto_resize_calls_update_send_btn():
     """autoResize() must call updateSendBtn() so button hides after send clears textarea."""
-    js, status = get_text("/static/messages.js")
+    js, status = get_family_text("messages", "/static/messages.js")
     assert status == 200
     assert 'updateSendBtn' in js
 
@@ -357,7 +363,7 @@ def test_send_button_still_has_send_btn_class():
 
 def test_ui_js_set_busy_calls_update_send_btn():
     """setBusy must call updateSendBtn to manage button disabled state."""
-    js, _ = get_text("/static/ui.js")
+    js, _ = get_family_text("ui", "/static/ui.js")
     busy_idx = js.find('function setBusy')
     busy_end = js.find('\n}', busy_idx) + 2
     busy_body = js[busy_idx:busy_end]
@@ -372,5 +378,5 @@ def test_index_html_attach_button_unchanged():
 
 def test_send_function_still_exists():
     """send() function must still be defined in messages.js."""
-    js, _ = get_text("/static/messages.js")
+    js, _ = get_family_text("messages", "/static/messages.js")
     assert 'async function send()' in js

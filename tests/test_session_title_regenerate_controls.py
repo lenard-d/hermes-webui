@@ -1,4 +1,5 @@
 """Regression coverage for manual session title regeneration controls (#3106)."""
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -6,8 +7,8 @@ from unittest.mock import MagicMock
 import api.streaming as streaming
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+I18N_JS = family_source("i18n")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

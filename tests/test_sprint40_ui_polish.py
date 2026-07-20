@@ -5,6 +5,7 @@ Covers:
 - .session-item.active .session-title uses var(--gold) instead of hardcoded #e8a030
 - The hardcoded amber color #e8a030 is NOT present in the active session title rule
 """
+from tests.frontend_asset_contract import family_source
 import os
 import pathlib
 import re
@@ -19,9 +20,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 REPO_ROOT  = _REPO_ROOT
-STYLE_CSS  = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-PANELS_JS   = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+STYLE_CSS  = family_source("style")
+SESSIONS_JS = family_source("sessions")
+PANELS_JS   = family_source("panels")
 
 try:
     from api import config as _api_config

@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import re
 from pathlib import Path
 
@@ -18,7 +19,7 @@ def test_messages_zero_skips_effective_model_resolution():
 
 
 def test_full_message_load_updates_viewed_count_after_metadata_fast_path():
-    src = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     compact = re.sub(r"\s+", "", src)
 
     # The metadata-arrival viewed-count update now flows through
@@ -33,14 +34,14 @@ def test_full_message_load_updates_viewed_count_after_metadata_fast_path():
 
 
 def test_lazy_message_load_skips_model_resolution():
-    src = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     assert "messages=1&resolve_model=0" in src
 
 
 def test_session_switch_defers_model_resolution_without_blocking():
-    src = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    ui = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
+    ui = family_source("ui")
 
     assert "messages=0&resolve_model=0" in src
     assert "function _resolveSessionModelForDisplaySoon" in src
@@ -51,7 +52,7 @@ def test_session_switch_defers_model_resolution_without_blocking():
 
 
 def test_deferred_model_resolution_refreshes_context_metadata():
-    src = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     start = src.index("function _resolveSessionModelForDisplaySoon")
     end = src.index("const _INITIAL_MSG_LIMIT", start)
     block = src[start:end]

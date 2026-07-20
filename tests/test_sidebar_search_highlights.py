@@ -1,3 +1,4 @@
+from tests.frontend_asset_contract import family_source
 import json
 import re
 import subprocess
@@ -11,7 +12,7 @@ INDEX_HTML = ROOT / "static" / "index.html"
 
 
 def _run_js_ranges(cases):
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     start = src.index("function _sessionSearchRanges")
     end = src.index("function _appendHighlightedText", start)
     helper = src[start:end]
@@ -76,8 +77,8 @@ def test_session_search_preview_handles_empty_or_unavailable_body():
 
 
 def test_sidebar_search_rendering_uses_safe_dom_helpers():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
-    css = STYLE_CSS.read_text(encoding="utf-8")
+    src = family_source("sessions")
+    css = family_source("style")
     assert "function _appendHighlightedText" in src
     assert ".textContent=source.slice(r.start,r.end)" in src
     assert "dangerouslySetInnerHTML" not in src
@@ -101,7 +102,7 @@ def test_session_search_has_accessible_clear_button():
 
 
 def test_session_search_clear_button_styles_do_not_shift_input_width():
-    css = STYLE_CSS.read_text(encoding="utf-8")
+    css = family_source("style")
     assert ".sidebar-search{position:relative;padding:8px 12px;flex-shrink:0;}" in css
     assert ".session-search-field{position:relative;display:flex;align-items:center;width:100%;}" in css
     assert ".session-search input{padding-right:34px;}" in css
@@ -115,7 +116,7 @@ def test_session_search_clear_button_styles_do_not_shift_input_width():
 
 
 def test_session_search_clear_sync_and_click_behaviour():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     start = src.index("function syncSessionSearchClear")
     end = src.index("function filterSessions", start)
     helper = src[start:end]
