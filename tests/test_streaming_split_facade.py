@@ -154,3 +154,16 @@ def test_title_sanitizer_observes_facade_validation_patch(monkeypatch):
     )
 
     assert streaming._sanitize_generated_title("ignored") == ""
+
+
+def test_title_analysis_observes_facade_message_text_patch(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "_message_text",
+        lambda content: f"visible:{content}",
+    )
+
+    assert streaming._first_exchange_snippets([
+        {"role": "user", "content": "question"},
+        {"role": "assistant", "content": "answer"},
+    ]) == ("visible:question", "visible:answer")

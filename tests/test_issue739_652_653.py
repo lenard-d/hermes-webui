@@ -6,14 +6,15 @@ Tests for streaming error handling fixes:
 
 All static tests (no live server required).
 """
-import ast
 import re
 import pathlib
 
 STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
+TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'title_generation.py'
 MESSAGES_JS = pathlib.Path(__file__).parent.parent / 'static' / 'messages.js'
 
 streaming_src = STREAMING.read_text(encoding='utf-8')
+title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')
 messages_js_src = MESSAGES_JS.read_text(encoding='utf-8')
 
 
@@ -108,17 +109,19 @@ class TestStreamEndSessionId:
         """Background title thread also emits stream_end with original session_id."""
         # In _run_background_title_update: put_event('stream_end', {'session_id': session_id})
         # The session_id param is passed from the caller with the original value
-        assert "put_event('stream_end', {'session_id': session_id})" in streaming_src
+        assert "put_event('stream_end', {'session_id': session_id})" in title_generation_src
 
     def test_s_session_id_not_used_in_stream_end(self):
         """s.session_id (which may be rotated after compaction) must not appear in stream_end."""
         # Find all stream_end emissions and verify none use s.session_id
-        for match in re.finditer(r"put[_a-z]*\('stream_end',[^)]+\)", streaming_src):
-            assert 's.session_id' not in match.group(), \
-                f"stream_end uses s.session_id (may be rotated): {match.group()}"
+        for source in (streaming_src, title_generation_src):
+            matches = re.finditer(r"put[_a-z]*\('stream_end',[^)]+\)", source)
+            for match in matches:
+                assert 's.session_id' not in match.group(), \
+                    f"stream_end uses s.session_id (may be rotated): {match.group()}"
 
     def test_title_event_uses_original_session_id(self):
         """title event in background title thread uses original session_id, not s.session_id."""
         # Client guard: if((d.session_id||activeSid)!==activeSid) return;
         # So title must be emitted with the original id
-        assert "put_event('title', {'session_id': session_id," in streaming_src
+        assert "put_event('title', {'session_id': session_id," in title_generation_src

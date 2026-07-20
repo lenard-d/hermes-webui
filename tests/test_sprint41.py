@@ -11,11 +11,16 @@ import pathlib
 import re
 import unittest
 
+from api.streaming import _sanitize_generated_title
+
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
 HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
+TITLE_GENERATION_PY = (
+    REPO_ROOT / "api" / "streaming_parts" / "title_generation.py"
+).read_text(encoding="utf-8")
 
 
 # ── streaming.py: title auto-generation condition ─────────────────────────
@@ -68,27 +73,19 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         )
 
     def test_streaming_rejects_generic_completion_titles(self):
-        self.assertIn(
-            "all set",
-            STREAMING_PY,
-            "streaming.py should reject generic English completion phrases as session titles",
-        )
-        self.assertIn(
-            "completed",
-            STREAMING_PY,
-            "streaming.py should reject completion-status titles as session titles",
-        )
+        self.assertEqual(_sanitize_generated_title("all set"), "")
+        self.assertEqual(_sanitize_generated_title("completed"), "")
         self.assertNotIn(
             "测试完成",
-            STREAMING_PY,
-            "streaming.py title generation should stay English-only",
+            TITLE_GENERATION_PY,
+            "title generation should stay English-only",
         )
 
     def test_streaming_uses_reasoning_split_for_minimax_titles(self):
         self.assertIn(
             "reasoning_split",
-            STREAMING_PY,
-            "streaming.py should request MiniMax title calls with reasoning_split so final text is separated from thinking",
+            TITLE_GENERATION_PY,
+            "title generation should request MiniMax calls with reasoning_split so final text is separated from thinking",
         )
 
     def test_streaming_emits_title_sse_event(self):
@@ -96,21 +93,21 @@ class TestIssue495TitleStreaming(unittest.TestCase):
         # which can be rotated during context compression — see #652 fix)
         self.assertIn(
             "put_event('title', {'session_id': session_id, 'title': effective_title})",
-            STREAMING_PY,
-            "streaming.py should emit a title SSE event when title is updated",
+            TITLE_GENERATION_PY,
+            "title generation should emit a title SSE event when title is updated",
         )
 
     def test_streaming_emits_title_status_sse_event(self):
         self.assertIn(
             "put_event('title_status', payload)",
-            STREAMING_PY,
-            "streaming.py should emit a title_status SSE event for title generation diagnostics",
+            TITLE_GENERATION_PY,
+            "title generation should emit a title_status SSE event for diagnostics",
         )
 
     def test_streaming_emits_stream_end_event(self):
         self.assertIn(
             "put_event('stream_end', {'session_id': session_id})",
-            STREAMING_PY,
+            TITLE_GENERATION_PY,
             "background title path should end the SSE stream with stream_end",
         )
 
