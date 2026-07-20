@@ -17,7 +17,7 @@ CHAT_RUNS_PY = (
 ).read_text(encoding="utf-8")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
-    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+    REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 
 

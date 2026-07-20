@@ -65,7 +65,7 @@ def _handle_btw(handler, body):
     ephemeral.save()
     stream = create_stream_channel()
     register_runtime_stream(stream_id, ephemeral.session_id, stream)
-    from api.background import track_btw
+    from api.runs.background import track_btw
     track_btw(body["session_id"], ephemeral.session_id, stream_id, question)
     thr = threading.Thread(
         target=_run_agent_streaming,
@@ -114,7 +114,7 @@ def _handle_background(handler, body):
     stream = create_stream_channel()
     register_runtime_stream(stream_id, bg.session_id, stream)
     task_id = uuid.uuid4().hex[:8]
-    from api.background import track_background, complete_background
+    from api.runs.background import track_background, complete_background
     parent_sid = body["session_id"]
     bg_sid = bg.session_id
     track_background(parent_sid, bg_sid, stream_id, task_id, prompt)
@@ -202,7 +202,7 @@ def _agent_runtime_barrier_response(
         return None
     if runner_local_owned and webui_gateway_chat_enabled(get_config()):
         return None
-    from api.runtime_adapter import runtime_adapter_runner_enabled
+    from api.runs.adapter import runtime_adapter_runner_enabled
 
     if runner_local_owned and runtime_adapter_runner_enabled():
         return None
@@ -346,7 +346,7 @@ def _start_run(
     returns no adapter is surfaced as ``{"error": str(exc), "_status": 501}``
     so both call sites can map it onto their own HTTP shape.
     """
-    from api.runtime_adapter import (
+    from api.runs.adapter import (
         LegacyJournalRuntimeAdapter,
         StartRunRequest,
         build_runtime_adapter,
@@ -921,7 +921,7 @@ def _handle_goal_command(handler, body):
         )
         previous_goal_state = goal_state_snapshot(s.session_id, profile_home=profile_home)
 
-    from api.runtime_adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
+    from api.runs.adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
 
     def _legacy_goal_update(session_id: str, _action: str, text: str) -> dict:
         return goal_command_payload(

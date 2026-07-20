@@ -48,7 +48,7 @@ def test_profile_runtime_env_includes_terminal_config_and_dotenv(tmp_path):
 
 
 def test_streaming_applies_profile_runtime_env_to_agent_run():
-    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+    src = Path("api/runs/local.py").read_text(encoding="utf-8")
 
     assert "get_profile_runtime_env" in src
     assert "_profile_runtime_env" in src
@@ -94,7 +94,7 @@ def test_profile_background_worker_uses_gateway_parity_runtime_env_filter():
 
 def test_streaming_thread_env_allows_profile_terminal_cwd_override():
     facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
-    run_src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+    run_src = Path("api/runs/local.py").read_text(encoding="utf-8")
 
     assert "def _build_agent_thread_env" in facade_src
     assert "_thread_env = _build_agent_thread_env(" in run_src

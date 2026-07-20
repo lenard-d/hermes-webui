@@ -157,7 +157,7 @@ def start_server_side_turn(
     """Start one wakeup turn asynchronously and re-defer admission races."""
     def _runner() -> None:
         try:
-            from api.routes import start_session_turn
+            from api.runs import start_session_turn
 
             response = start_session_turn(
                 session_id,

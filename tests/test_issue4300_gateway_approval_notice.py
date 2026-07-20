@@ -5,7 +5,7 @@ from tests.frontend_asset_contract import family_asset_paths, family_source
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-GATEWAY_CHAT = (REPO / "api" / "gateway_chat.py").read_text(encoding="utf-8")
+GATEWAY_CHAT = (REPO / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 I18N_JS = family_source("i18n")
 

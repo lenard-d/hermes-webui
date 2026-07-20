@@ -517,7 +517,7 @@ def test_materialize_helper_called_immediately_before_error_path_clears():
     """
     from pathlib import Path
     local_run_src = Path(__file__).parent.parent.joinpath(
-        'api', 'streaming_parts', 'local_run.py'
+        'api', 'runs', 'local.py'
     ).read_text(encoding='utf-8')
     live_controls_src = Path(__file__).parent.parent.joinpath(
         'api', 'streaming_parts', 'live_controls.py'
@@ -546,7 +546,7 @@ def test_materialize_helper_called_immediately_before_error_path_clears():
     assert len(sites_with_helper) >= 2, (
         f"Expected ≥2 clear sites preceded by {helper_name} within 4 lines; "
         f"found {sites_with_helper}. PR #1760 / #1361 regression — re-wire the "
-        f"helper at the error-branch clear sites in api/streaming.py."
+        f"helper at the error-branch clear sites in api/runs/local.py."
     )
 
 

@@ -171,7 +171,7 @@ def test_streaming_py_imports_has_pending(cleanup_test_sessions):
     """R4: api/streaming.py must import an approval-check function.
     When missing, the approval check mid-stream caused NameError.
     """
-    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
+    src = (REPO_ROOT / "api/runs/local.py").read_text()
     assert "has_blocking_approval" in src, "has_blocking_approval not found in local_run.py"
     assert "import" in src and "has_blocking_approval" in src, \
         "has_blocking_approval must be imported in local_run.py"
@@ -183,8 +183,8 @@ def test_aiagent_imported_in_streaming(cleanup_test_sessions):
     """
     src = (REPO_ROOT / "api/streaming.py").read_text()
     assert "get_ai_agent_class" in src, "guarded AIAgent resolver not referenced in api/streaming.py"
-    assert "from api.agent_runtime import" in src and "get_ai_agent_class" in src, \
-        "AIAgent must be resolved through api.agent_runtime in api/streaming.py"
+    assert "from api.runs.agent_runtime import" in src and "get_ai_agent_class" in src, \
+        "AIAgent must be resolved through api.runs.agent_runtime in api/streaming.py"
 
 
 # ── R5: SSE loop did not break on cancel event (Sprint 10 bug) ───────────────
@@ -924,7 +924,7 @@ def test_streaming_bridge_accepts_current_tool_progress_callback_signature(clean
     The agent now calls tool_progress_callback(event_type, name, preview, args, **kwargs).
     If the WebUI bridge only accepts (name, preview, args), live tool updates silently vanish.
     """
-    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
+    src = (REPO_ROOT / "api/runs/local.py").read_text()
     assert "def on_tool(*cb_args, **cb_kwargs):" in src, \
         "streaming.py must accept variable callback args for tool progress events"
     assert "reasoning_callback=on_reasoning" in src, \
@@ -942,7 +942,7 @@ def test_streaming_reads_reasoning_effort_from_config_dict(cleanup_test_sessions
     regardless of what `/reasoning <level>` had been set to.  This static
     source assertion pins the fix because the runtime symptom is silent.
     """
-    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
+    src = (REPO_ROOT / "api/runs/local.py").read_text()
     assert "_cfg.cfg" not in src, \
         "get_config() returns a dict; accessing _cfg.cfg drops reasoning_config to None"
     assert "_cfg.get('agent', {})" in src or '_cfg.get("agent", {})' in src, \
@@ -956,7 +956,7 @@ def test_streaming_agent_cache_signature_includes_reasoning_config(cleanup_test_
     matches the old entry and the operator's `/reasoning xhigh` change has
     no effect on the live session.
     """
-    src = (REPO_ROOT / "api/streaming_parts/local_run.py").read_text()
+    src = (REPO_ROOT / "api/runs/local.py").read_text()
     start = src.find("_sig_blob = _json.dumps")
     end = src.find("_agent_sig", start)
     assert start >= 0 and end > start, "agent cache signature block not found"

@@ -28,7 +28,7 @@ def _append_journaled_partial_output(
         return False
 
     try:
-        from api.run_journal import read_run_events
+        from api.runs.journal import read_run_events
         journal = read_run_events(session.session_id, stream_id)
     except Exception:
         logger.debug(

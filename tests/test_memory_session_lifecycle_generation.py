@@ -323,7 +323,7 @@ def test_lru_eviction_commits_outside_cache_lock():
     import api.streaming as streaming_mod
 
     facade_src = Path(streaming_mod.__file__).read_text(encoding="utf-8")
-    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+    src = Path("api/runs/local.py").read_text(encoding="utf-8")
     marker = "_evicted_items = []"
     collect_start = src.index(marker)
     lock_start = src.index("with SESSION_AGENT_CACHE_LOCK:", collect_start)
@@ -397,7 +397,7 @@ def test_post_turn_lifecycle_marks_completion_without_commit():
     CLI-parity semantics, completed turns are marked dirty/uncommitted;
     actual extraction/commit happens only at session boundaries
     (new session, LRU eviction, shutdown drain)."""
-    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+    src = Path("api/runs/local.py").read_text(encoding="utf-8")
 
     save_pos = src.index("s.save()")
     lifecycle_marker = src.index("mark_turn_completed(s.session_id, agent=agent)", save_pos)

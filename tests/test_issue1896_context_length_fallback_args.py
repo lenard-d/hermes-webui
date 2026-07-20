@@ -26,7 +26,7 @@ import types
 
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 SESSION_MODELS_PY = (
     REPO / "api" / "routes_parts" / "session_models.py"
 ).read_text(encoding="utf-8")

@@ -13,7 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from api.agent_runtime import (
+    from api.runs.agent_runtime import (
         AgentRuntimeChangedError,
         ensure_agent_runtime_current,
         require_ai_agent_class,

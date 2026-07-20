@@ -987,7 +987,7 @@ class TestLeftoverDelivery:
 
     def test_leftover_drain_call_in_streaming(self):
         """Verify the streaming.py source contains the drain call before put('done', ...)."""
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(encoding="utf-8")
         assert "_drain_pending_steer" in src, (
             "_run_agent_streaming must call agent._drain_pending_steer() to deliver leftovers"
         )
@@ -998,7 +998,7 @@ class TestLeftoverDelivery:
     def test_leftover_drain_runs_before_done_event(self):
         """The drain must happen BEFORE put('done', ...) so frontend gets both events
         on the same turn."""
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(encoding="utf-8")
         # Find the drain invocation and the next put('done', ...) AFTER it
         drain_idx = src.find("_drain_pending_steer()")
         assert drain_idx >= 0

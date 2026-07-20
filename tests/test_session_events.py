@@ -17,7 +17,7 @@ PROFILES = "\n".join(
     Path(path).read_text(encoding="utf-8")
     for path in ("api/profiles.py", "api/profiles_parts/cron_scope.py")
 )
-TURN_ADMISSION = Path("api/turn_admission.py").read_text(encoding="utf-8")
+TURN_ADMISSION = Path("api/runs/admission.py").read_text(encoding="utf-8")
 
 
 def test_session_events_endpoint_and_bus_are_defined():

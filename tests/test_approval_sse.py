@@ -30,7 +30,7 @@ STREAM_TRANSPORT_SRC = (
     REPO_ROOT / "api" / "routes_parts" / "stream_transport.py"
 ).read_text(encoding="utf-8")
 LOCAL_RUN_SRC = (
-    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+    REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 # Approval SSE state and helpers live in route_approvals after the #1907
 # extraction; combine both files so structural assertions below still pass.

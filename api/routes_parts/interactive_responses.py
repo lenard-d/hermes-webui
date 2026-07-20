@@ -183,7 +183,7 @@ def _handle_approval_respond(handler, body):
     # or recover the run_id from the mirrored gateway approval entry if the
     # stream pointer has already been cleared.
     try:
-        from api.gateway_chat import (
+        from api.runs.gateway import (
             _STREAM_RUN_IDS,
             _gateway_base_url,
             _gateway_api_key,
@@ -233,7 +233,7 @@ def _handle_approval_respond(handler, body):
     except Exception:
         pass  # fall through to local approval path
 
-    from api.runtime_adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
+    from api.runs.adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
 
     if runtime_adapter_enabled():
         adapter = LegacyJournalRuntimeAdapter(approval_delegate=_resolve_approval_legacy)
@@ -293,7 +293,7 @@ def _handle_clarify_respond(handler, body):
         return bad(handler, "response is required")
     clarify_id = body.get("clarify_id", "")
 
-    from api.runtime_adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
+    from api.runs.adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
 
     if runtime_adapter_enabled():
         adapter = LegacyJournalRuntimeAdapter(clarify_delegate=_resolve_clarify_legacy)

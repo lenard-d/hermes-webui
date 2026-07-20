@@ -22,7 +22,7 @@ from unittest import mock
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
-    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+    REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 
 

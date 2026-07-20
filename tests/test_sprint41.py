@@ -20,7 +20,7 @@ HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 LOCAL_RUN_PY = (
-    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+    REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 TITLE_GENERATION_PY = (
     REPO_ROOT / "api" / "streaming_parts" / "title_generation.py"

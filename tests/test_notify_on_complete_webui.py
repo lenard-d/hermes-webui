@@ -16,7 +16,7 @@ def test_webui_drains_only_matching_background_completion_events():
 
 
 def test_webui_injects_process_notifications_without_persisting_them_as_user_text():
-    src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+    src = Path("api/runs/local.py").read_text(encoding="utf-8")
 
     assert "_process_notifications = _drain_webui_process_notifications(" in src
     assert "pending_async_acceptances=_pending_async_acceptances" in src
@@ -28,7 +28,7 @@ def test_webui_injects_process_notifications_without_persisting_them_as_user_tex
 
 def test_webui_sets_gateway_session_platform_for_background_watchers():
     facade_src = Path("api/streaming.py").read_text(encoding="utf-8")
-    run_src = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+    run_src = Path("api/runs/local.py").read_text(encoding="utf-8")
 
     assert "'HERMES_SESSION_PLATFORM': 'webui'" in facade_src
     assert "os.environ['HERMES_SESSION_PLATFORM'] = 'webui'" in run_src

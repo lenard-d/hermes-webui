@@ -338,7 +338,7 @@ def _run_journal_has_visible_output(session, stream_id: str | None) -> bool:
     if not stream_id:
         return False
     try:
-        from api.run_journal import read_run_events
+        from api.runs.journal import read_run_events
         journal = read_run_events(session.session_id, stream_id)
     except Exception:
         return False
@@ -369,7 +369,7 @@ def _run_journal_terminal_state(session, stream_id: str | None) -> str | None:
     if not stream_id:
         return None
     try:
-        from api.run_journal import latest_run_summary
+        from api.runs.journal import latest_run_summary
         summary = latest_run_summary(session.session_id, stream_id)
     except Exception:
         return None
@@ -391,7 +391,7 @@ def _journal_is_still_arriving(session, stream_id: str | None) -> bool:
     if not stream_id:
         return False
     try:
-        from api.run_journal import _run_path, latest_run_summary
+        from api.runs.journal import _run_path, latest_run_summary
 
         path = _run_path(session.session_id, stream_id)
         summary = latest_run_summary(session.session_id, stream_id)

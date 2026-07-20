@@ -65,9 +65,9 @@ def install_fake_start_session_turn(monkeypatch, *, status: int = 200):
     """Patch ``api.routes.start_session_turn`` to record calls instead of
     running a real agent turn.
 
-    The drain helper does ``from api.routes import start_session_turn``
-    inside a daemon thread, so patching the attribute on the ``api.routes``
-    module is what the thread resolves at call time.
+    The drain helper calls ``api.runs.start_session_turn`` inside a daemon
+    thread. Its configured callback resolves the compatibility route attribute
+    at call time, so existing route-level monkeypatches remain observable.
 
     Returns a ``holder`` dict with ``calls`` (list of recorded call kwargs)
     and ``event`` (a ``threading.Event`` set on first call) — pair it with

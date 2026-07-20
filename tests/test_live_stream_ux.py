@@ -4,7 +4,7 @@ from tests.frontend_asset_contract import family_source
 ROOT = Path(__file__).resolve().parent.parent
 MESSAGES_JS = family_source("messages")
 UI_JS = family_source("ui")
-RUN_JOURNAL_PY = (ROOT / "api" / "run_journal.py").read_text(encoding="utf-8")
+RUN_JOURNAL_PY = (ROOT / "api" / "runs" / "journal.py").read_text(encoding="utf-8")
 
 def test_stale_interrupted_event_marks_recovery_control():
     assert "\"recovery_control\": True" in RUN_JOURNAL_PY

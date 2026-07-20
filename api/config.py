@@ -29,7 +29,6 @@ import weakref
 from pathlib import Path
 from typing import Any
 
-from api.runtime_state import ProcessRuntimeState
 from urllib.parse import parse_qs, urlparse
 
 from api.config_parts._binding import install_config_part as _install_config_part
@@ -1385,22 +1384,25 @@ def get_sessions_cache_max(config_data: dict | None = None) -> int:
 CHAT_LOCK = threading.Lock()
 
 
-from api.stream_channel import StreamChannel, create_stream_channel
+from api.runs.channels import StreamChannel, create_stream_channel  # noqa: F401 - compatibility exports
+from api.runs.runtime_state import (
+    ACTIVE_RUNS,
+    ACTIVE_RUNS_LOCK,
+    AGENT_INSTANCES,  # noqa: F401 - compatibility export
+    CANCEL_FLAGS,  # noqa: F401 - compatibility export
+    RUNTIME_STATE,  # noqa: F401 - compatibility export
+    STREAM_GOAL_RELATED,  # noqa: F401 - compatibility export
+    STREAM_LAST_EVENT_ID,  # noqa: F401 - compatibility export
+    STREAM_LIVE_TOOL_CALLS,  # noqa: F401 - compatibility export
+    STREAM_PARTIAL_TEXT,  # noqa: F401 - compatibility export
+    STREAM_REASONING_TEXT,  # noqa: F401 - compatibility export
+    STREAM_SESSION_OWNERS,  # noqa: F401 - compatibility export
+    STREAM_SESSION_OWNERS_LOCK,  # noqa: F401 - compatibility export
+    STREAMS,  # noqa: F401 - compatibility export
+    STREAMS_LOCK,  # noqa: F401 - compatibility export
+)
 
 
-STREAMS: dict = {}
-STREAMS_LOCK = threading.Lock()
-# stream_id -> session_id owner, populated synchronously before worker startup so
-# stream-id authorization does not depend on worker lifecycle registration.
-STREAM_SESSION_OWNERS: dict = {}
-STREAM_SESSION_OWNERS_LOCK = threading.Lock()
-CANCEL_FLAGS: dict = {}
-AGENT_INSTANCES: dict = {}  # stream_id -> AIAgent instance for interrupt propagation
-STREAM_PARTIAL_TEXT: dict = {}  # stream_id -> partial assistant text accumulated during streaming
-STREAM_REASONING_TEXT: dict = {}  # stream_id -> reasoning trace accumulated during streaming (#1361 §A)
-STREAM_LIVE_TOOL_CALLS: dict = {}  # stream_id -> live tool calls accumulated during streaming (#1361 §B)
-STREAM_GOAL_RELATED: dict = {}  # stream_id -> bool: only evaluate goal for goal-related turns (#1932)
-STREAM_LAST_EVENT_ID: dict = {}  # stream_id -> latest journal event_id for `id:` field on live SSE frames (stage-364)
 PENDING_GOAL_CONTINUATION: set = set()  # session_ids awaiting a goal continuation turn (#1932)
 
 
@@ -1547,30 +1549,8 @@ DEFERRED_PROCESS_WAKEUPS_LOCK = threading.Lock()
 SESSION_CHANNEL_IDLE_TTL_SECS: int = 14400  # 4 hours
 SESSION_CHANNEL_SUBSCRIBER_GRACE_SECS: int = 60  # subscribers-empty grace
 
-# Active agent-run registry. This intentionally tracks worker lifecycle rather
-# than SSE lifecycle: cancel/reconnect may remove STREAMS while the worker is
-# still unwinding, blocked in a provider call, or waiting for delegated work.
-ACTIVE_RUNS: dict = {}
-ACTIVE_RUNS_LOCK = threading.Lock()
 LAST_RUN_FINISHED_AT: float | None = None
 SERVER_START_TIME = time.time()
-
-
-RUNTIME_STATE = ProcessRuntimeState(
-    streams=STREAMS,
-    stream_owners=STREAM_SESSION_OWNERS,
-    cancel_flags=CANCEL_FLAGS,
-    agent_instances=AGENT_INSTANCES,
-    partial_text=STREAM_PARTIAL_TEXT,
-    reasoning_text=STREAM_REASONING_TEXT,
-    live_tool_calls=STREAM_LIVE_TOOL_CALLS,
-    goal_related=STREAM_GOAL_RELATED,
-    last_event_ids=STREAM_LAST_EVENT_ID,
-    active_runs=ACTIVE_RUNS,
-    streams_lock=STREAMS_LOCK,
-    owners_lock=STREAM_SESSION_OWNERS_LOCK,
-    active_runs_lock=ACTIVE_RUNS_LOCK,
-)
 
 
 # Keep the long-standing ``api.config`` import and monkeypatch surface while the

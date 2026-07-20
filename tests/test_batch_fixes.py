@@ -46,7 +46,7 @@ class TestRootWorkspaceUnblocked:
         assert "'/proc'" in src or 'Path("/proc")' in src or "Path('/proc')" in src
 
     def test_split_guard_present(self):
-        src = read("api/streaming_parts/local_run.py")
+        src = read("api/runs/local.py")
         assert "'\\n\\n[Attached files:' in msg_text" in src, (
             "base_text split must guard against missing '[Attached files:' "
             "to avoid empty-string on plain messages"

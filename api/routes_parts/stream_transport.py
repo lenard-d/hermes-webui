@@ -326,7 +326,7 @@ def _stream_runner_run_events(handler, run_id: str, cursor: str | None = None) -
     if not run_id:
         return False
     try:
-        from api.runtime_adapter import build_runtime_adapter, runtime_adapter_runner_enabled
+        from api.runs.adapter import build_runtime_adapter, runtime_adapter_runner_enabled
 
         if not runtime_adapter_runner_enabled():
             return False

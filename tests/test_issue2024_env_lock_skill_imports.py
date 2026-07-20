@@ -21,7 +21,7 @@ import textwrap
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 STREAMING_PY = REPO / "api" / "streaming.py"
-LOCAL_RUN_PY = REPO / "api" / "streaming_parts" / "local_run.py"
+LOCAL_RUN_PY = REPO / "api" / "runs" / "local.py"
 PROFILES_PY = REPO / "api" / "profiles.py"
 
 

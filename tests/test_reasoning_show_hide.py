@@ -426,7 +426,7 @@ class TestStreamingReasoningWiring:
 
     def test_streaming_reads_reasoning_effort_from_config(self):
         facade_src = read('api/streaming.py')
-        run_src = read('api/streaming_parts/local_run.py')
+        run_src = read('api/runs/local.py')
         assert 'parse_reasoning_effort' in facade_src, (
             "api/streaming.py must import parse_reasoning_effort to translate "
             "config.yaml agent.reasoning_effort into AIAgent reasoning_config"

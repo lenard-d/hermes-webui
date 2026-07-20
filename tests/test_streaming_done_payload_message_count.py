@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from api.streaming import _session_payload_with_full_messages
 
 
-LOCAL_RUN_SOURCE = Path("api/streaming_parts/local_run.py").read_text(encoding="utf-8")
+LOCAL_RUN_SOURCE = Path("api/runs/local.py").read_text(encoding="utf-8")
 
 
 class _FakeSession(SimpleNamespace):
@@ -92,7 +92,7 @@ def test_gateway_done_payload_uses_full_message_count_helper():
     """The gateway-routed chat `done` SSE shares the settled-payload path and
     must also report a message_count matching the embedded transcript (sibling
     of the two streaming.py sites)."""
-    gateway_source = Path("api/gateway_chat.py").read_text(encoding="utf-8")
+    gateway_source = Path("api/runs/gateway.py").read_text(encoding="utf-8")
     done_idx = gateway_source.index('put_gateway_event("done"')
     block_start = gateway_source.rfind("gateway_session_payload =", 0, done_idx)
     block = gateway_source[block_start:done_idx]

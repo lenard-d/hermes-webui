@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 
 
 def test_streaming_agent_reads_agent_max_turns_from_config():

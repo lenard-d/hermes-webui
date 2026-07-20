@@ -132,7 +132,7 @@ def test_session_persists_latest_gateway_routing_and_history_across_reload():
 
 def test_streaming_captures_gateway_metadata_into_usage_payload_and_assistant_turn():
     local_run_py = (
-        REPO / "api" / "streaming_parts" / "local_run.py"
+        REPO / "api" / "runs" / "local.py"
     ).read_text(encoding="utf-8")
     assert "_extract_gateway_routing_metadata" in local_run_py
     assert "usage['gateway_routing']" in local_run_py

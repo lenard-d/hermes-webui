@@ -34,7 +34,7 @@ from contextlib import closing
 from urllib.parse import parse_qs, quote, unquote, urljoin, urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPHandler, HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
-from api.agent_runtime import (
+from api.runs.agent_runtime import (
     AgentRuntimeChangedError,
     ensure_agent_runtime_current,
     require_ai_agent_class,
@@ -1701,10 +1701,10 @@ from api.helpers import (
     _CLIENT_DISCONNECT_ERRORS,
 )
 from api.agent_health import build_agent_health_payload
-from api.gateway_chat import gateway_chat_config_status
+from api.runs.gateway import gateway_chat_config_status
 from api.request_diagnostics import RequestDiagnostics
 from api.system_health import build_system_health_payload
-from api.turn_admission import (
+from api.runs import (
     LocalTurnRequest,
     start_local_turn,
 )
@@ -2541,8 +2541,11 @@ from api.streaming import (
     _compact_for_echo_compare,
     _strip_compact_echo_suffix,
 )
-from api.gateway_chat import _run_gateway_chat_streaming, webui_gateway_chat_enabled
-from api.run_journal import (
+from api.runs.gateway import (  # noqa: F401 - compatibility facade re-exports
+    _run_gateway_chat_streaming,
+    webui_gateway_chat_enabled,
+)
+from api.runs.journal import (
     _parse_run_journal_event_id as _shared_parse_run_journal_event_id,
     bound_run_journal_snapshot_args,
     find_run_summary,
@@ -4756,7 +4759,7 @@ def handle_get(handler, parsed) -> bool:
         sid = parse_qs(parsed.query).get("session_id", [""])[0]
         if not sid:
             return bad(handler, "Missing session_id")
-        from api.background import get_results
+        from api.runs.background import get_results
         return j(handler, {"results": get_results(sid)})
 
     if parsed.path == "/api/sessions":
@@ -5025,7 +5028,7 @@ def handle_get(handler, parsed) -> bool:
             return bad(handler, "stream_id required")
         if not _stream_id_visible_to_request_profile(handler, stream_id):
             return True
-        from api.runtime_adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
+        from api.runs.adapter import LegacyJournalRuntimeAdapter, runtime_adapter_enabled
 
         if runtime_adapter_enabled():
             adapter = LegacyJournalRuntimeAdapter(cancel_delegate=cancel_stream)
@@ -9432,6 +9435,18 @@ from api.routes_parts.chat_runs import (
 
 _install_routes_part(globals(), _chat_runs_routes_part)
 del _chat_runs_routes_part
+
+# Compose the server-side run entry point after the route-owned compatibility
+# function has been installed. The late global lookup preserves existing
+# monkeypatch and reload behavior without making background domains import the
+# HTTP facade.
+from api.runs.server_turn import configure_start_session_turn
+
+configure_start_session_turn(
+    lambda session_id, message, *, source="process_wakeup": globals()[
+        "start_session_turn"
+    ](session_id, message, source=source)
+)
 
 
 

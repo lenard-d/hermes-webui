@@ -184,7 +184,7 @@ def test_global_context_length_remains_default_model_only(monkeypatch):
 
 def test_streaming_fallbacks_use_shared_provider_context_helper():
     local_run_py = (
-        REPO / "api" / "streaming_parts" / "local_run.py"
+        REPO / "api" / "runs" / "local.py"
     ).read_text(encoding="utf-8")
     assert local_run_py.count("_context_length_lookup_inputs_for_model(") >= 2
     assert "_cfg_base_url = getattr(agent, 'base_url', '') or resolved_base_url or ''" in local_run_py

@@ -260,7 +260,7 @@ console.log(JSON.stringify({
     def test_main_extra_body_flows_to_agent_request_overrides(self):
         """Persisted main extra_body must be passed to AIAgent, not only shown in Settings."""
         local_run_py = (
-            ROOT / "api" / "streaming_parts" / "local_run.py"
+            ROOT / "api" / "runs" / "local.py"
         ).read_text(encoding="utf-8")
         assert "_main_model_request_overrides" in local_run_py
         assert "'request_overrides' in _agent_params" in local_run_py

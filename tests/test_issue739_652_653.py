@@ -12,7 +12,7 @@ import pathlib
 
 from api.streaming import _sanitize_messages_for_api
 
-STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'local_run.py'
+STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local.py'
 STREAMING_FACADE = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
 TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'title_generation.py'
 

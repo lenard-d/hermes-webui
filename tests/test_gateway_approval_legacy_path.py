@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 from api.gateway_chat import _gateway_runs_approval_event
 
 REPO_ROOT = Path(__file__).parent.parent
-GATEWAY_CHAT_SRC = (REPO_ROOT / "api" / "gateway_chat.py").read_text(encoding="utf-8")
+GATEWAY_CHAT_SRC = (REPO_ROOT / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
 
 _LEGACY_MARKER = 'url = f"{base_url}/v1/chat/completions"'
 _NEXT_FUNC_RE = "\ndef "
@@ -21,7 +21,7 @@ _NEXT_FUNC_RE = "\ndef "
 def _extract_legacy_sse_loop():
     """Extract the legacy /v1/chat/completions SSE relay function body."""
     start = GATEWAY_CHAT_SRC.find(_LEGACY_MARKER)
-    assert start >= 0, "Legacy chat/completions path not found in gateway_chat.py"
+    assert start >= 0, "Legacy chat/completions path not found in api/runs/gateway.py"
     end = GATEWAY_CHAT_SRC.find(_NEXT_FUNC_RE, start)
     if end < 0:
         end = len(GATEWAY_CHAT_SRC)

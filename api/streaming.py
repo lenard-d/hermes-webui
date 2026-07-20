@@ -53,7 +53,7 @@ from api.compression_recovery import stamp_compression_exhausted_recovery  # noq
 from api.metering import meter  # noqa: F401 -- late-bound local-run facade seam
 from api.todo_state import attach_todo_state, emit_todo_state  # noqa: F401
 from api.turn_journal import append_turn_journal_event_for_stream  # noqa: F401 -- late-bound local-run facade seam
-from api.turn_execution import TurnExecution  # noqa: F401 -- late-bound local-run facade seam
+from api.runs import TurnExecution  # noqa: F401 -- late-bound local-run facade seam
 from api.usage import prompt_cache_hit_percent  # noqa: F401 -- late-bound local-run facade seam
 from api.models import (  # noqa: F401 -- late-bound local-run facade seams
     _is_empty_partial_activity_message,  # noqa: F401 -- late-bound streaming facade seam
@@ -85,7 +85,7 @@ from api.streaming_parts import compression_anchors as _streaming_compression_an
 from api.streaming_parts import context_replay as _streaming_context_replay
 from api.streaming_parts import gateway_routing_metadata as _streaming_gateway_routing
 from api.streaming_parts import live_controls as _streaming_live_controls
-from api.streaming_parts import local_run as _streaming_local_run
+from api.runs import local as _streaming_local_run
 from api.streaming_parts import message_sanitization as _streaming_message_sanitization
 from api.streaming_parts import post_compression_context as _streaming_post_compression
 from api.streaming_parts import provider_errors as _streaming_provider_errors
@@ -477,7 +477,7 @@ def _prewarm_skill_tool_modules():
 
 
 # Lazy import to avoid circular deps -- hermes-agent is on sys.path via api/config.py
-from api.agent_runtime import ensure_agent_runtime_current, get_ai_agent_class
+from api.runs.agent_runtime import ensure_agent_runtime_current, get_ai_agent_class
 
 
 # Eagerly attempt the import at startup, matching the pre-guard behavior. If
@@ -3961,6 +3961,20 @@ def _refresh_cached_agent_primary_runtime_snapshot(agent) -> None:
             rt['anthropic_base_url'] = getattr(agent, '_anthropic_base_url')
         if hasattr(agent, '_is_anthropic_oauth'):
             rt['is_anthropic_oauth'] = getattr(agent, '_is_anthropic_oauth')
+
+
+def _context_length_lookup_inputs_for_model(*args, **kwargs):
+    """Late HTTP-bound adapter injected into the run-domain implementation."""
+    from api.routes import _context_length_lookup_inputs_for_model as owner
+
+    return owner(*args, **kwargs)
+
+
+def _should_accept_session_context_length_refresh(*args, **kwargs):
+    """Late HTTP-bound adapter injected into the run-domain implementation."""
+    from api.routes import _should_accept_session_context_length_refresh as owner
+
+    return owner(*args, **kwargs)
 
 
 def _run_agent_streaming(

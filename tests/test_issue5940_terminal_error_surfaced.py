@@ -21,7 +21,7 @@ from pathlib import Path
 from api import streaming
 
 ROOT = Path(__file__).resolve().parents[1]
-STREAMING_PY = (ROOT / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+STREAMING_PY = (ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 
 
 # The exact shape the Agent emits (agent/conversation_loop.py:3780) wrapping the

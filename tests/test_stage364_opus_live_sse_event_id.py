@@ -24,16 +24,16 @@ from urllib.parse import urlparse
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STREAMING_PY = (
-    REPO_ROOT / "api" / "streaming_parts" / "local_run.py"
+    REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-GATEWAY_CHAT_PY = (REPO_ROOT / "api" / "gateway_chat.py").read_text(encoding="utf-8")
+GATEWAY_CHAT_PY = (REPO_ROOT / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
 
 
 def test_local_producer_delegates_journal_and_cursor_publication_to_sink():
     """The local policy wrapper must delegate publication to RunEventSink."""
     put_def_idx = STREAMING_PY.find("def put(event, data):")
-    assert put_def_idx != -1, "put(event, data) not found in api/streaming.py"
+    assert put_def_idx != -1, "put(event, data) not found in api/runs/local.py"
     put_body = STREAMING_PY[put_def_idx:put_def_idx + 700]
     sink_idx = STREAMING_PY.find("event_sink = execution.event_sink")
     assert 0 <= sink_idx < put_def_idx

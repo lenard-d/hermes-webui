@@ -16,7 +16,7 @@ from api.config import STREAMS, STREAMS_LOCK, invalidate_gateway_caps
 from api.gateway_chat import _run_gateway_chat_streaming
 
 REPO = Path(__file__).resolve().parents[1]
-GATEWAY_CHAT = (REPO / "api" / "gateway_chat.py").read_text(encoding="utf-8")
+GATEWAY_CHAT = (REPO / "api" / "runs" / "gateway.py").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 
 

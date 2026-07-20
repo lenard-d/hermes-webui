@@ -66,7 +66,7 @@ def test_get_session_metadata_only_evicts_cached_object_with_wrong_session_id(tm
 
 def test_compression_cache_migration_never_moves_unverified_cached_object_to_new_sid():
     streaming_src = open(
-        "api/streaming_parts/local_run.py", encoding="utf-8"
+        "api/runs/local.py", encoding="utf-8"
     ).read()
 
     assert "SESSIONS[new_sid] = SESSIONS.pop(old_sid)" not in streaming_src

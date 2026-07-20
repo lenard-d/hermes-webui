@@ -18,7 +18,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_RUN_PY = (
-    ROOT / "api" / "streaming_parts" / "local_run.py"
+    ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 
 
@@ -27,7 +27,7 @@ def _line_of(pattern: str) -> int:
     for idx, line in enumerate(LOCAL_RUN_PY.splitlines(), start=1):
         if re.search(pattern, line):
             return idx
-    raise AssertionError(f"pattern not found in api/streaming_parts/local_run.py: {pattern!r}")
+    raise AssertionError(f"pattern not found in api/runs/local.py: {pattern!r}")
 
 
 def test_discover_mcp_tools_called_after_hermes_home_mutation():

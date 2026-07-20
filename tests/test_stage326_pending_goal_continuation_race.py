@@ -23,7 +23,7 @@ from pathlib import Path
 
 def _read_streaming():
     return Path(__file__).parents[1].joinpath(
-        "api", "streaming_parts", "local_run.py"
+        "api", "runs", "local.py"
     ).read_text(encoding="utf-8")
 
 

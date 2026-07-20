@@ -329,7 +329,7 @@ class TestIssue765FollowupHardening:
         This keeps the post-run_conversation session rewrite serialized relative to the
         periodic checkpoint worker.
         """
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
         stop_idx = src.find("if _checkpoint_stop is not None:\n                _checkpoint_stop.set()")
@@ -354,7 +354,7 @@ class TestIssue765FollowupHardening:
         Reacquiring the same per-session lock inside the post-run_conversation block
         deadlocks because `_get_session_agent_lock()` returns a non-reentrant Lock.
         """
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
         outer_lock_idx = src.find(
@@ -377,7 +377,7 @@ class TestIssue765FollowupHardening:
     def test_checkpoint_stop_initialised_before_any_raiseable_code(self):
         """Static check: `_checkpoint_stop = None` must appear before any code
         that could raise inside _run_agent_streaming's outer try."""
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
         lines = src.splitlines()
@@ -426,7 +426,7 @@ class TestIssue765FollowupHardening:
 
         The code must use a nullcontext fallback rather than unconditionally
         entering `with _agent_lock:`."""
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
         # Verify contextlib.nullcontext is used as a fallback
@@ -444,7 +444,7 @@ class TestIssue765FollowupHardening:
     def test_periodic_checkpoint_uses_agent_lock(self):
         """The periodic checkpoint thread must hold _agent_lock while saving
         to prevent concurrent mutation races with other endpoints."""
-        src = (Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py").read_text(
+        src = (Path(__file__).parent.parent / "api" / "runs" / "local.py").read_text(
             encoding="utf-8"
         )
         # Find the _periodic_checkpoint function

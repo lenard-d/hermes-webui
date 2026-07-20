@@ -9,7 +9,7 @@ captured state object would silently bypass that established seam.
 from typing import Protocol, cast
 
 from api.config_parts.facade import config_api
-from api.runtime_state import ProcessRuntimeState
+from api.runs.runtime_state import ProcessRuntimeState
 
 
 class ConfigRuntimeAPI(Protocol):

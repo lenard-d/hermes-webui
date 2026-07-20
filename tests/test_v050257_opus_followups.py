@@ -147,7 +147,7 @@ def test_run_agent_streaming_uses_session_enabled_toolsets():
     the surrounding `except Exception`, so the user's toolset chip silently
     no-op'd every time. Pin the source-level invariant so this exact regression
     can't return."""
-    src = (REPO / "api" / "streaming_parts" / "local_run.py").read_text(encoding="utf-8")
+    src = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 
     # The bug shape that must NOT come back: dict-style access on the result.
     # Negative-pattern guard (prevents revert).

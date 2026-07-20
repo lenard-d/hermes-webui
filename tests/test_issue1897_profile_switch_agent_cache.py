@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 STREAMING_PY = (
-    REPO / "api" / "streaming_parts" / "local_run.py"
+    REPO / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 
 

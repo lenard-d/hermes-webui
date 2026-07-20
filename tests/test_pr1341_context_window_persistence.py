@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-STREAMING = ROOT / "api" / "streaming_parts" / "local_run.py"
+STREAMING = ROOT / "api" / "runs" / "local.py"
 ROUTES = ROOT / "api" / "routes.py"
 
 

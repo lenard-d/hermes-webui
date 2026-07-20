@@ -92,7 +92,7 @@ def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(mo
 def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
     sources = [
         open("api/streaming.py", encoding="utf-8").read(),
-        open("api/streaming_parts/local_run.py", encoding="utf-8").read(),
+        open("api/runs/local.py", encoding="utf-8").read(),
         open("api/streaming_parts/live_controls.py", encoding="utf-8").read(),
     ]
 

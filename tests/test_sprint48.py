@@ -88,7 +88,7 @@ class TestXmlToolCallStrip:
         """Verify the strip call is applied to assistant message content after
         the agent run completes (server-side persistence fix)."""
         facade_src = read('api/streaming.py')
-        run_src = read('api/streaming_parts/local_run.py')
+        run_src = read('api/runs/local.py')
         assert '_strip_xml_tool_calls' in facade_src, (
             "_strip_xml_tool_calls must be referenced in api/streaming.py"
         )

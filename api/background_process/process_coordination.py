@@ -225,7 +225,7 @@ def _start_async_delegation_wakeup_turn(
 
     def _runner() -> None:
         try:
-            from api.routes import start_session_turn
+            from api.runs import start_session_turn
 
             resp = start_session_turn(
                 session_id,

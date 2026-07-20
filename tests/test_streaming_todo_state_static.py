@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 STREAMING_PY = Path(__file__).parent.parent / "api" / "streaming.py"
-LOCAL_RUN_PY = Path(__file__).parent.parent / "api" / "streaming_parts" / "local_run.py"
+LOCAL_RUN_PY = Path(__file__).parent.parent / "api" / "runs" / "local.py"
 
 
 def _emit_todo_state_calls() -> list[ast.Call]:
