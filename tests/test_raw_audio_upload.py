@@ -4,7 +4,8 @@ import json
 import sys
 import types
 
-from api.upload import handle_upload, handle_transcribe
+from api.routes import handle_transcribe
+from api.upload import handle_upload
 from tests.frontend_asset_contract import family_source
 
 

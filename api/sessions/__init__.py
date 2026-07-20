@@ -28,6 +28,7 @@ from .repository import (
     delete_session_state,
     edit_session,
     get_full_session,
+    session_write_owner,
 )
 from .store import (
     SESSION_DIR,
@@ -75,6 +76,7 @@ __all__ = [
     "persisted_message_count_for_session",
     "publish_session_list_changed",
     "register_agent",
+    "session_write_owner",
     "should_emit_session_updated",
     "subscribe_to_session_channel",
     "title_from",

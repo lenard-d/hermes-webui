@@ -1,10 +1,11 @@
 import io
 import json
+from pathlib import Path
 import sys
 import types
 
-import api.upload as upload
-from api.upload import (
+from api import speech
+from api.routes import (
     _stt_provider_capability_from_module,
     handle_transcribe,
     handle_transcribe_capability,
@@ -99,8 +100,31 @@ def test_handle_transcribe_surfaces_provider_error(monkeypatch):
     assert handler.payload()["error"] == "STT not configured"
 
 
+def test_handle_transcribe_cleans_temporary_audio_after_provider_error(monkeypatch):
+    observed = {}
+    fake_mod = types.ModuleType("tools.transcription_tools")
+
+    def fail_transcription(path):
+        observed["path"] = Path(path)
+        assert observed["path"].exists()
+        return {"success": False, "error": "bad audio"}
+
+    fake_mod.transcribe_audio = fail_transcription
+    _install_fake_transcription_tools(monkeypatch, fake_mod)
+    body, content_type = _multipart_body(
+        files={"file": ("voice.webm", b"broken", "audio/webm")}
+    )
+    handler = _FakeHandler(body, content_type)
+
+    handle_transcribe(handler)
+
+    assert handler.status == 400
+    assert observed["path"].name.startswith("webui-stt-")
+    assert not observed["path"].exists()
+
+
 def test_handle_transcribe_capability_reports_unavailable_without_provider(monkeypatch):
-    monkeypatch.setattr(upload, "_stt_provider_capability", lambda: (False, "none"))
+    monkeypatch.setattr(speech, "discover_transcription_provider", lambda: (False, "none"))
 
     handler = _FakeHandler(b"", "")
     handle_transcribe_capability(handler)
@@ -110,7 +134,7 @@ def test_handle_transcribe_capability_reports_unavailable_without_provider(monke
     assert handler.payload()["available"] is False
 
 def test_handle_transcribe_capability_reports_available_provider(monkeypatch):
-    monkeypatch.setattr(upload, "_stt_provider_capability", lambda: (True, "openai"))
+    monkeypatch.setattr(speech, "discover_transcription_provider", lambda: (True, "openai"))
 
     handler = _FakeHandler(b"", "")
     handle_transcribe_capability(handler)

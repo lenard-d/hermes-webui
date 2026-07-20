@@ -2527,8 +2527,6 @@ from api.workspace import (
 from api.upload import (
     handle_upload,
     handle_upload_extract,
-    handle_transcribe,
-    handle_transcribe_capability,
     handle_workspace_upload,
 )
 from api.streaming import (
@@ -8786,6 +8784,17 @@ del _media_files_routes_part
 
 from api.routes_parts import tts as _tts_routes_part
 from api.routes_parts.tts import (  # noqa: F401 - compatibility facade re-exports
+    _speech_api,
+    _speech_normalize_tts_prosody,
+    _speech_tts_addr_is_blocked,
+    _speech_tts_host_is_blocked_target,
+    _speech_tts_resolve_pinned_addresses,
+    _speech_tts_resolve_pinned_address,
+    _speech_normalized_openai_tts_base_url,
+    _speech_buffer_tts_audio_response,
+    _speech_tts_open,
+    _TtsRateLimiter,
+    _write_audio_response,
     _normalize_tts_prosody,
     _TTS_PROXY_MAX_BYTES,
     _TTS_LOCALHOST_HOSTS,
@@ -8800,17 +8809,14 @@ from api.routes_parts.tts import (  # noqa: F401 - compatibility facade re-expor
     _PinnedHTTPSHandler,
     _tts_open,
     _handle_tts,
+    _stt_provider_capability_from_module,
+    _stt_provider_capability,
+    handle_transcribe,
+    handle_transcribe_capability,
 )
 
 _install_routes_part(globals(), _tts_routes_part)
 del _tts_routes_part
-for _tts_compat_class in (
-    _NoRedirectTtsHandler,
-    _PinnedHTTPSConnection,
-    _PinnedHTTPSHandler,
-):
-    _tts_compat_class.__module__ = __name__
-del _tts_compat_class
 
 
 
