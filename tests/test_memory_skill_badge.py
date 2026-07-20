@@ -10,6 +10,7 @@ the authentic tool-call shapes, asserting the counts are correct. It is the
 RED/GREEN guard for the corrected action vocabularies.
 """
 import json
+from tests.frontend_asset_contract import family_source
 import pathlib
 import shutil
 import subprocess
@@ -17,7 +18,7 @@ import subprocess
 import pytest
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-_UI_JS = (_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+_UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

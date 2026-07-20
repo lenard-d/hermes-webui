@@ -18,6 +18,7 @@ Four invariants this file locks in place:
    post-`stream_end` error event wipes the just-rendered answer.
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
@@ -25,10 +26,10 @@ import re
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 INDEX = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 COMMANDS_JS = (REPO / "static" / "commands.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+STYLE_CSS = family_source("style")
 
 
 # ── #1 dropdown escapes composer-left ─────────────────────────────────────────

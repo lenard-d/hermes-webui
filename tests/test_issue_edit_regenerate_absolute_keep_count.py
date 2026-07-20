@@ -1,10 +1,11 @@
 """Regression: edit/regenerate use absolute keep_count (#2184 pattern)."""
 
 import re
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _function_body(src: str, name: str) -> str:

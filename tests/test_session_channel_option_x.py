@@ -10,6 +10,7 @@ plus pure-function tests for the SessionChannel class and reaper logic.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import time
 from pathlib import Path
@@ -417,7 +418,7 @@ def test_server_starts_session_channel_reaper():
 
 
 def test_frontend_opens_session_stream():
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     assert "api/session/stream?session_id=" in js
     assert "startSessionStream" in js
     assert "stopSessionStream" in js
@@ -430,7 +431,7 @@ def test_session_stream_pauses_while_chat_stream_is_active():
     Chrome same-origin connection slot and can starve ordinary /api/session
     fetches on HTTP/1.1.
     """
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     assert "function _chatStreamActiveForSession(sid)" in js
     assert "function _suspendSessionStreamForLiveChat(sid)" in js
     assert "function _resumeSessionStreamAfterLiveChat(sid)" in js
@@ -463,7 +464,7 @@ def test_session_stream_resume_rearms_when_live_stream_registry_clears():
     If the first resume attempt sees LIVE_STREAMS[sid] still present, the
     stream_end teardown must re-attempt resume after deleting that owner entry.
     """
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     close_src = _js_function_decl(js, "closeLiveStream")
 
     delete_idx = close_src.index("delete LIVE_STREAMS[sessionId];")
@@ -490,7 +491,7 @@ def test_frontend_busy_race_gate_obsoleted_by_option_z_pivot():
     became moot. We assert the pivot documentation is in place so a future
     refactor doesn't silently re-introduce the gate without re-introducing
     the re-POST as well."""
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     fn_ix = js.index("function _handleBgTaskCompleteEvent")
     fn_src = js[fn_ix:fn_ix + 2400]
     assert "Option Z PIVOT" in fn_src
@@ -502,7 +503,7 @@ def test_frontend_busy_race_gate_obsoleted_by_option_z_pivot():
 
 def test_frontend_shared_handler_dedupes_across_paths():
     """Module-scope dedupe ring buffer (Map+TTL keyed (sid, event_id)) is what makes dual-emit safe."""
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     # Module-scope Map+TTL declaration outside any `function () { ... }` body
     assert "const _bgTaskCompleteSeenIds = new Map();" in js
     assert "const _BG_TASK_COMPLETE_TTL_MS = 60000;" in js
@@ -514,7 +515,7 @@ def test_frontend_shared_handler_dedupes_across_paths():
 
 
 def test_sessions_js_starts_and_stops_session_stream_on_mount_unmount():
-    js = (REPO_ROOT / "static" / "sessions.js").read_text()
+    js = family_source("sessions")
     assert "startSessionStream(S.session.session_id)" in js
     assert "stopSessionStream" in js
 
@@ -869,7 +870,7 @@ def test_backend_emitter_stamps_event_id_on_every_bg_task_complete():
 # connection.
 
 def test_session_stream_onerror_clears_closed_source_so_reconnect_proceeds():
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     # Isolate the onerror handler body within startSessionStream.
     fn_ix = js.index("function startSessionStream")
     err_ix = js.index("es.onerror", fn_ix)
@@ -923,7 +924,7 @@ def test_session_stream_onerror_clears_closed_source_so_reconnect_proceeds():
 # against a dead session. Mirrors the #2979 messages.js reconnect fix.
 
 def test_load_session_rearms_stream_on_every_early_return():
-    js = (REPO_ROOT / "static" / "sessions.js").read_text()
+    js = family_source("sessions")
 
     # The idempotent re-arm helper must exist and arm the on-screen session.
     assert "function _rearmActiveSessionStream(" in js, (

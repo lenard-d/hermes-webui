@@ -8,9 +8,9 @@ test — either source-level assertions (checking the JS source directly) or
 behavioural assertions (checking rendered HTML via a Python mirror).
 """
 import re
-import pathlib
+from tests.frontend_asset_contract import family_source
 
-UI_JS = (pathlib.Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 import html as _html
 

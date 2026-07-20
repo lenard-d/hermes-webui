@@ -7,6 +7,7 @@ erase work completed while it was in flight.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import importlib
 import json
@@ -235,7 +236,7 @@ def test_shutdown_drain_waits_for_inflight_commit_and_flushes_new_generation():
 
 
 def test_frontend_new_session_sends_previous_session_id_boundary():
-    src = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     start = src.index("async function newSession")
     end = src.index("const data=await api('/api/session/new'", start)
     body = src[start:end]

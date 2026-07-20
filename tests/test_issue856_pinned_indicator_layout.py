@@ -1,19 +1,19 @@
 """Regression checks for #856 pinned-star layout in the session list."""
 
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-SESSIONS_JS = (Path(__file__).resolve().parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (Path(__file__).resolve().parent.parent / "static" / "style.css").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 
 
 def test_pinned_indicator_renders_inside_title_row():
     title_row_idx = SESSIONS_JS.find("titleRow.className='session-title-row';")
     assert title_row_idx != -1, "session title row construction not found"
 
-    assert ("body.appendChild(_renderOneSession(s, Boolean(g.isPinned)))" in SESSIONS_JS
+    assert ("body.appendChild(_renderOneSession(s, Boolean(g.isPinned), rowRenderContext))" in SESSIONS_JS
             or "body.appendChild(parentEl)" in SESSIONS_JS)
-    assert "function _renderOneSession(s, isPinnedGroup=false)" in SESSIONS_JS
+    assert "function _renderOneSession(s, isPinnedGroup=false, renderContext)" in SESSIONS_JS
     assert "if(s.pinned&&!isPinnedGroup){" in SESSIONS_JS
 
     pin_idx = SESSIONS_JS.find("pinInd.className='session-pin-indicator';", title_row_idx)
@@ -133,7 +133,7 @@ def test_plain_mouse_hover_does_not_mark_session_row_dragging():
 
 
 def test_sidebar_uses_local_inflight_state_for_immediate_spinner():
-    messages_js = (Path(__file__).resolve().parent.parent / "static" / "messages.js").read_text(encoding="utf-8")
+    messages_js = family_source("messages")
 
     assert "function _isSessionLocallyStreaming(s)" in SESSIONS_JS
     assert "isActive && Boolean(S.busy)" in SESSIONS_JS
@@ -158,7 +158,7 @@ def test_date_group_caret_expanded_down_collapsed_right():
 def test_apperror_path_calls_render_session_list():
     """apperror handler must call renderSessionList() to clear the streaming indicator
     immediately rather than waiting for the streaming poll interval."""
-    messages_js = (Path(__file__).resolve().parent.parent / "static" / "messages.js").read_text(encoding="utf-8")
+    messages_js = family_source("messages")
     apperror_idx = messages_js.find("source.addEventListener('apperror'")
     assert apperror_idx != -1, "apperror handler not found in messages.js"
     warning_idx = messages_js.find("source.addEventListener('warning'", apperror_idx)

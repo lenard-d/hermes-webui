@@ -20,6 +20,7 @@ These tests are BEHAVIORAL: they extract the real predicate functions from the
 static JS and execute them in Node against representative scenes.
 """
 import json
+from tests.frontend_asset_contract import family_source
 import shutil
 import subprocess
 import textwrap
@@ -28,8 +29,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 
 
 def _function_body(src: str, name: str) -> str:

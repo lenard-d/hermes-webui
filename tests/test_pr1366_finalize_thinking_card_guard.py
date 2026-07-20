@@ -18,10 +18,11 @@ These tests pin both invariants:
 """
 
 import pathlib
+from tests.frontend_asset_contract import family_source
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def test_finalize_thinking_card_guard_exists():

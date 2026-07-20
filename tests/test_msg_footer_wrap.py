@@ -13,9 +13,10 @@ These are source-structure assertions on static/style.css (CSS isn't executed in
 suite), pinning the wrap behavior so it can't silently regress.
 """
 import pathlib
+from tests.frontend_asset_contract import family_source
 
 REPO = pathlib.Path(__file__).parent.parent
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def _rule_body(selector_literal: str) -> str:

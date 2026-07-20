@@ -1,10 +1,11 @@
 """Regression coverage for vendored js-yaml assets."""
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 VENDOR_FILE = REPO / "static" / "vendor" / "js-yaml" / "4.1.0" / "js-yaml.min.js"
 
 

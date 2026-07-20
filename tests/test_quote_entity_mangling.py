@@ -13,13 +13,14 @@ Fix: extend _al_stash regex to also stash <pre\b[^>]*>[\s\S]*?<\/pre>
 blocks so the outer autolink scanner never touches code-block content.
 """
 import html as _html
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import pathlib
 import re
 import subprocess
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
-UI_JS = UI_JS_PATH.read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 # ── helpers: Python mirror of the relevant renderMd() segment ────────────────
@@ -139,11 +140,12 @@ class TestAlStashSourceFix:
 
     def test_js_syntax_valid(self):
         """ui.js must pass node --check after the fix."""
-        result = subprocess.run(
-            ['node', '--check', str(UI_JS_PATH)],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 0, f"node --check failed:\n{result.stderr}"
+        for path in family_asset_paths("ui"):
+            result = subprocess.run(
+                ['node', '--check', str(path)],
+                capture_output=True, text=True,
+            )
+            assert result.returncode == 0, f"node --check failed for {path}:\n{result.stderr}"
 
 
 # ── Behaviour: code blocks with quoted URLs ───────────────────────────────────

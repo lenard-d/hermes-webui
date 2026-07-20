@@ -1,11 +1,12 @@
 """Regression coverage for streaming KaTeX rendering (#2976)."""
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 
 
 def _extract_function(src: str, name: str) -> str:

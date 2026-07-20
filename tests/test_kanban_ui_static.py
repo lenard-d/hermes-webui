@@ -1,25 +1,32 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import re
 
 from tests.js_source_extract import extract_function
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS = family_source("panels")
+STYLE = family_source("style")
+I18N = family_source("i18n")
 COMPACT_INDEX = re.sub(r"\s+", "", INDEX)
 COMPACT_PANELS = re.sub(r"\s+", "", PANELS)
 COMPACT_STYLE = re.sub(r"\s+", "", STYLE)
 
 
 def _locale_blocks_with_body(i18n_text: str):
-    locale_blocks = re.findall(
-        r"\n\s*(?:'(?P<quoted>[a-z]{2}(?:-[A-Z][A-Za-z]+)?)'|(?P<plain>[a-z]{2}(?:-[A-Z]{2})?))\s*:\s*\{(.*?)\n\s*\},",
-        i18n_text,
-        flags=re.S,
-    )
-    return [(quoted or plain, body) for quoted, plain, body in locale_blocks]
+    locale_blocks = []
+    for path in family_asset_paths("i18n"):
+        if not path.name.startswith("locale-"):
+            continue
+        source = path.read_text(encoding="utf-8")
+        match = re.search(
+            r"registerLocale\('([^']+)',\s*\{([\s\S]*)\}\);\s*\}\)\(",
+            source,
+        )
+        assert match, f"could not parse locale registration in {path.name}"
+        locale_blocks.append((match.group(1), match.group(2)))
+    return locale_blocks
 
 
 def test_kanban_has_native_sidebar_rail_and_mobile_tab():
@@ -818,10 +825,9 @@ def test_kanban_review_feedback_static_ui_fixes_exist():
 def test_kanban_task_detail_renderer_executes_with_log_and_formats_feedback():
     import json
     import subprocess
-    script = """
+    script = "const src = " + json.dumps(PANELS) + ";\n" + """
 const fs = require('fs');
 const vm = require('vm');
-const src = fs.readFileSync('static/panels.js', 'utf8');
 function esc(value) {
   return String(value == null ? '' : value).replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
 }
@@ -887,9 +893,7 @@ def test_kanban_readonly_banner_starts_hidden_and_is_toggled_on_load():
         "read_only flag from the API."
     )
     # And panels.js must toggle it based on _kanbanBoard.read_only
-    panels_path = os.path.join(here, "..", "static", "panels.js")
-    with open(panels_path, "r", encoding="utf-8") as f:
-        panels = f.read()
+    panels = PANELS
     assert ".kanban-readonly" in panels, (
         "panels.js must reference .kanban-readonly to toggle the banner"
     )

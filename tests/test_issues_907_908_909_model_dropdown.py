@@ -1,10 +1,11 @@
 """Regression tests for issues #907, #908, #909 — model dropdown fixes."""
 import re
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+PANELS_JS = family_source("panels")
 
 
 # ── #907: Normalized dedup in _addLiveModelsToSelect ─────────────────────────

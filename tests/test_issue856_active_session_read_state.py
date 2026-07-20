@@ -1,9 +1,9 @@
 """Regression checks for #856 active-session unread state handling."""
 
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-MESSAGES_JS = (Path(__file__).resolve().parent.parent / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def test_messages_js_defines_active_session_viewed_helper():

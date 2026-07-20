@@ -7,6 +7,7 @@ reasoning via BOTH `on_reasoning` AND `<think>` tags in the token stream
 then showed identical content in the thinking card and the main response.
 """
 import os
+from tests.frontend_asset_contract import family_source
 import re
 
 
@@ -28,7 +29,7 @@ class TestStreamDisplayStripsThinkBlocksAlways:
     def test_early_return_on_reasoning_text_is_gone(self):
         """Regression guard: the bypass that caused the thinking card to
         mirror the main response must stay removed."""
-        js = _read("static/messages.js")
+        js = family_source("messages")
         m = re.search(r'function _streamDisplay\(\)\{.*?\n  \}', js, re.DOTALL)
         assert m, "_streamDisplay not found"
         fn = m.group(0)
@@ -40,7 +41,7 @@ class TestStreamDisplayStripsThinkBlocksAlways:
 
     def test_think_pair_stripping_still_runs(self):
         """The shared inline extractor must still strip think blocks."""
-        js = _read("static/messages.js")
+        js = family_source("messages")
         m = re.search(r'function _streamDisplay\(\)\{.*?\n  \}', js, re.DOTALL)
         assert m
         fn = m.group(0)
@@ -52,7 +53,7 @@ class TestStreamDisplayStripsThinkBlocksAlways:
     def test_still_handles_incomplete_think_tag_partial_prefix(self):
         """Existing behaviour preserved: partial `<thi`, `<think` prefixes
         must still be suppressed so users don't see them mid-stream."""
-        js = _read("static/messages.js")
+        js = family_source("messages")
         m = re.search(r'function _streamDisplay\(\)\{.*?\n  \}', js, re.DOTALL)
         assert m
         fn = m.group(0)

@@ -1,7 +1,8 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-SESSIONS_JS = Path("static/sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = Path("static/messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 CHANGELOG = Path("CHANGELOG.md").read_text(encoding="utf-8")
 
 
@@ -91,7 +92,7 @@ def test_hard_refresh_injects_missing_active_session_model_option():
 
 
 def test_sync_topbar_preserves_missing_session_model_as_dropdown_option():
-    ui_js = Path("static/ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     assert "function _ensureModelOptionInDropdown" in ui_js
     sync_topbar = _extract_function(ui_js, "function syncTopbar")
     branch_start = sync_topbar.index("const applied=_applyModelToDropdown(currentModel,modelSel,S.session.model_provider||null);")
@@ -170,7 +171,7 @@ def test_new_session_keeps_provider_fallback_guards_after_model_precedence():
 
 
 def test_save_settings_syncs_default_model_provider_with_saved_model():
-    panels_js = Path("static/panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     save_block = _extract_function(panels_js, "async function saveSettings")
     apply_saved_block = _extract_function(panels_js, "function _applySavedSettingsUi")
     autosave_block = panels_js[panels_js.index("const pwField=$('settingsPassword');"):panels_js.index("if(!pwDirty&&!modelDirty){", panels_js.index("const pwField=$('settingsPassword');")) + 24]

@@ -1,11 +1,12 @@
 import pathlib
+from tests.frontend_asset_contract import family_source
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
 INDEX = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-PANELS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-I18N = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS = family_source("panels")
+CSS = family_source("style")
+I18N = family_source("i18n")
 
 
 def _function_body(src: str, name: str) -> str:

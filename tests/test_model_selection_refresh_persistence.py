@@ -7,11 +7,12 @@ next ``loadSession()`` before ``syncTopbar()`` projects server metadata.
 """
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+UI_JS = family_source("ui")
 
 
 def _body_between(src: str, start: str, end: str) -> str:

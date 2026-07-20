@@ -1,4 +1,5 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,9 +8,9 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
 )
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
 
 
 def test_endless_scroll_is_opt_in_setting():

@@ -1,5 +1,6 @@
 """Regression tests for large composer text paste attachment behavior."""
 import json
+from tests.frontend_asset_contract import family_source
 import os
 from pathlib import Path
 import shutil
@@ -14,9 +15,9 @@ CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 NODE = shutil.which("node")
 UTC_2026_07_01_12_41_11_610 = 1782909671610
 

@@ -1,13 +1,14 @@
 """Regression coverage for PWA-backed browser notifications (#3196)."""
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 SW_JS = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+I18N_JS = family_source("i18n")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
 DESKTOP_BACKGROUND_NOTIFICATION_NAMES = (

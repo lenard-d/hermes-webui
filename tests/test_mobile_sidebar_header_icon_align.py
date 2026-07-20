@@ -5,9 +5,10 @@ Mobile-only (@media max-width:640px); desktop hides the X entirely.
 """
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parent.parent
-STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE = family_source("style")
 
 
 def test_mobile_close_glyph_matches_plus_button_size():

@@ -26,12 +26,13 @@ the compression/replay paths.
 """
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).parent.parent
 
 
 def _ui_js() -> str:
-    return (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 def _fn_body(src: str, marker: str) -> str:

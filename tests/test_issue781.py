@@ -10,14 +10,14 @@ Verifies that:
 """
 
 import re
+from tests.frontend_asset_contract import family_source
 import os
 
 CSS_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "style.css")
 
 
 def _load_css():
-    with open(CSS_PATH, "r", encoding="utf-8") as f:
-        return f.read()
+    return family_source("style")
 
 
 def _extract_media_block(css, media_query_pattern):

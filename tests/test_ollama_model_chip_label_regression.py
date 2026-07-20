@@ -1,4 +1,5 @@
 import pathlib
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -6,7 +7,7 @@ UI_JS = ROOT / "static" / "ui.js"
 
 
 def _read_ui() -> str:
-    return UI_JS.read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 def test_select_model_custom_option_uses_friendly_label_helper():

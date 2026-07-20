@@ -1,14 +1,15 @@
 """Regression guards for Anchor-owned live progress echo cleanup."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 import re
 
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-MESSAGES = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-UI = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES = family_source("messages")
+UI = family_source("ui")
 
 
 def _interim_listener_body() -> str:

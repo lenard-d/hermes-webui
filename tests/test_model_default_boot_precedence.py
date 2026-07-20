@@ -8,6 +8,7 @@ model-state writes pointless or let later model-list refreshes reset a live
 in-page selection.
 """
 import json
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,13 +18,15 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const ui = fs.readFileSync(process.argv[2], 'utf8');
+const ui = JSON.parse(process.argv[2])
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('');
 
 function extractFunc(name) {
   const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\(');
@@ -305,7 +308,7 @@ def _run_populate_driver(
     }
     assert NODE is not None
     result = subprocess.run(
-        [NODE, driver_path, str(REPO / "static" / "ui.js"), json.dumps(payload)],
+        [NODE, driver_path, json.dumps([str(path) for path in family_asset_paths("ui")]), json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,

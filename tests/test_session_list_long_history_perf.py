@@ -1,6 +1,6 @@
 import io
+from tests.frontend_asset_contract import family_source
 import json
-import pathlib
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -229,7 +229,7 @@ def test_sessions_api_internal_typeerror_is_not_hidden_by_legacy_fallback(monkey
 
 
 def test_session_list_fetch_adds_include_archived_only_when_toggle_is_on():
-    src = (pathlib.Path(__file__).parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     assert "qs.set('include_archived','1');" in src
     assert "const archiveLimit=Math.min(" in src
@@ -307,7 +307,7 @@ def test_sessions_api_runtime_overlay_sorts_active_rows_first(monkeypatch):
 
 
 def test_frontend_session_list_sorts_effective_streaming_rows_first():
-    src = (pathlib.Path(__file__).parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     assert "function _sessionSidebarSortCompare(a, b)" in src
     assert "function _sessionRunningSortRank(session)" in src
@@ -317,7 +317,7 @@ def test_frontend_session_list_sorts_effective_streaming_rows_first():
 
 
 def test_frontend_session_date_buckets_use_runtime_sort_timestamp():
-    src = (pathlib.Path(__file__).parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     loop_start = src.index("for(const s of unpinned){")
     loop_body = src[loop_start:src.index("if(curItems.length) groups.push", loop_start)]
 

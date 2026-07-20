@@ -1,11 +1,12 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _css_rule(selector: str) -> str:
-    css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    css = family_source("style")
     start = css.index(selector + "{")
     return css[start : css.index("}", start) + 1]
 

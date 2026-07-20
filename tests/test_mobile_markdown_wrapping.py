@@ -1,8 +1,9 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def _mobile_code_wrap_block() -> str:

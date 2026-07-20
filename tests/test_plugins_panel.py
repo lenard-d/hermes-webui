@@ -1,6 +1,7 @@
 """Regression coverage for issue #539: Settings plugin/hook visibility."""
 
 import json
+from tests.frontend_asset_contract import family_source
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -252,7 +253,7 @@ class TestPluginsApi:
 class TestPluginsSettingsUi:
     def test_settings_sidebar_has_plugins_section(self):
         html = read("static/index.html")
-        js = read("static/panels.js")
+        js = family_source("panels")
 
         assert 'data-settings-section="plugins"' in html
         assert "settingsPanePlugins" in html
@@ -267,7 +268,7 @@ class TestPluginsSettingsUi:
         assert "No Hermes plugins are currently visible" in html
 
     def test_plugins_panel_fetches_api_and_renders_hook_badges_safely(self):
-        js = read("static/panels.js")
+        js = family_source("panels")
 
         assert "api('/api/plugins')" in js
         assert "_buildPluginCard" in js
@@ -282,19 +283,19 @@ class TestDashboardPluginsSecurity:
     """Tests for dashboard plugin iframe sandbox and CSP security properties."""
 
     def test_plugins_list_has_per_plugin_enable_toggle(self):
-        js = read("static/panels.js")
+        js = family_source("panels")
         assert "handlePluginEnableToggle" in js
         assert "plugin-toggle-switch" in js
         assert "plugin-toggle-slider" in js
 
     def test_open_button_requires_enabled_plugin(self):
-        js = read("static/panels.js")
+        js = family_source("panels")
         segment = js[js.find("function _buildPluginCard"):js.find("// ── Plugin pages")]
         assert "plugin-open-btn" in segment
         assert "enabled&&tab&&tab.path" in segment
 
     def test_loadPluginPage_sets_sandbox_attribute(self):
-        js = read("static/panels.js")
+        js = family_source("panels")
         assert "iframe.setAttribute('sandbox'" in js
         assert "allow-scripts" in js
         assert "allow-forms" in js
@@ -486,7 +487,7 @@ class TestPluginNameValidation:
         # tab.path / plugin.key must not be interpolated into inline onclick/
         # onchange JS (HTML-escaping is insufficient for a JS-string context).
         # They're bound via addEventListener with raw closure values instead.
-        js = read("static/panels.js")
+        js = family_source("panels")
         start = js.find("function _buildPluginCard")
         seg = js[start:js.find("return card;", start)]
         assert "onclick=\"switchPluginPage" not in seg
@@ -558,7 +559,7 @@ class TestPluginCollisionDetection:
         # The card must distinguish exclusive/provider activation from a plain
         # "Enabled" state and use the dedicated empty-hooks message for
         # provider plugins instead of "No registered lifecycle hooks" (#2659).
-        js = read("static/panels.js")
+        js = family_source("panels")
         segment = js[js.find("function _buildPluginCard"):js.find("// ── Providers panel")]
 
         assert "plugin.activation" in segment
@@ -571,7 +572,7 @@ class TestPluginCollisionDetection:
         assert "plugin.enabled===false" in segment
 
     def test_plugins_panel_i18n_strings_present(self):
-        i18n = read("static/i18n.js")
+        i18n = family_source("i18n")
 
         assert "plugins_active_provider:" in i18n
         assert "plugins_provider_no_hooks:" in i18n
@@ -581,7 +582,7 @@ class TestAutoHidePluginsTab:
     """Tests for issue #3457: auto-hide Plugins tab when no plugins installed."""
 
     def test_loadPluginsPanel_hides_tab_when_empty(self):
-        js = read("static/panels.js")
+        js = family_source("panels")
         segment = js[js.find("async function loadPluginsPanel"):js.find("function _buildPluginCard")]
 
         assert "data-settings-section=\"plugins\"" in segment
@@ -589,7 +590,7 @@ class TestAutoHidePluginsTab:
         assert "style.display='none'" in segment
 
     def test_switchSettingsSection_fallback_when_hidden(self):
-        js = read("static/panels.js")
+        js = family_source("panels")
         segment = js[js.find("function switchSettingsSection"):js.find("function _syncHermesPanelSessionActions")]
 
         assert "section==='plugins'" in segment

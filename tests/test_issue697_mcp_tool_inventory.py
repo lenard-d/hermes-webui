@@ -1,5 +1,6 @@
 """Regression tests for issue #697 — searchable global MCP tool inventory."""
 import json
+from tests.frontend_asset_contract import family_source
 from unittest.mock import MagicMock, patch
 
 from api.routes import (
@@ -114,7 +115,7 @@ class TestMcpToolInventoryUi:
         assert 'oninput="filterMcpTools()"' in html
 
     def test_panels_js_loads_tools_and_filters_name_server_description(self):
-        js = _read("static/panels.js")
+        js = family_source("panels")
         assert "function loadMcpTools" in js
         assert "api('/api/mcp/tools')" in js
         assert "function filterMcpTools" in js
@@ -126,7 +127,7 @@ class TestMcpToolInventoryUi:
         assert "mcp-tool-error-state" in js
 
     def test_mcp_tool_i18n_keys_are_present(self):
-        i18n = _read("static/i18n.js")
+        i18n = family_source("i18n")
         for key in [
             "mcp_tools_title",
             "mcp_tools_desc",

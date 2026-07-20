@@ -1,11 +1,12 @@
 """Regression coverage for vendored KaTeX assets."""
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
 REPO = pathlib.Path(__file__).parent.parent
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 VENDOR_DIR = REPO / "static" / "vendor" / "katex" / "0.16.22"
 
 

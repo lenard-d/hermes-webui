@@ -6,7 +6,7 @@ Tests for issues #373, #374, and #375.
 #375: Model dropdown should fetch live models from provider
 """
 import pathlib
-import re
+from tests.frontend_asset_contract import family_source
 
 from api.model_catalog import FALLBACK_MODELS, PROVIDER_MODELS
 
@@ -14,8 +14,8 @@ REPO = pathlib.Path(__file__).parent.parent
 STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 CONFIG_PY    = (REPO / "api" / "config.py").read_text(encoding="utf-8")
 ROUTES_PY    = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-MESSAGES_JS  = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS        = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES_JS  = family_source("messages")
+UI_JS        = family_source("ui")
 
 
 # ── Issue #373: Silent error detection ──────────────────────────────────────

@@ -1,9 +1,10 @@
 """Regression guard for CLI import refresh overwriting active transcript."""
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def test_sse_import_cli_guard_skips_shorter_transcript_overwrite():

@@ -1,7 +1,7 @@
 """Regression checks for per-conversation action menu click stability."""
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-SESSIONS_JS = (Path(__file__).resolve().parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_block(src: str, name: str) -> str:

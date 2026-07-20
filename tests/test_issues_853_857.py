@@ -1,6 +1,7 @@
 """Regression tests for #853 (image_generate inline rendering) and
 #857 (auto-title strips thinking preambles)."""
 import os
+from tests.frontend_asset_contract import family_source
 import re
 
 
@@ -19,7 +20,7 @@ class TestMediaUrlRendersInline:
     similar CDNs serve images via content-addressed paths)."""
 
     def test_render_md_checks_https_scheme_for_img_tag(self):
-        js = _read("static/ui.js")
+        js = family_source("ui")
         # The fix OR-chains the extension check with a scheme check so any
         # https:// URL in a MEDIA: token renders as <img>
         assert re.search(
@@ -33,7 +34,7 @@ class TestMediaUrlRendersInline:
     def test_img_class_applied_to_media_image(self):
         """The resulting <img> uses the existing msg-media-img class so the
         styling/fullscreen-click interaction is preserved."""
-        js = _read("static/ui.js")
+        js = family_source("ui")
         # The img tag is constructed with the existing class + onclick toggle
         assert "msg-media-img" in js
         # PR #1135: CSS class toggle replaced by lightbox. Class removed; _openImgLightbox handles zoom.

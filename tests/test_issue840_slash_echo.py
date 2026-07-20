@@ -1,5 +1,6 @@
 """Tests for slash command echo (#840) — user message shown in chat after /skills, /help, etc."""
 import os
+from tests.frontend_asset_contract import family_source
 
 _SRC = os.path.join(os.path.dirname(__file__), "..")
 
@@ -110,7 +111,7 @@ class TestSendSlashIntercept:
     """send() in messages.js must push user message for echo-worthy commands."""
 
     def test_send_checks_noecho_flag(self):
-        src = _read("static/messages.js")
+        src = family_source("messages")
         idx = src.find("Slash command intercept")
         block = src[idx:idx + 1400]
         assert "_cmd.noEcho" in block or "cmd.noEcho" in block, (
@@ -118,7 +119,7 @@ class TestSendSlashIntercept:
         )
 
     def test_send_pushes_user_message_for_echo_commands(self):
-        src = _read("static/messages.js")
+        src = family_source("messages")
         idx = src.find("Slash command intercept")
         block = src[idx:idx + 1400]
         assert "role:'user'" in block and "content:text" in block, (
@@ -130,7 +131,7 @@ class TestSendSlashIntercept:
         synchronously.  The user message must be pushed BEFORE the handler
         runs so S.messages ends up [user, assistant] — not [assistant, user]
         which would display in reverse chronological order."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         idx = src.find("Slash command intercept")
         block = src[idx:idx + 1400]
         user_push_pos = block.find("role:'user'")
@@ -149,7 +150,7 @@ class TestSendSlashIntercept:
         """If a handler returns false (opt-out — e.g. /reasoning <level>),
         the pre-pushed user message must be popped so the normal send path
         can add it cleanly for forwarding to the agent."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         idx = src.find("Slash command intercept")
         block = src[idx:idx + 1400]
         assert "S.messages.pop()" in block, (

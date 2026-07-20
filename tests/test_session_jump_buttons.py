@@ -1,12 +1,13 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
+PANELS_JS = family_source("panels")
 CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )

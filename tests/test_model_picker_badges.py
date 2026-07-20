@@ -1,4 +1,5 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 from api import config
 
@@ -90,7 +91,7 @@ def test_duplicate_slash_id_primary_badge_sticks_to_matching_provider_only():
 
 def test_ui_badge_lookup_prefers_row_provider_for_duplicate_model_ids():
     root = Path(__file__).resolve().parent.parent
-    js = (root / "static" / "ui.js").read_text(encoding="utf-8")
+    js = family_source("ui")
 
     assert "function _getConfiguredModelBadge(modelId,badgeMap,providerId){" in js
     assert "child.dataset&&child.dataset.provider?child.dataset.provider:''" in js
@@ -100,7 +101,7 @@ def test_ui_badge_lookup_prefers_row_provider_for_duplicate_model_ids():
 def test_configured_model_group_label_has_i18n_key():
     """The Configured model group must not render the raw i18n key."""
     root = Path(__file__).resolve().parent.parent
-    i18n = (root / "static" / "i18n.js").read_text(encoding="utf-8")
+    i18n = family_source("i18n")
 
     locale_count = i18n.count("_lang:")
     key_count = i18n.count("model_group_configured:")
@@ -151,9 +152,9 @@ def test_get_available_models_cache_preserves_configured_model_badges(tmp_path, 
 
 def test_ui_renders_model_badges_from_api_payload():
     root = Path(__file__).resolve().parent.parent
-    js = (root / "static" / "ui.js").read_text(encoding="utf-8")
+    js = family_source("ui")
     html = (root / "static" / "index.html").read_text(encoding="utf-8")
-    css = (root / "static" / "style.css").read_text(encoding="utf-8")
+    css = family_source("style")
 
     assert "window._configuredModelBadges=data.configured_model_badges||{};" in js, (
         "populateModelDropdown() deve guardar configured_model_badges do /api/models "

@@ -1,11 +1,12 @@
 """Source-level regression tests for the Kanban board UI."""
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+PANELS_JS = family_source("panels")
 
 
 def _css_rule(selector: str) -> str:

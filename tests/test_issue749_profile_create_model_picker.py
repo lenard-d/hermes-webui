@@ -1,6 +1,7 @@
 """Regression coverage for #749 profile creation model/provider selection."""
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 import pytest
 import yaml
@@ -9,7 +10,7 @@ import api.profiles as profiles
 
 
 REPO = Path(__file__).resolve().parent.parent
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
 

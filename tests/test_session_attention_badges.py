@@ -1,4 +1,5 @@
 import io
+from tests.frontend_asset_contract import family_source
 import json
 import pathlib
 import sys
@@ -171,8 +172,8 @@ def test_sessions_api_includes_attention_summary_for_sidebar_rows(monkeypatch):
 
 
 def test_session_sidebar_renders_attention_badge_and_semantic_classes():
-    sessions_js = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    style_css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    sessions_js = family_source("sessions")
+    style_css = family_source("style")
 
     assert "function _sessionAttentionState" in sessions_js
     assert "needs-attention" in sessions_js
@@ -188,7 +189,7 @@ def test_session_sidebar_renders_attention_badge_and_semantic_classes():
     assert "s.attention" in sessions_js
     assert "_sessionAttentionState(s) ||" in sessions_js
 
-    i18n_js = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+    i18n_js = family_source("i18n")
     assert "session_attention_approval" in i18n_js
     assert "session_attention_clarify" in i18n_js
     assert "session_attention_approval_title" in i18n_js

@@ -11,6 +11,7 @@ Covers:
 """
 
 import pathlib
+from tests.frontend_asset_contract import family_source
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
@@ -84,7 +85,7 @@ class TestUiJsThinkingGate:
     """Historical thinking cards must be gated by window._showThinking."""
 
     def test_thinking_card_gated_in_render_messages(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         assert 'window._showThinking!==false' in src, (
             "ui.js must gate thinkingCardHtml on window._showThinking"
         )
@@ -98,7 +99,7 @@ class TestUiJsThinkingGate:
                 break
 
     def test_worklog_reasoning_rows_are_gated_by_show_thinking(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         # The gate must sit in the ACTUAL render paths that build Worklog reasoning
         # rows — _syncWorklogReasonFromAnchor (live + settled) and _appendWorklogReason
         # (settled rebuild) — not in the unused _worklogReasonNodeFromText helper.
@@ -113,7 +114,7 @@ class TestUiJsThinkingGate:
         )
 
     def test_show_thinking_gate_does_not_hide_worklog_anchor_text(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         html_fn = function_body(src, "_worklogReasonHtmlFromText")
         assert 'window._showThinking' not in html_fn, (
             "the low-level Worklog text renderer is also used for anchor/progress text; "
@@ -121,7 +122,7 @@ class TestUiJsThinkingGate:
         )
 
     def test_remove_thinking_prunes_reasoning_rows_but_preserves_tool_or_anchor_rows(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         fn = function_body(src, "removeThinking")
         # The live/settled reasoning rows are tagged data-worklog-anchor-reason="1"
         # (by _syncWorklogReasonFromAnchor / _appendWorklogReason); the sweep MUST
@@ -146,7 +147,7 @@ class TestMessagesJsLiveThinkingGate:
     """Live streaming thinking card must be hidden when _showThinking is false."""
 
     def test_live_thinking_gated(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert 'window._showThinking===false' in src, (
             "messages.js _renderLiveThinking must early-return when _showThinking is false"
         )
@@ -242,7 +243,7 @@ class TestReasoningCommand:
         assert "arg==='off'" in fn, "off alias missing"
 
     def test_cmd_reasoning_i18n_key_exists(self):
-        i18n = read('static/i18n.js')
+        i18n = family_source("i18n")
         assert 'cmd_reasoning' in i18n, (
             "i18n.js must define the cmd_reasoning key"
         )

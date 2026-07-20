@@ -1,6 +1,7 @@
 """Static regressions for frontend passive polling hardening."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
@@ -10,6 +11,10 @@ MESSAGES_JS = ROOT / "static" / "messages.js"
 
 
 def _source(path: Path) -> str:
+    if path == SESSIONS_JS:
+        return family_source("sessions")
+    if path == MESSAGES_JS:
+        return family_source("messages")
     return path.read_text(encoding="utf-8")
 
 

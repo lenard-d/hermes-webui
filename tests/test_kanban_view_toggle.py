@@ -6,6 +6,7 @@ shared Kanban config so reloads and other browsers see the same mode.
 """
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 import re
 from types import SimpleNamespace
 
@@ -15,9 +16,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 def test_kanban_header_exposes_accessible_view_toggle():

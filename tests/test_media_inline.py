@@ -10,6 +10,7 @@ Covers:
 6. /api/media endpoint: integration test via live server (requires 8788)
 """
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import json
 import os
@@ -26,8 +27,8 @@ from tests._pytest_port import BASE, TEST_STATE_DIR
 from tests.conftest import TEST_WORKSPACE
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
 WORKSPACE_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
 
 
@@ -137,7 +138,7 @@ class TestMediaRenderMdStash(unittest.TestCase):
 
 class TestMediaCSS(unittest.TestCase):
 
-    CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    CSS = family_source("style")
 
     def test_msg_media_img_class_defined(self):
         self.assertIn(".msg-media-img", self.CSS)
@@ -180,7 +181,7 @@ class TestMediaCSS(unittest.TestCase):
 class TestInlineAudioVideoEditor(unittest.TestCase):
     """Static checks for inline audio/video preview controls in chat and workspace."""
 
-    CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    CSS = family_source("style")
     WORKSPACE_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
     INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
@@ -242,7 +243,7 @@ class TestInlineAudioVideoEditor(unittest.TestCase):
 class TestWorkspacePdfViewer(unittest.TestCase):
     """Static checks for inline PDF preview support in the workspace panel."""
 
-    CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    CSS = family_source("style")
     WORKSPACE_JS = (REPO_ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
     INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 

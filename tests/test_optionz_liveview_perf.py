@@ -25,6 +25,7 @@ Defect A — SSE thread exhaustion with multiple tabs.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import socket
 import threading
@@ -277,7 +278,7 @@ def test_start_session_turn_emits_server_turn_started():
 
 
 def test_frontend_attaches_renderer_on_server_turn_started():
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     assert "server_turn_started" in js
     # Must reuse the existing chat-stream render path, not hand-roll a 2nd one.
     assert "attachLiveStream" in js
@@ -401,7 +402,7 @@ def test_frontend_recovered_frame_uses_reconnecting_attach():
     a recovered (replay) frame attaches via the reconnecting path so the
     renderer rebuilds the in-progress stream from the run journal instead
     of expecting token 0 (which would render a truncated turn)."""
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     assert "recovered" in js
     h_ix = js.index("addEventListener('server_turn_started'")
     h_src = js[h_ix:h_ix + 1600]
@@ -554,7 +555,7 @@ def test_emit_to_session_streams_skip_unknown_owner_documented_in_source():
 
 def test_frontend_handler_requires_event_id_to_surface():
     """Source-grep: _handleBgTaskCompleteEvent ignores events without event_id."""
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     fn_ix = js.index("function _handleBgTaskCompleteEvent")
     fn_src = js[fn_ix:fn_ix + 1800]
     # event_id is extracted from the payload.
@@ -720,7 +721,7 @@ def test_frontend_subscribes_with_known_count_and_handles_session_updated():
     session's FULL message_count (not the rendered tail S.messages.length), and
     (b) handle the `session-updated` frame via the keepStaleUntilLoaded
     swap-in-place loadSession path (no clear+refetch → no blank-gap jump)."""
-    js = (REPO_ROOT / "static" / "messages.js").read_text()
+    js = family_source("messages")
     # (a) known_count is sent on subscribe, sourced from S.session.message_count.
     assert "known_count" in js
     ss_ix = js.index("function startSessionStream")
@@ -755,7 +756,7 @@ def test_loadsession_idle_cleanup_does_not_clobber_concurrent_live_stream():
     that silently kills the live turn's render. It must re-read the LIVE state and
     prefer a concurrently-attached same-session stream over the stale snapshot.
     """
-    js = (REPO_ROOT / "static" / "sessions.js").read_text()
+    js = family_source("sessions")
     compact = js.replace(" ", "").replace("\n", "")
     # `activeStreamId` is declared `let` (not const) so it can be re-read.
     assert "letactiveStreamId=S.session.active_stream_id||null" in compact, (

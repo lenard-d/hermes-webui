@@ -5,6 +5,7 @@ These tests exist specifically to prevent those bugs from silently returning.
 Each test is tagged with the sprint/commit where the bug was found and fixed.
 """
 import json
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import os
 import pathlib
 import re
@@ -13,6 +14,14 @@ import urllib.error
 import urllib.request
 import urllib.parse
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
+SESSION_LIFECYCLE_SRC = next(
+    path for path in family_asset_paths("sessions")
+    if path.name == "002-session-lifecycle.js"
+).read_text(encoding="utf-8")
+RESTORE_LOADED_SESSION_SRC = SESSION_LIFECYCLE_SRC[
+    SESSION_LIFECYCLE_SRC.index("async function _restoreLoadedSession"):
+    SESSION_LIFECYCLE_SRC.index("async function loadSession")
+]
 
 from tests._pytest_port import BASE
 
@@ -253,7 +262,7 @@ def test_loadSession_resets_busy_state_for_idle_session(cleanup_test_sessions):
     When missing, switching from a busy session to an idle one left the Send button
     disabled, showed the wrong activity bar, and pointed Cancel at the wrong stream.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = RESTORE_LOADED_SESSION_SRC
     # The fix adds explicit S.busy=false in the non-inflight else branch
     assert "S.busy=false;" in src,         "sessions.js loadSession must set S.busy=false when loading a non-inflight session"
     # btnSend state must be refreshed via updateSendBtn
@@ -266,7 +275,7 @@ def test_done_handler_guards_setbusy_with_inflight_check(cleanup_test_sessions):
     When missing, finishing session A while viewing in-flight session B would
     disable B's Send button.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # The fix wraps setBusy(false) in an active-pane ownership guard. Newer
     # implementations may centralize the guard in a helper rather than repeat the
     # raw INFLIGHT expression at every terminal event site.
@@ -282,9 +291,9 @@ def test_refresh_handler_does_not_drop_tool_messages_needed_by_todos(cleanup_tes
     destroy the raw session messages because loadTodos reconstructs state from the
     latest todo tool output.
     """
-    sessions_src = (REPO_ROOT / "static/sessions.js").read_text()
-    ui_src = (REPO_ROOT / "static/ui.js").read_text()
-    panels_src = (REPO_ROOT / "static/panels.js").read_text()
+    sessions_src = family_source("sessions")
+    ui_src = family_source("ui")
+    panels_src = family_source("panels")
 
     assert "data.session.messages=(data.session.messages||[]).filter(" not in sessions_src, \
         "sessions.js must not overwrite raw session.messages when filtering transcript display"
@@ -298,7 +307,7 @@ def test_cancel_button_not_cleared_across_sessions(cleanup_test_sessions):
     """R7c: The Cancel button and activeStreamId must only be cleared when the
     done/error event belongs to the currently viewed session.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # Both clear operations must be inside the activeSid === S.session guard
     # We check for the pattern added by the fix
     assert "S.session.session_id===activeSid" in src,         "messages.js must guard activeStreamId/Cancel clearing with session identity check"
@@ -374,7 +383,7 @@ def test_token_handler_guards_session_id(cleanup_test_sessions):
     if the user switched sessions mid-stream.
     Sprint 12: handler moved into _wireSSE(source), so search source.addEventListener.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # Sprint 12 refactored es.addEventListener -> source.addEventListener inside _wireSSE()
     token_idx = src.find("source.addEventListener('token'")
     if token_idx < 0:
@@ -393,7 +402,7 @@ def test_tool_handler_guards_session_id(cleanup_test_sessions):
     When missing, tool cards from session A would render into session B's message area.
     Sprint 12: handler moved into _wireSSE(source), so search source.addEventListener.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     tool_idx = src.find("source.addEventListener('tool'")
     if tool_idx < 0:
         tool_idx = src.find("es.addEventListener('tool'")
@@ -410,7 +419,7 @@ def test_respond_approval_uses_approval_session_id(cleanup_test_sessions):
     the approval, not S.session.session_id (which may be a different session
     if the user switched while approval was pending).
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # The fix introduces _approvalSessionId to track the correct session
     assert "_approvalSessionId" in src,         "messages.js must use _approvalSessionId in respondApproval"
     # respondApproval must use _approvalSessionId, not S.session.session_id directly
@@ -427,7 +436,7 @@ def test_tool_status_only_shown_for_current_session(cleanup_test_sessions):
     status. Live tool cards in the current conversation are the authoritative
     progress UI, which avoids cross-session status leakage entirely.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # Sprint 12: handler moved into _wireSSE(source)
     tool_idx = src.find("source.addEventListener('tool'")
     if tool_idx < 0:
@@ -447,12 +456,12 @@ def test_loadSession_inflight_restores_live_tool_cards(cleanup_test_sessions):
     When missing, tool cards disappeared on switch-away even though the session
     was still processing.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = SESSION_LIFECYCLE_SRC
     # INFLIGHT branch must call appendLiveToolCard
     # Anchor on the Phase-2 INFLIGHT restore branch (the later occurrence); #3899
     # added an earlier if(INFLIGHT[sid]){ idle-reset block, so .find() would
     # grab the wrong one. (rfind = the substantive restore branch.)
-    inflight_idx = src.rfind("if(INFLIGHT[sid]){")
+    inflight_idx = src.find("if(INFLIGHT[sid]){")
     assert inflight_idx >= 0, "INFLIGHT branch not found in loadSession"
     inflight_block = src[inflight_idx:inflight_idx+4200]
     assert "appendLiveToolCard" in inflight_block,         "loadSession INFLIGHT branch must restore live tool cards via appendLiveToolCard"
@@ -466,7 +475,7 @@ def test_done_handler_sets_busy_false_before_renderMessages(cleanup_test_session
     whether settled tool cards are rendered. When S.busy=true during renderMessages(),
     tool cards are skipped entirely after a response completes.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # Sprint 12: handler moved into _wireSSE(source)
     done_idx = src.find("source.addEventListener('done'")
     if done_idx < 0:
@@ -491,7 +500,7 @@ def test_send_uses_session_model_as_authoritative_source(cleanup_test_sessions):
     current dropdown list, the select value would be stale after switching sessions,
     causing the wrong model to be sent.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # The model field in the chat/start payload must prefer S.session.model.
     # PR #1591 (May 2026) added optimistic `upsertActiveSessionForLocalTurn`
     # comments that mention `/api/chat/start` BEFORE the actual POST call, so
@@ -511,7 +520,7 @@ def test_newSession_clears_live_tool_cards(cleanup_test_sessions):
     """R15: newSession() must call clearLiveToolCards() so live cards from a
     previous in-flight session don't persist when starting a fresh conversation.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = family_source("sessions")
     new_sess_idx = src.find("async function newSession(")
     assert new_sess_idx >= 0
     # Find end of newSession (next async function)
@@ -525,7 +534,7 @@ def test_newSession_resets_busy_state_for_fresh_chat(cleanup_test_sessions):
     Without this, starting a second chat while another session is streaming leaves
     S.busy=true, so the first send in the new chat gets incorrectly queued.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = family_source("sessions")
     new_sess_idx = src.find("async function newSession(")
     assert new_sess_idx >= 0
     next_fn = src.find("async function ", new_sess_idx + 10)
@@ -543,9 +552,9 @@ def test_session_scoped_message_queue_frontend_wiring(cleanup_test_sessions):
     The frontend should use a session-keyed queue store and drain only the active
     session's queued messages when that session becomes idle.
     """
-    ui_src = (REPO_ROOT / "static/ui.js").read_text()
-    messages_src = (REPO_ROOT / "static/messages.js").read_text()
-    sessions_src = (REPO_ROOT / "static/sessions.js").read_text()
+    ui_src = family_source("ui")
+    messages_src = family_source("messages")
+    sessions_src = family_source("sessions")
     assert "const SESSION_QUEUES" in ui_src
     assert "function queueSessionMessage" in ui_src
     assert "function shiftQueuedSessionMessage" in ui_src
@@ -562,7 +571,7 @@ def test_queue_card_cross_session_clear_called_before_draft_save(cleanup_test_se
     session's queue card before the async draft-save await, so stale DOM cannot
     survive into the destination session.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = family_source("sessions")
     block_pattern = re.compile(
         r"if \(currentSid && currentSid !== sid\) \{\s*"
         r"if\(typeof window\._clearPendingSelections==='function'\) window\._clearPendingSelections\(\);\s*"
@@ -580,7 +589,7 @@ def test_queue_card_cross_session_helper_used_only_for_session_change(cleanup_te
     """R15c: _clearQueueCardDisplay(sid) must only fire on cross-session switches,
     not on same-session navigation/force-reload code paths.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = family_source("sessions")
     load_start = src.find("async function loadSession(sid){")
     assert load_start >= 0
     load_end = src.find("  // Sync context usage indicator from session data", load_start)
@@ -605,7 +614,7 @@ def test_queue_card_clear_helper_tracks_render_epoch(cleanup_test_sessions):
     """R15d: the delayed queue clear must only wipe the chips from the render it
     was asked to dismiss, not a later render for the same shared queue DOM.
     """
-    src = (REPO_ROOT / "static/ui.js").read_text()
+    src = family_source("ui")
     assert "let _queueRenderEpoch=0;" in src
     assert "if(sid) delete _queueRenderKeys[sid];" in src
     assert "inner.setAttribute('data-queue-render-sid',sid);" in src
@@ -671,9 +680,9 @@ def test_reload_path_restores_pending_message_and_reattaches_live_stream(cleanup
     """R15d: the frontend reload path must show the pending user turn and
     reattach to the live SSE stream after loadSession().
     """
-    sessions_src = (REPO_ROOT / "static/sessions.js").read_text()
-    ui_src = (REPO_ROOT / "static/ui.js").read_text()
-    messages_src = (REPO_ROOT / "static/messages.js").read_text()
+    sessions_src = family_source("sessions")
+    ui_src = family_source("ui")
+    messages_src = family_source("messages")
     assert 'getPendingSessionMessage' in ui_src
     assert 'pending_user_message' in ui_src
     assert 'function attachLiveStream' in messages_src
@@ -708,8 +717,8 @@ def test_live_stream_tokens_persist_partial_assistant_for_session_switch(cleanup
     and the live stream must rebind to the rebuilt DOM after switching away and back.
     Without this, partial assistant output disappears until the final done payload lands.
     """
-    messages_src = (REPO_ROOT / "static/messages.js").read_text()
-    ui_src = (REPO_ROOT / "static/ui.js").read_text()
+    messages_src = family_source("messages")
+    ui_src = family_source("ui")
 
     # #3455: the persisted partial assistant content is now the think-split content
     # (inline <think> moved to m.reasoning), so the push uses content:split.content
@@ -738,7 +747,7 @@ def test_live_stream_tokens_persist_partial_assistant_for_session_switch(cleanup
         "renderMessages must preserve a live-assistant DOM anchor when rebuilding the thread"
     assert "snapshotLiveTurnHtmlForSession(activeSid)" in messages_src, \
         "live turn DOM snapshots should preserve the interleaved timeline across session switches"
-    assert "restoreLiveTurnHtmlForSession(sid)" in (REPO_ROOT / "static/sessions.js").read_text(), \
+    assert "restoreLiveTurnHtmlForSession(sid)" in family_source("sessions"), \
         "loadSession should restore the live turn snapshot before replaying flat tool cards"
 
 
@@ -746,8 +755,8 @@ def test_inflight_session_state_tracks_live_tool_cards_per_session(cleanup_test_
     """R16b: live tool cards must be stored on the in-flight session, not only in the
     global S.toolCalls array, so switching chats does not lose or misattach them.
     """
-    messages_src = (REPO_ROOT / "static/messages.js").read_text()
-    sessions_src = (REPO_ROOT / "static/sessions.js").read_text()
+    messages_src = family_source("messages")
+    sessions_src = family_source("sessions")
 
     assert "inflight.toolCalls.push(tc)" in messages_src, \
         "tool SSE handler must persist live tool calls onto the in-flight session"
@@ -761,11 +770,11 @@ def test_loadSession_inflight_sets_busy_before_renderMessages(cleanup_test_sessi
     same tool call appears once inline and once in the live tool host after a
     session switch.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = RESTORE_LOADED_SESSION_SRC
     # Anchor on the Phase-2 INFLIGHT restore branch (the later occurrence); #3899
     # added an earlier if(INFLIGHT[sid]){ idle-reset block, so .find() would
     # grab the wrong one. (rfind = the substantive restore branch.)
-    inflight_idx = src.rfind("if(INFLIGHT[sid]){")
+    inflight_idx = src.find("if(INFLIGHT[sid]){")
     assert inflight_idx >= 0, "INFLIGHT branch not found in loadSession"
     inflight_block = src[inflight_idx:inflight_idx+4200]
     busy_pos = inflight_block.find("S.busy=")
@@ -779,11 +788,11 @@ def test_loadSession_inflight_sets_busy_before_renderMessages(cleanup_test_sessi
 
 
 def test_loadSession_inflight_merges_tail_with_persisted_transcript(cleanup_test_sessions):
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = RESTORE_LOADED_SESSION_SRC
     # Anchor on the Phase-2 INFLIGHT restore branch (the later occurrence); #3899
     # added an earlier if(INFLIGHT[sid]){ idle-reset block, so .find() would
     # grab the wrong one. (rfind = the substantive restore branch.)
-    inflight_idx = src.rfind("if(INFLIGHT[sid]){")
+    inflight_idx = src.find("if(INFLIGHT[sid]){")
     assert inflight_idx >= 0, "INFLIGHT branch not found in loadSession"
     inflight_block = src[inflight_idx:inflight_idx+1200]
 
@@ -793,7 +802,7 @@ def test_loadSession_inflight_merges_tail_with_persisted_transcript(cleanup_test
     assert "_mergeInflightTailMessages(S.messages,inflightMessages)" in inflight_block, (
         "INFLIGHT messages should be merged as a tail, not replace the full transcript"
     )
-    assert "function _mergeInflightTailMessages" in src, (
+    assert "function _mergeInflightTailMessages" in family_source("sessions"), (
         "sessions.js should centralize INFLIGHT tail merge logic for regression coverage"
     )
 
@@ -806,7 +815,7 @@ def test_renderMessages_preserves_loading_placeholder_for_session_switch(cleanup
     renderMessages() must keep the existing 'Loading conversation...' placeholder
     instead of clearing #msgInner to an empty transcript.
     """
-    ui_src = (REPO_ROOT / "static/ui.js").read_text()
+    ui_src = family_source("ui")
     fn_start = ui_src.find("function renderMessages")
     assert fn_start >= 0, "renderMessages() not found in ui.js"
     fn_body = ui_src[fn_start:fn_start + 1400]
@@ -835,7 +844,7 @@ def test_browser_session_url_accepts_api_session_id_param(cleanup_test_sessions)
     legitimately produce `/?session_id=<sid>`; ignoring it falls back to stale
     localStorage and renders the wrong or empty conversation.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = family_source("sessions")
     start = src.find("function _sessionIdFromLocation")
     assert start >= 0, "session URL parser not found"
     end = src.find("function _sessionUrlForSid", start)
@@ -850,7 +859,7 @@ def test_inflight_merge_dedupes_uploaded_user_message(cleanup_test_sessions):
     final pending text with an `[Attached files: ...]` suffix.  The INFLIGHT
     merge must treat those as the same user turn instead of rendering both.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = family_source("sessions")
     assert "function _normalizeUserTranscriptText" in src, (
         "sessions.js should normalize user transcript text before deduping user turns"
     )
@@ -882,11 +891,11 @@ def test_loadSession_inflight_sets_active_stream_before_replaying_live_tool_card
     and replays them before assigning S.activeStreamId, the compact Activity
     counter drops the previously-seen tools after a focus change.
     """
-    src = (REPO_ROOT / "static/sessions.js").read_text()
+    src = RESTORE_LOADED_SESSION_SRC
     # Anchor on the Phase-2 INFLIGHT restore branch (the later occurrence); #3899
     # added an earlier if(INFLIGHT[sid]){ idle-reset block, so .find() would
     # grab the wrong one. (rfind = the substantive restore branch.)
-    inflight_idx = src.rfind("if(INFLIGHT[sid]){")
+    inflight_idx = src.find("if(INFLIGHT[sid]){")
     assert inflight_idx >= 0, "INFLIGHT branch not found in loadSession"
     inflight_block = src[inflight_idx:inflight_idx+4200]
     active_pos = inflight_block.find("S.activeStreamId=activeStreamId;")
@@ -951,7 +960,7 @@ def test_messages_js_supports_live_reasoning_and_tool_completion(cleanup_test_se
     Without these handlers, the operator only sees generic Thinking… or nothing
     until the final done snapshot redraws the whole turn.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     # reasoningText is initialised at closure scope in attachLiveStream.
     # On initial connect it defaults to ''; on reconnect it restores from
     # INFLIGHT so the already-rendered content survives the session switch.
@@ -991,7 +1000,7 @@ def test_messages_js_supports_interim_assistant_events(cleanup_test_sessions):
     Without a dedicated SSE handler, Codex-style interim status text disappears
     from the live answer and users only see the final response after tool calls.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     assert "source.addEventListener('interim_assistant'" in src or 'source.addEventListener("interim_assistant"' in src, \
         "messages.js must listen for interim_assistant SSE events"
     assert "function _resetAssistantSegment()" in src, \
@@ -1004,7 +1013,7 @@ def test_ui_js_can_upgrade_thinking_spinner_into_live_reasoning_card(cleanup_tes
     """R19: ui.js keeps the thinking helpers available while simplified mode
     renders provider reasoning as a Worklog Thinking Card.
     """
-    src = (REPO_ROOT / "static/ui.js").read_text()
+    src = family_source("ui")
     assert "function _thinkingMarkup(text='')" in src or 'function _thinkingMarkup(text="")' in src, \
         "ui.js must centralize thinking row markup so it can switch between spinner and live text"
     assert ("function updateThinking(text='', options){appendThinking(text, options);}" in src
@@ -1019,7 +1028,7 @@ def test_ui_js_keeps_split_thinking_cards_and_assistant_header(cleanup_test_sess
     turns inside a single assistant turn container, preserving one assistant header
     for the whole response while keeping multiple thinking cards distinct.
     """
-    src = (REPO_ROOT / "static" / "ui.js").read_text()
+    src = family_source("ui")
     assert "pendingTurnThinking" not in src, \
         "renderMessages must not merge distinct thinking blocks into one settled card"
     assert "_createAssistantTurn(" in src, \
@@ -1032,7 +1041,7 @@ def test_ui_js_keeps_reasoning_only_assistant_messages_visible(cleanup_test_sess
     """R19c: assistant messages that only contain reasoning must still survive
     rerenders, otherwise prior thinking cards disappear on the next turn.
     """
-    src = (REPO_ROOT / "static" / "ui.js").read_text()
+    src = family_source("ui")
     assert "function _messageHasReasoningPayload(m)" in src, \
         "ui.js must detect reasoning-only assistant messages"
     assert "hasTc||hasTu||_messageHasReasoningPayload(m)" in src.replace(' ', ''), \
@@ -1043,7 +1052,7 @@ def test_ui_js_does_not_hide_anchor_segments_that_contain_thinking(cleanup_test_
     """R19c2/R19c3: reasoning-only metadata must remain preserved as a
     collapsed Worklog Thinking Card.
     """
-    src = (REPO_ROOT / "static" / "ui.js").read_text()
+    src = family_source("ui")
     compact = src.replace(' ', '').replace('\n', '')
     assert "assistantThinking.set(rawIdx,thinkingText)" in compact, \
         "renderMessages must preserve reasoning text before hiding empty anchor segments"
@@ -1063,7 +1072,7 @@ def test_messages_js_live_assistant_segment_reuses_live_turn_wrapper(cleanup_tes
     """R19d: live streaming must reuse the existing live assistant turn wrapper created
     by appendThinking(), otherwise the header gets recreated when answer tokens start.
     """
-    src = (REPO_ROOT / "static" / "messages.js").read_text()
+    src = family_source("messages")
     assert "function ensureAssistantRow(force=false)" in src or 'function ensureAssistantRow(force = false)' in src, \
         "ensureAssistantRow should manage the live assistant content segment"
     assert "let turn=$('liveAssistantTurn');" in src, \
@@ -1087,7 +1096,7 @@ def test_messages_js_live_assistant_segment_reuses_live_turn_wrapper(cleanup_tes
 
 def test_messages_js_stream_perf_cleanup_lifecycle(cleanup_test_sessions):
     """#5455 review: throttled snapshot timers and incremental anchor caches tear down at terminal events."""
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     assert "function _cancelThrottledSnapshotTimer()" in src
     assert "clearTimeout(_snapshotLiveTurnTimer)" in src
     assert "function _clearAnchorProseIncrementalNode()" in src
@@ -1135,7 +1144,7 @@ def test_messages_js_finalizes_thinking_card_before_tool_card(cleanup_test_sessi
     """R19e: later reasoning after a tool call must render in a fresh Worklog
     Thinking Card without discarding durable reasoning.
     """
-    src = (REPO_ROOT / "static/messages.js").read_text()
+    src = family_source("messages")
     tool_start = src.find("source.addEventListener('tool'")
     tool_complete_start = src.find("source.addEventListener('tool_complete'", tool_start + 1)
     assert tool_start >= 0 and tool_complete_start > tool_start
@@ -1210,9 +1219,9 @@ def test_reload_recovery_persists_durable_inflight_state(cleanup_test_sessions):
     Without these helpers, loadSession() references loadInflightState() but a full
     browser reload has no saved state to hydrate, so recovery silently no-ops.
     """
-    ui_src = (REPO_ROOT / "static/ui.js").read_text()
-    messages_src = (REPO_ROOT / "static/messages.js").read_text()
-    sessions_src = (REPO_ROOT / "static/sessions.js").read_text()
+    ui_src = family_source("ui")
+    messages_src = family_source("messages")
+    sessions_src = family_source("sessions")
 
     assert "const INFLIGHT_STATE_KEY = 'hermes-webui-inflight-state'" in ui_src
     assert "function saveInflightState(sid, state)" in ui_src

@@ -9,13 +9,14 @@ Four optimizations to reduce session-switch latency:
 """
 
 import pathlib
+from tests.frontend_asset_contract import family_source
 import re
 import threading
 import time
 from unittest.mock import patch, MagicMock
 
 REPO = pathlib.Path(__file__).parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
@@ -489,7 +490,7 @@ class TestMessagePaginationFrontend:
 
     def test_scroll_to_top_triggers_loading(self):
         """Scroll event handler must trigger _loadOlderMessages near top when opt-in is enabled."""
-        UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+        UI_JS = family_source("ui")
 
         assert "const olderPrefetchPx=Math.max(600,el.clientHeight*1.5)" in UI_JS
         assert "_isSessionEndlessScrollEnabled()&&el.scrollTop<olderPrefetchPx" in UI_JS
@@ -497,7 +498,7 @@ class TestMessagePaginationFrontend:
 
     def test_load_older_indicator_in_render(self):
         """renderMessages must show a 'load older' indicator when truncated."""
-        UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+        UI_JS = family_source("ui")
 
         assert "loadOlderIndicator" in UI_JS
 
@@ -652,7 +653,7 @@ class TestScrollPositionPreservation:
     def test_uses_correct_scrollable_container(self):
         """_loadOlderMessages must use $('messages') not $('msgInner')."""
         SESSIONS_JS = pathlib.Path(__file__).parent.parent / "static" / "sessions.js"
-        src = SESSIONS_JS.read_text(encoding="utf-8")
+        src = family_source("sessions")
 
         fn_start = src.find("async function _loadOlderMessages")
         fn_end = src.find("\n}", fn_start) + 2
@@ -670,7 +671,7 @@ class TestScrollPositionPreservation:
     def test_resets_scroll_pinned_after_restore(self):
         """_scrollPinned must be false after older-history scroll anchoring."""
         SESSIONS_JS = pathlib.Path(__file__).parent.parent / "static" / "sessions.js"
-        src = SESSIONS_JS.read_text(encoding="utf-8")
+        src = family_source("sessions")
 
         fn_start = src.find("async function _loadOlderMessages")
         fn_end = src.find("\n}", fn_start) + 2

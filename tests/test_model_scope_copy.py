@@ -1,4 +1,5 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -9,8 +10,8 @@ def read(rel: str) -> str:
 
 
 def test_composer_model_dropdown_has_scope_advisory():
-    ui = read("static/ui.js")
-    style = read("static/style.css")
+    ui = family_source("ui")
+    style = family_source("style")
 
     assert "model-scope-note" in ui
     assert "model_scope_advisory" in ui
@@ -22,7 +23,7 @@ def test_composer_model_dropdown_has_scope_advisory():
 
 def test_model_selection_toast_describes_conversation_scope():
     boot = read("static/boot.js")
-    i18n = read("static/i18n.js")
+    i18n = family_source("i18n")
 
     assert "model_scope_toast" in boot
     assert "Applies to this conversation from your next message." in i18n
@@ -33,7 +34,7 @@ def test_model_selection_toast_describes_conversation_scope():
 
 def test_settings_default_model_copy_describes_new_conversations():
     html = read("static/index.html")
-    i18n = read("static/i18n.js")
+    i18n = family_source("i18n")
 
     assert 'data-i18n="settings_desc_model"' in html
     assert "Used for new conversations. Existing conversations keep their selected model." in html

@@ -1,5 +1,6 @@
 """Regression tests for sidebar lineage collapse helpers."""
 import json
+from tests.frontend_asset_contract import family_source
 import shutil
 import subprocess
 from pathlib import Path
@@ -32,7 +33,7 @@ def _run_node(source: str) -> str:
 
 
 def test_sidebar_lineage_collapse_keeps_latest_tip_and_counts_segments():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -68,7 +69,7 @@ console.log(JSON.stringify(collapsed));
 
 
 def test_sidebar_active_state_can_fall_back_to_url_session_during_boot():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -94,7 +95,7 @@ console.log(_activeSessionIdForSidebar());
 
 
 def test_collapsed_lineage_contains_active_hidden_segment():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -134,7 +135,7 @@ def test_parent_present_webui_compression_child_without_lineage_metadata_collaps
     in the sidebar payload, the continuation should still collapse with its
     parent instead of appearing as a separate branch-like conversation (#2489).
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -176,7 +177,7 @@ def test_stale_optimistic_compression_tips_collapse_even_when_parents_are_visibl
     Those rows carry explicit lineage metadata and must collapse as one sidebar
     conversation instead of rendering 7/8/9/10 segment duplicates.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -220,7 +221,7 @@ def test_sidebar_lineage_collapse_prefers_highest_compression_segment_over_touch
     segment, otherwise the visible chat jumps back to a parent that lacks the
     completed assistant answer.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -262,7 +263,7 @@ def test_sidebar_lineage_collapse_prefers_current_tip_over_same_segment_snapshot
     compression jumps back to the older parent transcript and looks like the
     active conversation disappeared.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -304,7 +305,7 @@ def test_direct_parent_restore_resolves_to_visible_compression_tip():
     parent. Boot restore should use that visible tip instead of loading the old
     parent transcript and making the continuation look lost.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -338,7 +339,7 @@ console.log(JSON.stringify({{parent:_resolveSessionIdFromSidebarLineage('parent'
 
 
 def test_sidebar_attaches_child_sessions_to_collapsed_hidden_parent_lineage():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -377,7 +378,7 @@ console.log(JSON.stringify(attached));
 
 
 def test_mixed_source_live_refresh_keeps_authoritative_tip_and_child_set():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -445,7 +446,7 @@ console.log(JSON.stringify([summarize(refreshA), summarize(refreshB)]));
 
 def test_cross_surface_subagent_child_stacks_under_visible_webui_parent():
     """Delegate subagent rows are cross-source but still belong under their WebUI parent."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -502,7 +503,7 @@ console.log(JSON.stringify(rows));
 
 def test_cross_surface_subagent_child_stacks_under_visible_fork_parent():
     """Forked WebUI conversations can still own subagent child rows."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -556,7 +557,7 @@ console.log(JSON.stringify(rows));
 
 def test_parent_source_label_display_text_does_not_force_external_orphaning():
     """Display-only source labels must not drive machine source classification."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -591,7 +592,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_cross_surface_webui_child_session_remains_top_level_when_parent_is_messaging():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -642,7 +643,7 @@ def test_sidebar_reference_rows_suppress_source_filtered_archived_parent_child()
     (`_scopedSidebarReferenceRows`), mirroring how renderSessionListFromCache feeds
     project/source-scoped references into _renderSidebarRowsFromRawSessions.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -690,7 +691,7 @@ def test_sidebar_reference_rows_do_not_suppress_cross_project_child():
     project-A fork. _scopedSidebarReferenceRows filters references to the active
     project/source before they feed the render.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -732,7 +733,7 @@ console.log(JSON.stringify(rows.map(r => r.session_id)));
 
 def test_archived_hidden_parent_suppresses_cross_surface_child_orphan():
     """A cross-surface child should not leak when its archived parent is hidden."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -775,7 +776,7 @@ console.log(JSON.stringify(rows));
 
 def test_archived_hidden_parent_suppresses_child_and_fork_orphans():
     """Archived parents should not leave child/delegate clutter behind (#4293)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -810,7 +811,7 @@ console.log(JSON.stringify(rows));
 
 def test_archived_hidden_ancestor_suppresses_nested_child_and_fork_orphans():
     """Nested descendants of an archived hidden parent must not leak as orphans (#4293)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -848,7 +849,7 @@ console.log(JSON.stringify(rows));
 
 def test_cross_project_archived_parent_does_not_hide_active_project_fork():
     """Archived parents outside the active project must not suppress an active-project fork (#4293)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -892,7 +893,7 @@ console.log(JSON.stringify({{correctRows, wrongRows}}));
 
 def test_inactive_source_tab_count_uses_its_own_archived_parent_references():
     """Inactive source-count renders must not borrow another source's reference rows (#4293)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -942,7 +943,7 @@ console.log(JSON.stringify({{wrongWebuiCount,rightWebuiCount,wrongCliCount,right
 
 def test_child_archive_render_rebuild_drops_stale_decorated_children():
     """A previous decorated parent copy must not retain an archived child (#4293)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -987,7 +988,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_fork_child_with_visible_parent_is_nested_once():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1020,7 +1021,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_fork_child_without_visible_parent_stays_top_level():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1051,7 +1052,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_pinned_fork_with_visible_parent_stays_top_level():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1083,7 +1084,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_nested_fork_tracks_latest_child_without_changing_parent_bucket_timestamp():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1121,7 +1122,7 @@ console.log(JSON.stringify({{row: rows[0], timestampMs: _sessionTimestampMs(rows
 
 
 def test_hidden_archived_lineage_child_bubbles_running_state_and_latest_child_timestamp_without_changing_parent_bucket():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1184,7 +1185,7 @@ console.log(JSON.stringify({{row: rows[0], count: rows.length, timestampMs: _ses
 
 
 def test_archived_lineage_child_without_root_id_preserves_parent_bucket_timestamp():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1246,7 +1247,7 @@ console.log(JSON.stringify({{row: rows[0], count: rows.length, timestampMs: _ses
 
 
 def test_non_archived_reference_only_lineage_row_does_not_bubble_to_visible_parent():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1309,7 +1310,7 @@ console.log(JSON.stringify({{row: rows[0], count: rows.length, timestampMs: _ses
 
 
 def test_stale_active_stream_id_on_hidden_archived_child_keeps_parent_bucket_and_latest_child_timestamp():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1372,7 +1373,7 @@ console.log(JSON.stringify({{row: rows[0], count: rows.length, timestampMs: _ses
 
 
 def test_collapsed_lineage_segments_do_not_render_as_child_sessions():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1417,7 +1418,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_nested_fork_bubbles_parent_attention_state():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1467,7 +1468,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_fork_chain_stays_attached_under_visible_root():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1502,7 +1503,7 @@ console.log(JSON.stringify(rows));
 
 
 def test_sidebar_lineage_key_uses_session_id_for_fork_rows():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1532,7 +1533,7 @@ console.log(JSON.stringify({{
 
 
 def test_session_segment_count_prefers_visible_collapsed_backend_and_materialized_counts():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1562,8 +1563,8 @@ console.log(JSON.stringify(cases));
 
 
 def test_sidebar_lineage_segment_badge_is_detailed_density_only_and_localized():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
-    css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    js = family_source("sessions")
+    css = family_source("style")
     assert "session-lineage-count" in js
     assert "const density=(window._sidebarDensity==='detailed'?'detailed':'compact');" in js
     assert "const showLineageMetadata=density==='detailed';" in js
@@ -1577,8 +1578,8 @@ def test_sidebar_lineage_segment_badge_is_detailed_density_only_and_localized():
 
 
 def test_lineage_segment_expansion_static_contract():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
-    css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    js = family_source("sessions")
+    css = family_source("style")
     assert "const _expandedLineageKeys = new Set();" in js
     assert "const _lineageReportCache = new Map();" in js
     assert "const _lineageReportInflight = new Map();" in js
@@ -1607,7 +1608,7 @@ def test_lineage_segment_expansion_static_contract():
 
 
 def test_lineage_report_fetch_is_needed_only_when_backend_count_exceeds_materialized_segments():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1646,7 +1647,7 @@ console.log(JSON.stringify({{before, afterCache, fullLocal}}));
 
 
 def test_lineage_report_cache_identity_uses_tip_and_evicts_segment_count_mismatch():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1696,7 +1697,7 @@ console.log(JSON.stringify({{
 
 
 def test_render_path_skips_stale_cached_segments_when_mismatch_forces_refresh():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1742,7 +1743,7 @@ console.log(JSON.stringify({{needsFetch, rendered, cacheRetained:_lineageReportC
 
 
 def test_cached_lineage_report_segments_merge_with_materialized_segments_without_duplicates_or_children():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1782,7 +1783,7 @@ console.log(JSON.stringify(segments));
 
 
 def test_lineage_report_fetch_uses_endpoint_once_and_caches_result():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1831,7 +1832,7 @@ eval(extractFunc('_fetchLineageReportForRow'));
 
 
 def test_lineage_refresh_cache_prune_keeps_visible_keys_and_drops_missing_ones():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1873,7 +1874,7 @@ console.log(JSON.stringify({{
 
 
 def test_pruned_lineage_inflight_request_cannot_repopulate_cache():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1923,7 +1924,7 @@ eval(extractFunc('_fetchLineageReportForRow'));
 
 
 def test_active_hidden_lineage_segment_auto_expands_parent():
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -1959,7 +1960,7 @@ console.log(JSON.stringify({{lineage:[..._expandedLineageKeys], child:[..._expan
 
 
 def test_lineage_segment_locale_keys_are_defined_for_sidebar_locales():
-    i18n = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+    i18n = family_source("i18n")
     required = [
         "session_meta_segments:",
         "session_lineage_segment_untitled:",
@@ -1978,7 +1979,7 @@ def test_session_meta_segments_softened_label_no_literal_segment_in_english():
     t() fallback for untranslated locales also produces softened copy.
     """
     import re
-    i18n_text = (REPO_ROOT / 'static' / 'i18n.js').read_text(encoding='utf-8')
+    i18n_text = family_source("i18n")
     # Locate the English base-locale block (first occurrence, before any _lang guard).
     first_lang = i18n_text.index('_lang: \'en\'')
     second_lang = i18n_text.index('_lang:', first_lang + 1)
@@ -1999,7 +2000,7 @@ def test_session_meta_segments_softened_label_no_literal_segment_in_english():
 
 def test_sidebar_search_and_rows_use_read_only_display_title():
     """Stale persisted titles should not drive sidebar search/render when display_title exists."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     assert "function _sessionDisplayTitle" in js
     assert "function _sessionTitleTags" in js
     assert "function _sessionSearchDirectAndTitleMatches" in js
@@ -2013,7 +2014,7 @@ def test_sidebar_search_and_rows_use_read_only_display_title():
 
 def test_child_session_parent_segment_note_uses_display_title():
     """A child attached through a hidden parent segment should show the reconciled segment title."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -2059,7 +2060,7 @@ console.log(JSON.stringify(rows[0]._child_sessions[0]));
 
 def test_default_webui_numbered_titles_are_not_treated_as_hash_tags():
     """The reconciled title 'Hermes WebUI #177' must render with its number intact."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = f"""
 const src = {js!r};
 function extractFunc(name) {{
@@ -2089,7 +2090,7 @@ def test_streaming_state_recorded_from_own_state_not_bubbled_child():
     """_rememberRenderedStreamingState must receive the parent's own streaming
     state, not the composite own||child value.  Otherwise the parent gets
     marked unread/completed when a nested fork stops streaming."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     # The pattern we need: ownStreaming used for remember, isStreaming used
     # for rendering (includes child).
     assert "const ownStreaming=_isSessionEffectivelyStreaming(s);" in js
@@ -2102,7 +2103,7 @@ def test_streaming_state_recorded_from_own_state_not_bubbled_child():
 def test_nested_fork_rows_included_in_visible_sidebar_ids():
     """Expanded writable fork children must appear in _sessionVisibleSidebarIds
     so they participate in batch-select (select-all / shift-select)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     assert "child.session_source==='fork'" in js
     # The _sessionVisibleSidebarIds builder must push fork children.
     assert "_sessionVisibleSidebarIds.push(child.session_id)" in js
@@ -2111,7 +2112,7 @@ def test_nested_fork_rows_included_in_visible_sidebar_ids():
 def test_nested_fork_rows_render_select_checkbox():
     """The session-child-session-fork render path must include a batch-select
     checkbox when _sessionSelectMode is active and the child is writable."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     render_marker = "row.className='session-child-session session-child-session-fork'"
     fork_render_start = js.find(render_marker)
     assert fork_render_start > 0

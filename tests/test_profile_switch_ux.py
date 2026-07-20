@@ -7,6 +7,7 @@ Covered behavior:
 - Session-list refreshes animate rows with row-level FLIP motion.
 """
 import re
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
@@ -15,7 +16,7 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()
 class TestProfileSwitchSpinner:
     """Static-analysis tests for the spinner loading indicator."""
 
-    JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    JS = family_source("panels")
 
     def _get_switch_fn(self):
         idx = self.JS.find("async function switchToProfile(name) {")
@@ -80,7 +81,7 @@ class TestProfileSwitchSpinner:
 class TestParallelizedFetches:
     """Verify that background refresh work does not block visible profile switching."""
 
-    JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    JS = family_source("panels")
 
     def _get_switch_fn(self):
         idx = self.JS.find("async function switchToProfile(name) {")
@@ -168,7 +169,7 @@ class TestParallelizedFetches:
         """Profile switches should not duplicate workspace-tree loads."""
         fn = self._get_switch_fn()
         assert "awaitWorkspaceLoad: workspaceVisible" in fn
-        sessions_js = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+        sessions_js = family_source("sessions")
         assert "if(options&&options.awaitWorkspaceLoad){" in sessions_js
         assert "await loadDir('.')" in sessions_js
         assert "typeof _deferWorkspaceRefreshForSession==='function'" in sessions_js
@@ -248,7 +249,7 @@ class TestParallelizedFetches:
 class TestSpinnerCss:
     """Verify the spinner CSS class is defined correctly."""
 
-    CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    CSS = family_source("style")
 
     def test_switching_class_defined(self):
         assert ".composer-profile-chip.switching" in self.CSS
@@ -269,8 +270,8 @@ class TestSpinnerCss:
 class TestProfileSessionListFlip:
     """Verify session-list refreshes use row-level FLIP motion."""
 
-    JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    JS = family_source("sessions")
+    CSS = family_source("style")
 
     def test_profile_refresh_flips_new_rows(self):
         assert "session-list-flip-enter" in self.JS
@@ -286,11 +287,9 @@ class TestProfileSessionListFlip:
 
     def test_profile_refresh_drops_queued_reflow_before_playing_flip(self):
         start = self.JS.index("// Refresh FLIP and queued archive/delete reflow both drive")
-        # End anchor: the next function declaration after the reflow block. (Was the
-        # "// Note: declared after the groups loop" comment on the nested
-        # _sessionAttentionState, which #3696 removed when that helper was hoisted to
-        # top-level scope — so anchor on the stable _renderOneSession decl instead.)
-        end = self.JS.index("function _renderOneSession(", start)
+        # The split keeps this block and its owning render function together;
+        # stop at that module's explicit export instead of crossing asset boundaries.
+        end = self.JS.index("window.HermesSessions.parts.sidebarRendering", start)
         block = self.JS[start:end]
 
         assert "const reflowBefore=animateRefresh?flipBefore:_pendingSessionReflowPositions;" in block

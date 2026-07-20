@@ -5,18 +5,19 @@ placeholder HTML for .pdf and .html files, that lazy-load functions exist,
 and that CSS classes are defined.
 """
 import os
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import re
-import pytest
 
 
 def _read_js(name):
+    if name == "ui.js":
+        return family_source("ui")
     with open(os.path.join('static', name), encoding="utf-8") as f:
         return f.read()
 
 
 def _read_css():
-    with open(os.path.join('static', 'style.css'), encoding="utf-8") as f:
-        return f.read()
+    return family_source("style")
 
 
 # ── Extension regexes ──────────────────────────────────────────────────────
@@ -316,23 +317,14 @@ class TestI18nKeys:
     HTML_KEYS = ['html_loading', 'html_too_large', 'html_error', 'html_open_full', 'html_sandbox_label']
 
     def _find_locale_block(self, locale):
-        with open('static/i18n.js', encoding="utf-8") as f:
-            content = f.read()
-        start = content.find(f"'{locale}':")
-        if start < 0:
-            start = content.find(f'{locale}:')
-        if start < 0:
-            return ''
-        # Find end by scanning for next top-level locale
-        locales = ['en', 'ru', 'es', 'de', 'zh', 'zh-Hant', 'ko']
-        end = len(content)
-        for loc in locales:
-            if loc == locale:
+        marker = f"registerLocale('{locale}',"
+        for path in family_asset_paths("i18n"):
+            if not path.name.startswith("locale-"):
                 continue
-            pos = content.find(f"'{loc}':", start + 5)
-            if pos > start and pos < end:
-                end = pos
-        return content[start:end]
+            content = path.read_text(encoding="utf-8")
+            if marker in content:
+                return content
+        return ''
 
     def test_pdf_keys_in_en(self):
         block = self._find_locale_block('en')

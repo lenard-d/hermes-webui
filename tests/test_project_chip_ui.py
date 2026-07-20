@@ -23,11 +23,12 @@ presence of the resize helper at both call sites.
 """
 
 import pathlib
+from tests.frontend_asset_contract import family_source
 from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO = pathlib.Path(__file__).parent.parent
 SESSIONS_JS = SESSIONS_SOURCE
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 # ── Bug 1: context menu background ────────────────────────────────────────────

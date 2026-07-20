@@ -12,11 +12,11 @@ asserting the rendered HTML for the most common LLM-output shapes.
 Add a case here whenever the renderer fix targets a class of input the
 Python mirror cannot exercise faithfully.
 """
-import os
+import json
+from tests.frontend_asset_contract import family_asset_paths
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -31,7 +31,9 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2])
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('');
 global.window = {};
 global.document = { createElement: () => ({ innerHTML: '', textContent: '' }), baseURI: 'http://localhost/app/' };
 function _sessionUrlForSid(sid) { return '/app/session/' + encodeURIComponent(String(sid || '')); }
@@ -90,7 +92,7 @@ def driver_path(tmp_path_factory):
 def _render(driver_path, markdown: str) -> str:
     """Run renderMd against the actual ui.js and return the rendered HTML."""
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH)],
+        [NODE, driver_path, json.dumps([str(path) for path in family_asset_paths("ui")])],
         input=markdown,
         capture_output=True,
         text=True,

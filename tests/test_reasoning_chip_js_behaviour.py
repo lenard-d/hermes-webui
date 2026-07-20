@@ -10,7 +10,7 @@ label fell through to a wrong value for an unknown input.
 This file pins the actual rendered output for every effort state so the
 chip's None/Default visibility cannot silently regress.
 """
-import os
+from tests.frontend_asset_contract import family_asset_paths
 import shutil
 import subprocess
 from pathlib import Path
@@ -26,7 +26,9 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2])
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('');
 
 function makeEl() {
     return {
@@ -111,7 +113,7 @@ def _apply(driver_path, value):
     """Run _applyReasoningChip(value) against the actual ui.js."""
     import json as _json
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), _json.dumps(value)],
+        [NODE, driver_path, _json.dumps([str(path) for path in family_asset_paths("ui")]), _json.dumps(value)],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:
@@ -215,7 +217,9 @@ class TestTitleAttributeAccessibility:
 
 _DRIVER_META_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2])
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('');
 
 function makeEl() {
     return {
@@ -300,7 +304,7 @@ def _apply_meta(driver_meta_path, effort, meta):
     import json as _json
     payload = _json.dumps({"effort": effort, "meta": meta})
     result = subprocess.run(
-        [NODE, driver_meta_path, str(UI_JS_PATH), payload],
+        [NODE, driver_meta_path, _json.dumps([str(path) for path in family_asset_paths("ui")]), payload],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:
@@ -382,7 +386,9 @@ class TestSupportsThinkingToggleVisibility:
 
 _DRIVER_OPTIONS_SRC = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = JSON.parse(process.argv[2])
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('');
 
 function makeOption(effort) {
     return {
@@ -481,7 +487,7 @@ def _visible_options(driver_options_path, effort, meta):
     import json as _json
     payload = _json.dumps({"effort": effort, "meta": meta})
     result = subprocess.run(
-        [NODE, driver_options_path, str(UI_JS_PATH), payload],
+        [NODE, driver_options_path, _json.dumps([str(path) for path in family_asset_paths("ui")]), payload],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:

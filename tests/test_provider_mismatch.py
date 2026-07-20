@@ -11,6 +11,7 @@ Covers:
   6. /api/models: response includes active_provider field
 """
 import json
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import pathlib
 import re
 import urllib.request
@@ -22,6 +23,15 @@ from tests._pytest_port import BASE
 
 def _read(rel_path: str) -> str:
     return (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+
+
+def _locale_source(locale: str) -> str:
+    marker = f"registerLocale('{locale}',"
+    for path in family_asset_paths("i18n"):
+        source = path.read_text(encoding="utf-8")
+        if marker in source:
+            return source
+    raise AssertionError(f"locale asset not found: {locale}")
 
 
 def _post(path, body=None):
@@ -109,14 +119,14 @@ class TestCheckProviderMismatch:
 
     def test_function_defined(self):
         """_checkProviderMismatch function must be defined in ui.js."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         assert "function _checkProviderMismatch" in src, (
             "_checkProviderMismatch not defined in ui.js"
         )
 
     def test_uses_window_active_provider(self):
         """Function must read window._activeProvider."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         idx = src.find("function _checkProviderMismatch")
         block = src[idx:idx + 800]
         assert "_activeProvider" in block, (
@@ -125,7 +135,7 @@ class TestCheckProviderMismatch:
 
     def test_skips_check_for_openrouter(self):
         """OpenRouter can route to any provider — skip the warning."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         idx = src.find("function _checkProviderMismatch")
         block = src[idx:idx + 800]
         assert "_providerSkipsModelMismatchWarning(ap)" in block, (
@@ -139,7 +149,7 @@ class TestCheckProviderMismatch:
 
     def test_skips_check_for_custom(self):
         """Custom endpoints can serve any model — skip the warning."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         idx = src.find("function _checkProviderMismatch")
         block = src[idx:idx + 800]
         assert "_providerSkipsModelMismatchWarning(ap)" in block, (
@@ -153,7 +163,7 @@ class TestCheckProviderMismatch:
 
     def test_skips_check_for_named_custom_provider(self):
         """Named custom providers are aggregators too — skip the warning."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         idx = src.find("function _checkProviderMismatch")
         block = src[idx:idx + 800]
         assert "_providerSkipsModelMismatchWarning(ap)" in block, (
@@ -168,7 +178,7 @@ class TestCheckProviderMismatch:
 
     def test_active_provider_stored_on_model_load(self):
         """populateModelDropdown must store active_provider from /api/models."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         # Find the function definition (skip the comment that also mentions the name)
         idx = src.find("async function populateModelDropdown")
         assert idx != -1, "async function populateModelDropdown not found"
@@ -186,21 +196,21 @@ class TestApperrorHandler:
 
     def test_auth_mismatch_type_handled(self):
         """apperror handler must check for type='auth_mismatch'."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "auth_mismatch" in src, (
             "auth_mismatch type not handled in messages.js apperror handler"
         )
 
     def test_provider_mismatch_label(self):
         """'Provider mismatch' label must appear in the error handling."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "Provider mismatch" in src, (
             "'Provider mismatch' label not found in messages.js"
         )
 
     def test_is_auth_mismatch_variable(self):
         """isAuthMismatch variable must be defined."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "isAuthMismatch" in src, (
             "isAuthMismatch variable not found in messages.js apperror handler"
         )
@@ -228,7 +238,7 @@ class TestI18nProviderMismatch:
 
     def test_all_locales_have_warning_key(self):
         """provider_mismatch_warning must appear in all locales."""
-        src = _read("static/i18n.js")
+        src = family_source("i18n")
         locale_count = len(self._locale_names(src))
         count = self._count_key(src, "provider_mismatch_warning")
         assert count >= locale_count, (
@@ -238,7 +248,7 @@ class TestI18nProviderMismatch:
 
     def test_all_locales_have_label_key(self):
         """provider_mismatch_label must appear in all locales."""
-        src = _read("static/i18n.js")
+        src = family_source("i18n")
         locale_count = len(self._locale_names(src))
         count = self._count_key(src, "provider_mismatch_label")
         assert count >= locale_count, (
@@ -247,11 +257,7 @@ class TestI18nProviderMismatch:
 
     def test_warning_is_function_in_en(self):
         """English provider_mismatch_warning must be a function (m, p) => ..."""
-        src = _read("static/i18n.js")
-        # Find the en block
-        en_start = src.find("\n  en: {")
-        es_start = src.find("\n  es: {")
-        en_block = src[en_start:es_start]
+        en_block = _locale_source("en")
         assert "provider_mismatch_warning" in en_block, "Key not in en block"
         idx = en_block.find("provider_mismatch_warning")
         line = en_block[idx:idx + 200]
@@ -263,10 +269,7 @@ class TestI18nProviderMismatch:
 
     def test_spanish_locale_key_coverage(self):
         """Spanish locale must have the new keys (parity with English)."""
-        src = _read("static/i18n.js")
-        es_start = src.find("\n  es: {")
-        de_start = src.find("\n  de: {")
-        es_block = src[es_start:de_start]
+        es_block = _locale_source("es")
         for key in self.REQUIRED_KEYS:
             assert key in es_block, f"Key '{key}' missing from Spanish locale"
 
@@ -1545,7 +1548,7 @@ class TestChatStartEffectiveModelRecovery:
     """messages.js must accept an effective_model correction from the backend."""
 
     def test_send_applies_effective_model_from_chat_start(self):
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "startData.effective_model" in src, (
             "send() must read effective_model from /api/chat/start so the UI can "
             "recover from stale persisted session models"
@@ -1567,7 +1570,7 @@ class TestFrontendModelProviderState:
         assert "model_provider:modelState.model_provider||null" in src
 
     def test_new_session_carries_visible_picker_model_into_create_request(self):
-        src = _read("static/sessions.js")
+        src = family_source("sessions")
         start = src.index("async function newSession(")
         body = src[start:src.index("const data=await api('/api/session/new'", start)]
         assert "profile:S.activeProfile||'default'" in body
@@ -1597,7 +1600,7 @@ class TestFrontendModelProviderState:
         )
 
     def test_ui_has_json_model_state_storage(self):
-        src = _read("static/ui.js")
+        src = family_source("ui")
         assert "hermes-webui-model-state" in src
         assert "function _writePersistedModelState" in src
         assert "_providerQualifiedModelValueForSelect(sel, modelId)" in src
@@ -1605,7 +1608,7 @@ class TestFrontendModelProviderState:
 
     def test_named_custom_live_models_keep_provider_prefix(self):
         """Live models from custom:* providers should keep explicit provider context."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         idx = src.find("function _addLiveModelsToSelect")
         assert idx != -1, "_addLiveModelsToSelect must exist"
         block = src[idx:idx + 2200]
@@ -1619,7 +1622,7 @@ class TestFrontendModelProviderState:
 
     def test_named_custom_missing_dropdown_model_does_not_persist_fallback(self):
         """syncTopbar must not overwrite custom:* selections just because the static picker lacks them."""
-        src = _read("static/ui.js")
+        src = family_source("ui")
         helper_idx = src.find("function _providerDefersMissingModelFallback")
         assert helper_idx != -1, "custom-provider missing-model fallback helper must exist"
         helper = src[helper_idx:helper_idx + 500]
@@ -1852,9 +1855,7 @@ def test_stale_ui_js_does_not_inject_unavailable_option():
     """renderSession() must no longer inject a bare (unavailable) option into
     modelSelect when the session model is not in the provider list (#829).
     It should silently reset to the first available model instead."""
-    import os
-    src = open(os.path.join(os.path.dirname(__file__), "..", "static", "ui.js"),
-               encoding="utf-8").read()
+    src = family_source("ui")
 
     # The old pattern must be gone — both keys removed from ui.js
     assert "model_unavailable" not in src and "model_unavailable_title" not in src, (

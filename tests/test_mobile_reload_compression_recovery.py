@@ -1,6 +1,7 @@
 """Regression coverage for mobile reload recovery after compression session rotation."""
 
 import collections
+from tests.frontend_asset_contract import family_source
 import json
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def test_load_session_follows_backend_continuation_hint():
     speculatively up-front (so a rejected/cross-profile continuation can't poison
     restore state with an unusable id — #2980 hardening).
     """
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     load_session = _function_block(src, "async function loadSession")
 
     assert "continuation_session_id" in load_session

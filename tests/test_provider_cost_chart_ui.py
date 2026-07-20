@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
 
@@ -7,8 +8,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_provider_cost_chart_ui_guards_are_present():
-    panels_js = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-    style_css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
+    style_css = family_source("style")
 
     # function is defined
     assert "async function renderProviderCostChart(card)" in panels_js

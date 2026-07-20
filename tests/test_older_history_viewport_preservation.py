@@ -1,7 +1,8 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(src: str, signature: str) -> str:

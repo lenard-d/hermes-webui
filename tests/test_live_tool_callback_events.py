@@ -1,4 +1,5 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,8 +65,8 @@ def test_legacy_progress_events_are_suppressed_when_structured_callbacks_are_wir
 
 
 def test_tool_callback_events_keep_existing_frontend_event_contract():
-    messages = _read("static/messages.js")
-    ui = _read("static/ui.js")
+    messages = family_source("messages")
+    ui = family_source("ui")
 
     assert "source.addEventListener('tool',e=>{" in messages
     assert "source.addEventListener('tool_complete',e=>{" in messages

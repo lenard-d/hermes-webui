@@ -1,14 +1,15 @@
 """Regression coverage for large MCP tool inventories in Settings → System."""
 
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+STYLE_CSS = family_source("style")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 
 
 def test_mcp_tool_list_has_summary_list_and_pager_mounts():

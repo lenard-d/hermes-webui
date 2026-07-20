@@ -1,4 +1,5 @@
 import base64
+from tests.frontend_asset_contract import family_source
 import io
 import json
 import hashlib
@@ -385,7 +386,7 @@ def test_passkey_feature_flag_via_config(monkeypatch, tmp_path):
 
 def test_passwordless_settings_and_last_passkey_guard_are_wired():
     routes = open("api/routes.py", encoding="utf-8").read()
-    panels = open("static/panels.js", encoding="utf-8").read()
+    panels = family_source("panels")
     index = open("static/index.html", encoding="utf-8").read()
 
     assert "_passwordless" in routes

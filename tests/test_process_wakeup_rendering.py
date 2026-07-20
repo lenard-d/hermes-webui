@@ -8,6 +8,7 @@ preceded the notification and the assistant response produced by the wakeup.
 """
 
 import json
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import re
 import shutil
 import subprocess
@@ -18,8 +19,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS_PATH = ROOT / "static" / "ui.js"
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -27,7 +28,9 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 _DRIVER = r"""
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[1], 'utf8');
+const src = JSON.parse(process.argv[1])
+  .map(path => fs.readFileSync(path, 'utf8'))
+  .join('');
 function extractFunc(name){
   const start = src.indexOf('function ' + name);
   if(start === -1) throw new Error(name + ' not found');
@@ -136,7 +139,7 @@ process.stdout.write(JSON.stringify({
 def _run_driver():
     assert NODE is not None
     proc = subprocess.run(
-        [NODE, "-e", _DRIVER, str(UI_JS_PATH)],
+        [NODE, "-e", _DRIVER, json.dumps([str(path) for path in family_asset_paths("ui")])],
         text=True,
         capture_output=True,
         timeout=30,
@@ -177,7 +180,7 @@ def test_attachment_only_process_wakeup_is_visible_and_display_markers_are_strip
 
 
 def test_process_wakeup_uses_compact_status_row_not_normal_user_bubble():
-    ui = UI_JS_PATH.read_text(encoding="utf-8")
+    ui = family_source("ui")
     marker = "const isProcessWakeup="
     marker_idx = ui.find(marker)
     assert marker_idx != -1, "render loop must classify process-wakeup messages"
@@ -214,18 +217,11 @@ def test_process_wakeup_uses_compact_status_row_not_normal_user_bubble():
 
 
 def test_process_wakeup_label_key_exists_in_all_locales():
-    locale_pattern = re.compile(
-        r"^\s{2}(?:'(?P<quoted>[A-Za-z0-9-]+)'|(?P<plain>[A-Za-z0-9-]+))\s*:\s*\{",
-        re.MULTILINE,
-    )
-    locale_matches = list(locale_pattern.finditer(I18N_JS))
-    assert locale_matches, "expected at least the English locale"
-    for idx, match in enumerate(locale_matches):
-        name = match.group("quoted") or match.group("plain")
-        start = match.end()
-        end = locale_matches[idx + 1].start() if idx + 1 < len(locale_matches) else I18N_JS.find("\n};", start)
-        block = I18N_JS[start:end]
+    locale_paths = [path for path in family_asset_paths("i18n") if path.name.startswith("locale-")]
+    assert locale_paths, "expected at least the English locale"
+    for path in locale_paths:
+        block = path.read_text(encoding="utf-8")
         assert re.search(r"\bprocess_wakeup_label\s*:", block), (
-            f"process_wakeup_label missing from locale {name}"
+            f"process_wakeup_label missing from locale asset {path.name}"
         )
     assert "process_wakeup_label:'Background wakeup'" in I18N_JS

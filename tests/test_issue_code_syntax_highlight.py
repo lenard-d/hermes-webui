@@ -1,11 +1,12 @@
 """Regression tests for fenced code block syntax highlighting."""
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 UI_JS = Path(__file__).resolve().parent.parent / "static" / "ui.js"
 
 
 def _read_ui_js() -> str:
-    return UI_JS.read_text()
+    return family_source("ui")
 
 
 def test_fenced_code_blocks_add_prism_language_class():

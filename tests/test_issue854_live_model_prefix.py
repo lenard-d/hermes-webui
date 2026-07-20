@@ -1,6 +1,7 @@
 """Regression tests for #854 — live-fetched models must route through the
 configured portal provider, not OpenRouter."""
 import os
+from tests.frontend_asset_contract import family_source
 import re
 
 
@@ -22,7 +23,7 @@ class TestLiveModelPrefix:
         scenario in #854 is precisely about slash-prefixed IDs like
         `minimax/minimax-m2.7` from Nous's live catalog — excluding them
         leaves the bug unfixed."""
-        js = _read("static/ui.js")
+        js = family_source("ui")
         # Live model prefix logic was extracted to _addLiveModelsToSelect (#872)
         m = re.search(r'function _addLiveModelsToSelect\(.*?\n\}', js, re.DOTALL)
         if not m:
@@ -49,7 +50,7 @@ class TestLiveModelPrefix:
         """The flag controlling prefix application should be named/structured
         so the prefix is ADDED when the flag is true (portal fetch), not when
         false.  Earlier revision used `!_needsPrefix` (inverted)."""
-        js = _read("static/ui.js")
+        js = family_source("ui")
         # Live model prefix logic was extracted to _addLiveModelsToSelect (#872)
         m = re.search(r'function _addLiveModelsToSelect\(.*?\n\}', js, re.DOTALL)
         if not m:
@@ -71,7 +72,7 @@ class TestLiveModelPrefix:
     def test_portal_fetch_excludes_openrouter_and_custom(self):
         """OpenRouter IDs are cross-namespace by design, and `custom` providers
         use user-defined bare names — neither should get a `@provider:` prefix."""
-        js = _read("static/ui.js")
+        js = family_source("ui")
         # Live model prefix logic was extracted to _addLiveModelsToSelect (#872)
         m = re.search(r'function _addLiveModelsToSelect\(.*?\n\}', js, re.DOTALL)
         if not m:
@@ -91,7 +92,7 @@ class TestCheckProviderMismatchAtPrefix:
     the prefix itself is an explicit provider hint, so there's no mismatch."""
 
     def test_returns_null_for_at_prefix_ids(self):
-        js = _read("static/ui.js")
+        js = family_source("ui")
         m = re.search(r'function _checkProviderMismatch\(.*?\n\}', js, re.DOTALL)
         assert m, "_checkProviderMismatch not found"
         fn = m.group(0)

@@ -1,11 +1,10 @@
 """Test: session batch select mode functions exist in sessions.js (#568)"""
-import re
+from tests.frontend_asset_contract import family_source
 
 
 def test_batch_select_state_variables():
     """Verify batch select state variables are declared."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert '_sessionSelectMode' in src, "Missing _sessionSelectMode variable"
     assert '_selectedSessions' in src, "Missing _selectedSessions variable"
     assert 'new Set()' in src, "Selected sessions should use Set"
@@ -13,8 +12,7 @@ def test_batch_select_state_variables():
 
 def test_batch_select_functions_exist():
     """Verify all batch select functions are defined."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     required_funcs = [
         'toggleSessionSelectMode',
         'exitSessionSelectMode',
@@ -31,8 +29,7 @@ def test_batch_select_functions_exist():
 
 def test_batch_select_checkbox_rendering():
     """Verify checkbox is rendered when in select mode."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert 'session-select-cb' in src, "Missing session-select-cb class"
     assert 'session-select-cb-wrapper' in src, "Missing session-select-cb-wrapper class"
     assert "cb.type='checkbox'" in src, "Checkbox should be type checkbox"
@@ -40,8 +37,7 @@ def test_batch_select_checkbox_rendering():
 
 def test_batch_select_intercepts_navigation():
     """Verify select mode intercepts session navigation."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert "_sessionSelectMode" in src
     # Should have early return when in select mode
     assert 'toggleSessionSelect(s.session_id)' in src, \
@@ -50,8 +46,7 @@ def test_batch_select_intercepts_navigation():
 
 def test_batch_checkbox_sets_selection_without_row_double_toggle():
     """Clicking the checkbox itself must not also trigger row-level toggling."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert 'function setSessionSelected(sid, selected)' in src, \
         "Checkbox changes should set explicit state instead of toggling blindly"
     assert 'cb.onchange=(e)=>{e.stopPropagation();setSessionSelected(s.session_id,cb.checked);};' in src, \
@@ -64,24 +59,21 @@ def test_batch_checkbox_sets_selection_without_row_double_toggle():
 
 def test_batch_select_escape_handler():
     """Verify Escape key exits select mode."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert "e.key==='Escape'&&_sessionSelectMode" in src, \
         "Should have Escape key handler for select mode"
 
 
 def test_batch_select_toggle_button():
     """Verify select mode toggle button is rendered."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert 'session-select-toggle' in src, "Missing session-select-toggle class"
     assert 'toggleSessionSelectMode' in src, "Missing toggleSessionSelectMode call"
 
 
 def test_batch_select_bar_element():
     """Verify batch action bar DOM element is created."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert 'batchActionBar' in src, "Missing batchActionBar element"
     assert 'batch-action-bar' in src, "Missing batch-action-bar CSS class"
     assert 'batch-action-btn' in src, "Missing batch-action-btn class"
@@ -89,8 +81,7 @@ def test_batch_select_bar_element():
 
 def test_batch_action_bar_overrides_css_hidden_state():
     """Selected sessions must make the fixed action bar visible."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert "if(count>0){_renderBatchActionBar();}" in src, \
         "Updating selected count must render action buttons, not just reveal an empty bar"
     assert "t('session_selected_count',_selectedSessions.size)" in src, \
@@ -107,10 +98,8 @@ def test_batch_action_bar_overrides_css_hidden_state():
 
 def test_batch_action_bar_is_sidebar_inline_not_global_footer():
     """Batch actions should appear in the session list, not over the composer."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        js = f.read()
-    with open('static/style.css', encoding="utf-8") as f:
-        css = f.read()
+    js = family_source("sessions")
+    css = family_source("style")
     assert "list.appendChild(batchBar)" in js, \
         "Batch action bar should be rendered inside the session list"
     assert "document.body.appendChild(batchBar)" not in js, \
@@ -123,10 +112,8 @@ def test_batch_action_bar_is_sidebar_inline_not_global_footer():
 
 def test_batch_project_picker_is_anchored_to_batch_actions():
     """Batch move project picker should open inside the sidebar action bar."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        js = f.read()
-    with open('static/style.css', encoding="utf-8") as f:
-        css = f.read()
+    js = family_source("sessions")
+    css = family_source("style")
     assert "const bar=$('batchActionBar');if(!bar)return;" in js, \
         "Batch project picker should anchor to the batch action bar"
     assert "picker.className='project-picker batch-project-picker'" in js, \
@@ -143,8 +130,7 @@ def test_batch_project_picker_is_anchored_to_batch_actions():
 
 def test_streaming_zero_message_sessions_stay_visible_after_reload():
     """In-flight sessions may have zero saved messages during reload recovery."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     assert "_isSessionEffectivelyStreaming(s)" in src, \
         "Streaming sessions must bypass the zero-message sidebar filter"
     assert "!!s.active_stream_id" in src, \
@@ -169,8 +155,7 @@ def test_boot_does_not_drop_zero_message_inflight_session():
 
 def test_batch_select_i18n_keys():
     """Verify all batch select i18n keys exist in all locales."""
-    with open('static/i18n.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("i18n")
     required_keys = [
         'session_select_mode',
         'session_select_mode_desc',
@@ -202,8 +187,7 @@ def test_batch_select_i18n_keys():
 
 def test_i18n_string_placeholder_interpolation_supported():
     """String-valued translations with {0} placeholders should interpolate args."""
-    with open('static/i18n.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("i18n")
     assert "String(val).replace(/\\{(\\d+)\\}/g" in src, \
         "t() must interpolate {0}-style placeholders for string-valued translations"
     assert "Object.prototype.hasOwnProperty.call(args, idx)" in src, \
@@ -212,8 +196,7 @@ def test_i18n_string_placeholder_interpolation_supported():
 
 def test_batch_select_css_exists():
     """Verify batch select CSS classes are defined."""
-    with open('static/style.css', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("style")
     required_classes = [
         'session-select-toggle',
         'session-select-bar',
@@ -233,8 +216,7 @@ def test_batch_select_css_exists():
 
 def test_batch_select_mode_flags():
     """Verify select mode properly toggles state."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     # toggleSessionSelectMode should flip the flag
     assert '_sessionSelectMode=!_sessionSelectMode' in src, \
         "toggleSessionSelectMode should flip _sessionSelectMode"
@@ -247,8 +229,7 @@ def test_batch_select_mode_flags():
 
 def test_batch_delete_uses_confirm_dialog():
     """Verify batch delete shows confirmation dialog."""
-    with open('static/sessions.js', encoding="utf-8") as f:
-        src = f.read()
+    src = family_source("sessions")
     # The delete handler should call showConfirmDialog with batch message
     assert "session_batch_delete_confirm" in src, \
         "Batch delete should use session_batch_delete_confirm i18n key"

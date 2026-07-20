@@ -4,6 +4,7 @@ Quota chip default state is now OFF (per Nathan's directive 2026-05-16, immediat
 after the stage-371 release of #2082). Users opt in via Settings → Preferences.
 """
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
@@ -33,7 +34,7 @@ def test_quota_chip_render_short_circuits_when_disabled():
     hide the chip when window._showQuotaChip !== true. Specifically renderer
     must hide BEFORE any other render logic, and refresher must skip the fetch
     entirely so we don't burn quota API calls for chip-disabled users."""
-    js = UI_JS.read_text(encoding="utf-8")
+    js = family_source("ui")
 
     # Renderer must early-hide when disabled
     render_start = js.index("function renderProviderQuotaIndicator(status){")
@@ -72,7 +73,7 @@ def test_quota_chip_boot_initializes_default_off():
 
 
 def test_quota_chip_panels_round_trip():
-    js = PANELS.read_text(encoding="utf-8")
+    js = family_source("panels")
     # Payload read
     assert "const showQuotaChipCb=$('settingsShowQuotaChip');" in js
     assert "payload.show_quota_chip=showQuotaChipCb.checked;" in js
@@ -87,6 +88,6 @@ def test_quota_chip_panels_round_trip():
 
 
 def test_quota_chip_localized_in_all_locales():
-    js = I18N.read_text(encoding="utf-8")
+    js = family_source("i18n")
     assert js.count("settings_label_quota_chip:") == 15, "12 locales expected"
     assert js.count("settings_desc_quota_chip:") == 15, "12 locales expected"

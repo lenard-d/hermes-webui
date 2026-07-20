@@ -1,9 +1,10 @@
 """Regression tests for Markdown table cell spacing."""
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 
 
 def test_table_cell_paragraph_margins_are_reset():

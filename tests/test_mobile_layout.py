@@ -17,12 +17,13 @@ Run as part of the standard test suite:
 """
 
 import pathlib
+from tests.frontend_asset_contract import family_asset_paths, family_source
 import re
 from html.parser import HTMLParser
 
 REPO = pathlib.Path(__file__).parent.parent
 HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-CSS  = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+CSS  = family_source("style")
 
 
 def _max_width_media_blocks(width_px):
@@ -357,7 +358,7 @@ def test_composer_controls_switch_to_fit_stage_classes():
         ".composer-footer should define container-type:inline-size and container-name:composer-footer"
     assert "@container composer-footer (max-width: 700px)" not in CSS
     assert "@container composer-footer (max-width: 520px)" not in CSS
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     fit_body = _js_function_body(ui_js, "_fitComposerFooter")
     assert "scrollWidth" in fit_body and "clientWidth" in fit_body, \
         "_fitComposerFooter() should measure actual left-cluster overflow"
@@ -427,7 +428,7 @@ def test_composer_compact_switch_is_not_viewport_only():
         "Icon-chip stage should be expressed as the .cf-icons class"
     assert ".composer-footer.cf-burger" in CSS, \
         "Hamburger stage should be expressed as the .cf-burger class"
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     assert "_fitComposerFooter" in ui_js and "scrollWidth" in ui_js, \
         "Composer compacting should be driven by measured overflow"
     assert "ResizeObserver" in ui_js and "MutationObserver" in ui_js, \
@@ -586,7 +587,7 @@ def test_compact_titlebar_keeps_hamburger_available():
 
 def test_mobile_rail_click_opens_full_screen_panel_drawer():
     """Rail clicks on phone should keep the full-screen drawer open for panel switching."""
-    panels_js = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     assert "opts.fromRailClick" in panels_js, (
         "switchPanel() should distinguish rail clicks from programmatic switches"
     )
@@ -651,7 +652,7 @@ def test_pwa_edge_swipe_opens_current_mobile_panel():
 
 def test_mobile_sidebar_open_syncs_panel_from_visible_detail_view():
     """The mobile sidebar should not fall back to Chat when a module detail is visible."""
-    panels_js = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     assert "const MAIN_VIEW_PANELS =" in panels_js
     main_view_panels = panels_js.split("const MAIN_VIEW_PANELS =", 1)[1].split("];", 1)[0]
     assert "'todos'" not in main_view_panels, (
@@ -694,7 +695,7 @@ def test_mobile_sidebar_open_syncs_panel_from_visible_detail_view():
 
 def test_mobile_skill_selection_closes_sidebar_after_detail_load():
     """Selecting a skill on phone should reveal the newly-loaded detail view."""
-    panels_js = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     helper = _js_function_body(panels_js, "_closeMobileSidebarAfterPanelSelection")
     assert "if(typeof closeMobileSidebar!=='function')return" in helper
     assert "if(typeof _isDesktopWidth==='function'&&_isDesktopWidth())return" in helper
@@ -706,7 +707,7 @@ def test_mobile_skill_selection_closes_sidebar_after_detail_load():
 
 def test_mobile_sidebar_detail_selections_share_close_helper():
     """Sidebar list commits should consistently reveal their main detail on phone."""
-    panels_js = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     for name in [
         "openCronDetail",
         "loadKanbanTask",
@@ -1199,7 +1200,7 @@ def test_mobile_composer_overflow_control_present():
     left_end = HTML.index('<div class="composer-right">', left_start)
     assert 'id="composerMobileConfigPanel"' not in HTML[left_start:left_end], \
         "mobile overflow panel must not be nested inside .composer-left where overflow can clip it"
-    assert "function toggleMobileComposerConfig()" in (REPO / "static" / "ui.js").read_text(encoding="utf-8"), \
+    assert "function toggleMobileComposerConfig()" in family_source("ui"), \
         "toggleMobileComposerConfig() must be defined in static/ui.js"
 
     mobile_css = _composer_phone_media_block()
@@ -1239,7 +1240,7 @@ def test_model_and_reasoning_controls_live_in_mobile_overflow_panel():
         "mobile quota action must expose the selected quota label"
     assert 'id="composerMobileReasoningLabel"' in panel_html, \
         "mobile reasoning action must expose the selected reasoning label"
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     assert "composerMobileModelAction" in ui_js, \
         "model dropdown positioning/click handling must know the mobile model action"
     assert "composerMobileQuotaAction" in ui_js, \
@@ -1272,7 +1273,7 @@ def test_mobile_overflow_panel_quota_order_matches_desktop_sequence():
 
 def test_model_and_reasoning_dropdowns_use_mobile_panel_anchors():
     """Model/reasoning dropdowns must anchor to mobile actions while the overflow is open."""
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     model_start = ui_js.index("function _positionModelDropdown()")
     model_end = ui_js.index("function renderModelDropdown()", model_start)
     model_body = ui_js[model_start:model_end]
@@ -1320,7 +1321,7 @@ def test_context_details_live_in_mobile_overflow_panel():
     assert 'id="composerMobileCtxBadge"' not in right_html, \
         "mobile context badge must stay on the config button, not composer-right"
 
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     sync_start = ui_js.index("function _syncMobileCtxDisplay(state)")
     sync_end = ui_js.index("// ── Touch support", sync_start)
     sync_body = ui_js[sync_start:sync_end]
@@ -1352,7 +1353,7 @@ def test_context_details_live_in_mobile_overflow_panel():
 
 def test_context_indicator_click_opens_shared_mobile_config_menu():
     """The desktop context ring should open the same menu used by phone mode."""
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     assert "function openMobileComposerConfig()" in ui_js, \
         "mobile config open path should be reusable outside the phone button"
     assert "function openComposerContextMenu(e)" in ui_js, \
@@ -1393,7 +1394,7 @@ def test_workspace_control_lives_in_mobile_overflow_panel():
     assert workspace_chip.get("display") == "none!important", \
         "inline workspace switch chip must remain hidden on phones"
 
-    panels_js = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
     pos_start = panels_js.index("function _positionComposerWsDropdown()")
     pos_end = panels_js.index("function _positionProfileDropdown()", pos_start)
     position_body = panels_js[pos_start:pos_end]
@@ -1412,14 +1413,14 @@ def test_workspace_control_lives_in_mobile_overflow_panel():
     assert "!e.target.closest('#composerMobileWorkspaceAction')" in panels_js, \
         "workspace dropdown click-away handling must include the mobile workspace action"
 
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     assert "e.target.closest('#composerWsDropdown')" in ui_js, \
         "mobile overflow click-away handling must allow interaction with the workspace dropdown"
 
 
 def test_mobile_config_panel_escape_closes_panel_and_dropdowns():
     """Escape should close mobile overflow state without touching desktop-only dropdowns."""
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     keydown_start = ui_js.index("document.addEventListener('keydown',function(e){", ui_js.index("function toggleMobileComposerConfig()"))
     keydown_end = ui_js.index("\n});", keydown_start)
     keydown_body = ui_js[keydown_start:keydown_end]
@@ -1441,7 +1442,7 @@ def test_mobile_config_panel_escape_closes_panel_and_dropdowns():
 
 def test_reasoning_chip_updates_desktop_and_mobile_controls():
     """Reasoning chip sync should keep both footer and mobile overflow labels current."""
-    ui_js = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     chip_start = ui_js.index("function _applyReasoningChip(eff)")
     chip_end = ui_js.index("function fetchReasoningChip(", chip_start)
     chip_body = ui_js[chip_start:chip_end]
@@ -1462,10 +1463,11 @@ def test_mobile_config_kickers_have_i18n_fallbacks():
     panel_start = HTML.index('id="composerMobileConfigPanel"')
     panel_end = HTML.index('<div class="profile-dropdown"', panel_start)
     panel_html = HTML[panel_start:panel_end]
-    i18n_js = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
-    en_start = i18n_js.index("  en: {")
-    en_end = i18n_js.index("\n  ru: {", en_start)
-    english = i18n_js[en_start:en_end]
+    english = next(
+        path.read_text(encoding="utf-8")
+        for path in family_asset_paths("i18n")
+        if path.name == "locale-en.js"
+    )
     for key, label in (
         ("composer_mobile_workspace", "Workspace"),
         ("composer_mobile_model", "Model"),

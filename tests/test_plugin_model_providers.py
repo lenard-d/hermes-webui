@@ -6,6 +6,7 @@ the model picker without hardcoding each slug.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import sys
 import types
@@ -182,7 +183,7 @@ class TestPluginOnlyExcludesStaticProviders:
 
 class TestPluginModelProvidersPanelFilter:
     def test_providers_panel_includes_plugin_model_providers(self):
-        src = open("static/panels.js", encoding="utf-8").read()
+        src = family_source("panels")
         assert "p.is_plugin_provider" in src
         assert "filter(p=>p.configurable||p.is_oauth||p.is_custom||p.is_plugin_provider||p.is_self_hosted)" in src
 

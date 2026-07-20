@@ -1,9 +1,10 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+SESSIONS_JS = family_source("sessions")
+CSS = family_source("style")
 
 
 def test_message_virtualization_switches_render_messages_to_scroll_driven_window():

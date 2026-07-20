@@ -1,6 +1,8 @@
 """Visible-order contract for the first anchor-backed Compact Worklog handoff."""
 
 import json
+from tests.frontend_asset_contract import family_asset_paths, family_source
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -9,12 +11,12 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
+SESSIONS_JS = family_source("sessions")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 NODE = shutil.which("node")
 
 
@@ -67,7 +69,10 @@ def _event_listener_body(src, event_name):
 
 def _run_node_script(script):
     assert NODE, "node is required for DOM-executed anchor render tests"
-    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False)
+    env = os.environ.copy()
+    env["HERMES_TEST_UI_PATHS"] = json.dumps([str(path) for path in family_asset_paths("ui")])
+    env["HERMES_TEST_MESSAGE_PATHS"] = json.dumps([str(path) for path in family_asset_paths("messages")])
+    result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False, env=env)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -102,7 +107,7 @@ function extractFunc(name){
 def _run_complete_anchor_settlement_case(active_mode):
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "messages.js"))}, 'utf8');
+const src = JSON.parse(process.env.HERMES_TEST_MESSAGE_PATHS).map(path => fs.readFileSync(path, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 const activeMode = {json.dumps(active_mode)};
 global.window = {{
@@ -207,7 +212,7 @@ process.stdout.write(JSON.stringify({{
 def test_dom_render_live_compression_row_transitions_to_settled_scene():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.env.HERMES_TEST_UI_PATHS).map(path => fs.readFileSync(path, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 class FakeElement {{
   constructor(tag){{
@@ -366,7 +371,7 @@ def test_anchor_scene_projection_tracks_active_mode():
 def test_anchor_scene_active_mode_falls_back_when_primary_accessor_throws():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "messages.js"))}, 'utf8');
+const src = JSON.parse(process.env.HERMES_TEST_MESSAGE_PATHS).map(path => fs.readFileSync(path, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 eval(extractFunc('_anchorSceneActiveMode'));
 global.window = {{
@@ -540,7 +545,7 @@ def test_anchor_scene_has_worklog_worthy_rows_rejects_prose_only_and_terminal_on
 
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "messages.js"))}, 'utf8');
+const src = JSON.parse(process.env.HERMES_TEST_MESSAGE_PATHS).map(path => fs.readFileSync(path, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 eval(extractFunc('_anchorSceneHasWorklogWorthyRows'));
 const proseOnly = {{activity_rows:[{{role:'prose'}}, {{role:'terminal', source_event_type:'done'}}]}};
@@ -577,7 +582,7 @@ def test_scene_renderer_coalesces_row_updates_and_renders_in_scene_order():
 def test_live_anchor_scene_dedupes_exact_duplicate_process_prose_only_live():
     script = f"""
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.env.HERMES_TEST_UI_PATHS).map(path => fs.readFileSync(path, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 function _anchorSceneToolRowLogicalKey(){{ return ''; }}
 function _anchorSceneMergeToolRows(a,b){{ return b; }}
@@ -1049,7 +1054,7 @@ def test_live_anchor_scene_transparent_snapshot_render_is_idempotent_and_hides_l
     script = f"""
 const assert = require('assert');
 const fs = require('fs');
-const src = fs.readFileSync({json.dumps(str(ROOT / "static" / "ui.js"))}, 'utf8');
+const src = JSON.parse(process.env.HERMES_TEST_UI_PATHS).map(path => fs.readFileSync(path, 'utf8')).join('');
 {_EXTRACT_FUNC_JS}
 
 class FakeElement {{

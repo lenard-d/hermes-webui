@@ -16,9 +16,9 @@ site, instead of relying on (broken) scope resolution. This test locks that the
 declaration takes the param and no bare-call site remains.
 """
 import re
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
-MESSAGES_JS = (Path(__file__).resolve().parents[1] / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 
 
 def test_bailout_helper_takes_source_param():

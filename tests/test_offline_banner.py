@@ -1,16 +1,17 @@
 """Regression coverage for the browser-offline banner and auto-refresh loop."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
 import pathlib
 
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 def test_offline_banner_markup_styles_and_copy_exist():

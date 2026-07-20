@@ -1,9 +1,10 @@
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 import re
 
 ROOT=Path(__file__).resolve().parents[1]
-UI=(ROOT/"static"/"ui.js").read_text(encoding="utf-8")
-CSS=(ROOT/"static"/"style.css").read_text(encoding="utf-8")
+UI=family_source("ui")
+CSS=family_source("style")
 
 def test_vendor_subgroup_allowlist():
     assert "SUB_GROUP_PROVIDERS" in UI

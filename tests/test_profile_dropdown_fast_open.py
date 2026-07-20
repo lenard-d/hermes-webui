@@ -5,12 +5,13 @@ for a cold /api/profiles request before showing the menu. On machines where the
 profile metadata scan is slow, that made the click feel frozen for seconds.
 """
 import json
+from tests.frontend_asset_contract import family_source
 import subprocess
 import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def _function_body(src: str, marker: str, next_marker: str | None = None) -> str:

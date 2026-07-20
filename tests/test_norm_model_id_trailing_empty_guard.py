@@ -10,10 +10,11 @@ Mirrors:
   static/ui.js         _normalizeConfiguredModelKey
 """
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = Path(__file__).parent.parent
 CONFIG_PY = (REPO_ROOT / "api" / "config.py").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _exec_norm():

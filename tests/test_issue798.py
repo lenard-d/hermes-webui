@@ -10,6 +10,7 @@ touching os.environ or module-level state.
 """
 
 import json
+from tests.frontend_asset_contract import family_source
 import os
 import subprocess
 import sys
@@ -17,7 +18,6 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 
 # ── R19: get_hermes_home_for_profile ─────────────────────────────────────────
@@ -259,7 +259,7 @@ def test_concurrent_new_sessions_get_correct_profiles():
 def test_sessions_js_sends_profile_in_new_session_post():
     """R19i: sessions.js newSession() must include profile:S.activeProfile in the
     JSON body sent to /api/session/new — the client-side half of the #798 fix."""
-    js = (Path(__file__).parent.parent / 'static' / 'sessions.js').read_text()
+    js = family_source("sessions")
     assert 'profile:S.activeProfile' in js or 'profile: S.activeProfile' in js, (
         "sessions.js newSession() must send profile: S.activeProfile in the POST body "
         "so the server uses the tab's active profile, not the process global."

@@ -11,9 +11,7 @@ Bug 2: /api/models returned stale results after a profile switch because the
 These tests verify both fixes.
 """
 import os
-import json
-import tempfile
-import textwrap
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
@@ -203,7 +201,6 @@ no active session), the early-return branch ran without updating the chip.
 This caused the chip to keep showing the old profile name after switchToProfile().
 """
 
-import re
 
 
 def test_syncTopbar_early_return_updates_profile_chip():
@@ -211,8 +208,7 @@ def test_syncTopbar_early_return_updates_profile_chip():
     syncTopbar() must update profileChipLabel inside the !S.session early-return block.
     Without this, the composer profile chip stays stale when there is no active session.
     """
-    from pathlib import Path
-    ui_js = (Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
 
     # Find the syncTopbar function
     fn_start = ui_js.find("function syncTopbar(){")
@@ -333,9 +329,8 @@ def test_regression_synctopbar_early_return_updates_profile_chip():
     though S.activeProfile has been updated, because syncTopbar() exits early
     before reaching the chip-update code at the end of the function.
     """
-    from pathlib import Path
 
-    ui_js = (Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
 
     fn_start = ui_js.find("function syncTopbar(){")
     assert fn_start != -1, "syncTopbar not found — has it been renamed?"

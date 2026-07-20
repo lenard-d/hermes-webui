@@ -9,6 +9,7 @@ Fix: introduce S._profileSwitchWorkspace as the dedicated one-shot flag for
 profile-switch semantics; S._profileDefaultWorkspace is now persistent.
 """
 import pathlib
+from tests.frontend_asset_contract import family_source
 import re
 
 REPO = pathlib.Path(__file__).parent.parent
@@ -22,7 +23,7 @@ class TestProfileDefaultWorkspacePersistence:
     """_profileDefaultWorkspace must NOT be nulled by newSession()."""
 
     def test_new_session_does_not_null_profile_default_workspace(self):
-        src = read('static/sessions.js')
+        src = family_source("sessions")
         m = re.search(r'async function newSession\(.*?\n\}', src, re.DOTALL)
         assert m, "newSession not found"
         fn = m.group(0)
@@ -34,7 +35,7 @@ class TestProfileDefaultWorkspacePersistence:
         )
 
     def test_new_session_uses_dedicated_switch_workspace_flag(self):
-        src = read('static/sessions.js')
+        src = family_source("sessions")
         m = re.search(r'async function newSession\(.*?\n\}', src, re.DOTALL)
         assert m
         fn = m.group(0)
@@ -50,7 +51,7 @@ class TestProfileDefaultWorkspacePersistence:
     def test_new_session_still_inherits_default_workspace(self):
         """newSession must still pass a workspace to /api/session/new,
         now via the _profileSwitchWorkspace -> _profileDefaultWorkspace -> current session chain."""
-        src = read('static/sessions.js')
+        src = family_source("sessions")
         m = re.search(r'async function newSession\(.*?\n\}', src, re.DOTALL)
         assert m
         fn = m.group(0)
@@ -67,7 +68,7 @@ class TestProfileSwitchWorkspaceSetter:
     """panels.js must set _profileSwitchWorkspace on profile switch."""
 
     def test_panels_sets_profile_switch_workspace(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         # Find the profile-switch workspace block
         assert 'S._profileSwitchWorkspace' in src, (
             "panels.js must set S._profileSwitchWorkspace during profile switch "
@@ -75,14 +76,14 @@ class TestProfileSwitchWorkspaceSetter:
         )
 
     def test_panels_still_sets_profile_default_workspace(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         assert 'S._profileDefaultWorkspace = data.default_workspace' in src, (
             "panels.js must still set S._profileDefaultWorkspace (persistent default) "
             "alongside S._profileSwitchWorkspace"
         )
 
     def test_both_set_together_in_same_block(self):
-        src = read('static/panels.js')
+        src = family_source("panels")
         default_pos = src.find('S._profileDefaultWorkspace = data.default_workspace')
         switch_pos = src.find('S._profileSwitchWorkspace = data.default_workspace')
         assert default_pos != -1, "S._profileDefaultWorkspace setter not found"
@@ -98,7 +99,7 @@ class TestProfileSwitchWorkspaceSetter:
         """Opus Q4: when the user manually changes workspace, the pending one-shot
         switch flag should be cleared so a subsequent newSession() inherits the
         user's explicit choice rather than the stale profile-switch default."""
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'async function switchToWorkspace\(.*?\n\}', src, re.DOTALL)
         assert m, "switchToWorkspace not found"
         fn = m.group(0)
@@ -114,7 +115,7 @@ class TestBlankPageAfterSessionDelete:
     def test_sync_workspace_displays_reads_profile_default(self):
         """syncWorkspaceDisplays relies on S._profileDefaultWorkspace which must
         still be set after a session is created and deleted."""
-        src = read('static/panels.js')
+        src = family_source("panels")
         m = re.search(r'function syncWorkspaceDisplays\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "syncWorkspaceDisplays not found"
         fn = m.group(0)
@@ -125,7 +126,7 @@ class TestBlankPageAfterSessionDelete:
     def test_prompt_new_file_reads_profile_default(self):
         """promptNewFile on blank page reads _profileDefaultWorkspace which must
         be non-null even after a newSession() + deleteSession() cycle."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(r'async function promptNewFile\([^)]*\)\{.*?\n\}', src, re.DOTALL)
         assert m, "promptNewFile not found"
         fn = m.group(0)

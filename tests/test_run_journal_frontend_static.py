@@ -1,12 +1,13 @@
 import json
+from tests.frontend_asset_contract import family_source
 import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_SRC = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-SESSIONS_SRC = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-UI_SRC = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES_SRC = family_source("messages")
+SESSIONS_SRC = family_source("sessions")
+UI_SRC = family_source("ui")
 
 
 def _function_body(src: str, signature: str) -> str:
@@ -405,9 +406,7 @@ def test_run_journal_cursor_tracks_every_long_task_timeline_event():
 def test_server_runtime_journal_snapshot_restores_structured_inflight_state():
     helper_pos = SESSIONS_SRC.index("function _serverLiveSnapshotToolId")
     helper_block = SESSIONS_SRC[helper_pos : helper_pos + 3600]
-    load_pos = SESSIONS_SRC.index("async function loadSession")
-    load_end = SESSIONS_SRC.index("// ── Handoff hint logic", load_pos)
-    load_block = SESSIONS_SRC[load_pos:load_end]
+    load_block = _function_body(SESSIONS_SRC, "async function _restoreLoadedSession")
 
     assert "runtime_journal_snapshot" in load_block
     assert "_serverLiveSnapshotInflight(S.session.runtime_journal_snapshot" in load_block

@@ -1,12 +1,13 @@
 """Regression checks for #856 background completion unread markers."""
 
 import json
+from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 
 
 def _done_block() -> str:

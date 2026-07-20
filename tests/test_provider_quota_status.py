@@ -1,6 +1,7 @@
 """Regression coverage for active-provider quota status (#706)."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_asset_paths, family_source
 
 import base64
 import json
@@ -1217,7 +1218,7 @@ def test_provider_quota_route_is_registered():
 
 def test_provider_quota_card_is_rendered_in_providers_panel():
     """The Providers panel should show active provider quota/status before cards."""
-    panels = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     assert "_fetchProviderQuotaStatus(false)" in panels
     assert "'/api/provider/quota'" in panels
     assert "function _buildProviderQuotaCard" in panels
@@ -1245,7 +1246,7 @@ def test_provider_quota_card_is_rendered_in_providers_panel():
 
 def test_provider_quota_card_has_manual_refresh_control():
     """The quota card should let users force an immediate fresh usage lookup."""
-    panels = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     assert "function _refreshProviderQuota" in panels
     assert "function _fetchProviderQuotaStatus" in panels
     assert "refresh=1" in panels
@@ -1260,37 +1261,39 @@ def test_provider_quota_card_has_manual_refresh_control():
 
 def test_provider_quota_i18n_keys_exist_for_all_locales():
     """Provider quota UI keys must be present in every locale block."""
-    i18n = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-    locale_count = len(
-        re.findall(r"^  (?:[A-Za-z_][A-Za-z0-9_]*|'[^']+'):\s*\{", i18n, re.MULTILINE)
-    )
-    keys = sorted(set(re.findall(r"provider_quota_[a-z0-9_]+", (ROOT / "static" / "panels.js").read_text(encoding="utf-8"))))
-    assert locale_count >= 1
+    locale_sources = [
+        path.read_text(encoding="utf-8")
+        for path in family_asset_paths("i18n")
+        if path.name.startswith("locale-")
+    ]
+    keys = sorted(set(re.findall(r"provider_quota_[a-z0-9_]+", family_source("panels"))))
+    assert locale_sources
     assert "provider_quota_retry_after" in keys
     for key in keys:
-        assert len(re.findall(rf"^\s+{re.escape(key)}:", i18n, re.MULTILINE)) == locale_count, key
+        assert all(re.search(rf"^\s+{re.escape(key)}:", source, re.MULTILINE) for source in locale_sources), key
 
 
 def test_settings_label_and_description_i18n_keys_exist_for_all_locales():
     """Settings labels/descriptions referenced by the page need every locale."""
-    i18n = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+    locale_sources = [
+        path.read_text(encoding="utf-8")
+        for path in family_asset_paths("i18n")
+        if path.name.startswith("locale-")
+    ]
     index_html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    locale_count = len(
-        re.findall(r"^  (?:[A-Za-z_][A-Za-z0-9_]*|'[^']+'):\s*\{", i18n, re.MULTILINE)
-    )
     keys = sorted(
         set(re.findall(r'data-i18n="(settings_(?:label|desc)_[a-z0-9_]+)"', index_html))
     )
-    assert locale_count >= 1
+    assert locale_sources
     assert "settings_label_fade_text_effect" in keys
     assert "settings_desc_fade_text_effect" in keys
     for key in keys:
-        assert len(re.findall(rf"^\s+{re.escape(key)}:", i18n, re.MULTILINE)) == locale_count, key
+        assert all(re.search(rf"^\s+{re.escape(key)}:", source, re.MULTILINE) for source in locale_sources), key
 
 
 def test_provider_quota_styles_exist():
     """Quota UI should have visible supported/unavailable/invalid states."""
-    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    css = family_source("style")
     for token in (
         ".provider-quota-card",
         ".provider-quota-metric",

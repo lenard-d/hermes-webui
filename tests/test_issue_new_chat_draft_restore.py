@@ -4,10 +4,11 @@ The bug: New Chat -> type draft -> open history -> New Chat created a fresh
 empty session instead of returning to the empty session that owns the draft.
 """
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
 ROOT = Path(__file__).parents[1]
-SESSIONS_JS = ROOT.joinpath("static", "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 BOOT_JS = ROOT.joinpath("static", "boot.js").read_text(encoding="utf-8")
 
 

@@ -1,4 +1,5 @@
 import json
+from tests.frontend_asset_contract import family_source
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,10 +8,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS_PATH = ROOT / "static" / "sessions.js"
-SESSIONS_JS = SESSIONS_JS_PATH.read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+I18N_JS = family_source("i18n")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
 NODE = shutil.which("node")
 
 

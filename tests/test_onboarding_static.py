@@ -1,4 +1,5 @@
 import pathlib
+from tests.frontend_asset_contract import family_source
 
 
 REPO = pathlib.Path(__file__).parent.parent
@@ -17,7 +18,7 @@ def test_index_contains_onboarding_overlay_markup():
 
 
 def test_onboarding_css_rules_exist():
-    css = read("static/style.css")
+    css = family_source("style")
     for selector in (
         ".onboarding-overlay",
         ".onboarding-card",
@@ -39,7 +40,7 @@ def test_onboarding_js_exposes_bootstrap_hooks():
 def test_onboarding_uses_i18n_helpers():
     html = read("static/index.html")
     js = read("static/onboarding.js")
-    i18n = read("static/i18n.js")
+    i18n = family_source("i18n")
     assert 'data-i18n="onboarding_title"' in html
     assert 'data-i18n="onboarding_continue"' in html
     assert "t('onboarding_step_system_title')" in js

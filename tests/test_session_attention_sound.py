@@ -6,10 +6,11 @@ attention sound when a session newly needs user input, without blasting sounds
 for already-existing badges on initial load.
 """
 from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 REPO = Path(__file__).parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 
 
 def _body_from_brace(src: str, brace: int, label: str) -> str:

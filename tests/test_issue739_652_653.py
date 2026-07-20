@@ -6,6 +6,7 @@ Tests for streaming error handling fixes:
 
 All static tests (no live server required).
 """
+from tests.frontend_asset_contract import family_source
 import re
 import pathlib
 
@@ -13,11 +14,10 @@ from api.streaming import _sanitize_messages_for_api
 
 STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'streaming.py'
 TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'streaming_parts' / 'title_generation.py'
-MESSAGES_JS = pathlib.Path(__file__).parent.parent / 'static' / 'messages.js'
 
 streaming_src = STREAMING.read_text(encoding='utf-8')
 title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')
-messages_js_src = MESSAGES_JS.read_text(encoding='utf-8')
+messages_js_src = family_source("messages")
 
 
 # ── #739: Quota exhaustion detection ─────────────────────────────────────────

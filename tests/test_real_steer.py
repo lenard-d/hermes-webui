@@ -16,8 +16,8 @@ after run_conversation returns and a `pending_steer_leftover` SSE event is
 emitted so the frontend can queue the leftover text as a next-turn message.
 """
 import sys
+from tests.frontend_asset_contract import family_source
 import os
-import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -289,8 +289,8 @@ class TestFrontendWiring:
     @classmethod
     def setup_class(cls):
         cls.cmds = (Path(__file__).parent.parent / "static" / "commands.js").read_text(encoding="utf-8")
-        cls.msgs = (Path(__file__).parent.parent / "static" / "messages.js").read_text(encoding="utf-8")
-        cls.i18n = (Path(__file__).parent.parent / "static" / "i18n.js").read_text(encoding="utf-8")
+        cls.msgs = family_source("messages")
+        cls.i18n = family_source("i18n")
 
     def test_cmd_steer_calls_endpoint(self):
         idx = self.cmds.find("async function cmdSteer(")
@@ -850,7 +850,7 @@ class TestFrontendWiring:
         assert "_trySteer uploads with clearPending=false" in self.msgs
 
     def test_upload_pending_files_can_preserve_staged_files_for_steer(self):
-        ui = (Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+        ui = family_source("ui")
         assert "async function uploadPendingFiles(options={})" in ui
         assert "const pendingFiles=Array.isArray(opts.files)?opts.files.filter(Boolean):[...(S.pendingFiles||[])];" in ui
         assert "const sessionId=String(opts.sessionId||(S.session&&S.session.session_id)||'');" in ui
@@ -860,14 +860,14 @@ class TestFrontendWiring:
         assert "else if(typeof renderTray==='function'&&_uploadPendingFilesCurrentSession(sessionId))renderTray();" in ui
 
     def test_upload_pending_files_progress_bar_is_session_scoped(self):
-        ui = (Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+        ui = family_source("ui")
         progress_helper = _source_between(
             ui,
             "const _uploadPendingFilesProgressBySession",
             "\nasync function uploadPendingFiles",
         )
         upload_body = ui[ui.index("async function uploadPendingFiles") :]
-        sessions = (Path(__file__).parent.parent / "static" / "sessions.js").read_text(encoding="utf-8")
+        sessions = family_source("sessions")
         load_body = _source_between(sessions, "async function loadSession", "\nfunction _isMessagingSession")
         assert "_uploadPendingFilesSyncProgressForSession(sid)" in load_body
         assert "_uploadPendingFilesProgressBySession.set(owner,{percent:clamped})" in progress_helper
@@ -893,7 +893,7 @@ class TestFrontendWiring:
             pytest.skip("node not available")
         assert node is not None
 
-        ui = (Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+        ui = family_source("ui")
         progress_src = _source_between(
             ui,
             "const _uploadPendingFilesProgressBySession",
@@ -964,7 +964,7 @@ class TestI18nKeys:
 
     @classmethod
     def setup_class(cls):
-        cls.i18n = (Path(__file__).parent.parent / "static" / "i18n.js").read_text(encoding="utf-8")
+        cls.i18n = family_source("i18n")
 
     def test_cmd_steer_delivered_in_all_locales(self):
         assert self.i18n.count("cmd_steer_delivered:") >= 6, (

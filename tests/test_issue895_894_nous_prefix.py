@@ -2,7 +2,7 @@
 Regression tests for #895 (set_hermes_default_model strips @nous: prefix + blocks on live fetch)
 and #894 (resolve_model_provider strips cross-namespace prefix for portal providers with base_url).
 """
-import threading
+from tests.frontend_asset_contract import family_source
 import pytest
 from pathlib import Path
 
@@ -137,7 +137,7 @@ class TestSetDefaultModelPreservesAtPrefix:
         `@nous:anthropic/claude-opus-4.6`). `_applyModelToDropdown()` normalises
         on both sides and picks the matching option.
         """
-        js = (Path(__file__).resolve().parent.parent / "static" / "panels.js").read_text()
+        js = family_source("panels")
         # Find the block that sets _settingsHermesDefaultModelOnOpen
         anchor = "_settingsHermesDefaultModelOnOpen=(models&&models.default_model)||"
         idx = js.find(anchor)

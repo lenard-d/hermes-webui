@@ -6,14 +6,15 @@ family.
 """
 
 import pathlib
+from tests.frontend_asset_contract import family_source
 import shutil
 import subprocess
 
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
+STYLE_CSS = family_source("style")
 NODE = shutil.which("node")
 
 
