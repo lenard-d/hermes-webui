@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import api.routes as routes
-import api.sessions.store as models
+import api.sessions.external as external_sessions
 import api.profiles as profiles
 import pytest
 
@@ -54,10 +54,10 @@ def _handle_sessions(url):
 @pytest.fixture(autouse=True)
 def _clear_cache():
     routes._session_list_cache_clear()
-    models.clear_cli_sessions_cache()
+    external_sessions.clear_cli_sessions_cache()
     yield
     routes._session_list_cache_clear()
-    models.clear_cli_sessions_cache()
+    external_sessions.clear_cli_sessions_cache()
 
 
 def _common_monkeypatches(monkeypatch, rows, cli_rows):
@@ -251,13 +251,19 @@ def test_cli_sessions_cache_key_varies_with_claude_code_toggle(monkeypatch):
         calls.append(include)
         return [{"session_id": "claude" if include else "plain"}]
 
-    monkeypatch.setattr(models, "_resolve_cli_sessions_context", fake_resolve)
-    monkeypatch.setattr(models, "_load_cli_sessions_uncached", fake_load)
-    monkeypatch.setattr(models, "_cli_sessions_cache_ttl_seconds", lambda: 60.0)
-    monkeypatch.setattr(models, "_cli_sessions_streaming_freeze_marker", lambda: None)
+    monkeypatch.setattr(
+        external_sessions, "_resolve_cli_sessions_context", fake_resolve
+    )
+    monkeypatch.setattr(external_sessions, "_load_cli_sessions_uncached", fake_load)
+    monkeypatch.setattr(
+        external_sessions, "_cli_sessions_cache_ttl_seconds", lambda: 60.0
+    )
+    monkeypatch.setattr(
+        external_sessions, "_cli_sessions_streaming_freeze_marker", lambda: None
+    )
 
-    visible = models.get_cli_sessions(include_claude_code=True)
-    hidden = models.get_cli_sessions(include_claude_code=False)
+    visible = external_sessions.get_cli_sessions(include_claude_code=True)
+    hidden = external_sessions.get_cli_sessions(include_claude_code=False)
 
     assert calls == [True, False]
     assert visible == [{"session_id": "claude"}]
@@ -302,11 +308,15 @@ def test_all_profiles_scans_claude_code_only_once(monkeypatch):
             rows.append({"session_id": "claude-global"})
         return rows
 
-    monkeypatch.setattr(models, "_all_profiles_cli_contexts", fake_contexts)
-    monkeypatch.setattr(models, "_load_cli_sessions_uncached", fake_load)
-    monkeypatch.setattr(models, "_cli_sessions_cache_ttl_seconds", lambda: 0.0)
+    monkeypatch.setattr(external_sessions, "_all_profiles_cli_contexts", fake_contexts)
+    monkeypatch.setattr(external_sessions, "_load_cli_sessions_uncached", fake_load)
+    monkeypatch.setattr(
+        external_sessions, "_cli_sessions_cache_ttl_seconds", lambda: 0.0
+    )
 
-    rows = models.get_cli_sessions(all_profiles=True, include_claude_code=True)
+    rows = external_sessions.get_cli_sessions(
+        all_profiles=True, include_claude_code=True
+    )
 
     assert calls == [("profile-a", True), ("profile-b", False)]
     assert [row["session_id"] for row in rows] == [

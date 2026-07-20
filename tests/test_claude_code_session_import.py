@@ -26,23 +26,23 @@ def _claude_fixture_rows() -> list[dict]:
 
 def test_default_claude_code_scan_is_disabled_inside_test_state(monkeypatch, tmp_path):
     """Test runs must not accidentally scan Michael's real ~/.claude/projects."""
-    import api.sessions.store as models
+    import api.sessions.external as external_sessions
 
     monkeypatch.delenv("HERMES_WEBUI_CLAUDE_PROJECTS_DIR", raising=False)
     monkeypatch.setenv("HERMES_WEBUI_TEST_STATE_DIR", str(tmp_path / "state"))
 
-    assert models._default_claude_code_projects_dir() is None
-    assert models.get_claude_code_sessions() == []
+    assert external_sessions._default_claude_code_projects_dir() is None
+    assert external_sessions.get_claude_code_sessions() == []
 
 
 def test_get_claude_code_sessions_reads_fixture_jsonl_without_real_home(tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as external_sessions
 
     projects_dir = tmp_path / "claude" / "projects"
     fixture = projects_dir / "project-a" / "session.jsonl"
     _write_jsonl(fixture, _claude_fixture_rows())
 
-    sessions = models.get_claude_code_sessions(projects_dir=projects_dir)
+    sessions = external_sessions.get_claude_code_sessions(projects_dir=projects_dir)
 
     assert len(sessions) == 1
     session = sessions[0]
@@ -57,7 +57,9 @@ def test_get_claude_code_sessions_reads_fixture_jsonl_without_real_home(tmp_path
     assert session["is_cli_session"] is True
     assert session["read_only"] is True
 
-    messages = models.get_claude_code_session_messages(session["session_id"], projects_dir=projects_dir)
+    messages = external_sessions.get_claude_code_session_messages(
+        session["session_id"], projects_dir=projects_dir
+    )
     assert messages == [
         {"role": "user", "content": "Can Hermes show this Claude Code history read-only?", "timestamp": 1776513601.0},
         {"role": "assistant", "content": "Yes — it appears with a Claude Code source badge.", "timestamp": 1776513602.0},
@@ -65,7 +67,7 @@ def test_get_claude_code_sessions_reads_fixture_jsonl_without_real_home(tmp_path
 
 
 def test_claude_code_scan_skips_symlinks_and_oversized_files(tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as external_sessions
 
     projects_dir = tmp_path / "claude" / "projects"
     valid = projects_dir / "project-a" / "valid.jsonl"
@@ -82,22 +84,24 @@ def test_claude_code_scan_skips_symlinks_and_oversized_files(tmp_path):
     root_link = tmp_path / "root-link"
     root_link.symlink_to(projects_dir, target_is_directory=True)
 
-    sessions = models.get_claude_code_sessions(projects_dir=projects_dir, max_file_bytes=512)
+    sessions = external_sessions.get_claude_code_sessions(
+        projects_dir=projects_dir, max_file_bytes=512
+    )
 
     assert [session["title"] for session in sessions] == ["valid import"]
-    assert models.get_claude_code_sessions(projects_dir=root_link) == []
+    assert external_sessions.get_claude_code_sessions(projects_dir=root_link) == []
 
 
 def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as external_sessions
     import api.profiles as profiles
 
     hermes_home = tmp_path / "hermes"
     hermes_home.mkdir()
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    models.clear_cli_sessions_cache()
+    monkeypatch.setattr(external_sessions, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    external_sessions.clear_cli_sessions_cache()
 
     calls = 0
 
@@ -115,11 +119,13 @@ def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
             }
         ]
 
-    monkeypatch.setattr(models, "get_claude_code_sessions", fake_claude_code_sessions)
+    monkeypatch.setattr(
+        external_sessions, "get_claude_code_sessions", fake_claude_code_sessions
+    )
 
-    first = models.get_cli_sessions()
+    first = external_sessions.get_cli_sessions()
     first[0]["title"] = "mutated by caller"
-    second = models.get_cli_sessions()
+    second = external_sessions.get_cli_sessions()
 
     assert calls == 1
     assert second[0]["title"] == "Cached Claude Code"
@@ -127,7 +133,7 @@ def test_get_cli_sessions_reuses_short_ttl_cache(monkeypatch, tmp_path):
 
 
 def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch, tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as external_sessions
     import api.profiles as profiles
 
     hermes_home = tmp_path / "hermes"
@@ -136,9 +142,9 @@ def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch,
     db_path.write_text("initial", encoding="utf-8")
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: str(hermes_home))
     monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
-    monkeypatch.setattr(models, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0, raising=False)
-    monkeypatch.setattr(models, "get_claude_code_sessions", lambda: [])
-    models.clear_cli_sessions_cache()
+    monkeypatch.setattr(external_sessions, "_CLI_SESSIONS_CACHE_TTL_SECONDS", 60.0)
+    monkeypatch.setattr(external_sessions, "get_claude_code_sessions", lambda: [])
+    external_sessions.clear_cli_sessions_cache()
 
     calls = 0
 
@@ -160,11 +166,13 @@ def test_get_cli_sessions_cache_invalidates_when_sqlite_wal_changes(monkeypatch,
             }
         ]
 
-    monkeypatch.setattr(models, "read_importable_agent_session_rows", fake_rows)
+    monkeypatch.setattr(
+        external_sessions, "read_importable_agent_session_rows", fake_rows
+    )
 
-    first = models.get_cli_sessions()
+    first = external_sessions.get_cli_sessions()
     Path(f"{db_path}-wal").write_text("new wal contents", encoding="utf-8")
-    second = models.get_cli_sessions()
+    second = external_sessions.get_cli_sessions()
 
     # Two calls to get_cli_sessions() × 3 invocations each (first pass +
     # cron-only pass + webhook-only pass) = 6 total calls to the mock.
@@ -307,7 +315,16 @@ def test_read_only_source_badge_ui_guards_are_present():
     ui_js = family_source("ui")
     panels_js = family_source("panels")
     style_css = family_source("style")
-    routes_py = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+    session_mutations_py = (
+        REPO_ROOT / "api" / "http" / "routes" / "session_mutations.py"
+    ).read_text(encoding="utf-8")
+    session_organization_mutations_py = (
+        REPO_ROOT
+        / "api"
+        / "http"
+        / "routes"
+        / "session_organization_mutations.py"
+    ).read_text(encoding="utf-8")
 
     assert "function _isReadOnlySession" in sessions_js
     assert "read-only-session" in sessions_js
@@ -321,8 +338,11 @@ def test_read_only_source_badge_ui_guards_are_present():
     assert "S.session.read_only || S.session.is_read_only" in panels_js
     assert 'data-source-key="claude_code"' in style_css
     assert ".session-item.read-only-session:hover .session-source-chip" in style_css
-    assert "Read-only imported sessions cannot be deleted" in routes_py
-    assert "Read-only imported sessions cannot be archived" in routes_py
+    assert "Read-only imported sessions cannot be deleted" in session_mutations_py
+    assert (
+        "Read-only imported sessions cannot be archived"
+        in session_organization_mutations_py
+    )
 
 
 def test_messaging_source_badge_not_gated_on_is_cli_session():

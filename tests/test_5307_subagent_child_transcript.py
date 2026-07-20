@@ -130,11 +130,13 @@ def isolated_state_db(tmp_path, monkeypatch):
     index_path = sessions_dir / "_index.json"
     index_path.write_text("[]", encoding="utf-8")
     import api.routes as _routes
-    import api.sessions.store as _models
-    monkeypatch.setattr(_models, "_active_state_db_path", lambda: db)
+    import api.profiles as _profiles
+    import api.sessions.records as _records
+
+    monkeypatch.setattr(_profiles, "get_active_hermes_home", lambda: tmp_path)
     monkeypatch.setattr(_routes, "SESSION_INDEX_FILE", index_path)
-    monkeypatch.setattr(_models, "SESSION_INDEX_FILE", index_path)
-    monkeypatch.setattr(_models, "SESSION_DIR", sessions_dir)
+    monkeypatch.setattr(_records, "SESSION_INDEX_FILE", index_path)
+    monkeypatch.setattr(_records, "SESSION_DIR", sessions_dir)
     return {"db": db, "state_dir": state_dir, "sessions_dir": sessions_dir,
             "index_path": index_path}
 
