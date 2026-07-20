@@ -1,5 +1,4 @@
 import importlib.util
-import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +13,12 @@ assert _SPEC.loader is not None
 _SPEC.loader.exec_module(_HELPERS)
 
 NODE = _HELPERS.NODE
+_DRIVER_SRC = _HELPERS._DRIVER_SRC.replace(
+    "const src = JSON.parse(process.argv[2])\n"
+    "  .map(path => fs.readFileSync(path, 'utf8'))\n"
+    "  .join('');",
+    "const src = fs.readFileSync(process.argv[2], 'utf8');",
+)
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +26,7 @@ def driver_path(tmp_path_factory):
     directory = tmp_path_factory.mktemp("issue5641_renderer_driver")
     driver = directory / "driver.js"
     source = directory / "ui-browser-order.js"
-    driver.write_text(_HELPERS._DRIVER_SRC, encoding="utf-8")
+    driver.write_text(_DRIVER_SRC, encoding="utf-8")
     source.write_text(family_source("ui"), encoding="utf-8")
     return str(driver), str(source)
 
@@ -29,7 +34,7 @@ def driver_path(tmp_path_factory):
 def _render(driver_paths, markdown: str) -> str:
     driver, source = driver_paths
     result = _HELPERS.subprocess.run(
-        [NODE, driver, json.dumps([source])],
+        [NODE, driver, source],
         input=markdown,
         capture_output=True,
         text=True,
