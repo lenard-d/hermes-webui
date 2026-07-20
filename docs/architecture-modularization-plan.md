@@ -250,11 +250,11 @@ The repository should use these meanings consistently:
 
 The existing ownership modules remain authoritative during migration:
 
-- process-local run state: `api/runtime_state.py`
-- turn admission: `api/turn_admission.py`
-- session persistence: `api/session_repository.py`
-- event publication ordering: `api/run_event_sink.py`
-- shared worker setup and teardown: `api/turn_execution.py`
+- process-local run state: `api/runs/runtime_state.py`
+- turn admission: `api/runs/admission.py`
+- session persistence: `api/sessions/repository.py`
+- event publication ordering: `api/runs/event_sink.py`
+- shared worker setup and teardown: `api/runs/execution.py`
 
 Packaging these files under `runs/` or `sessions/` must preserve, not duplicate,
 their ownership. The applicable contracts in `docs/rfcs/` continue to define
@@ -447,12 +447,14 @@ invalidation, and credential scoping remain behaviorally verified.
 ### Phase 3: runs and sessions
 
 **Status: Package conversion implemented; deepening in progress.** Run and
-session ownership now lives under `api/runs/` and `api/sessions/`. The session
+session ownership now lives under `api/runs/` and `api/sessions/`. Run
+execution, terminal outcomes, transcript handling, local-agent caching, and
+provider error handling have semantic owners under `api/runs/`. The session
 store compatibility surface has been reduced to a stateless facade while
 records, external projections, recovery, reconciliation, cache, cleanup, and
-state-db behavior have semantic owners. Remaining work includes migrating old
-facade-patching tests and moving route-owned projection/orchestration into the
-domain packages.
+state-db behavior have semantic owners. Remaining work is concentrated in
+route-owned session projection/orchestration and the largest cohesive run and
+session implementations.
 
 - group the existing run owners under `api/runs/`
 - group session persistence, recovery, projection, sources, and events under
@@ -484,10 +486,12 @@ session, run, provider, workspace, or update state.
 
 ### Phase 5: streaming transport
 
-**Status: In progress.** Run execution and durable event ownership already have
-dedicated run modules. The remaining facade/parts implementation is being
-ported to a real `api/streaming/` package on top of the current run and session
-owners so the migration does not overwrite newer lifecycle work.
+**Status: Implemented; compatibility cleanup remains.** Run execution and
+durable event ownership live under `api/runs/`. `api/streaming/` now owns the
+live transport implementation, while its package interface is a small
+compatibility surface. Reverse private imports from run execution into the old
+streaming facade have been removed. Remaining work is caller migration away
+from temporary private transport imports, not another package conversion.
 
 - distinguish live transport from run execution and durable event ownership
 - move local/Gateway orchestration behind the run package interface
@@ -588,15 +592,15 @@ The architecture program is complete when:
 
 ## Immediate next step
 
-Finish the currently independent integration wave without widening its scope:
+Finish the current owner-deepening and integration wave:
 
-1. port the streaming package onto the latest run/session owners rather than
-   replaying its historical monolith diff
-2. complete the remaining HTTP, session-projection, and anchor-scene owner
-   extractions
-3. replace cross-package private imports in the config/profile/provider stack
-   with deliberate public interfaces and then refresh the architecture
-   baseline
-4. migrate the remaining compatibility-facade tests to their actual owners
-5. run focused neighboring suites followed by the complete repository suite,
-   then update `ARCHITECTURE.md` to describe only the verified live structure
+1. complete session projection and reduce `api/routes.py` to HTTP translation
+   plus a temporary compatibility interface
+2. deepen the remaining large run, session, update, and frontend orchestration
+   modules along state and lifecycle seams
+3. remove the remaining reverse edges in the config/profile/provider stack
+   without breaking mutable-state identity or profile scoping
+4. migrate remaining compatibility-facade tests only after their product
+   owners are final
+5. refresh the architecture baseline, run the complete repository suite, and
+   update `ARCHITECTURE.md` after all module commits have been integrated
