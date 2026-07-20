@@ -546,8 +546,16 @@ larger migration remains incremental:
   `session-recovery.js` converges disconnected turns on canonical session
   snapshots. `stream-transcript.js` owns recovery-control filtering and
   ephemeral turn-field carry-forward, while `stream-progress.js` owns delayed
-  INFLIGHT persistence and DOM snapshots. These modules are complete native
-  modules; no handler or function body is split across files.
+  INFLIGHT persistence and DOM snapshots. Live prose rendering follows the
+  same ownership rule: `stream-content.js` projects raw provider output,
+  `stream-link-policy.js` owns fail-closed live URL projection,
+  `stream-media.js` owns parser-scoped cross-chunk `MEDIA:` buffering,
+  `stream-markdown.js` owns the incremental parser lifecycle,
+  `stream-fade.js` owns optional motion-aware word playout, and
+  `anchor-prose-rendering.js` owns persistent Anchor-scene parser nodes.
+  `rendering.js` composes those interfaces with the per-stream scheduler. These
+  modules are complete native modules; no handler or function body is split
+  across files.
 - The native `static/modules/commands/` graph has a directed ownership chain:
   `command-catalog.js` owns the built-in catalog, parsing, and local dispatch;
   `remote-command-catalog.js` owns Agent, plugin, bundle, and skill metadata

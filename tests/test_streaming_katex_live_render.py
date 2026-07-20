@@ -14,7 +14,7 @@ def test_live_smd_writes_schedule_incremental_katex_rendering():
     assert "setTimeout(()=>{" in MESSAGES_JS
     assert "renderKatexBlocks(assistantBody,{streaming:true})" in MESSAGES_JS
 
-    smd_write_idx = MESSAGES_JS.index("function _smdWrite(displayText, fade=false){")
+    smd_write_idx = MESSAGES_JS.index("function _smdWrite(displayText,fade=false){")
     done_idx = MESSAGES_JS.index("source.addEventListener('done'")
     smd_write_block = MESSAGES_JS[smd_write_idx:done_idx]
     assert "_scheduleStreamingKatex();" in smd_write_block
@@ -23,8 +23,7 @@ def test_live_smd_writes_schedule_incremental_katex_rendering():
 def test_streaming_katex_timer_is_cleared_when_smd_parser_ends():
     """The final done path should not leave a stale live KaTeX timer around."""
     end_idx = MESSAGES_JS.index("function _smdEndParser(){")
-    write_idx = MESSAGES_JS.index("function _smdWrite(displayText, fade=false){")
-    end_block = MESSAGES_JS[end_idx:write_idx]
+    end_block = MESSAGES_JS[end_idx:end_idx + 1800]
     assert "if(_streamingKatexTimer){clearTimeout(_streamingKatexTimer);_streamingKatexTimer=null;}" in end_block
 
 

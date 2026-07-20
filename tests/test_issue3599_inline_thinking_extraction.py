@@ -8,7 +8,7 @@ from api.runs.thinking_content import _extract_inline_thinking_from_content, _sp
 REPO = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
 STREAM_RENDERER_JS = (
-    REPO / "static" / "modules" / "messages" / "rendering.js"
+    REPO / "static" / "modules" / "messages" / "stream-content.js"
 ).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
@@ -101,10 +101,12 @@ def test_messages_js_live_and_persist_paths_share_extractor():
     parse_state = _function_body(STREAM_RENDERER_JS, "function _parseStreamState")
     split_persist = _function_body(MESSAGES_JS, "function _splitThinkFromContent")
 
-    assert "const state=readState();" in stream_display
-    assert "_extractInlineThinkingFromContent(_stripXmlToolCalls(state.assistantText), state.liveReasoningText, {streaming:true}).content" in stream_display
-    assert "const state=readState();" in parse_state
-    assert "return _extractInlineThinkingFromContent(_stripXmlToolCalls(state.assistantText), state.liveReasoningText, {streaming:true});" in parse_state
+    assert "return _parseStreamState().content;" in stream_display
+    assert "const state=read();" in parse_state
+    assert "_extractInlineThinkingFromContent(" in parse_state
+    assert "_stripXmlToolCalls(state.assistantText)" in parse_state
+    assert "state.liveReasoningText" in parse_state
+    assert "{streaming:true}" in parse_state
     assert "return _extractInlineThinkingFromContent(rawContent, existingReasoning, {streaming:false});" in split_persist
     assert "window._extractInlineThinkingFromContentForRender" in MESSAGES_JS
     assert "_thinkingFenceMarkerAt" in MESSAGES_JS

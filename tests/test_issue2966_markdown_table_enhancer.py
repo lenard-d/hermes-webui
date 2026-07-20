@@ -31,8 +31,10 @@ def test_markdown_table_enhancer_is_registered_and_invoked_after_render_paths():
     assert "window.renderMessages=function(...args)" in messages
     assert "enhanceMarkdownTables(inner)" in messages
 
-    smd_end = messages[messages.index("function _smdEndParser()"):messages.index("function _scheduleStreamingKatex()")]
-    assert "_sanitizeSmdLinks(assistantBody);enhanceMarkdownTables(assistantBody);" in smd_end
+    smd_end_start = messages.index("function _smdEndParser(){")
+    smd_end = messages[smd_end_start:smd_end_start + 1800]
+    assert "_sanitizeSmdLinks(assistantBody);enhanceTables(assistantBody);" in smd_end
+    assert "enhanceTables:enhanceMarkdownTables" in messages
 
 
 def test_markdown_table_enhancement_is_idempotent_and_message_scoped():

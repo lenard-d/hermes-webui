@@ -79,6 +79,9 @@ def _run_real_smd_media_cases() -> dict:
             _extract_js_function(MESSAGES_JS, "_smdParserKey"),
             _extract_js_function(MESSAGES_JS, "_smdBindParserIdentity"),
             _extract_js_function(MESSAGES_JS, "_smdMediaTailClear"),
+            _extract_js_function(MESSAGES_JS, "_smdImgSrcAllowed"),
+            _extract_js_function(MESSAGES_JS, "installSafeSmdAttributes"),
+            _extract_js_function(MESSAGES_JS, "createSmdMediaTextWriter"),
             _extract_js_function(MESSAGES_JS, "_streamFadeSkipNode"),
             _extract_js_function(MESSAGES_JS, "_streamFadeReduceMotionEnabled"),
             _extract_js_function(MESSAGES_JS, "_streamFadeBindCleanup"),
@@ -256,11 +259,7 @@ class TestSmdMediaInStream(unittest.TestCase):
     def test_safe_smd_renderer_wraps_add_text_with_media_interceptor(self):
         idx = MESSAGES_JS.index("function _safeSmdRenderer")
         block = MESSAGES_JS[idx:idx + 2000]
-        self.assertIn(
-            "_smdMediaAwareAddText", block,
-            "_safeSmdRenderer's add_text override must route text chunks "
-            "through _smdMediaAwareAddText so MEDIA tokens become DOM nodes",
-        )
+        self.assertIn("createSmdMediaTextWriter", block)
 
     def test_stream_fade_renderer_short_circuits_media_chunks(self):
         idx = MESSAGES_JS.index("function _streamFadeRenderer")
@@ -280,10 +279,9 @@ class TestSmdMediaInStream(unittest.TestCase):
         # as literal text instead of completing the MEDIA token.
         idx = MESSAGES_JS.index("function _streamFadeRenderer")
         block = MESSAGES_JS[idx:idx + 6500]
-        self.assertIn("const parser=parserFor(data);", block)
+        self.assertIn("const parser=_smdParserKey(data,element);", block)
         self.assertIn("_SMD_MEDIA_TAIL.has(parser)", block)
         self.assertIn("||hasMediaTail", block)
-        self.assertIn("hasMediaPrefixTail", block)
         self.assertIn("_smdMediaPrefixTail(value)", block)
 
     def test_media_interceptor_handles_token_at_chunk_start(self):
@@ -371,7 +369,7 @@ class TestSmdMediaInStream(unittest.TestCase):
         # so the first half is buffered instead of rendered as visible prose.
         idx = MESSAGES_JS.index("function _smdMediaAwareAddText")
         block = MESSAGES_JS[idx:idx + 7000]
-        self.assertIn("const _SMD_MEDIA_PREFIX = 'MEDIA:'", MESSAGES_JS)
+        self.assertIn("const _SMD_MEDIA_PREFIX='MEDIA:'", MESSAGES_JS)
         self.assertIn("function _smdMediaPrefixTail", MESSAGES_JS)
         self.assertIn("_smdMediaPrefixTail(combined)", block)
         self.assertIn("_smdMediaPrefixTail(rest)", block)
@@ -387,8 +385,8 @@ class TestSmdMediaInStream(unittest.TestCase):
         block = MESSAGES_JS[idx:idx + 6500]
         self.assertIn("function _smdMediaRefHasReliableBoundary", MESSAGES_JS)
         self.assertIn("matchEnd===combined.length", block)
-        self.assertIn("!_smdMediaRefHasReliableBoundary(m[1])", block)
-        self.assertIn("unmatchedTail = candidate", block)
+        self.assertIn("!_smdMediaRefHasReliableBoundary(match[1])", block)
+        self.assertIn("unmatchedTail=candidate", block)
 
     def test_media_ref_boundary_extension_list_matches_renderer_formats(self):
         # Keep the streaming boundary whitelist aligned with ui.js media
@@ -411,7 +409,7 @@ class TestSmdMediaInStream(unittest.TestCase):
         # even when it has no filename extension.
         self.assertIn("function _smdMediaTailFlush", MESSAGES_JS)
         self.assertIn("/^MEDIA:([^", MESSAGES_JS)
-        self.assertIn("_smdMediaTailFlush(_smdParser)", MESSAGES_JS)
+        self.assertIn("_smdMediaTailFlush(parser)", MESSAGES_JS)
 
     def test_extensionless_https_tail_waits_until_stream_end(self):
         # A chunk ending at MEDIA:https://fal.med may still be mid-URL. Do not
@@ -435,8 +433,7 @@ class TestSmdMediaInStream(unittest.TestCase):
         # (not just by element) so a split MEDIA token in stream A doesn't
         # get prepended to a chunk in stream B.
         self.assertTrue(
-            ("parserFor" in MESSAGES_JS and "_SMD_MEDIA_TAIL.get(parser)" in MESSAGES_JS)
-            or ("tails.get(parser)" in MESSAGES_JS and "parserFor" in MESSAGES_JS),
+            "tails.get(parser)" in MESSAGES_JS,
             "Tail buffer must be keyed by a stable parser identity so "
             "concurrent streams don't cross-pollinate",
         )
@@ -461,8 +458,8 @@ class TestSmdMediaInStream(unittest.TestCase):
         idx = MESSAGES_JS.index("function _streamFadeRenderer")
         block = MESSAGES_JS[idx:idx + 7000]
         self.assertIn("const writeFadeText=", block)
-        self.assertIn("_streamFadeAppendText(writeParent, writeText)", block)
-        self.assertIn("_smdMediaAwareAddText(baseAddText, parent, data, text, _SMD_MEDIA_TAIL, parser, writeFadeText)", block)
+        self.assertIn("_streamFadeAppendText(parent,text)", block)
+        self.assertIn("_smdMediaAwareAddText(baseAddText,parent,data,text,undefined,parser,writeFadeText)", block)
 
     def test_smd_parser_identity_is_bound_to_real_parser(self):
         # smd's renderer.data does not expose a parser by default. Bind the
@@ -471,17 +468,14 @@ class TestSmdMediaInStream(unittest.TestCase):
         self.assertIn("function _smdParserKey", MESSAGES_JS)
         self.assertIn("function _smdBindParserIdentity", MESSAGES_JS)
         self.assertIn("renderer.data.parser=parser", MESSAGES_JS)
-        self.assertIn("el.__smdParser=parser", MESSAGES_JS)
-        smd_new = MESSAGES_JS[
-            MESSAGES_JS.index("function _smdNewParser"):
-            MESSAGES_JS.index("function _smdRendererWithoutUnderscoreEmphasis")
-        ].replace(" ", "")
-        self.assertIn("_smdBindParserIdentity(renderer,_smdParser,el)", smd_new)
+        self.assertIn("element.__smdParser=parser", MESSAGES_JS)
+        smd_new = _extract_js_function(MESSAGES_JS, "_smdNewParser").replace(" ", "")
+        self.assertIn("_smdBindParserIdentity(renderer,_smdParser,element)", smd_new)
         anchor = MESSAGES_JS[
             MESSAGES_JS.index("function _anchorProseIncrementalNode"):
             MESSAGES_JS.index("function _clearAnchorProseIncrementalNode")
         ].replace(" ", "")
-        self.assertIn("_smdBindParserIdentity(renderer,st.parser,body)", anchor)
+        self.assertIn("_smdBindParserIdentity(renderer,state.parser,body)", anchor)
         self.assertNotIn("(data && data.nodes && data.nodes[data.index]) || __SMD_PARSER_FALLBACK", MESSAGES_JS)
 
     def test_smd_end_parser_clears_fallback_media_tail(self):
@@ -489,19 +483,20 @@ class TestSmdMediaInStream(unittest.TestCase):
         # so stream-end cleanup must clear that sentinel key, not null.
         idx = MESSAGES_JS.index("function _smdEndParser")
         block = MESSAGES_JS[idx:idx + 1600]
-        self.assertIn("_smdMediaTailFlush(_smdParser)", block)
+        self.assertIn("_smdMediaTailFlush(parser)", block)
         self.assertIn("_smdMediaTailFlush(__SMD_PARSER_FALLBACK)", block)
-        self.assertLess(block.index("parser_end"), block.index("_smdMediaTailFlush(_smdParser)"))
-        self.assertIn("_smdMediaTailClear(_smdParser)", block)
+        self.assertLess(block.index("parser_end"), block.index("_smdMediaTailFlush(parser)"))
+        self.assertIn("_smdMediaTailClear(parser)", block)
         self.assertIn("_smdMediaTailClear(__SMD_PARSER_FALLBACK)", block)
         self.assertNotIn("_smdMediaTailClear(null)", block)
 
     def test_anchor_prose_cleanup_flushes_media_tail_before_clear(self):
-        idx = MESSAGES_JS.index("function _clearAnchorProseIncrementalNode")
-        block = MESSAGES_JS[idx:idx + 1800]
-        self.assertIn("_smdMediaTailFlush(st.parser)", block)
-        self.assertIn("_smdMediaTailClear(st.parser)", block)
-        self.assertLess(block.index("_smdMediaTailFlush(st.parser)"), block.index("_smdMediaTailClear(st.parser)"))
+        dispose = _extract_js_function(MESSAGES_JS, "_disposeAnchorProseState")
+        clear = _extract_js_function(MESSAGES_JS, "_clearAnchorProseIncrementalNode")
+        self.assertIn("_smdMediaTailFlush(state.parser)", dispose)
+        self.assertIn("_smdMediaTailClear(state.parser)", dispose)
+        self.assertLess(dispose.index("_smdMediaTailFlush(state.parser)"), dispose.index("_smdMediaTailClear(state.parser)"))
+        self.assertIn("_disposeAnchorProseState(state)", clear)
 
     def test_live_media_insertions_are_post_processed(self):
         # Streaming MEDIA inserts PDF/HTML/diff/CSV/Excalidraw placeholders into
@@ -512,10 +507,7 @@ class TestSmdMediaInStream(unittest.TestCase):
             MESSAGES_JS.index("function _smdScheduleMediaPostProcess")
         ]
         self.assertIn("_smdScheduleMediaPostProcess(parent)", append)
-        scheduler = MESSAGES_JS[
-            MESSAGES_JS.index("function _smdScheduleMediaPostProcess"):
-            MESSAGES_JS.index("// Per-parser tail buffer")
-        ]
+        scheduler = _extract_js_function(MESSAGES_JS, "_smdScheduleMediaPostProcess")
         self.assertIn("_postProcessWithAnchorSuppression(root)", scheduler)
         self.assertIn("postProcessRenderedMessages(root)", scheduler)
         self.assertIn("_applyMediaPlaybackPreferences(root)", scheduler)

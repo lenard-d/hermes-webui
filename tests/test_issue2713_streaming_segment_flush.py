@@ -79,8 +79,8 @@ class TestFlushHelperExists:
         )
         assert m
         fn = m.group(0)
-        assert "_smdWrite(" in fn, (
-            "_flushPendingSegmentRender must write via _smdWrite for smd path"
+        assert "markdown.write(displayText)" in fn, (
+            "_flushPendingSegmentRender must write through the markdown owner"
         )
 
     def test_flush_helper_has_render_md_fallback(self):

@@ -105,5 +105,6 @@ def test_streaming_markdown_rewrites_workspace_links_before_sanitizing():
     assert "function _smdLinkHref" in MESSAGES_JS
     assert "workspace:\\/\\/" in MESSAGES_JS
     assert "'#workspace='" in MESSAGES_JS
-    assert "_smdLinkHref(v)" in MESSAGES_JS
     assert "_smdLinkHref(value)" in MESSAGES_JS
+    assert "installSafeSmdAttributes" in MESSAGES_JS
+    assert "_sanitizeSmdLinks" in MESSAGES_JS

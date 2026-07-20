@@ -70,6 +70,7 @@ eval(constLine(messages, '_SMD_SAFE_IMG_URL_RE').replace(/^const /, 'var '));
 eval(fn(messages, '_smdImgSrcAllowed'));
 function _smdLinkHref(value) { return String(value || ''); }
 function _streamFadeBindCleanup() {}
+function createSmdMediaTextWriter(baseAddText) { return baseAddText; }
 globalThis.window = {
   smd: {
     HREF: 'href', SRC: 'src',
@@ -79,6 +80,7 @@ globalThis.window = {
     }),
   },
 };
+eval(fn(messages, 'installSafeSmdAttributes'));
 eval(fn(messages, '_streamFadeRenderer'));
 eval(fn(messages, '_safeSmdRenderer'));
 function invoke(factory, value) {

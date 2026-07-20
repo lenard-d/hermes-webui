@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIR = ROOT / "static" / "modules" / "messages"
 MODULE_NAMES = {
     "anchor-live.js",
+    "anchor-prose-rendering.js",
     "anchor-scene.js",
     "approvals.js",
     "clarify.js",
@@ -25,6 +26,11 @@ MODULE_NAMES = {
     "session-events.js",
     "session-recovery.js",
     "stream-lifecycle.js",
+    "stream-link-policy.js",
+    "stream-markdown.js",
+    "stream-media.js",
+    "stream-fade.js",
+    "stream-content.js",
     "stream-progress.js",
     "stream-transcript.js",
     "stream-transport.js",

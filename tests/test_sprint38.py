@@ -11,7 +11,7 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 UI_JS     = family_source("ui")
 MSG_JS    = family_source("messages")
 STREAM_RENDERER_JS = (
-    REPO_ROOT / "static" / "modules" / "messages" / "rendering.js"
+    REPO_ROOT / "static" / "modules" / "messages" / "stream-content.js"
 ).read_text(encoding="utf-8")
 
 
@@ -121,10 +121,17 @@ def test_stream_display_uses_shared_inline_thinking_extractor():
     assert fn_idx >= 0, "_streamDisplay function not found in messages.js"
     fn_end = STREAM_RENDERER_JS.find("\n  }", fn_idx) + 4
     fn_body = STREAM_RENDERER_JS[fn_idx:fn_end]
-    assert "const state=readState();" in fn_body, \
-        "_streamDisplay must read the renderer owner's injected stream state"
-    assert "_extractInlineThinkingFromContent(_stripXmlToolCalls(state.assistantText), state.liveReasoningText, {streaming:true}).content" in fn_body, \
-        "_streamDisplay must route through the shared inline thinking extractor"
+    parse_idx = STREAM_RENDERER_JS.find("function _parseStreamState()")
+    parse_end = STREAM_RENDERER_JS.find("\n  }", parse_idx) + 4
+    parse_body = STREAM_RENDERER_JS[parse_idx:parse_end]
+    assert "return _parseStreamState().content" in fn_body, \
+        "_streamDisplay must project the shared parsed stream state"
+    assert "const state=read();" in parse_body, \
+        "_parseStreamState must read the content owner's injected stream state"
+    assert "_extractInlineThinkingFromContent(" in parse_body, \
+        "_parseStreamState must route through the shared inline thinking extractor"
+    assert "_stripXmlToolCalls(state.assistantText)" in parse_body
+    assert "state.liveReasoningText" in parse_body
 
 
 def test_shared_extractor_scans_known_open_tags():

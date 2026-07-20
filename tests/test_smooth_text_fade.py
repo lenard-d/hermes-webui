@@ -9,9 +9,7 @@ CONFIG_PY = (REPO / "api" / "config" / "settings.py").read_text(
 )
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
-STREAM_RENDERER_JS = (
-    REPO / "static" / "modules" / "messages" / "rendering.js"
-).read_text(encoding="utf-8")
+STREAM_RENDERER_JS = family_source("messages")
 STREAM_JS = (REPO / "static" / "modules" / "messages" / "stream.js").read_text(
     encoding="utf-8"
 )
@@ -164,8 +162,8 @@ def test_stream_fade_uses_incremental_renderer_without_changing_default_path():
     assert_contains_all(
         STREAM_RENDERER_JS,
         [
-            "_renderStreamingFadeMarkdown(displayText)",
-            "_smdWrite(displayText)",
+            "fade.renderMarkdown(displayText)",
+            "markdown.write(displayText)",
             "?33:66",
         ],
     )
@@ -175,15 +173,15 @@ def test_stream_fade_uses_incremental_renderer_without_changing_default_path():
             "_streamFadeNextText(displayText)",
             "if(!next.changed) return next.caughtUp",
             "if(!_shouldUseTransparentStreamFade())",
-            "_smdNewParser(assistantBody,true)",
-            "_smdWrite(next.text,true)",
+            "markdown.newParser(assistantBody,true)",
+            "markdown.write(next.text,true)",
             "_sanitizeSmdLinks(assistantBody)",
             "assistantBody.appendChild(document.createTextNode(delta))",
             "_streamFadeDomText=String(next.text||'')",
             "stream-fade-active",
         ],
     )
-    assert render_block.index("_smdWrite(next.text,true)") < render_block.index(
+    assert render_block.index("markdown.write(next.text,true)") < render_block.index(
         "assistantBody.appendChild(document.createTextNode(delta))"
     )
     assert "_streamFadeAppendText(assistantBody,delta)" not in render_block
@@ -194,20 +192,15 @@ def test_stream_fade_uses_incremental_renderer_without_changing_default_path():
         [
             "document.createDocumentFragment()",
             "span.className='stream-fade-word is-new'",
-            "el.appendChild(frag)",
+            "element.appendChild(fragment)",
             "_streamFadeLatestAnimationEndAt",
         ],
     )
     assert_contains_all(
         renderer_block,
         [
-            "span.className='stream-fade-word is-new'",
-            "_streamFadeReduceMotionEnabled()",
-            "const appendStartedAt=performance.now()",
-            "--stream-fade-ms",
-            "renderer.set_attr",
-            "data-blocked-scheme",
-            "_streamFadeLatestAnimationEndAt",
+            "installSafeSmdAttributes(renderer)",
+            "_streamFadeAppendText(parent,value)",
         ],
     )
     assert_contains_all(
@@ -275,12 +268,14 @@ def test_transparent_anchor_prose_uses_fade_renderer_when_enabled():
     assert_contains_all(
         anchor_block,
         [
-            "const fade=typeof _shouldUseLiveProseFade==='function'&&_shouldUseLiveProseFade()",
-            "if(st && st.fade!==fade) st=null",
+            "const fade=shouldFade()",
+            "state.fade!==fade",
+            "_dropAnchorProseState(key,state)",
             "if(body.classList) body.classList.toggle('stream-fade-active',fade)",
-            "const baseRenderer=fade?_streamFadeRenderer(body):_safeSmdRenderer(body)",
-            "st={node,parser:window.smd.parser(renderer),writtenText:'',fade}",
-            "const body=st.node&&st.node.querySelector&&st.node.querySelector('.msg-body')",
+            "createFadeRenderer(body)",
+            "createSafeRenderer(body)",
+            "state={node,parser:window.smd.parser(renderer),writtenText:'',fade}",
+            "const body=state.node&&state.node.querySelector&&state.node.querySelector('.msg-body')",
         ],
     )
     assert_contains_all(
@@ -322,7 +317,7 @@ global.window={
     };
   },
 };
-function isTransparentStream(){ return transparent; }
+    const isTransparent=()=>transparent;
 if(_shouldUseLiveProseFade()) throw new Error('reduced motion allowed live prose fade');
 _streamFadeReduceMotionMql=null;
 reduceMotion=false;
@@ -404,28 +399,24 @@ if(!assistantBody.classList.added.includes('stream-fade-active')) throw new Erro
 
 
 def test_transparent_anchor_prose_receives_revealed_fade_text():
-    render_section = slice_between(
-        STREAM_RENDERER_JS,
-        "const displayText = segmentStart===0",
-        "scrollIfPinned();",
-    )
+    render_section = function_block(STREAM_RENDERER_JS, "_scheduleRender")
     assert_contains_all(
         render_section,
         [
             "let anchorProcessText=displayText",
             "if(assistantBody){",
-            "const caughtUp=_renderStreamingFadeMarkdown(displayText)",
-            "if(_shouldUseLiveProseFade())",
-            "anchorProcessText=_streamFadeDomText||''",
-            "if(anchorProcessText) _upsertAnchorProcessProse(anchorProcessText)",
+            "const caughtUp=fade.renderMarkdown(displayText)",
+            "if(fade.shouldUse())",
+            "anchorProcessText=fade.domText()||''",
+            "if(anchorProcessText) upsertAnchorProse(anchorProcessText)",
         ],
     )
     assert render_section.index("let anchorProcessText=displayText") < render_section.index("if(assistantBody){")
-    assert render_section.index("anchorProcessText=_streamFadeDomText||''") < render_section.index(
-        "_upsertAnchorProcessProse(anchorProcessText)"
+    assert render_section.index("anchorProcessText=fade.domText()||''") < render_section.index(
+        "upsertAnchorProse(anchorProcessText)"
     )
     assert render_section.index("if(assistantBody){") < render_section.rindex(
-        "if(anchorProcessText) _upsertAnchorProcessProse(anchorProcessText)"
+        "if(anchorProcessText) upsertAnchorProse(anchorProcessText)"
     )
 
 
@@ -436,17 +427,17 @@ def test_stream_fade_done_drain_has_hard_cap_for_large_buffered_responses():
         drain_block,
         [
             "const drainStartedAt=performance.now();",
-            "const target=_streamFadeCurrentDisplayText();",
+            "const target=currentDisplayText();",
             "const caughtUp=_renderStreamingFadeMarkdown(target);",
             "const anchorProcessText=_streamFadeDomText||target;",
-            "if(anchorProcessText) _upsertAnchorProcessProse(anchorProcessText);",
+            "if(anchorProcessText) upsertAnchorProse(anchorProcessText);",
             "performance.now()-drainStartedAt>=_STREAM_FADE_DONE_DRAIN_MAX_MS",
-            "if(_smdParser) _smdEndParser();",
+            "if(markdown&&markdown.hasParser()) markdown.end();",
             "onDone();",
         ],
     )
     assert drain_block.index("_renderStreamingFadeMarkdown(target)") < drain_block.index(
-        "_upsertAnchorProcessProse(anchorProcessText)"
+        "upsertAnchorProse(anchorProcessText)"
     )
 
 
@@ -509,7 +500,8 @@ def test_stream_fade_reduced_motion_listener_is_cleaned_up_on_terminal_paths():
     assert "function _streamFadeCleanupReduceMotionListener()" in STREAM_RENDERER_JS
     assert "removeEventListener('change',_streamFadeReduceMotionOnChange)" in STREAM_RENDERER_JS
     assert "removeListener(_streamFadeReduceMotionOnChange)" in STREAM_RENDERER_JS
-    assert STREAM_JS.count("_streamFadeCleanupReduceMotionListener();") >= 4
+    assert "cleanupReduceMotion:_streamFadeCleanupReduceMotionListener" in STREAM_JS
+    assert "_streamFadeCleanupReduceMotionListener();" in STREAM_JS
 
 
 def test_stream_fade_duration_scales_up_with_playback_speed():

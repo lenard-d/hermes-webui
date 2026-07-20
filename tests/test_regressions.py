@@ -14,9 +14,7 @@ import urllib.error
 import urllib.request
 import urllib.parse
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-STREAM_RENDERER_SRC = (
-    REPO_ROOT / "static" / "modules" / "messages" / "rendering.js"
-).read_text(encoding="utf-8")
+STREAM_RENDERER_SRC = family_source("messages")
 STREAM_PROGRESS_SRC = (
     REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
 ).read_text(encoding="utf-8")

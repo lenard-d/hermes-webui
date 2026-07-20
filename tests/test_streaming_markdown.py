@@ -27,9 +27,7 @@ import subprocess
 
 REPO = pathlib.Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
-STREAM_RENDERER_JS = (
-    REPO / "static" / "modules" / "messages" / "rendering.js"
-).read_text(encoding="utf-8")
+STREAM_RENDERER_JS = family_source("messages")
 UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 
@@ -143,12 +141,11 @@ class TestIndexHtmlSmdScript:
 # ── 2. Closure variable declarations ─────────────────────────────────────────
 
 class TestClosureVariables:
-    """_smdParser, _smdWrittenLen and _smdReconnect must be declared in the
-    stream renderer owner, not inside a helper or handler."""
+    """Parser state stays local to the incremental-markdown owner."""
 
     def get_prelude(self):
-        factory = re.search(r"function createStreamRenderer\(", STREAM_RENDERER_JS)
-        first_helper = re.search(r"\n\s*function _stripXmlToolCalls\(", STREAM_RENDERER_JS)
+        factory = re.search(r"function createStreamingMarkdown\(", STREAM_RENDERER_JS)
+        first_helper = re.search(r"\n\s*function _safeSmdRenderer\(", STREAM_RENDERER_JS)
         assert factory and first_helper
         return STREAM_RENDERER_JS[factory.start() : first_helper.start()]
 
@@ -158,10 +155,10 @@ class TestClosureVariables:
             "_smdParser must be declared in the stream renderer owner scope"
         )
 
-    def test_smd_written_len_declared(self):
+    def test_smd_written_prefix_declared(self):
         prelude = self.get_prelude()
-        assert prelude and "_smdWrittenLen" in prelude, (
-            "_smdWrittenLen must be declared in the stream renderer owner scope"
+        assert prelude and "_smdWrittenText" in prelude, (
+            "the written prefix must be declared in the markdown owner scope"
         )
 
     def test_smd_reconnect_declared(self):
@@ -182,11 +179,11 @@ class TestClosureVariables:
             "_smdParser=null" in prelude or "_smdParser = null" in prelude
         ), "_smdParser must be initialised to null"
 
-    def test_smd_written_len_initialised_zero(self):
+    def test_smd_written_prefix_initialised_empty(self):
         prelude = self.get_prelude()
         assert prelude and (
-            "_smdWrittenLen=0" in prelude or "_smdWrittenLen = 0" in prelude
-        ), "_smdWrittenLen must be initialised to 0"
+            "_smdWrittenText=''" in prelude or '_smdWrittenText=""' in prelude
+        ), "the written prefix must be initialised empty"
 
 
 # ── 3. Helper functions ───────────────────────────────────────────────────────
@@ -198,11 +195,11 @@ class TestSmdHelpers:
         fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn is not None, "_smdNewParser function must be defined"
 
-    def test_smd_new_parser_resets_written_len(self):
+    def test_smd_new_parser_resets_written_prefix(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
         assert fn and (
-            "_smdWrittenLen=0" in fn or "_smdWrittenLen = 0" in fn
-        ), "_smdNewParser must reset _smdWrittenLen to 0"
+            "_smdWrittenText=''" in fn or '_smdWrittenText=""' in fn
+        ), "_smdNewParser must reset the written prefix"
 
     def test_smd_new_parser_calls_safe_renderer(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
@@ -246,11 +243,11 @@ class TestSmdHelpers:
             "_smdParser=null" in fn or "_smdParser = null" in fn
         ), "_smdEndParser must set _smdParser to null after flushing"
 
-    def test_smd_end_parser_resets_written_len(self):
+    def test_smd_end_parser_resets_written_prefix(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_smdEndParser")
         assert fn and (
-            "_smdWrittenLen=0" in fn or "_smdWrittenLen = 0" in fn
-        ), "_smdEndParser must reset _smdWrittenLen to 0"
+            "_smdWrittenText=''" in fn or '_smdWrittenText=""' in fn
+        ), "_smdEndParser must reset the written prefix"
 
     def test_smd_write_exists(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
@@ -258,8 +255,8 @@ class TestSmdHelpers:
 
     def test_smd_write_slices_delta(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
-        assert fn and "_smdWrittenLen" in fn, (
-            "_smdWrite must slice from _smdWrittenLen to send only new chars"
+        assert fn and "value.slice(_smdWrittenText.length)" in fn, (
+            "_smdWrite must slice from the verified written prefix"
         )
 
     def test_smd_write_calls_parser_write(self):
@@ -270,8 +267,8 @@ class TestSmdHelpers:
 
     def test_smd_write_updates_written_len(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_smdWrite")
-        assert fn and "displayText.length" in fn, (
-            "_smdWrite must advance _smdWrittenLen to displayText.length after writing"
+        assert fn and "_smdWrittenText=value" in fn, (
+            "_smdWrite must advance the written prefix after writing"
         )
 
     def test_smd_write_has_prefix_desync_guard(self):
@@ -394,14 +391,14 @@ class TestScheduleRenderSmdPath:
 
     def test_smd_path_present(self):
         fn = self.get_fn()
-        assert fn and "_smdParser" in fn, (
-            "_scheduleRender must check for _smdParser to take the smd path"
+        assert fn and "markdown.hasParser()" in fn, (
+            "_scheduleRender must ask the markdown owner whether a parser exists"
         )
 
     def test_smd_write_called_in_schedule_render(self):
         fn = self.get_fn()
-        assert fn and "_smdWrite(" in fn, (
-            "_scheduleRender must call _smdWrite() to feed incremental text"
+        assert fn and "markdown.write(displayText)" in fn, (
+            "_scheduleRender must feed incremental text through the markdown interface"
         )
 
     def test_fallback_rendermd_still_present(self):
@@ -413,25 +410,21 @@ class TestScheduleRenderSmdPath:
     def test_fallback_formats_first_segment_with_render_md(self):
         fn = self.get_fn()
         assert fn, "_scheduleRender not found"
-        assert "const fallbackText" in fn, (
-            "_scheduleRender fallback should choose the visible segment text once"
-        )
-        assert "renderMd(fallbackText)" in fn, (
+        assert "renderMd(displayText)" in fn, (
             "When smd is unavailable, the first live segment must still be "
             "formatted with renderMd instead of inserting raw parsed.displayText"
         )
 
     def test_smd_new_parser_called_lazily(self):
         fn = self.get_fn()
-        assert fn and "_smdNewParser(" in fn, (
-            "_scheduleRender must lazily call _smdNewParser() on first token after body creation"
+        assert fn and "markdown.newParser(assistantBody,false)" in fn, (
+            "_scheduleRender must lazily ask the markdown owner for a parser"
         )
 
     def test_reconnect_clears_body(self):
-        fn = self.get_fn()
-        assert fn and "_smdReconnect" in fn, (
-            "_scheduleRender must handle the reconnect case by checking _smdReconnect"
-        )
+        fn = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
+        assert fn and "_smdReconnect&&element" in fn
+        assert "element.innerHTML=''" in fn
 
     def test_no_raw_innerhtml_assignment_in_smd_path(self):
         """When smd is active, innerHTML must NOT be set — only _smdWrite() feeds the DOM."""
@@ -440,10 +433,10 @@ class TestScheduleRenderSmdPath:
         # The smd branch must be separated from the innerHTML branch by an if/else.
         # A crude but effective check: _smdWrite and innerHTML=... must not appear
         # on the same code path (i.e., _smdWrite must be inside an `if(_smdParser)` block).
-        smd_write_pos = fn.find("_smdWrite(")
-        innerhtml_pos = fn.find("assistantBody.innerHTML =")
+        smd_write_pos = fn.find("markdown.write(displayText)")
+        innerhtml_pos = fn.find("assistantBody.innerHTML=")
         # Both must exist
-        assert smd_write_pos != -1, "_smdWrite( not found in _scheduleRender"
+        assert smd_write_pos != -1, "markdown owner write not found in _scheduleRender"
         assert innerhtml_pos != -1, "innerHTML fallback not found in _scheduleRender"
         # They must be separated by an if/else construct — there must be a `} else {`
         # between them (in either order). We just verify `else` appears between them.
@@ -632,8 +625,8 @@ class TestExistingStreamingGuardsIntact:
 
     def test_stream_finalized_still_guards_schedule_render(self):
         fn = extract_fn(STREAM_RENDERER_JS, "_scheduleRender")
-        assert fn and "_streamFinalized" in fn, (
-            "_streamFinalized guard must still be present in _scheduleRender"
+        assert fn and "initialState.streamFinalized" in fn and "state.streamFinalized" in fn, (
+            "both pre-schedule and callback-time finalized guards must remain"
         )
 
     def test_done_still_sets_stream_finalized(self):
@@ -732,27 +725,19 @@ class TestSmdUrlSchemeSanitization:
         # per token that caused progressive streaming freeze on long answers.
         safefn = extract_fn(STREAM_RENDERER_JS, "_safeSmdRenderer")
         assert safefn, "_safeSmdRenderer must exist for URL safety on the non-fade path"
-        assert "set_attr" in safefn, (
-            "_safeSmdRenderer must override set_attr to validate href/src inline"
-        )
-        assert "_SMD_SAFE_URL_RE" in safefn, (
-            "_safeSmdRenderer set_attr must use _SMD_SAFE_URL_RE for href safety"
-        )
-        assert "_smdImgSrcAllowed" in safefn, (
-            "_safeSmdRenderer set_attr must delegate src safety to the shared data-image policy"
-        )
-        assert "data-blocked-scheme" in safefn, (
-            "_safeSmdRenderer set_attr must set data-blocked-scheme on unsafe URLs"
-        )
-        # _safeSmdRenderer algorithm must be the same as the proven
-        # _streamFadeRenderer set_attr (fade path has been in production).
+        assert "installSafeSmdAttributes(renderer)" in safefn
         fadefn = extract_fn(STREAM_RENDERER_JS, "_streamFadeRenderer")
-        assert fadefn and "set_attr" in fadefn, "_streamFadeRenderer must also have set_attr"
+        assert fadefn and "installSafeSmdAttributes(renderer)" in fadefn
+        policyfn = extract_fn(STREAM_RENDERER_JS, "installSafeSmdAttributes")
+        assert policyfn and "set_attr" in policyfn
+        assert "_SMD_SAFE_URL_RE" in policyfn
+        assert "_smdImgSrcAllowed" in policyfn
+        assert "data-blocked-scheme" in policyfn
         # Both renderers go through _smdRendererWithoutUnderscoreEmphasis so
         # the set_attr hook is part of the final parser — verify the call chain.
         newparser = extract_fn(STREAM_RENDERER_JS, "_smdNewParser")
-        assert newparser and "fade ? _streamFadeRenderer(el) : _safeSmdRenderer(el)" in newparser, (
-            "_smdNewParser must route non-fade to _safeSmdRenderer and fade to _streamFadeRenderer"
+        assert newparser and "fade&&createFadeRenderer?createFadeRenderer(element):_safeSmdRenderer(element)" in newparser, (
+            "_smdNewParser must route fade and non-fade through their owner renderers"
         )
         # _sanitizeSmdLinks is still defined and used at parser_end as a final
         # safety net — not removed, just no longer called on every token.
