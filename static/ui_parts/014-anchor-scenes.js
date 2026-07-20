@@ -1031,4 +1031,5 @@ function ensureRunActivityGroup(inner, opts){
 window.HermesUI.register('anchorScenes', {
   renderLiveAnchorActivityScene,
   ensureActivityGroup,
+  ensureRunActivityGroup,
 });

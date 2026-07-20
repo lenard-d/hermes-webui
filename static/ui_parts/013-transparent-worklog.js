@@ -1068,5 +1068,4 @@ function _updateLiveAnchorReasoningRowForFallback(turn, text, opts){
 
 window.HermesUI.register('transparentWorklog', {
   ensureLiveWorklogContainer,
-  ensureRunActivityGroup,
 });

@@ -76,6 +76,53 @@ def test_full_ui_load_order_is_syntax_valid(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
+def test_adjacent_worklog_modules_register_in_browser_load_order():
+    runner = r"""
+const fs = require('fs');
+const vm = require('vm');
+const modules = Object.create(null);
+const compat = Object.create(null);
+const context = vm.createContext({console});
+context.window = context;
+context.HermesUI = {
+  modules,
+  compat,
+  register(name, exports) {
+    modules[name] = exports;
+    Object.assign(compat, exports);
+  },
+};
+
+for (const path of process.argv.slice(1)) {
+  vm.runInContext(fs.readFileSync(path, 'utf8'), context, {filename: path});
+}
+
+if (typeof modules.transparentWorklog.ensureLiveWorklogContainer !== 'function') {
+  throw new Error('transparentWorklog module did not register its worklog owner');
+}
+if (typeof modules.anchorScenes.ensureRunActivityGroup !== 'function') {
+  throw new Error('anchorScenes module did not register its run-activity owner');
+}
+if (compat.ensureRunActivityGroup !== modules.anchorScenes.ensureRunActivityGroup) {
+  throw new Error('run-activity compatibility export is not owned by anchorScenes');
+}
+"""
+    result = subprocess.run(
+        [
+            "node",
+            "-e",
+            runner,
+            str(PARTS_DIR / "013-transparent-worklog.js"),
+            str(PARTS_DIR / "014-anchor-scenes.js"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_compatibility_surface_keeps_primary_entry_points():
     source = _combined_source()
 
