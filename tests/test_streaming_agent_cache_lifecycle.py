@@ -91,53 +91,65 @@ def test_evicted_agent_lifecycle_keeps_provider_alive_when_commit_still_dirty(mo
     agent._session_db.close.assert_not_called()
 
 
-def test_identity_mismatch_cache_evictions_close_entries_outside_cache_lock():
-    sources = [
-        open("api/runs/agent_cache.py", encoding="utf-8").read(),
-        open("api/runs/local.py", encoding="utf-8").read(),
-        open("api/runs/local_agent_cache.py", encoding="utf-8").read(),
-        open("api/streaming/live_controls.py", encoding="utf-8").read(),
-    ]
+def test_identity_mismatch_cache_eviction_closes_outside_cache_lock(monkeypatch):
+    import threading
 
-    expected_markers = [
-        "identity_mismatch = SESSION_AGENT_CACHE.pop(session_id, None)",
-        "stale = SESSION_AGENT_CACHE.pop(session_id, None)",
-        "_skipped_agent_migration_entry = _cached_entry",
-        "evicted_cached_entry = _cfg.SESSION_AGENT_CACHE.pop(sid, None)",
-        "_evicted_entry = SESSION_AGENT_CACHE.pop(session_id, None)",
-    ]
-    for marker in expected_markers:
-        assert any(marker in source for source in sources)
+    import api.config as config
+    from api.runs import local_agent_cache
 
-    cache_owner = sources[2]
-    for variable in ("identity_mismatch", "stale"):
-        pop_idx = cache_owner.index(
-            f"{variable} = SESSION_AGENT_CACHE.pop(session_id, None)"
-        )
-        close_idx = cache_owner.index(
-            "_close_cached_agent_entry_at_session_boundary(", pop_idx
-        )
-        assert pop_idx < close_idx
+    cache = config.SESSION_AGENT_CACHE.__class__()
+    cache_lock = threading.Lock()
+    monkeypatch.setattr(config, "SESSION_AGENT_CACHE", cache)
+    monkeypatch.setattr(config, "SESSION_AGENT_CACHE_LOCK", cache_lock)
+    monkeypatch.setattr(local_agent_cache, "_register_agent", lambda *_args: None)
+    monkeypatch.setattr(local_agent_cache, "_active_session_ids", lambda: set())
 
-    close_markers = [
-        "_close_cached_agent_entry_at_session_boundary(old_sid, _skipped_agent_migration_entry)",
-        "sid, evicted_cached_entry)",
-        "_close_cached_agent_entry_at_session_boundary(session_id, _evicted_entry)",
-    ]
-    for marker in close_markers:
-        source = next(source for source in sources if marker in source)
-        lines = source.splitlines()
-        close_idx = next(i for i, line in enumerate(lines) if marker in line)
-        lock_idx = max(
-            i
-            for i, line in enumerate(lines[:close_idx])
-            if "SESSION_AGENT_CACHE_LOCK:" in line
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.session_id = kwargs.get("session_id")
+
+    def acquire():
+        return local_agent_cache.acquire_local_agent(
+            agent_class=FakeAgent,
+            session_id="cache-owner-session",
+            ephemeral=False,
+            kwargs={"session_id": "cache-owner-session"},
+            session_db=None,
+            model="model",
+            provider="provider",
+            base_url=None,
+            api_key=None,
+            runtime={},
+            max_iterations=None,
+            max_tokens=None,
+            fallback_models=None,
+            toolsets=None,
+            reasoning=None,
+            request_overrides=None,
+            prefill_status=None,
+            profile_home=None,
         )
-        lock_indent = len(lines[lock_idx]) - len(lines[lock_idx].lstrip())
-        between = lines[lock_idx + 1:close_idx]
-        assert any(
-            line.strip()
-            and not line.lstrip().startswith("#")
-            and len(line) - len(line.lstrip()) <= lock_indent
-            for line in between
-        ), f"{marker} still appears inside the SESSION_AGENT_CACHE_LOCK block"
+
+    created = acquire()
+    with cache_lock:
+        _, signature = cache["cache-owner-session"]
+        mismatched = FakeAgent(session_id="another-session")
+        cache["cache-owner-session"] = (mismatched, signature)
+
+    closed = []
+
+    def close_entry(session_id, entry):
+        assert not cache_lock.locked()
+        closed.append((session_id, entry))
+        return True
+
+    monkeypatch.setattr(
+        local_agent_cache,
+        "_close_cached_agent_entry_at_session_boundary",
+        close_entry,
+    )
+
+    replacement = acquire()
+
+    assert replacement.agent is not created.agent
+    assert closed == [("cache-owner-session", (mismatched, signature))]

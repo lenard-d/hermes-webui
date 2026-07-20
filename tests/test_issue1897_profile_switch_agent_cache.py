@@ -6,6 +6,7 @@ import os
 import queue
 import sys
 import types
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -23,7 +24,7 @@ def test_same_session_profile_switch_rebuilds_agent_under_new_soul_home(tmp_path
     from api import config as cfg
     from api import oauth
     from api import profiles
-    from api import streaming
+    from api.runs import local as local_run
 
     default_home = tmp_path / "hermes-home"
     profile_a_home = default_home / "profiles" / "alpha"
@@ -142,14 +143,15 @@ def test_same_session_profile_switch_rebuilds_agent_under_new_soul_home(tmp_path
     def home_for_profile(profile_name):
         return {"alpha": profile_a_home, "beta": profile_b_home}[profile_name]
 
-    monkeypatch.setattr(streaming, "get_session", lambda _sid: fake_session)
-    monkeypatch.setattr(streaming, "_get_ai_agent", lambda: SoulCachingAgent)
-    monkeypatch.setattr(
-        streaming,
-        "resolve_model_provider",
-        lambda _model, **_kw: ("test-model", "test-provider", None),
+    run_dependencies = replace(
+        local_run._DEFAULT_DEPENDENCIES,
+        get_session=lambda _sid: fake_session,
+        get_ai_agent=lambda: SoulCachingAgent,
+        resolve_model_provider=(
+            lambda _model, **_kw: ("test-model", "test-provider", None)
+        ),
+        maybe_schedule_title_refresh=lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(streaming, "_maybe_schedule_title_refresh", lambda *args, **kwargs: None)
     monkeypatch.setattr(profiles, "get_hermes_home_for_profile", home_for_profile)
     monkeypatch.setattr(profiles, "get_profile_runtime_env", lambda _home: {})
     monkeypatch.setattr(
@@ -170,24 +172,25 @@ def test_same_session_profile_switch_rebuilds_agent_under_new_soul_home(tmp_path
 
     with cfg.SESSION_AGENT_CACHE_LOCK:
         cfg.SESSION_AGENT_CACHE.clear()
-    streaming.STREAMS.clear()
-    streaming.CANCEL_FLAGS.clear()
-    streaming.AGENT_INSTANCES.clear()
-    streaming.STREAM_PARTIAL_TEXT.clear()
-    streaming.STREAM_REASONING_TEXT.clear()
-    streaming.STREAM_LIVE_TOOL_CALLS.clear()
+    cfg.STREAMS.clear()
+    cfg.CANCEL_FLAGS.clear()
+    cfg.AGENT_INSTANCES.clear()
+    cfg.STREAM_PARTIAL_TEXT.clear()
+    cfg.STREAM_REASONING_TEXT.clear()
+    cfg.STREAM_LIVE_TOOL_CALLS.clear()
 
     def run_turn(profile_name: str, stream_id: str, text: str):
         fake_session.profile = profile_name
         fake_session.active_stream_id = stream_id
-        streaming.STREAMS[stream_id] = queue.Queue()
-        streaming._run_agent_streaming(
+        cfg.STREAMS[stream_id] = queue.Queue()
+        local_run.run_agent_streaming(
             session_id=fake_session.session_id,
             msg_text=text,
             model="test-model",
             model_provider="test-provider",
             workspace=str(tmp_path),
             stream_id=stream_id,
+            dependencies=run_dependencies,
         )
 
     run_turn("alpha", "issue1897-stream-1", "first turn")
