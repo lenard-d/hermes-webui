@@ -183,19 +183,14 @@ def _handle_approval_respond(handler, body):
     # or recover the run_id from the mirrored gateway approval entry if the
     # stream pointer has already been cleared.
     try:
-        from api.runs.gateway import (
-            _STREAM_RUN_IDS,
-            _gateway_base_url,
-            _gateway_api_key,
-            webui_gateway_chat_enabled,
-        )
+        import api.runs as run_domain
         from api.config import get_config as _get_config
         s = get_session(sid)
         _run_id = None
         if s is not None:
             active_sid = getattr(s, "active_stream_id", None)
             if active_sid:
-                _run_id = _STREAM_RUN_IDS.get(active_sid)
+                _run_id = run_domain.gateway_run_for_stream(active_sid)
             if not _run_id and approval_id:
                 _run_id = _gateway_mirrored_pending_run_id(sid, approval_id)
         if _run_id:
@@ -203,8 +198,8 @@ def _handle_approval_respond(handler, body):
                 return bad(handler, "approval_id is required for gateway approvals")
             from api.runner_client import HttpRunnerClient, RunnerClientError
             _cfg = _get_config()
-            _base = _gateway_base_url(_cfg)
-            _key = _gateway_api_key()
+            _base = run_domain.gateway_base_url(_cfg)
+            _key = run_domain.gateway_api_key()
             try:
                 HttpRunnerClient(base_url=_base, api_key=_key).respond_approval(_run_id, approval_id, choice)
             except (RunnerClientError, ValueError) as exc:
@@ -216,7 +211,9 @@ def _handle_approval_respond(handler, body):
             return j(handler, {"ok": True, "choice": choice, "relayed": True})
         # Only a still-mirrored gateway approval with a missing run should 409;
         # stale or empty gateway clicks fall through to local resolution.
-        if webui_gateway_chat_enabled(_get_config()) and _gateway_pending_approval_without_run_id(
+        if run_domain.webui_gateway_chat_enabled(
+            _get_config()
+        ) and _gateway_pending_approval_without_run_id(
             sid, approval_id
         ):
             return j(

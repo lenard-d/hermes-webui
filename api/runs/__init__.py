@@ -20,6 +20,9 @@ _PUBLIC = {
     "checkpoint_user_message": (".admission", "checkpoint_user_message"),
     "delete_run_journal": (".journal", "delete_run_journal"),
     "find_run_summary": (".journal", "find_run_summary"),
+    "gateway_api_key": (".gateway_config", "gateway_api_key"),
+    "gateway_base_url": (".gateway_config", "gateway_base_url"),
+    "gateway_run_for_stream": (".gateway_runtime", "gateway_run_for_stream"),
     "get_background_results": (".background", "get_results"),
     "latest_run_summary": (".journal", "latest_run_summary"),
     "prepare_session_for_turn": (".admission", "prepare_session_for_turn"),
@@ -36,6 +39,10 @@ _PUBLIC = {
     "runtime_worker_items": (".runtime_state", "runtime_worker_items"),
     "start_local_turn": (".admission", "start_local_turn"),
     "start_session_turn": (".server_turn", "start_session_turn"),
+    "webui_gateway_chat_enabled": (
+        ".gateway_config",
+        "webui_gateway_chat_enabled",
+    ),
 }
 __all__ = list(_PUBLIC)
 

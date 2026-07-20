@@ -124,6 +124,12 @@ actions. The topbar remains focused on conversation context and the workspace/fi
                            payload, attachment, compression, terminal, and title owners
       runs/                Local/Gateway run orchestration, admission, publication,
                            journaling, and explicit Local helper owners
+        gateway.py         Gateway turn orchestration and lifecycle coordination
+        gateway_config.py  Backend selection, credentials, request policy, safe HTTP errors
+        gateway_events.py  Protocol decoding plus runtime/browser event publication
+        gateway_runtime.py Local stream-to-Gateway-run approval correlation
+        gateway_transport.py Runs API and chat-completions HTTP/SSE transports
+        gateway_settlement.py Owner-checked success, error, cancel, and teardown persistence
       model_context.py     Shared context-window lookup and refresh policy
       workspace_context.py Shared workspace display/prefix and runtime-path policy
       updates/             Self-update package with a small public interface
@@ -461,6 +467,15 @@ larger migration remains incremental:
   adapters, preserving the dependency direction config -> profiles -> providers.
   `api.models` preserves only a stateless compatibility import, while the
   durable owner lives in `api.sessions`.
+- Gateway-backed chat is divided by lifecycle responsibility inside `api.runs`.
+  `gateway_transport` owns request construction and both Gateway HTTP/SSE
+  protocols; `gateway_events` projects decoded protocol activity into the one
+  run-owned runtime snapshot and browser event sink; `gateway_settlement` owns
+  owner-checked terminal persistence and late-cancel reconciliation;
+  `gateway_runtime` owns the sole process-local stream-to-run correlation needed
+  for approval relay. `gateway.py` coordinates those modules and always releases
+  the shared `TurnExecution` plus the Gateway correlation on teardown. The
+  transports do not create a second stream, cancellation, or callback registry.
 - `api.updates`, `api.workspace`, and `api.workspace_git` use explicit package
   owners and stateless compatibility interfaces. `api.runs` owns local and
   Gateway execution plus the transcript, payload, agent-cache, attachment,
@@ -1209,6 +1224,8 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         streaming/            SSE transport, live controls, and the temporary route Adapter
         runs/                 Local/Gateway execution, admission, publication, journaling,
                               transcript, payload, agent, tool, compression, and title owners
+          gateway*.py         Gateway config, protocol events, transport, settlement,
+                              correlation state, and turn orchestration owners
         model_context.py      Shared model context-window policy
         workspace_context.py  Shared workspace runtime/display policy
       static/
