@@ -3,6 +3,8 @@
 Bug 1: Composer tray shows paperclip chip for images instead of thumbnail preview.
 Bug 2: Chat history renders uploaded images as broken <img> (wrong endpoint / dead URL).
 """
+from tests.frontend_asset_contract import family_source
+
 import os
 import re
 import pytest
@@ -14,8 +16,7 @@ def _read_js(name):
 
 
 def _read_css():
-    with open(os.path.join('static', 'style.css')) as f:
-        return f.read()
+    return family_source("style")
 
 
 # ── Bug 1: Composer tray thumbnail previews ────────────────────────────────
@@ -25,7 +26,7 @@ class TestComposerTrayThumbnails:
 
     def test_rendertray_checks_image_extension(self):
         """renderTray must branch on _IMAGE_EXTS for the file object in S.pendingFiles."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         # Find renderTray function body
         idx = ui.find('function renderTray()')
         assert idx >= 0, 'renderTray() not found in ui.js'
@@ -34,28 +35,28 @@ class TestComposerTrayThumbnails:
 
     def test_rendertray_uses_createobjecturl_for_images(self):
         """Image files must use URL.createObjectURL(f) to generate a blob URL for the thumbnail."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         idx = ui.find('function renderTray()')
         body = ui[idx:idx + 800]
         assert 'URL.createObjectURL(' in body, 'renderTray must use URL.createObjectURL for image thumbnails'
 
     def test_rendertray_revokes_blob_url_on_remove(self):
         """Blob URLs must be revoked when a file is removed to prevent memory leaks."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         idx = ui.find('function renderTray()')
         body = ui[idx:idx + 2500]
         assert 'URL.revokeObjectURL(' in body, 'renderTray must revoke blob URL when chip is removed'
 
     def test_rendertray_uses_attach_thumb_class(self):
         """Image chips must use attach-thumb class for the thumbnail <img> element."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         idx = ui.find('function renderTray()')
         body = ui[idx:idx + 800]
         assert 'attach-thumb' in body, 'renderTray image chip must use attach-thumb class'
 
     def test_rendertray_non_image_still_uses_paperclip(self):
         """Non-image files must still get the paperclip chip (not thumbnail)."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         idx = ui.find('function renderTray()')
         body = ui[idx:idx + 800]
         assert 'paperclip' in body, 'non-image files must still use paperclip chip in renderTray'
@@ -77,7 +78,7 @@ class TestComposerTrayThumbnails:
 
     def test_adfiles_function_still_present(self):
         """addFiles() must still exist after renderTray refactor."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         assert 'function addFiles(' in ui, 'addFiles() must not be removed from ui.js'
 
 
@@ -96,7 +97,7 @@ class TestChatHistoryImageRendering:
         api/file/raw resolves the filename relative to the session's workspace, which is
         exactly where the upload endpoint stores the file.
         """
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         m = re.search(r'm\.attachments&&m\.attachments\.length', ui)
         assert m, 'attachments rendering block not found in ui.js'
         body = ui[m.start():m.start() + 2000]
@@ -112,7 +113,7 @@ class TestChatHistoryImageRendering:
 
     def test_attachment_render_includes_session_id(self):
         """api/file/raw URL must include session_id parameter for workspace resolution."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         m = re.search(r'm\.attachments&&m\.attachments\.length', ui)
         body = ui[m.start():m.start() + 2000]
         assert 'session_id' in body, (
@@ -122,14 +123,14 @@ class TestChatHistoryImageRendering:
 
     def test_attachment_render_image_uses_msg_media_img(self):
         """Image attachments must still render with msg-media-img class for consistent styling."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         m = re.search(r'm\.attachments&&m\.attachments\.length', ui)
         body = ui[m.start():m.start() + 2000]
         assert 'msg-media-img' in body, 'Image attachment <img> must use msg-media-img class'
 
     def test_attachment_render_click_to_fullscreen(self):
         """Click-to-fullscreen uses the delegated .msg-media-img listener, not inline JS."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         assert "document.addEventListener('click'" in ui
         assert "closest('.msg-media-img')" in ui
         m = re.search(r'm\.attachments&&m\.attachments\.length', ui)
@@ -139,14 +140,14 @@ class TestChatHistoryImageRendering:
 
     def test_attachment_render_non_image_keeps_paperclip(self):
         """Non-image attachments in chat history must still show paperclip badge."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         m = re.search(r'm\.attachments&&m\.attachments\.length', ui)
         body = ui[m.start():m.start() + 2000]
         assert 'msg-file-badge' in body, 'Non-image attachments must still use msg-file-badge in chat history'
 
     def test_attachment_render_extracts_filename(self):
         """Filename extraction (.split('/').pop()) must still be present for display."""
-        ui = _read_js('ui.js')
+        ui = family_source("ui")
         m = re.search(r'm\.attachments&&m\.attachments\.length', ui)
         body = ui[m.start():m.start() + 2000]
         assert ".split('/').pop()" in body, 'Must extract filename from path for display'

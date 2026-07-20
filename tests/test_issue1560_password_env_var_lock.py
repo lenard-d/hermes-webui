@@ -9,6 +9,8 @@ Fix: surface env-var precedence in GET /api/settings (`password_env_var: bool`),
 refuse the write loudly (409) when shadowed, disable the field + show help-text
 banner in the UI, with i18n keys in all 9 locales.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import os
@@ -82,7 +84,7 @@ def test_settings_html_has_password_env_lock_banner():
 
 def test_panels_js_disables_password_when_env_locked():
     """panels.js must disable the password field and show the banner when password_env_var is true."""
-    src = _read('static/panels.js')
+    src = family_source("panels")
     assert 'password_env_var' in src, \
         'panels.js must read settings.password_env_var from GET /api/settings'
     assert 'settingsPasswordEnvLock' in src, \
@@ -94,7 +96,7 @@ def test_panels_js_disables_password_when_env_locked():
 
 def test_panels_js_hides_disable_auth_button_when_env_locked():
     """The Disable Auth button must be hidden when env var shadows the settings password."""
-    src = _read('static/panels.js')
+    src = family_source("panels")
     # When env-locked, btnDisableAuth should be set display:none
     # We verify by locating the env-locked block and checking it touches btnDisableAuth
     idx = src.index('pwEnvLocked')
@@ -113,11 +115,11 @@ LOCALES = ['en', 'it', 'ja', 'ru', 'es', 'de', 'zh', 'zh-Hant', 'pt', 'ko']
 def _split_locales(i18n_src):
     """Split i18n.js into per-locale source slices.
 
-    Locale block headers look like `  en: {` or `  'zh-Hant': {`. We slice each
-    block from its header to the next sibling header at the same indentation.
+    Locale modules register with ``api.registerLocale('en', {``. Slice each
+    registration from its call to the next locale registration.
     """
     import re
-    pattern = re.compile(r"^  ['\"]?([\w\-]+)['\"]?: \{$", re.MULTILINE)
+    pattern = re.compile(r"api\.registerLocale\(['\"]([\w\-]+)['\"],\s*\{")
     matches = list(pattern.finditer(i18n_src))
     blocks = {}
     for i, m in enumerate(matches):
@@ -130,7 +132,7 @@ def _split_locales(i18n_src):
 
 def test_i18n_password_env_var_locked_in_all_locales():
     """Every locale must define the password_env_var_locked banner string."""
-    src = _read('static/i18n.js')
+    src = family_source("i18n")
     blocks = _split_locales(src)
     missing = [loc for loc in LOCALES if loc not in blocks
                or 'password_env_var_locked:' not in blocks[loc]]
@@ -140,7 +142,7 @@ def test_i18n_password_env_var_locked_in_all_locales():
 
 def test_i18n_password_env_var_locked_placeholder_in_all_locales():
     """Every locale must define the password_env_var_locked_placeholder string."""
-    src = _read('static/i18n.js')
+    src = family_source("i18n")
     blocks = _split_locales(src)
     missing = [loc for loc in LOCALES
                if loc not in blocks
@@ -151,7 +153,7 @@ def test_i18n_password_env_var_locked_placeholder_in_all_locales():
 
 def test_i18n_locked_string_mentions_env_var_name_in_all_locales():
     """Each locale's banner must literally mention HERMES_WEBUI_PASSWORD so users can find it."""
-    src = _read('static/i18n.js')
+    src = family_source("i18n")
     blocks = _split_locales(src)
     for loc in LOCALES:
         block = blocks.get(loc, '')

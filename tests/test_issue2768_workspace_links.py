@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -6,7 +8,7 @@ import textwrap
 
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 

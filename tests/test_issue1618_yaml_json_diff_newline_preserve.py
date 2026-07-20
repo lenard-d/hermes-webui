@@ -48,13 +48,12 @@ static/ui.js renderMd() function.
 
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
 
-REPO_ROOT = Path(__file__).parent.parent.resolve()
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
+
 NODE = shutil.which("node")
 
 
@@ -71,7 +70,7 @@ def test_pre_stash_regex_matches_pre_with_attributes():
     tree-viewer pass and the diff/patch coloring pass — those blocks fall
     through to paragraph wrap, which converts \\n to <br>.
     """
-    src = UI_JS_PATH.read_text(encoding="utf-8")
+    src = family_source("ui")
 
     # The fix introduces `<pre[^>]*>` (any attributes) in the _pre_stash regex.
     # The exact regex line is documented in static/ui.js:1914.
@@ -98,7 +97,7 @@ def test_pre_stash_still_captures_pre_header_and_optional_div():
     """The fix must keep the rest of the _pre_stash regex intact —
     specifically the optional <div class="pre-header"> prefix and the
     mermaid-block / katex-block alternation."""
-    src = UI_JS_PATH.read_text(encoding="utf-8")
+    src = family_source("ui")
 
     pre_stash_idx = src.find("const _pre_stash=[]")
     pre_stash_block = src[pre_stash_idx:pre_stash_idx + 1500]
@@ -157,15 +156,19 @@ process.stdin.on('end', () => { process.stdout.write(renderMd(buf)); });
 
 @pytest.fixture(scope="module")
 def driver_path(tmp_path_factory):
-    p = tmp_path_factory.mktemp("issue1618_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("issue1618_driver")
+    p = directory / "driver.js"
     p.write_text(_DRIVER_SRC, encoding="utf-8")
-    return str(p)
+    ui = directory / "ui-browser-order.js"
+    ui.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(ui)
 
 
 def _render(driver_path, markdown: str) -> str:
     """Run renderMd against the actual ui.js and return the rendered HTML."""
+    driver, ui = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH)],
+        [NODE, driver, ui],
         input=markdown,
         capture_output=True,
         text=True,

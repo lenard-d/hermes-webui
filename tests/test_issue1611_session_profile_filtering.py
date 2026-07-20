@@ -13,6 +13,8 @@ This test file pins the server-side filter shape via api.routes._profiles_match
 all_profiles=1 opt-in path. End-to-end HTTP-level tests live separately under
 tests/test_sessions_endpoint.py if/when added.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import os
@@ -134,10 +136,7 @@ def test_static_sessions_js_no_cli_session_bypass():
     re-filter by profile at all (a strict-equality client filter would reject
     the server's renamed-root cross-aliased rows).
     """
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent
-    src = (repo_root / 'static' / 'sessions.js').read_text(encoding='utf-8')
+    src = family_source("sessions")
 
     assert "s.is_cli_session||s.profile===S.activeProfile" not in src, (
         "Old CLI-session bypass must be removed (#1611)"
@@ -153,10 +152,7 @@ def test_static_sessions_js_uses_all_profiles_query_when_toggle_on():
     Without this, flipping the toggle just re-renders client-cached rows that
     may not contain cross-profile data (since the server scoped on first fetch).
     """
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent
-    src = (repo_root / 'static' / 'sessions.js').read_text(encoding='utf-8')
+    src = family_source("sessions")
 
     assert "if(_showAllProfiles) qs.set('all_profiles','1');" in src, (
         "Expected session-list fetch query to flip on the all-profiles toggle state"
@@ -174,10 +170,7 @@ def test_static_sessions_js_uses_all_profiles_query_when_toggle_on():
 
 def test_static_sessions_js_marks_all_profiles_imports_with_profile():
     """All-profiles row opens must opt into cross-profile import explicitly."""
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent
-    src = (repo_root / 'static' / 'sessions.js').read_text(encoding='utf-8')
+    src = family_source("sessions")
 
     assert "function _externalImportPayload(session)" in src
     assert "payload.all_profiles = true;" in src
@@ -191,10 +184,7 @@ def test_static_sessions_js_switches_profile_before_opening_all_profiles_row():
     /api/session intentionally rejects a foreign-profile session_id. The UI must
     use the row's profile metadata from ?all_profiles=1 before calling loadSession().
     """
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent
-    src = (repo_root / 'static' / 'sessions.js').read_text(encoding='utf-8')
+    src = family_source("sessions")
 
     ensure_idx = src.index("async function _ensureSidebarSessionProfile(session)")
     open_idx = src.index("async function _openSidebarSession(session, loadOpts={})")
@@ -211,11 +201,8 @@ def test_static_sessions_js_switches_profile_before_opening_all_profiles_row():
 
 def test_static_all_profiles_toggle_is_persisted_and_not_reset_by_profile_switch():
     """The all-profiles toggle is a shared navigation preference, not per-profile state."""
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent
-    sessions_src = (repo_root / 'static' / 'sessions.js').read_text(encoding='utf-8')
-    panels_src = (repo_root / 'static' / 'panels.js').read_text(encoding='utf-8')
+    sessions_src = family_source("sessions")
+    panels_src = family_source("panels")
 
     assert "const SHOW_ALL_PROFILES_STORAGE_KEY = 'hermes-show-all-profiles';" in sessions_src
     assert "localStorage.setItem(SHOW_ALL_PROFILES_STORAGE_KEY" in sessions_src
@@ -276,10 +263,7 @@ def test_static_sessions_js_trusts_server_profile_scoping():
     rejects them — user loses every legacy 'default'-tagged session.
 
     Fix: drop the redundant client filter; trust the server."""
-    from pathlib import Path
-
-    repo_root = Path(__file__).parent.parent
-    src = (repo_root / 'static' / 'sessions.js').read_text(encoding='utf-8')
+    src = family_source("sessions")
 
     # The fragile client-side strict-equality filter must be gone.
     forbidden = "withMessages.filter(s=>(s.profile||'default')===(S.activeProfile||'default'))"

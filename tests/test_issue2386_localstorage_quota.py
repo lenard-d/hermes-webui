@@ -1,9 +1,14 @@
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _script(path):
+    family = {"static/sessions.js": "sessions", "static/messages.js": "messages"}.get(path)
+    if family:
+        return family_source(family)
     return (ROOT / path).read_text()
 
 

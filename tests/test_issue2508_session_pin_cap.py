@@ -1,4 +1,6 @@
 """Regression checks for issue #2508 session pinning bounds and context menu access."""
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import pathlib
@@ -12,8 +14,8 @@ from tests._pytest_port import BASE, TEST_STATE_DIR
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 
 
 def post(path, body=None):

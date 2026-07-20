@@ -1,7 +1,9 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
-UI_JS = Path("static/ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 INDEX_HTML = Path("static/index.html").read_text(encoding="utf-8")
 
 

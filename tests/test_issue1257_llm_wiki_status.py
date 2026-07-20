@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -90,9 +92,9 @@ def test_api_wiki_status_route_is_registered(monkeypatch, tmp_path):
 
 
 def test_insights_panel_fetches_and_renders_llm_wiki_status_card():
-    panels_src = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_src = family_source("panels")
     index_src = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-    style_src = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+    style_src = family_source("style")
 
     assert "api('/api/wiki/status')" in panels_src
     assert "function _renderLlmWikiStatus" in panels_src

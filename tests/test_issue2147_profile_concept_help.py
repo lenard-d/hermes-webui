@@ -1,11 +1,13 @@
 """Regression guards for localized profile-concept help copy (#2147)."""
+from tests.frontend_asset_contract import family_source
+
 
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
+PANELS_JS = family_source("panels")
 
 PROFILE_CONCEPT_KEYS = [
     "profile_concept_title",
@@ -20,11 +22,10 @@ PROFILE_CONCEPT_KEYS = [
 
 
 def _locale_blocks():
-    """Extract every top-level locale block from static/i18n.js."""
-    matches = list(re.finditer(r"^  ('[^']+'|[A-Za-z][A-Za-z0-9-]*): \{$", I18N_JS, re.MULTILINE))
-    end = I18N_JS.index("\n};", matches[-1].start())
+    """Extract every directly loaded locale registration."""
+    matches = list(re.finditer(r"api\.registerLocale\(['\"]([A-Za-z0-9_-]+)['\"],\s*\{", I18N_JS))
     return {
-        match.group(1).strip("'"): I18N_JS[match.start() : (matches[index + 1].start() if index + 1 < len(matches) else end)]
+        match.group(1): I18N_JS[match.start() : (matches[index + 1].start() if index + 1 < len(matches) else len(I18N_JS))]
         for index, match in enumerate(matches)
     }
 

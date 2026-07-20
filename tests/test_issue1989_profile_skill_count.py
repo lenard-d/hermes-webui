@@ -1,12 +1,13 @@
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
+
 import re
 
-I18N_JS = (Path(__file__).resolve().parents[1] / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 
 
 def _extract_locale_block(locale: str, src: str) -> str:
     locale_key_re = re.compile(
-        rf"(?m)^[ \t]{{2}}(?:'{re.escape(locale)}'|\"{re.escape(locale)}\"|{re.escape(locale)})\s*:\s*\{{"
+        rf"api\.registerLocale\(['\"]{re.escape(locale)}['\"],\s*\{{"
     )
     start_match = locale_key_re.search(src)
     assert start_match is not None, f"Locale {locale!r} not found in i18n.js"
@@ -14,9 +15,7 @@ def _extract_locale_block(locale: str, src: str) -> str:
     brace_start = start_match.end() - 1
     assert brace_start != -1, f"Locale {locale!r} block has no opening brace"
 
-    next_locale_re = re.compile(
-        r"(?m)^[ \t]{2}(?:[A-Za-z]{2,3}(?:[-_][A-Za-z0-9_]+)?|'[A-Za-z]{2,3}(?:[-_][A-Za-z0-9_]+)?'|\"[A-Za-z]{2,3}(?:[-_][A-Za-z0-9_]+)?\")\s*:\s*\{"
-    )
+    next_locale_re = re.compile(r"api\.registerLocale\(['\"][A-Za-z0-9_-]+['\"],\s*\{")
     next_match = next_locale_re.search(src, pos=brace_start + 1)
     end = next_match.start() if next_match else len(src)
 

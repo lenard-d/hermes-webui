@@ -1,11 +1,12 @@
 """Regression checks for #2066 stale sidebar spinner state."""
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import subprocess
-from pathlib import Path
 
 
-SESSIONS_JS = (Path(__file__).resolve().parent.parent / "static" / "sessions.js").read_text()
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_block(name: str, next_name: str) -> str:

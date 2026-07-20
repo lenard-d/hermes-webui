@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 # Regression tests for _purgeStaleInflightEntries ghost-entry leak (#2092).
 #
 # When a session is deleted / archived / filtered out of the sidebar list,
@@ -13,7 +15,7 @@
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-SESSIONS_JS = (REPO_ROOT / 'static' / 'sessions.js').read_text(encoding='utf-8')
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(src: str, name: str) -> str:

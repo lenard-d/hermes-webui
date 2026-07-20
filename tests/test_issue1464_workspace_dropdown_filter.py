@@ -9,13 +9,15 @@ should appear only when zero items match the filter.
 This test pins both ternaries inside renderWorkspaceDropdownInto.filterWs() to
 their correct shape, so future edits can't silently re-invert either of them.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
 
 def test_workspace_dropdown_noresults_hides_when_matches_exist():
-    panels = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     fn_start = panels.find("function renderWorkspaceDropdownInto")
     assert fn_start != -1, "renderWorkspaceDropdownInto must exist in panels.js"
 

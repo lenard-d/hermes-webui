@@ -16,13 +16,13 @@ This test pins:
 - The scroll handler short-circuits when total <= threshold (prevents the
   rebuild churn entirely on small lists)
 """
-from pathlib import Path
 
-SESSIONS_JS = Path(__file__).parent.parent / "static" / "sessions.js"
+from tests.frontend_asset_contract import family_source
+
 
 
 def _read_source():
-    return SESSIONS_JS.read_text()
+    return family_source("sessions")
 
 
 def test_render_restores_scroll_top_for_non_virtualized_lists():

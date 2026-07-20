@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -6,7 +8,7 @@ def _read(path: str) -> str:
 
 
 def test_preserved_task_list_marker_only_helper_is_strict():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "function _isPreservedCompressionTaskListMarkerOnlyText" in src
     start = src.find("function _isPreservedCompressionTaskListMarkerOnlyText")
@@ -19,7 +21,7 @@ def test_preserved_task_list_marker_only_helper_is_strict():
 
 
 def test_marker_only_assistant_message_renders_as_error_not_model_text():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "function _isMarkerOnlyAssistantCompressionMessage" in src
     assert "m.role!=='assistant'" in src
@@ -29,7 +31,7 @@ def test_marker_only_assistant_message_renders_as_error_not_model_text():
 
 
 def test_done_and_restore_replace_marker_only_assistant_with_error_toast():
-    src = _read("static/messages.js")
+    src = family_source("messages")
 
     assert "function _replaceMarkerOnlyAssistantWithStreamError(messages)" in src
     assert "_isMarkerOnlyAssistantMessage(msg)" in src

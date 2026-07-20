@@ -13,6 +13,8 @@ Fixes:
   4. static/panels.js: OAuth card shows correct hint + badge per key_source
   5. static/i18n.js: new i18n keys for config_yaml and not_configured hints
 """
+from tests.frontend_asset_contract import family_source
+
 
 import re
 import sys
@@ -166,7 +168,7 @@ class TestGetProvidersOauthBlock:
 class TestBuildProviderCardJs:
     """Static-analysis tests for the JS card rendering."""
 
-    JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    JS = family_source("panels")
 
     def _get_fn(self):
         idx = self.JS.find("function _buildProviderCard(p){")
@@ -231,7 +233,7 @@ class TestBuildProviderCardJs:
 class TestI18nNewKeys:
     """Verify new i18n keys exist in the English locale."""
 
-    I18N = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+    I18N = family_source("i18n")
 
     def test_providers_oauth_config_yaml_hint_exists(self):
         assert "providers_oauth_config_yaml_hint" in self.I18N, (
@@ -273,7 +275,7 @@ class TestI18nNewKeys:
 class TestProviderListFilter:
     """Test that the JS filter includes OAuth providers."""
 
-    JS = (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+    JS = family_source("panels")
 
     def test_providers_filter_includes_is_oauth(self):
         """

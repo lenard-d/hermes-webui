@@ -1,4 +1,6 @@
 """Tests for #1116 — composer placeholder reflects active profile name."""
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -13,7 +15,7 @@ class TestComposerPlaceholderProfile:
     def test_applyBotName_uses_profile_name(self):
         """Non-default profiles must use the profile name instead of bot_name."""
         src = _src("boot.js")
-        ui_src = _src("ui.js")
+        ui_src = family_source("ui")
         assert "function assistantDisplayName()" in ui_src, \
             "assistant display name resolution should be shared"
         assert "S.activeProfile&&S.activeProfile!=='default'" in ui_src, \
@@ -23,7 +25,7 @@ class TestComposerPlaceholderProfile:
 
     def test_applyBotName_capitalises_profile_name(self):
         """Profile name should be capitalised (first letter uppercase)."""
-        src = _src("ui.js")
+        src = family_source("ui")
         m = re.search(r'function assistantDisplayName\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "assistantDisplayName function must exist"
         body = m.group(0)
@@ -32,7 +34,7 @@ class TestComposerPlaceholderProfile:
 
     def test_applyBotName_falls_back_to_bot_name(self):
         """The saved assistant name applies to the default profile."""
-        src = _src("ui.js")
+        src = family_source("ui")
         m = re.search(r'function assistantDisplayName\(\)\{.*?\n\}', src, re.DOTALL)
         assert m, "assistantDisplayName function must exist"
         body = m.group(0)
@@ -41,9 +43,9 @@ class TestComposerPlaceholderProfile:
 
     def test_chat_surfaces_use_shared_assistant_display_name(self):
         """Chat rows, titles, notifications, and cancel copy must honor profile overrides."""
-        ui_src = _src("ui.js")
-        messages_src = _src("messages.js")
-        sessions_src = _src("sessions.js")
+        ui_src = family_source("ui")
+        messages_src = family_source("messages")
+        sessions_src = family_source("sessions")
         assert "document.title=assistantDisplayName();" in ui_src
         assert "document.title=sessionTitle+' \\u2014 '+assistantDisplayName();" in ui_src
         assert "const _bn=assistantDisplayName();" in ui_src
@@ -64,7 +66,7 @@ class TestComposerPlaceholderProfile:
     def test_settings_copy_names_default_assistant_scope(self):
         """The preference copy must say that only the default profile is renamed."""
         index_src = _src("index.html")
-        i18n_src = _src("i18n.js")
+        i18n_src = family_source("i18n")
         assert "Default assistant name" in index_src
         assert "Used for the default profile only. Other profiles use their own profile names." in index_src
         assert "settings_label_bot_name: 'Default assistant name'" in i18n_src
@@ -75,7 +77,7 @@ class TestComposerPlaceholderProfile:
 
     def test_switchToProfile_calls_applyBotName(self):
         """switchToProfile() must call applyBotName() after switching."""
-        src = _src("panels.js")
+        src = family_source("panels")
         assert "function switchToProfile" in src, \
             "switchToProfile function must exist"
         # Find the function block (starts with 'async function switchToProfile')

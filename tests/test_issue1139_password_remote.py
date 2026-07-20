@@ -5,6 +5,8 @@ Users in Settings > System could type a new password but had no way to submit it
 Disable Auth and Sign Out buttons existed but Save was missing.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import pytest
 
 
@@ -41,8 +43,7 @@ def test_system_pane_has_password_field_and_auth_buttons():
 
 def test_save_settings_sends_password():
     """saveSettings() must read settingsPassword and send _set_password."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     assert 'settingsPassword' in src, 'saveSettings should read settingsPassword'
     assert '_set_password' in src, 'saveSettings should send _set_password key'
@@ -50,8 +51,7 @@ def test_save_settings_sends_password():
 
 def test_disable_auth_sends_clear_password():
     """disableAuth() must send _clear_password: true."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     assert '_clear_password:true' in src, 'disableAuth should send _clear_password: true'
 

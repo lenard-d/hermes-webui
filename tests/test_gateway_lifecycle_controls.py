@@ -1,4 +1,6 @@
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import subprocess
@@ -239,9 +241,7 @@ def test_gateway_lifecycle_missing_cli_returns_sanitized_error(monkeypatch, tmp_
 
 
 def test_gateway_lifecycle_frontend_renders_valid_actions():
-    from pathlib import Path
-
-    panels = (Path(__file__).resolve().parents[1] / "static" / "panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     assert "api(`/api/gateway/${encodeURIComponent(action)}`" in panels
     assert "timeoutMs:70000" in panels
     assert "timeoutToast:false" in panels
@@ -251,9 +251,7 @@ def test_gateway_lifecycle_frontend_renders_valid_actions():
 
 
 def test_gateway_lifecycle_i18n_keys_exist():
-    from pathlib import Path
-
-    i18n = (Path(__file__).resolve().parents[1] / "static" / "i18n.js").read_text(encoding="utf-8")
+    i18n = family_source("i18n")
     for key in (
         "gateway_start",
         "gateway_stop",

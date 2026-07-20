@@ -1,10 +1,12 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 WORKSPACE_JS = Path("static/workspace.js").read_text(encoding="utf-8")
-SESSIONS_JS = Path("static/sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = Path("static/messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 INDEX_HTML = Path("static/index.html").read_text(encoding="utf-8")
-STYLE_CSS = Path("static/style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 CHANGELOG = Path("CHANGELOG.md").read_text(encoding="utf-8")
 
 

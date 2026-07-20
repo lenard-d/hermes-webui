@@ -1,7 +1,9 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
-SESSIONS_JS = Path("static/sessions.js").read_text(encoding="utf-8")
-PANELS_JS = Path("static/panels.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+PANELS_JS = family_source("panels")
 CHANGELOG = Path("CHANGELOG.md").read_text(encoding="utf-8")
 
 

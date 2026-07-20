@@ -4,6 +4,8 @@ elsewhere in the hermes-webui test suite (see tests/test_issue1867_upload_size_p
 
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
 UI_JS = ROOT / "static" / "ui.js"
@@ -85,7 +87,7 @@ def test_folder_download_streams_not_buffers():
 
 
 def test_ui_context_menu_has_download_folder():
-    src = UI_JS.read_text(encoding="utf-8")
+    src = family_source("ui")
     assert "download_folder" in src
     download_idx = src.index("download_folder")
     snippet = src[max(0, download_idx - 200):download_idx]
@@ -93,7 +95,7 @@ def test_ui_context_menu_has_download_folder():
 
 
 def test_ui_download_folder_uses_endpoint():
-    src = UI_JS.read_text(encoding="utf-8")
+    src = family_source("ui")
     download_idx = src.index("download_folder")
     snippet = src[download_idx:download_idx + 600]
     assert "/api/folder/download" in snippet

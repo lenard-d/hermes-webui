@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -9,8 +11,8 @@ def read(path):
 
 
 def test_delete_confirmation_mentions_retained_worktree():
-    src = read("static/sessions.js")
-    i18n = read("static/i18n.js")
+    src = family_source("sessions")
+    i18n = family_source("i18n")
     assert "function _sessionSnapshotById(sid)" in src
     assert "session.worktree_path?t('session_delete_worktree_confirm',session.worktree_path)" in src
     assert "session_delete_worktree_confirm" in i18n
@@ -21,8 +23,8 @@ def test_delete_confirmation_mentions_retained_worktree():
 
 
 def test_batch_archive_delete_confirmations_count_worktree_sessions():
-    src = read("static/sessions.js")
-    i18n = read("static/i18n.js")
+    src = family_source("sessions")
+    i18n = family_source("i18n")
     assert "function _worktreeSessionCount(ids)" in src
     assert "function _worktreeResponseCount(results)" in src
     assert "session_batch_delete_worktree_confirm" in src
@@ -32,8 +34,8 @@ def test_batch_archive_delete_confirmations_count_worktree_sessions():
 
 
 def test_archive_and_delete_action_descriptions_are_worktree_specific():
-    src = read("static/sessions.js")
-    i18n = read("static/i18n.js")
+    src = family_source("sessions")
+    i18n = family_source("i18n")
     assert "function _sessionArchiveDescription(session)" in src
     assert "function _sessionDeleteDescription(session)" in src
     assert "session&&session.worktree_path?t('session_archive_worktree_desc')" in src
@@ -45,7 +47,7 @@ def test_archive_and_delete_action_descriptions_are_worktree_specific():
 
 
 def test_archive_delete_success_copy_prefers_response_worktree_retained():
-    src = read("static/sessions.js")
+    src = family_source("sessions")
     assert "function _sessionResponseRetainsWorktree(response, session)" in src
     assert "typeof response.worktree_retained==='boolean'" in src
     assert "return response.worktree_retained;" in src
@@ -67,8 +69,8 @@ def test_archive_delete_success_copy_prefers_response_worktree_retained():
 
 
 def test_remove_worktree_ui_does_not_force_unsafe_status_by_default():
-    src = read("static/sessions.js")
-    i18n = read("static/i18n.js")
+    src = family_source("sessions")
+    i18n = family_source("i18n")
     assert "async function removeWorktree(session)" in src
     assert "status.dirty||status.untracked_count>0||(status.ahead_behind&&status.ahead_behind.ahead>0)" in src
     assert "session_worktree_remove_unsafe_blocked" in src

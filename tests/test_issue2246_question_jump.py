@@ -1,11 +1,13 @@
 """Regression coverage for #2246 per-turn jump-to-question buttons."""
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (REPO / "static" / "i18n.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 def test_assistant_footer_gets_completed_turn_question_jump_button():
@@ -104,4 +106,3 @@ def test_question_jump_skips_hidden_first_segment_and_falls_back():
     # display:none on the hidden segment classes is what makes the guard necessary.
     assert ".assistant-segment-worklog-source{" in STYLE_CSS
     assert ".assistant-segment-anchor { display: none; }" in STYLE_CSS
-

@@ -1,4 +1,6 @@
 """Static-analysis tests for the conversation outline panel (issue #2124)."""
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 import re
@@ -6,11 +8,11 @@ import re
 ROOT        = Path(__file__).parent.parent
 STATIC      = ROOT / "static"
 INDEX_HTML  = (STATIC / "index.html").read_text(encoding="utf-8")
-I18N_JS     = (STATIC / "i18n.js").read_text(encoding="utf-8")
+I18N_JS     = family_source("i18n")
 OUTLINE_JS  = (STATIC / "outline.js").read_text(encoding="utf-8")
-STYLE_CSS   = (STATIC / "style.css").read_text(encoding="utf-8")
+STYLE_CSS   = family_source("style")
 BOOT_JS     = (STATIC / "boot.js").read_text(encoding="utf-8")
-PANELS_JS   = (STATIC / "panels.js").read_text(encoding="utf-8")
+PANELS_JS   = family_source("panels")
 CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )

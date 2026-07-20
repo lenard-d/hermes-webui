@@ -23,14 +23,16 @@ The state-free part of the helper (`e.isComposing || e.keyCode === 229`) is what
 6 non-composer sites rely on — it works for any focused input on Safari without needing
 per-input composition listeners or a per-input flag.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+SESSIONS_JS = family_source("sessions")
 
 
 def _windowed_guard(ev: str) -> str:

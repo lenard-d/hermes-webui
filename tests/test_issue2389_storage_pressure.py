@@ -1,10 +1,12 @@
 """Regression coverage for storage-pressure cleanup from issue #2389."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SW_SRC = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
-SESSIONS_SRC = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_SRC = family_source("sessions")
 
 
 def _function_block(src: str, name: str, window: int = 1600) -> str:

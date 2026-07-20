@@ -5,20 +5,20 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
 PANELS_JS = ROOT / "static" / "panels.js"
-STYLE_CSS = ROOT / "static" / "style.css"
-I18N_JS = ROOT / "static" / "i18n.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 
 def _cron_schedule_source() -> str:
-    src = PANELS_JS.read_text(encoding="utf-8")
+    src = family_source("panels")
     start = src.find("function _cronScheduleKindForInput")
     if start < 0:
         pytest.fail("_cronScheduleKindForInput is missing")
@@ -29,7 +29,7 @@ def _cron_schedule_source() -> str:
 
 
 def _cron_schedule_save_source() -> str:
-    src = PANELS_JS.read_text(encoding="utf-8")
+    src = family_source("panels")
     start = src.find("async function saveCronForm()")
     if start < 0:
         pytest.fail("saveCronForm is missing")
@@ -473,9 +473,9 @@ console.log(JSON.stringify({
 
 
 def test_cron_form_surfaces_one_shot_warning_copy_markers_and_preset_markup():
-    panels = PANELS_JS.read_text(encoding="utf-8")
-    style = STYLE_CSS.read_text(encoding="utf-8")
-    i18n = I18N_JS.read_text(encoding="utf-8")
+    panels = family_source("panels")
+    style = family_source("style")
+    i18n = family_source("i18n")
 
     assert "id=\"cronFormScheduleOnceWarning\"" in panels
     assert "id=\"cronFormSchedulePreset\"" in panels
@@ -522,7 +522,7 @@ def test_cron_form_surfaces_one_shot_warning_copy_markers_and_preset_markup():
 
 def test_cron_form_save_payload_still_uses_visible_raw_schedule_only():
     save_block = _cron_schedule_save_source()
-    panels = PANELS_JS.read_text(encoding="utf-8")
+    panels = family_source("panels")
 
     assert "cronFormSchedulePreset" not in save_block
     assert "const schedule=schEl.value.trim();" in save_block
@@ -530,7 +530,7 @@ def test_cron_form_save_payload_still_uses_visible_raw_schedule_only():
 
 
 def test_cron_form_i18n_has_preset_keys():
-    i18n = I18N_JS.read_text(encoding="utf-8")
+    i18n = family_source("i18n")
     required_keys = [
         "cron_schedule_preset_label",
         "cron_schedule_preset_hourly",

@@ -21,13 +21,15 @@ These tests pin:
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 import re
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def _font_size(scope: str, level: str) -> int:

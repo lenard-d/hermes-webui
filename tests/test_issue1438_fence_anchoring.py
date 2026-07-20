@@ -27,16 +27,15 @@ in both implementations.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 import re
-from pathlib import Path
-
-import pytest
 
 from tests.test_sprint16 import render_md  # Python mirror of renderMd()
 
 
-UI_JS = (Path(__file__).resolve().parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _strip_pre_blocks(out: str) -> str:

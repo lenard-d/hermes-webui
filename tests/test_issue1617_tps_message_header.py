@@ -5,6 +5,8 @@ Product decision:
 - persist/show the final TPS at the end of the turn;
 - do not show placeholder or estimated TPS when unavailable.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -14,10 +16,10 @@ CONFIG_PY = (REPO / "api" / "config_parts" / "settings_persistence.py").read_tex
 STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+PANELS_JS = family_source("panels")
+UI_JS = family_source("ui")
+CSS = family_source("style")
 
 
 def test_tps_renders_in_message_header_not_global_titlebar():

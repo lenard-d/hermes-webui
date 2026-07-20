@@ -22,13 +22,15 @@ where all older messages have been scrolled in), ``_oldestIdx`` is 0
 and ``absoluteKeepCount`` equals ``msgIdx``, preserving existing
 behaviour.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 COMMANDS_JS = (REPO / "static" / "commands.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(src: str, name: str) -> str:

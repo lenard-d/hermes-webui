@@ -8,14 +8,15 @@ Verifies that:
 5. _renderCronDetail() adds has-new-run class to Last Output card
 """
 
+from tests.frontend_asset_contract import family_source
+
 import pytest
 
 # ── Static file tests (no server needed) ──
 
 def test_cron_new_job_ids_tracking_in_panels_js():
     """panels.js should declare _cronNewJobIds Set and populate it in startCronPolling."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     # _cronNewJobIds declared as Set
     assert '_cronNewJobIds' in src, '_cronNewJobIds not found in panels.js'
@@ -28,8 +29,7 @@ def test_cron_new_job_ids_tracking_in_panels_js():
 
 def test_cron_dot_indicator_rendered_in_load_crons():
     """loadCrons() should render a .cron-new-dot for jobs in _cronNewJobIds."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     # Dot indicator in cron-item rendering
     assert 'cron-new-dot' in src, 'cron-new-dot class not found'
@@ -39,8 +39,7 @@ def test_cron_dot_indicator_rendered_in_load_crons():
 
 def test_open_cron_detail_clears_unread():
     """openCronDetail() should mark job as read and remove the dot."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     # _clearCronUnreadForJob called in openCronDetail
     assert '_clearCronUnreadForJob' in src, \
@@ -56,8 +55,7 @@ def test_clear_cron_unread_for_job_function():
     _cronUnreadCount is derived from _cronNewJobIds.size in updateCronBadge,
     so the function only needs to delete from the set and trigger a badge sync.
     """
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     # Locate the function body to make assertions order-dependent
     start = src.find('function _clearCronUnreadForJob(')
@@ -71,8 +69,7 @@ def test_clear_cron_unread_for_job_function():
 
 def test_switch_panel_no_longer_clears_badge():
     """switchPanel override should NOT clear badge on tasks panel open."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     # The old pattern "if(name==='tasks'){_cronUnreadCount=0" should NOT exist
     assert "if(name==='tasks'){_cronUnreadCount=0" not in src, \
@@ -81,8 +78,7 @@ def test_switch_panel_no_longer_clears_badge():
 
 def test_has_new_run_class_in_render_detail():
     """_renderCronDetail() should add has-new-run class to Last Output card."""
-    with open('static/panels.js') as f:
-        src = f.read()
+    src = family_source("panels")
 
     # Check has-new-run class in the cronDetailRuns div
     assert 'has-new-run' in src, 'has-new-run class not found'
@@ -90,11 +86,9 @@ def test_has_new_run_class_in_render_detail():
 
 def test_cron_css_classes_exist():
     """style.css should contain .cron-new-dot and .has-new-run styles."""
-    with open('static/style.css') as f:
-        src = f.read()
+    src = family_source("style")
 
     assert '.cron-new-dot{' in src, '.cron-new-dot CSS rule not found'
     assert '.has-new-run{' in src, '.has-new-run CSS rule not found'
     assert 'cron-dot-pulse' in src, 'cron-dot-pulse animation not found'
-
 

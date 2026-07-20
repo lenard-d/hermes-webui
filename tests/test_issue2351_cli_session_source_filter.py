@@ -1,13 +1,13 @@
 """Regression coverage for issue #2351 CLI session list separation."""
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = ROOT / "static" / "sessions.js"
-STYLE_CSS = ROOT / "static" / "style.css"
 
 
 def test_sidebar_has_separate_webui_and_cli_session_source_tabs():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     assert "let _sessionSourceFilter = 'webui'" in src
     assert "hermes-session-source-filter" in src
     assert "session-source-tabs" in src
@@ -17,7 +17,7 @@ def test_sidebar_has_separate_webui_and_cli_session_source_tabs():
 
 
 def test_cli_filter_keeps_cli_rows_out_of_default_webui_list():
-    src = SESSIONS_JS.read_text(encoding="utf-8")
+    src = family_source("sessions")
     assert "function _partitionSidebarSessionRows(allMatched, activeSidForSidebar)" in src
     assert "cliSessionCount" in src
     assert "const showCliOnly=_sessionSourceFilter==='cli';" in src
@@ -30,7 +30,7 @@ def test_cli_filter_keeps_cli_rows_out_of_default_webui_list():
 
 
 def test_session_source_tabs_have_dedicated_sidebar_styles():
-    css = STYLE_CSS.read_text(encoding="utf-8")
+    css = family_source("style")
     assert ".session-source-tabs" in css
     assert ".session-source-tab.active" in css
     assert ".session-empty-note" in css

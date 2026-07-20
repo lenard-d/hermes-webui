@@ -1,11 +1,13 @@
 """Regression tests for #1360: streaming must not re-pin user scroll."""
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
+STYLE_CSS = family_source("style")
 
 
 def _extract_function(src: str, name: str) -> str:

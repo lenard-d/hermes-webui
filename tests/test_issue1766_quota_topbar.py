@@ -1,13 +1,15 @@
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
 INDEX = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def test_quota_indicator_is_near_model_picker_in_composer_chrome():

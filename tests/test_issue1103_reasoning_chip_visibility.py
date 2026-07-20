@@ -1,4 +1,6 @@
 """Tests for #1103 — reasoning chip visible on page load."""
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -48,8 +50,7 @@ def test_reasoning_chip_html_starts_hidden():
 
 
 def test_ui_js_passes_model_context_to_reasoning_api():
-    with open("static/ui.js") as f:
-        src = f.read()
+    src = family_source("ui")
     assert "_reasoningEffortQuery" in src, (
         "ui.js must pass the active session model/provider to /api/reasoning"
     )
@@ -73,8 +74,7 @@ def test_ui_js_passes_model_context_to_reasoning_api():
 
 def test_fetchReasoningChip_calls_apply():
     """fetchReasoningChip must call _applyReasoningChip on success."""
-    with open("static/ui.js") as f:
-        src = f.read()
+    src = family_source("ui")
     # Find fetchReasoningChip function
     func_match = re.search(r"function fetchReasoningChip\([^)]*\)\{(.+?)\}", src, re.DOTALL)
     assert func_match, "fetchReasoningChip function must exist"
@@ -85,8 +85,7 @@ def test_fetchReasoningChip_calls_apply():
 
 def test_syncReasoningChip_called_on_session_load():
     """syncReasoningChip must be called when a session is rendered."""
-    with open("static/ui.js") as f:
-        src = f.read()
+    src = family_source("ui")
     # Should be called in the session render flow
     assert "syncReasoningChip()" in src, \
         "syncReasoningChip() must be called somewhere in ui.js"
@@ -112,8 +111,7 @@ def test_syncReasoningChip_called_on_model_change():
 
 def test_selectModelFromDropdown_defers_reasoning_sync_to_onchange():
     """Custom model dropdown must not fetch reasoning before session state updates."""
-    with open("static/ui.js") as f:
-        src = f.read()
+    src = family_source("ui")
     match = re.search(
         r"async function selectModelFromDropdown\(value(?:,\s*preferredProviderId)?\)\{(.*?)\n\}",
         src,
@@ -133,8 +131,7 @@ def test_selectModelFromDropdown_defers_reasoning_sync_to_onchange():
 
 def test_model_dropdown_passes_provider_to_select():
     """Composer model rows must pass provider context through the shared picker callback."""
-    with open("static/ui.js") as f:
-        src = f.read()
+    src = family_source("ui")
     assert "selectModelFromDropdown(value,provider)" in src, (
         "composer default picker callback must still route to selectModelFromDropdown"
     )

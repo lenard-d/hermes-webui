@@ -1,9 +1,11 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+MESSAGES_JS = family_source("messages")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -84,8 +86,11 @@ def test_cached_render_path_uses_same_scroll_policy_as_fresh_render():
 
 
 def test_session_switch_and_idle_session_load_keep_default_bottom_pin_behavior():
-    load_session = _function_body(SESSIONS_JS, "loadSession")
-    idle_branch = load_session[load_session.index("}else{\n      S.busy=false;") : load_session.index("// Sync context usage indicator")]
+    restore_loaded_session = _function_body(SESSIONS_JS, "_restoreLoadedSession")
+    idle_branch = restore_loaded_session[
+        restore_loaded_session.index("}else{\n      S.busy=false;") :
+        restore_loaded_session.rindex("return true;")
+    ]
 
     # #3326: the idle branch now renders with a CONDITIONAL preserveScroll —
     # `renderMessages(sameSessionForceReload?{preserveScroll:true}:undefined)`.

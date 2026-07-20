@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 import re
 
@@ -12,20 +14,20 @@ def read(rel: str) -> str:
 def _locale_blocks(src: str) -> dict[str, str]:
     matches = list(
         re.finditer(
-            r"\n  (?:(['\"])([A-Za-z][A-Za-z0-9-]*)\1|([A-Za-z][A-Za-z0-9-]*)): \{",
+            r"api\.registerLocale\(['\"]([A-Za-z0-9_-]+)['\"],\s*\{",
             src,
         )
     )
     blocks: dict[str, str] = {}
     for idx, match in enumerate(matches):
         start = match.end()
-        end = matches[idx + 1].start() if idx + 1 < len(matches) else src.rfind("\n};")
-        blocks[match.group(2) or match.group(3)] = src[start:end]
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(src)
+        blocks[match.group(1)] = src[start:end]
     return blocks
 
 
 def test_selected_text_reply_button_is_selection_scoped_and_frontend_only():
-    js = read("static/messages.js")
+    js = family_source("messages")
 
     assert "window.getSelection" in js
     assert "selection.isCollapsed" in js
@@ -48,7 +50,7 @@ def test_selected_text_reply_button_is_selection_scoped_and_frontend_only():
 
 
 def test_selected_text_reply_collects_named_context_blocks_without_dumping_into_composer():
-    js = read("static/messages.js")
+    js = family_source("messages")
 
     assert "function _formatSelectedTextReplyQuote" in js
     assert "replace(/\\r\\n?/g,'\\n')" in js
@@ -66,7 +68,7 @@ def test_selected_text_reply_collects_named_context_blocks_without_dumping_into_
 
 
 def test_selected_text_reply_context_cards_are_built_with_text_nodes():
-    js = read("static/messages.js")
+    js = family_source("messages")
 
     assert "function _selectedContextPreview(text)" in js
     assert "card.className='selection-context-card'" in js
@@ -88,8 +90,8 @@ def test_selected_text_reply_context_cards_are_built_with_text_nodes():
 
 
 def test_selected_text_reply_styles_and_i18n_exist_for_all_locales():
-    css = read("static/style.css")
-    i18n = read("static/i18n.js")
+    css = family_source("style")
+    i18n = family_source("i18n")
 
     assert ".selected-text-reply-btn" in css
     assert ".selected-text-reply-btn.visible" in css
@@ -111,7 +113,7 @@ def test_selected_text_reply_styles_and_i18n_exist_for_all_locales():
     assert ".sent-selection-context" in css
     assert ".sent-selection-context-label" in css
     assert ".sent-selection-context-quote" in css
-    ui = read("static/ui.js")
+    ui = family_source("ui")
     assert "data-selected-context" in ui
     assert "const stashSelectedContextBlocks=(value)=>" in ui
     assert "<!-- hermes-selected-context -->" in ui
@@ -143,7 +145,7 @@ def test_selected_text_reply_styles_and_i18n_exist_for_all_locales():
 
 
 def test_selected_text_reply_button_has_user_select_none():
-    css = read("static/style.css")
+    css = family_source("style")
     # The base rule must carry user-select:none so browser selection never
     # renders on or through the button, regardless of hover background opacity.
     assert "user-select:none" in css
@@ -155,7 +157,7 @@ def test_selected_text_reply_button_has_user_select_none():
 
 
 def test_sent_selected_context_blocks_are_rendered_without_enabling_user_markdown():
-    ui = read("static/ui.js")
+    ui = family_source("ui")
 
     assert "const sentContextHtml=(label,quoteText)=>" in ui
     assert "const stashSelectedContextBlocks=(value)=>" in ui
@@ -170,7 +172,7 @@ def test_sent_selected_context_blocks_are_rendered_without_enabling_user_markdow
 
 
 def test_selected_text_reply_queue_path_includes_pending_selection_context():
-    js = read("static/messages.js")
+    js = family_source("messages")
 
     assert "function _composerTextWithPendingSelections()" in js
     assert "function _clearComposerAfterQueuedSelectionSend()" in js
@@ -186,8 +188,8 @@ def test_selection_only_reply_enables_primary_send_button():
     recognize pending selections — otherwise a selection-only reply is
     un-sendable via click/tap/mobile (only desktop Enter, which calls send()
     directly, would work). Pin the predicate + its wiring."""
-    msgs = read("static/messages.js")
-    ui = read("static/ui.js")
+    msgs = family_source("messages")
+    ui = family_source("ui")
 
     # messages.js exposes the predicate...
     assert "window._hasPendingSelections=function(){return _pendingSelections.length>0;};" in msgs, (

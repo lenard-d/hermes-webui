@@ -9,6 +9,8 @@ Bug 2 is server-side data loss (the message is gone from session JSON, not just
 the in-memory client copy) caused by cancel_stream() clearing pending_user_message
 without first persisting it to s.messages. This test suite locks down both fixes.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import queue
 import re
@@ -19,7 +21,6 @@ import pytest
 
 import api.config as config
 import api.models as models
-import api.streaming as streaming
 from api.models import Session
 from api.streaming import cancel_stream
 
@@ -285,7 +286,7 @@ class TestIssue1298ActivityGroupExpandPersistence:
     """
 
     def test_ui_js_tracks_user_expand_intent_for_live_activity_group(self):
-        src = (REPO_ROOT / "static" / "ui.js").read_text()
+        src = family_source("ui")
         assert "_liveActivityUserExpanded" in src, (
             "ui.js must declare a per-turn tracker for the user's expand intent "
             "on the live activity group (#1298)"
@@ -299,7 +300,7 @@ class TestIssue1298ActivityGroupExpandPersistence:
         """ensureActivityGroup() must consult _liveActivityUserExpanded when
         creating a fresh live group so the user's prior expand survives the
         destroy/recreate cycle."""
-        src = (REPO_ROOT / "static" / "ui.js").read_text()
+        src = family_source("ui")
         # Find the ensureActivityGroup function body
         m = re.search(
             r"function ensureActivityGroup\(inner, opts\)\{(.*?)\n\}",
@@ -318,7 +319,7 @@ class TestIssue1298ActivityGroupExpandPersistence:
 
     def test_finalize_thinking_card_respects_user_expand(self):
         """finalizeThinkingCard() must not force-collapse the live Worklog."""
-        src = (REPO_ROOT / "static" / "ui.js").read_text()
+        src = family_source("ui")
         m = re.search(
             r"function finalizeThinkingCard\(\)\{(.*?)\n\}",
             src, re.DOTALL,
@@ -334,7 +335,7 @@ class TestIssue1298ActivityGroupExpandPersistence:
     def test_inline_onclick_records_user_intent(self):
         """The summary button's click path must call _onLiveActivityToggle
         so user clicks update the tracker (#1298)."""
-        src = (REPO_ROOT / "static" / "ui.js").read_text()
+        src = family_source("ui")
         # The summary button is built inline inside ensureActivityGroup.
         assert "_onLiveActivityToggle" in src, (
             "_onLiveActivityToggle helper must be defined"
@@ -364,7 +365,7 @@ class TestIssue1298ActivityGroupExpandPersistence:
         """clearLiveToolCards() — invoked between turns — must reset the
         per-turn user-expand tracker so the next turn starts collapsed by
         default (#1298)."""
-        src = (REPO_ROOT / "static" / "ui.js").read_text()
+        src = family_source("ui")
         m = re.search(
             r"function clearLiveToolCards\(\)\{(.*?)\n\}",
             src, re.DOTALL,

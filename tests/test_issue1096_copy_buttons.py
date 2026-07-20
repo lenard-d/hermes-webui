@@ -1,4 +1,6 @@
 """Tests for #1096 — copy buttons work via Permissions-Policy + fallback."""
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -30,13 +32,13 @@ class TestCopyTextFunction:
 
     def test_copyText_uses_clipboard_api(self):
         """_copyText must call navigator.clipboard.writeText."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "navigator.clipboard.writeText(text)" in src, \
             "_copyText must use Clipboard API"
 
     def test_copyText_has_fallback(self):
         """_copyText must fall back to execCommand if clipboard API fails."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "function _fallbackCopy" in src, \
             "Must have a separate _fallbackCopy function"
         # Clipboard API call must .catch() to fallback
@@ -48,13 +50,13 @@ class TestCopyTextFunction:
 
     def test_fallbackCopy_uses_execCommand(self):
         """_fallbackCopy must use document.execCommand('copy')."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "document.execCommand('copy')" in src, \
             "_fallbackCopy must use execCommand('copy')"
 
     def test_fallbackCopy_focuses_textarea(self):
         """_fallbackCopy must explicitly focus textarea before select()."""
-        src = _src("ui.js")
+        src = family_source("ui")
         # Find _fallbackCopy function
         m = re.search(r"function _fallbackCopy", src)
         assert m, "_fallbackCopy function must exist"
@@ -64,7 +66,7 @@ class TestCopyTextFunction:
 
     def test_fallbackCopy_not_offscreen(self):
         """_fallbackCopy textarea must NOT be positioned at -9999px (fails in some browsers)."""
-        src = _src("ui.js")
+        src = family_source("ui")
         m = re.search(r"function _fallbackCopy", src)
         fn = src[m.start():m.start() + 600]
         assert "-9999" not in fn, \
@@ -72,7 +74,7 @@ class TestCopyTextFunction:
 
     def test_copyMsg_copies_raw_text(self):
         """copyMsg must extract text from data-raw-text attribute."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "closest('[data-raw-text]')" in src, \
             "copyMsg must find nearest element with data-raw-text"
         assert "dataset.rawText" in src, \
@@ -84,7 +86,7 @@ class TestCodeCopyButton:
 
     def test_code_copy_uses_copyText(self):
         """Code copy button onclick must call _copyText."""
-        src = _src("ui.js")
+        src = family_source("ui")
         # Find addCopyButtons function
         m = re.search(r"function addCopyButtons", src)
         assert m, "addCopyButtons must exist"
@@ -102,7 +104,7 @@ class TestCodeCopyButton:
         appended to the sibling .pre-header, not inside <pre>, so the duplicate
         guard must check the header as well as the <pre>.
         """
-        src = _src("ui.js")
+        src = family_source("ui")
         m = re.search(r"function addCopyButtons", src)
         assert m, "addCopyButtons must exist"
         fn = src[m.start():m.start() + 1200]
@@ -114,6 +116,6 @@ class TestCopyFailedI18n:
 
     def test_copy_failed_in_all_locales(self):
         """copy_failed key must exist in all locale blocks (currently 7 with Korean)."""
-        i18n = _src('i18n.js')
+        i18n = family_source("i18n")
         count = i18n.count('copy_failed')
         assert count >= 6, f'Expected copy_failed in at least 6 locale blocks, found {count}'

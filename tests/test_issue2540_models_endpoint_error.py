@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import urllib.error
 import urllib.request
 from email.message import Message
@@ -147,8 +149,8 @@ def test_named_custom_provider_models_endpoint_network_error_uses_short_timeout(
 
 
 def test_frontend_model_picker_renders_provider_endpoint_hint():
-    ui = open("static/ui.js", encoding="utf-8").read()
-    css = open("static/style.css", encoding="utf-8").read()
+    ui = family_source("ui")
+    css = family_source("style")
 
     assert "models_endpoint_error" in ui
     assert "dataset.modelsEndpointError" in ui

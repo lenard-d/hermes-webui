@@ -28,11 +28,13 @@ flag check inside its post-await body would be a no-op.  The generation
 token is the canonical pattern for invalidating async continuations and
 is what this regression suite locks in.
 """
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_body(src: str, name: str) -> str:

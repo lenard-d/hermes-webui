@@ -3,9 +3,10 @@
 import subprocess
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = ROOT / "static" / "sessions.js"
 GATEWAY_WATCHER = ROOT / "api" / "gateway_watcher.py"
 
 
@@ -33,7 +34,7 @@ def test_gateway_watcher_remains_hash_only():
 
 def test_gateway_sse_dedupes_reconnect_snapshot_before_refresh():
     """Reconnect initial snapshots should not force a sidebar refetch."""
-    src = _read(SESSIONS_JS)
+    src = family_source("sessions")
     handler = _block(
         src,
         "_gatewaySSE.addEventListener('sessions_changed'",
@@ -48,7 +49,7 @@ def test_gateway_sse_dedupes_reconnect_snapshot_before_refresh():
 
 def test_gateway_probe_reattaches_sse_after_profile_switch_restart():
     """A healthy probe must revive the EventSource when the watcher restarted."""
-    src = _read(SESSIONS_JS)
+    src = family_source("sessions")
     probe = _block(src, "async function probeGatewaySSEStatus()", "\n\nfunction startGatewaySSE")
 
     assert "if(!_gatewaySSE && typeof EventSource!=='undefined' && !(document&&document.hidden)) startGatewaySSE();" in probe
@@ -56,7 +57,7 @@ def test_gateway_probe_reattaches_sse_after_profile_switch_restart():
 
 def test_gateway_snapshot_key_matches_backend_hash_fields():
     """Frontend dedupe must compare the same fields that drive watcher events."""
-    src = _read(SESSIONS_JS)
+    src = family_source("sessions")
     key_fn = _block(
         src,
         "function _gatewaySessionSnapshotKey",
@@ -128,8 +129,8 @@ if(!_isDuplicateGatewaySessionSnapshot([null, {session_id:'web-2', session_sourc
 
 def test_load_session_persists_only_after_metadata_loads():
     """Do not overwrite the last good localStorage sid before /api/session succeeds."""
-    src = _read(SESSIONS_JS)
-    load = _block(src, "async function loadSession(sid)", "function _mergePendingSessionMessage")
+    src = family_source("sessions")
+    load = _block(src, "async function loadSession(sid)", "// Sync context usage indicator")
     api_pos = load.index("data = await api(`/api/session")
     persist_pos = load.index("localStorage.setItem('hermes-webui-session',S.session.session_id)")
 

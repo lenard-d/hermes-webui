@@ -9,6 +9,8 @@ Tests are ordered TDD-style:
   5. Watcher detects new sessions inserted into state.db
   6. Settings UI has renamed label
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import os
 import pathlib
@@ -1039,7 +1041,7 @@ def test_agent_session_source_normalization_contract():
 
 def test_sessions_js_treats_email_as_messaging_source():
     """Email gateway sessions should receive the same sidebar metadata as other messaging channels."""
-    src = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
 
     raw_section = src[src.find("_MESSAGING_RAW_SOURCES"):src.find("function _isMessagingSession")]
     label_section = src[src.find("_MESSAGING_SOURCE_LABELS"):src.find("function _isMessagingSession")]
@@ -1054,7 +1056,7 @@ def test_sessions_js_treats_email_as_messaging_source():
 
 def test_sessions_js_treats_wecom_sidecars_as_messaging_behaviorally():
     """Stale WeCom sidecars with session_source=other should still route as messaging."""
-    src = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     start = src.index("const _MESSAGING_RAW_SOURCES")
     end = src.index("/**", start)
     block = src[start:end]

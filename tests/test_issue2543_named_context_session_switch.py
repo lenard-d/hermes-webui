@@ -1,8 +1,9 @@
-from pathlib import Path
+from tests.frontend_asset_contract import family_source
 
 
-MESSAGES_JS = Path("static/messages.js").read_text(encoding="utf-8")
-SESSIONS_JS = Path("static/sessions.js").read_text(encoding="utf-8")
+
+MESSAGES_JS = family_source("messages")
+SESSIONS_JS = family_source("sessions")
 
 
 def test_named_context_clear_helper_is_exported_for_session_switches():

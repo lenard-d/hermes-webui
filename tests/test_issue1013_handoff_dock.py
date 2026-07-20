@@ -1,4 +1,6 @@
 """Regression guards for cross-channel handoff UI and summary generation."""
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import time
@@ -13,10 +15,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 HANDOFF_SUMMARY = (ROOT / "api" / "routes_parts" / "handoff_summary.py").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _new_state_db(path: Path) -> sqlite3.Connection:
@@ -153,8 +155,8 @@ def test_handoff_delete_clears_local_storage_markers():
 
 
 def test_handoff_summary_renders_as_transcript_card_not_dock_card():
-    assert "function setHandoffUi" in SESSIONS_JS or "function setHandoffUi" in (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-    ui_js = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    assert "function setHandoffUi" in SESSIONS_JS or "function setHandoffUi" in family_source("ui")
+    ui_js = family_source("ui")
     assert "_handoffCardsNode" in ui_js
     assert "data-handoff-card" in ui_js
     assert 'data-compression-card="1" data-handoff-card="1"' in ui_js

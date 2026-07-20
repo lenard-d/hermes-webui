@@ -29,6 +29,8 @@ Coverage:
 4. The fallback chain order is correct: explicit > _activeProvider >
    previous-session > null.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 from unittest.mock import patch
@@ -50,7 +52,7 @@ class TestClientFallbackSourceShape:
     """Static checks that the fallback chain lives inside newSession()."""
 
     def test_active_provider_fallback_present(self):
-        src = _read("static/sessions.js")
+        src = family_source("sessions")
         idx = src.find("async function newSession(flash, options={}){")
         assert idx != -1
         body = src[idx:idx + 6000]
@@ -61,7 +63,7 @@ class TestClientFallbackSourceShape:
         )
 
     def test_previous_session_fallback_present(self):
-        src = _read("static/sessions.js")
+        src = family_source("sessions")
         idx = src.find("async function newSession(flash, options={}){")
         body = src[idx:idx + 6000]
         assert "S.session&&S.session.model_provider" in body, (
@@ -72,7 +74,7 @@ class TestClientFallbackSourceShape:
 
     def test_fallback_chain_order(self):
         """Fallback order: explicit > _activeProvider > prev-session > null."""
-        src = _read("static/sessions.js")
+        src = family_source("sessions")
         idx = src.find("async function newSession(flash, options={}){")
         body = src[idx:idx + 6000]
         explicit = body.find("newModelState.model_provider")
@@ -87,7 +89,7 @@ class TestClientFallbackSourceShape:
 
     def test_issue_referenced_in_source(self):
         """Future readers should be able to trace this back to the issue."""
-        src = _read("static/sessions.js")
+        src = family_source("sessions")
         idx = src.find("async function newSession(flash, options={}){")
         # Window covers the model-fallback region of newSession(); the function
         # has grown over time (e.g. pre-session toolset staging #4490), so keep
@@ -211,7 +213,7 @@ def _provider_assignment_in_new_session() -> str:
     in a comment) and on the guard declaration so future comments
     referencing ``reqBody.model_provider`` cannot confuse it.
     """
-    src = _read("static/sessions.js")
+    src = family_source("sessions")
     idx = src.find("async function newSession(flash, options={}){")
     assert idx != -1, "newSession() must be defined in static/sessions.js"
     body = src[idx : idx + 7000]

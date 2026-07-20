@@ -10,15 +10,17 @@ dropdown in the panel-actions row and surfaces the non-default
 heading. The original filtering behavior is unchanged; only the affordance
 shape moved.
 """
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 # ── Original filtering behavior (must stay green) ────────────────────────

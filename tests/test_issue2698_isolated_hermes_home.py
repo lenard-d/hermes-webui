@@ -12,6 +12,8 @@ normal single-user named profile produces the same shape. The autouse fixture be
 the flag for this whole module (it tests the isolated-mode deployment posture); the
 shape-without-flag regression is covered separately in test_issue4586_*.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import os
 import io
@@ -584,7 +586,7 @@ class TestNormalModePreservation:
 
 
 def test_profiles_panel_hides_delete_controls_in_single_profile_mode():
-    panels_js = (Path(__file__).resolve().parents[1] / "static" / "panels.js").read_text(encoding="utf-8")
+    panels_js = family_source("panels")
 
     assert "const singleProfileMode = !!(_profilesCache && _profilesCache.single_profile_mode);" in panels_js
     assert "if (isDefault || singleProfileMode) hide(delBtn); else show(delBtn);" in panels_js

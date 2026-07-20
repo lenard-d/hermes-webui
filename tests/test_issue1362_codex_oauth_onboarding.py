@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 REPO = Path(__file__).resolve().parents[1]
 UI_JS = REPO / "static" / "ui.js"
 NODE = shutil.which("node")
@@ -915,10 +917,13 @@ console.log(JSON.stringify({ initial, hiddenStates, afterCustom, afterSelect, su
     with tempfile.NamedTemporaryFile("w", suffix=".cjs", encoding="utf-8", dir=REPO, delete=False) as handle:
         handle.write(driver)
         script = Path(handle.name)
+    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", dir=REPO, delete=False) as handle:
+        handle.write(family_source("ui"))
+        ui_source = Path(handle.name)
 
     try:
         result = subprocess.run(
-            [NODE, str(script), str(UI_JS)],
+            [NODE, str(script), str(ui_source)],
             capture_output=True,
             text=True,
             timeout=30,
@@ -926,6 +931,7 @@ console.log(JSON.stringify({ initial, hiddenStates, afterCustom, afterSelect, su
         )
     finally:
         script.unlink(missing_ok=True)
+        ui_source.unlink(missing_ok=True)
 
     if result.returncode != 0:
         raise RuntimeError(result.stderr)

@@ -1,6 +1,8 @@
 """Regression coverage for #2679: optional hiding of empty-chat suggestions."""
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
 STYLE = REPO_ROOT / "static" / "style.css"
@@ -26,7 +28,7 @@ def test_settings_preferences_expose_hide_suggestions_toggle():
 
 def test_empty_state_has_hideable_suggestions_hook_and_css():
     html = INDEX.read_text(encoding="utf-8")
-    css = STYLE.read_text(encoding="utf-8")
+    css = family_source("style")
     assert 'class="suggestion-grid"' in html
     assert '.empty-state.no-suggestions .suggestion-grid{display:none}' in css
 
@@ -40,7 +42,7 @@ def test_boot_applies_saved_hide_suggestions_preference():
 
 
 def test_panels_round_trip_and_hot_apply_hide_suggestions():
-    js = PANELS.read_text(encoding="utf-8")
+    js = family_source("panels")
     assert "const hideSuggestionsCb=$('settingsHideSuggestions');" in js
     assert "payload.hide_empty_state_suggestions=hideSuggestionsCb.checked;" in js
     assert "hideSuggestionsCb.checked=settings.hide_empty_state_suggestions===true;" in js
@@ -49,7 +51,7 @@ def test_panels_round_trip_and_hot_apply_hide_suggestions():
 
 
 def test_hide_suggestions_i18n_all_locales_and_changelog():
-    js = I18N.read_text(encoding="utf-8")
+    js = family_source("i18n")
     assert js.count("settings_label_hide_suggestions:") == 15
     assert js.count("settings_desc_hide_suggestions:") == 15
     changelog = CHANGELOG.read_text(encoding="utf-8")

@@ -33,8 +33,9 @@ Behavioral tests below split into two sections:
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
 
-from pathlib import Path
+
 import re
 import shutil
 import subprocess
@@ -44,9 +45,7 @@ import pytest
 from tests.test_sprint16 import render_md
 
 
-REPO = Path(__file__).resolve().parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-UI_JS_PATH = REPO / "static" / "ui.js"
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 
@@ -222,14 +221,18 @@ process.stdin.on('end', () => { process.stdout.write(renderMd(buf)); });
 def driver_path(tmp_path_factory):
     if NODE is None:
         pytest.skip("node not on PATH")
-    p = tmp_path_factory.mktemp("renderer1446_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("renderer1446_driver")
+    p = directory / "driver.js"
     p.write_text(_DRIVER_SRC, encoding="utf-8")
-    return str(p)
+    ui = directory / "ui-browser-order.js"
+    ui.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(ui)
 
 
 def _render(driver_path: str, markdown: str) -> str:
+    driver, ui = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH)],
+        [NODE, driver, ui],
         input=markdown,
         capture_output=True,
         text=True,

@@ -10,6 +10,8 @@ These tests use static analysis (same pattern as test_streaming_race_fix.py)
 to pin the structural invariants so a future refactor cannot silently re-break
 the flush guarantee.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
@@ -24,13 +26,13 @@ class TestFlushHelperExists:
     """_flushPendingSegmentRender must exist and have the right shape."""
 
     def test_flush_helper_declared(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         assert "function _flushPendingSegmentRender(options={})" in src, (
             "_flushPendingSegmentRender helper must be declared in messages.js"
         )
 
     def test_flush_helper_guards_on_assistant_body(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         m = re.search(
             r"function _flushPendingSegmentRender\(options=\{\}\)\{.*?\n  \}",
             src,
@@ -43,7 +45,7 @@ class TestFlushHelperExists:
         )
 
     def test_flush_helper_guards_on_render_pending(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         m = re.search(
             r"function _flushPendingSegmentRender\(options=\{\}\)\{.*?\n  \}",
             src,
@@ -56,7 +58,7 @@ class TestFlushHelperExists:
         )
 
     def test_flush_helper_cancels_pending_raf(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         m = re.search(
             r"function _flushPendingSegmentRender\(options=\{\}\)\{.*?\n  \}",
             src,
@@ -69,7 +71,7 @@ class TestFlushHelperExists:
         )
 
     def test_flush_helper_uses_smd_write(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         m = re.search(
             r"function _flushPendingSegmentRender\(options=\{\}\)\{.*?\n  \}",
             src,
@@ -82,7 +84,7 @@ class TestFlushHelperExists:
         )
 
     def test_flush_helper_has_render_md_fallback(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         m = re.search(
             r"function _flushPendingSegmentRender\(options=\{\}\)\{.*?\n  \}",
             src,
@@ -95,7 +97,7 @@ class TestFlushHelperExists:
         )
 
     def test_flush_helper_has_esc_fallback(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         m = re.search(
             r"function _flushPendingSegmentRender\(options=\{\}\)\{.*?\n  \}",
             src,
@@ -135,7 +137,7 @@ class TestToolHandlerFlush:
     """The tool SSE handler must call _flushPendingSegmentRender before reset."""
 
     def test_tool_handler_calls_flush(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "tool")
         assert "_flushPendingSegmentRender({force:true})" in fn, (
             "tool handler must force _flushPendingSegmentRender() before "
@@ -143,7 +145,7 @@ class TestToolHandlerFlush:
         )
 
     def test_tool_handler_flush_before_reset(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "tool")
         flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
         reset_pos = fn.index("_resetAssistantSegment()")
@@ -157,7 +159,7 @@ class TestInterimAssistantHandlerFlush:
     """The interim_assistant handler must call _flushPendingSegmentRender."""
 
     def test_interim_handler_calls_flush(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
         assert "_flushPendingSegmentRender({force:true})" in fn, (
             "interim_assistant handler must call _flushPendingSegmentRender() "
@@ -167,7 +169,7 @@ class TestInterimAssistantHandlerFlush:
     def test_interim_handler_flush_before_last_reset(self):
         """The flush must precede the final _resetAssistantSegment that seals
         the segment for new content (not the early alreadyStreamed branch)."""
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
         flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
         # Find the _resetAssistantSegment call that comes AFTER the flush
@@ -185,7 +187,7 @@ class TestInterimAssistantHandlerFlush:
         before resetting the segment; otherwise a fast tool boundary can orphan
         the text until a later render or session switch.
         """
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
         branch_start = fn.index("if(alreadyStreamed)")
         branch = fn[branch_start : fn.index("assistantText +=", branch_start)]
@@ -209,7 +211,7 @@ class TestInterimAssistantHandlerFlush:
         )
 
     def test_interim_handler_creates_visible_segment_before_forced_flush(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
         ensure_pos = fn.index("ensureAssistantRow(true)")
         flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
@@ -220,7 +222,7 @@ class TestInterimAssistantHandlerFlush:
         )
 
     def test_interim_handler_closes_activity_after_visible_progress_boundary(self):
-        src = read("static/messages.js")
+        src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
         flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
         close_pos = fn.index("closeCurrentLiveActivityGroup()", flush_pos)

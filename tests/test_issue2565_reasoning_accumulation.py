@@ -13,6 +13,8 @@ visible Worklog process prose or final-answer text.
 Both fixes are needed: Issue 1 keeps live cards scoped to a segment without data
 loss, while Issue 2 preserves reasoning as low-priority Worklog detail.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import pathlib
 import re
@@ -34,7 +36,7 @@ class TestLiveReasoningTextResetOnTool:
     def _tool_listener_body(self):
         """Extract the full tool listener body between the tool and
         tool_complete addEventListener calls."""
-        src = read('static/messages.js')
+        src = family_source("messages")
         tool_start = src.find("source.addEventListener('tool'")
         assert tool_start >= 0, "tool listener not found"
         tool_complete_start = src.find(
@@ -62,7 +64,7 @@ class TestLiveReasoningTextResetOnInterimAssistant:
     other segment boundary where the previous Thinking Card closes out."""
 
     def test_durable_reasoning_text_not_reset_in_interim_assistant_listener(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(
             r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev)\s*=>\s*\{(.*?)\n\s*\}\);",
             src, re.DOTALL,
@@ -75,7 +77,7 @@ class TestLiveReasoningTextResetOnInterimAssistant:
         )
 
     def test_live_reasoning_text_reset_in_interim_assistant_listener(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         m = re.search(
             r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev)\s*=>\s*\{(.*?)\n\s*\}\);",
             src, re.DOTALL,
@@ -95,7 +97,7 @@ class TestReasoningContentPreference:
     detail, but must not become process prose or final-answer text."""
 
     def test_reasoning_payload_still_in_message_signature(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         sig_fn = src.split("function _messageHasReasoningPayload(m)", 1)[1].split("function", 1)[0]
         assert 'm.reasoning' in sig_fn, (
             "ui.js should still treat persisted reasoning as message metadata "
@@ -103,20 +105,20 @@ class TestReasoningContentPreference:
         )
 
     def test_reasoning_metadata_not_used_as_inline_content_extraction(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         extraction = src.split("let thinkingText='';", 1)[1].split("const isUser=m.role==='user';", 1)[0]
         assert 'm.reasoning_content' not in extraction
         assert 'm.reasoning' not in extraction
 
     def test_reasoning_payload_feeds_worklog_thinking_card_helper(self):
-        src = read('static/ui.js')
+        src = family_source("ui")
         helper = src.split("function _worklogReasoningTextFromMessage", 1)[1].split("function _thinkingCardHtml", 1)[0]
         assert "_assistantReasoningPayloadText(m)" in helper
         assert "_stripVisibleAssistantEchoFromThinking" in helper
 
     def test_no_direct_reasoning_content_to_inline_thinking_assignment(self):
         """Provider reasoning should not be promoted into inline assistant prose."""
-        src = read('static/ui.js')
+        src = family_source("ui")
         m = re.search(
             r"thinkingText\s*=\s*(m\.reasoning_content\s*\|\|\s*m\.reasoning)",
             src,
@@ -136,14 +138,14 @@ class TestDoneEventReasoningPersist:
     when the backend already populated .reasoning."""
 
     def test_done_event_has_reasoning_guard(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert '!lastAsst.reasoning' in src, (
             "done event must guard reasoningText persistence with "
             "!lastAsst.reasoning to avoid overwriting backend-populated values"
         )
 
     def test_done_event_persists_reasoning_text(self):
-        src = read('static/messages.js')
+        src = family_source("messages")
         assert 'lastAsst.reasoning=reasoningText' in src, (
             "done event must still persist reasoningText to lastAsst.reasoning "
             "for providers that stream reasoning events without populating "

@@ -10,12 +10,11 @@ browser harness.
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
+from tests.frontend_asset_contract import family_source
+
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -207,9 +206,12 @@ process.stdout.write(JSON.stringify({
 
 @pytest.fixture(scope="module")
 def driver_path(tmp_path_factory):
-    p = tmp_path_factory.mktemp("issue1771_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("issue1771_driver")
+    p = directory / "driver.js"
     p.write_text(_DRIVER_SRC, encoding="utf-8")
-    return str(p)
+    ui = directory / "ui-browser-order.js"
+    ui.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(ui)
 
 
 def _run_sync(
@@ -238,8 +240,9 @@ def _run_sync(
             {"provider": "safe", "value": "@safe:gpt-4o-mini", "label": "GPT-4o mini"},
         ],
     }
+    driver, ui = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), json.dumps(payload)],
+        [NODE, driver, ui, json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -273,8 +276,9 @@ def _run_add_live_models(
             {"provider": "safe", "value": "@safe:gpt-4o-mini", "label": "GPT-4o mini"},
         ],
     }
+    driver, ui = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), json.dumps(payload)],
+        [NODE, driver, ui, json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,

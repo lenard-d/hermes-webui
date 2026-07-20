@@ -11,6 +11,8 @@ and ``server_tz`` (offset string like "+0800").  The JS computes
 fetch, then every time helper uses ``_serverNowMs()`` (which returns
 ``Date.now() - _serverTimeDelta``) instead of bare ``Date.now()``.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import json
 import pathlib
@@ -21,8 +23,8 @@ import time
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+UI_JS = family_source("ui")
 
 
 # ---------------------------------------------------------------------------

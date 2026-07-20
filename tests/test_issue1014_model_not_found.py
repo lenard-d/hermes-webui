@@ -8,6 +8,8 @@ Covers:
   4. static/i18n.js: model_not_found_label key present in all locales
   5. streaming.py: model_not_found checked after auth but before generic error
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
@@ -106,21 +108,21 @@ class TestApperrorModelNotFound:
 
     def test_model_not_found_type_handled(self):
         """apperror handler must check for type='model_not_found'."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "model_not_found" in src, (
             "model_not_found type not handled in messages.js apperror handler"
         )
 
     def test_model_not_found_label(self):
         """'Model not found' label must appear in the error handling."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "Model not found" in src, (
             "'Model not found' label not found in messages.js"
         )
 
     def test_is_model_not_found_variable(self):
         """isModelNotFound variable must be defined."""
-        src = _read("static/messages.js")
+        src = family_source("messages")
         assert "isModelNotFound" in src, (
             "isModelNotFound variable not found in messages.js apperror handler"
         )
@@ -134,21 +136,14 @@ class TestI18nModelNotFound:
     REQUIRED_KEY = "model_not_found_label"
 
     def _locale_names(self, src: str) -> list:
-        pattern = re.compile(
-            r"^\s{2}(?:'(?P<quoted>[A-Za-z0-9-]+)'|(?P<plain>[A-Za-z0-9-]+))\s*:\s*\{",
-            re.MULTILINE,
-        )
-        names = []
-        for match in pattern.finditer(src):
-            names.append(match.group("quoted") or match.group("plain"))
-        return names
+        return re.findall(r"api\.registerLocale\(['\"]([A-Za-z0-9_-]+)['\"],\s*\{", src)
 
     def _count_key(self, src: str, key: str) -> int:
         return len(re.findall(r'\b' + re.escape(key) + r'\b', src))
 
     def test_all_locales_have_model_not_found_label(self):
         """model_not_found_label must appear in all locales."""
-        src = _read("static/i18n.js")
+        src = family_source("i18n")
         locale_count = len(self._locale_names(src))
         count = self._count_key(src, self.REQUIRED_KEY)
         assert count >= locale_count, (
@@ -158,10 +153,10 @@ class TestI18nModelNotFound:
 
     def test_english_label_is_plain_string(self):
         """English model_not_found_label must be a plain string, not a function."""
-        src = _read("static/i18n.js")
-        en_start = src.find("\n  en: {")
-        es_start = src.find("\n  es: {")
-        en_block = src[en_start:es_start]
+        src = family_source("i18n")
+        en_start = src.index("api.registerLocale('en', {")
+        next_locale = src.index("api.registerLocale('", en_start + 1)
+        en_block = src[en_start:next_locale]
         assert self.REQUIRED_KEY in en_block, "Key not in en block"
         idx = en_block.find(self.REQUIRED_KEY)
         line = en_block[idx:idx + 200]

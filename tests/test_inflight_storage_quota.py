@@ -1,4 +1,6 @@
 """Regression coverage for browser in-flight localStorage quota handling."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -6,7 +8,7 @@ CONFIG_PY = (
     REPO_ROOT / "api" / "config_parts" / "settings_persistence.py"
 ).read_text(encoding="utf-8")
 BOOT_JS = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 
 
 def _function_body(src: str, name: str) -> str:

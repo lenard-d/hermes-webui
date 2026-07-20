@@ -6,10 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
-PANELS_JS_PATH = REPO_ROOT / "static" / "panels.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -134,7 +135,7 @@ def test_single_image_paste_keeps_existing_screenshot_filename_shape():
 def test_file_picker_and_drop_paths_still_pass_real_file_names_to_addfiles():
     """Non-clipboard multi-file paths should preserve browser-provided filenames."""
     boot = _read_js(BOOT_JS_PATH)
-    panels = _read_js(PANELS_JS_PATH)
+    panels = family_source("panels")
 
     assert "$('fileInput').onchange=e=>{addFiles(Array.from(e.target.files));e.target.value='';};" in boot
     assert "const files=Array.from(e.dataTransfer.files);" in panels

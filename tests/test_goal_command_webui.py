@@ -1,4 +1,6 @@
 """Regression tests for first-class WebUI /goal command parity."""
+from tests.frontend_asset_contract import family_source
+
 
 from contextlib import nullcontext
 from pathlib import Path
@@ -8,7 +10,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = (REPO_ROOT / "static" / "commands.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 ROUTES_PY = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 STREAMING_PY = (REPO_ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 

@@ -38,6 +38,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import FRONTEND_FAMILIES, family_asset_paths
+
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -65,14 +67,20 @@ def _collect_li_call_sites() -> list[tuple[str, int, str]]:
     in static JS files (excluding icons.js which defines li itself)."""
     pattern = re.compile(r"\bli\(\s*['\"]([\w\-]+)['\"]")
     sites: list[tuple[str, int, str]] = []
-    for path in sorted(STATIC_DIR.glob("*.js")):
-        if path.name == "icons.js":
-            continue
+    family_facades = {f"{family}.js" for family in FRONTEND_FAMILIES if family != "style"}
+    paths = [
+        path
+        for path in sorted(STATIC_DIR.glob("*.js"))
+        if path.name != "icons.js" and path.name not in family_facades
+    ]
+    for family in FRONTEND_FAMILIES:
+        paths.extend(path for path in family_asset_paths(family) if path.suffix == ".js")
+    for path in paths:
         for lineno, line in enumerate(
             path.read_text(encoding="utf-8").splitlines(), start=1
         ):
             for match in pattern.finditer(line):
-                sites.append((path.name, lineno, match.group(1)))
+                sites.append((path.relative_to(STATIC_DIR).as_posix(), lineno, match.group(1)))
     return sites
 
 

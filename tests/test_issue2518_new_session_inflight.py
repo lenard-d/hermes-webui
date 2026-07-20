@@ -1,4 +1,6 @@
 """Regression coverage for #2518 new-conversation cold-start dedupe."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +11,7 @@ def _source(rel: str) -> str:
 
 
 def test_new_session_reuses_inflight_request_before_posting_again():
-    src = _source("static/sessions.js")
+    src = family_source("sessions")
     assert "let _newSessionInFlight=null" in src
     assert "if(_newSessionInFlight){" in src
     assert "return _newSessionInFlight;" in src, (
@@ -21,7 +23,7 @@ def test_new_session_reuses_inflight_request_before_posting_again():
 
 
 def test_new_session_sets_visible_pending_state_for_cold_catalog_wait():
-    src = _source("static/sessions.js")
+    src = family_source("sessions")
     assert "function _setNewSessionPending(pending)" in src
     assert "btn.disabled=!!pending" in src
     assert "btn.setAttribute('aria-busy',pending?'true':'false')" in src
@@ -32,8 +34,8 @@ def test_new_session_sets_visible_pending_state_for_cold_catalog_wait():
 
 
 def test_new_session_pending_button_style_and_copy_exist():
-    css = _source("static/style.css")
-    i18n = _source("static/i18n.js")
+    css = family_source("style")
+    i18n = family_source("i18n")
     assert '.panel-head-btn:disabled,.panel-head-btn[aria-busy="true"]' in css
     assert '.app-titlebar-new-chat:disabled,.app-titlebar-new-chat[aria-busy="true"]' in css
     assert "cursor:wait" in css

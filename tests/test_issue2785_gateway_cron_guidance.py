@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX_HTML = ROOT / "static" / "index.html"
@@ -17,7 +19,7 @@ def test_tasks_panel_has_gateway_notice_container():
 
 
 def test_cron_panel_loads_gateway_status_for_scheduling_guidance():
-    panels = PANELS_JS.read_text(encoding="utf-8")
+    panels = family_source("panels")
 
     assert "function _cronGatewayNoticeHtml" in panels
     assert "function loadCronGatewayNotice" in panels

@@ -15,6 +15,8 @@ Fix:
   divergent histories), fall back to current_sha=None — the JS link guard
   suppresses the link rather than emitting a known-broken URL.
 """
+from tests.frontend_asset_contract import family_source
+
 
 import os
 import re
@@ -188,7 +190,7 @@ def test_current_sha_falls_back_to_None_when_merge_base_fails(tmp_path):
 # ── 2. Client-side: ui.js link guard suppresses URL on null current_sha ──
 
 def _read_ui_js():
-    return (REPO_ROOT / 'static' / 'ui.js').read_text(encoding='utf-8')
+    return family_source("ui")
 
 
 def test_whats_new_link_resets_display_and_contents_on_every_render():

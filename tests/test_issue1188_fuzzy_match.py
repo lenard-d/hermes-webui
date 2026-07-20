@@ -22,8 +22,8 @@ import subprocess
 
 import pytest
 
-REPO_ROOT = __import__("pathlib").Path(__file__).parent.parent.resolve()
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
+from tests.frontend_asset_contract import family_source
+
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -67,15 +67,19 @@ process.stdout.write(JSON.stringify(got));
 
 @pytest.fixture(scope="module")
 def driver_path(tmp_path_factory):
-    p = tmp_path_factory.mktemp("findmodel_driver") / "driver.js"
+    directory = tmp_path_factory.mktemp("findmodel_driver")
+    p = directory / "driver.js"
     p.write_text(_DRIVER_SRC, encoding="utf-8")
-    return str(p)
+    ui = directory / "ui-browser-order.js"
+    ui.write_text(family_source("ui"), encoding="utf-8")
+    return str(p), str(ui)
 
 
 def _find(driver_path, model_id: str, options: list[str], preferred: str | None = None):
     import json
+    driver, ui = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH),
+        [NODE, driver, ui,
          json.dumps({"modelId": model_id, "options": options, "preferredProvider": preferred})],
         capture_output=True, text=True, timeout=30,
     )

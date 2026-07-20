@@ -8,6 +8,8 @@ The chip must:
   * Continue to track state through _applyToolsetsChip() so /api/session/toolsets
     keeps working for scripted callers regardless of UI visibility.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -21,7 +23,7 @@ class TestToolsetsChipResponsiveCSS:
 
     def test_base_rule_defaults_chip_to_hidden(self):
         """The base .composer-toolsets-wrap rule must include display:none."""
-        css = _src("style.css")
+        css = family_source("style")
         # The base rule (outside any @container or @media block) must default-hide
         m = re.search(
             r'^\s*\.composer-toolsets-wrap\{[^}]*\}',
@@ -35,7 +37,7 @@ class TestToolsetsChipResponsiveCSS:
 
     def test_wide_container_query_shows_chip(self):
         """An @container composer-footer (min-width: 1100px) rule must reveal the chip."""
-        css = _src("style.css")
+        css = family_source("style")
         # Find the min-width container query — accept either display:block or display:flex
         # (we use block to match sibling wraps but either is a valid reveal)
         m = re.search(
@@ -49,7 +51,7 @@ class TestToolsetsChipResponsiveCSS:
 
     def test_burger_stage_keeps_hiding(self):
         """The fit-engine hamburger stage must still hide the chip."""
-        css = _src("style.css")
+        css = family_source("style")
         m = re.search(
             r'\.composer-footer\.cf-burger\b.*?\.composer-toolsets-wrap\s*\{\s*display:\s*none\s*!important',
             css, re.DOTALL,
@@ -61,7 +63,7 @@ class TestToolsetsChipResponsiveCSS:
 
     def test_mobile_viewport_keeps_hiding(self):
         """The existing @media max-width:640px rule must still hide the chip on mobile."""
-        css = _src("style.css")
+        css = family_source("style")
         m = re.search(
             r'@media\s*\(\s*max-width:\s*640px\s*\).*?\.composer-toolsets-wrap\s*\{\s*display:\s*none\s*!important',
             css, re.DOTALL,
@@ -77,7 +79,7 @@ class TestToolsetsChipJSDoesNotForceHide:
 
     def test_applyToolsetsChip_does_not_set_display_none(self):
         """_applyToolsetsChip must not contain wrap.style.display = 'none'."""
-        js = _src("ui.js")
+        js = family_source("ui")
         m = re.search(r'function _applyToolsetsChip\([^)]*\)\s*\{.*?\n\}', js, re.DOTALL)
         assert m, "_applyToolsetsChip function must exist"
         body = m.group(0)
@@ -93,7 +95,7 @@ class TestToolsetsChipJSDoesNotForceHide:
 
     def test_applyToolsetsChip_clears_inline_style(self):
         """_applyToolsetsChip must clear inline display so CSS rules can apply."""
-        js = _src("ui.js")
+        js = family_source("ui")
         m = re.search(r'function _applyToolsetsChip\([^)]*\)\s*\{.*?\n\}', js, re.DOTALL)
         assert m, "_applyToolsetsChip function must exist"
         body = m.group(0)
@@ -108,7 +110,7 @@ class TestToolsetsChipJSDoesNotForceHide:
 
     def test_applyToolsetsChip_still_tracks_state(self):
         """State tracking must be unchanged — /api/session/toolsets keeps working."""
-        js = _src("ui.js")
+        js = family_source("ui")
         assert "_currentSessionToolsets = toolsets" in js, (
             "_applyToolsetsChip must continue to update _currentSessionToolsets "
             "so /api/session/toolsets reflects the active state"
@@ -166,7 +168,7 @@ class TestToolsetsAPIStillWorks:
 
     def test_toolsets_dropdown_renderer_exists(self):
         """_renderToolsetsDropdown must still exist for when chip becomes visible."""
-        js = _src("ui.js")
+        js = family_source("ui")
         # Some form of toolsets dropdown machinery must remain so when the
         # chip is visible at wide widths, clicking it still opens the picker.
         assert "toggleToolsetsDropdown" in js, (
@@ -190,7 +192,7 @@ class TestToolsetsDropdownResizeGuard:
 
     def test_resize_handler_closes_dropdown_when_chip_hidden(self):
         """Resize listener must close dropdown when the chip is no longer visible."""
-        js = _src("ui.js")
+        js = family_source("ui")
         # Find the resize handler block for the toolsets dropdown
         # It must check chip.offsetParent === null and close, not reposition
         m = re.search(
@@ -212,7 +214,7 @@ class TestToolsetsDropdownResizeGuard:
 
     def test_position_dropdown_guards_against_hidden_chip(self):
         """_positionToolsetsDropdown must close-not-reposition if chip hidden."""
-        js = _src("ui.js")
+        js = family_source("ui")
         m = re.search(
             r"function _positionToolsetsDropdown\(\)\s*\{.*?\n\}",
             js, re.DOTALL,
@@ -228,7 +230,7 @@ class TestToolsetsDropdownResizeGuard:
 
     def test_toggle_dropdown_guards_against_hidden_chip(self):
         """toggleToolsetsDropdown must early-return if chip is hidden by CSS."""
-        js = _src("ui.js")
+        js = family_source("ui")
         m = re.search(
             r"function toggleToolsetsDropdown\(\)\s*\{.*?\n\}",
             js, re.DOTALL,

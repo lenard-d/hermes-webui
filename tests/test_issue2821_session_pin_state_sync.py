@@ -1,11 +1,13 @@
 """Regression checks for #2821 session pin/unpin state sync."""
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 
 
 def _function_block(src: str, name: str) -> str:

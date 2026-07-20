@@ -1,11 +1,13 @@
 """Regression coverage for #2554 — workspace tree file rows align with directories."""
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 
 
 def _render_tree_item_toggle_block() -> str:

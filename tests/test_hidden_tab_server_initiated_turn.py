@@ -20,11 +20,13 @@ tests pinning the contract:
   BOTH hidden-tab paths: a session opened while already hidden, AND a visible
   tab that transitions to hidden via the ``visibilitychange`` hook.
 """
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 SESSION_OPS = (REPO_ROOT / "api" / "session_ops.py").read_text(encoding="utf-8")
 
 

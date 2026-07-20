@@ -4,13 +4,15 @@ A WebUI profile switch uses cookie/thread-local profile state, so it should be
 allowed while another session is streaming. Only process-wide profile switches
 must remain blocked because they mutate global Hermes runtime state.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def _extract_switch_to_profile() -> str:

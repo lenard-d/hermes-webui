@@ -24,6 +24,8 @@ Tests in this file pin both invariants.
 """
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 import sys
 import types
@@ -566,8 +568,7 @@ class TestFrontendExtrasContract:
     catalog tail gets a bare-ID label or is invisible to /model autocomplete."""
 
     def test_ui_js_hydrates_dynamic_labels_from_extra_models(self):
-        from pathlib import Path
-        src = (Path(__file__).resolve().parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
+        src = family_source("ui")
         # Find the populateModelDropdown function and check it consumes
         # extra_models. Use a windowed substring search so the test stays
         # robust against minor refactors of surrounding code.
@@ -595,8 +596,7 @@ class TestFrontendExtrasContract:
         )
 
     def test_panels_js_uses_models_total_for_count(self):
-        from pathlib import Path
-        src = (Path(__file__).resolve().parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+        src = family_source("panels")
         idx = src.find("function _buildProviderCard")
         assert idx != -1
         body = src[idx : idx + 1500]
@@ -608,8 +608,7 @@ class TestFrontendExtrasContract:
         )
 
     def test_panels_js_renders_more_disclosure_pill(self):
-        from pathlib import Path
-        src = (Path(__file__).resolve().parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+        src = family_source("panels")
         # The "+N more" disclosure must reference the difference between
         # rendered count and total count somewhere in the providers-card
         # rendering path.

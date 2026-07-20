@@ -1,6 +1,8 @@
 """Regression coverage for issue #1800 file-picker and HTML-open interactions."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 import re
 from pathlib import Path
@@ -9,8 +11,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 ROUTES_PY = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
 
 

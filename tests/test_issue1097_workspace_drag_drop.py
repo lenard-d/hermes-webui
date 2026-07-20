@@ -1,4 +1,6 @@
 """Tests for #1097 — drag & drop workspace files into chat composer."""
+from tests.frontend_asset_contract import family_source
+
 import re
 
 
@@ -12,13 +14,13 @@ class TestWorkspaceDragDrop:
 
     def test_renderTreeItems_makes_items_draggable(self):
         """Each file-item must have draggable='true'."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "el.setAttribute('draggable','true')" in src, \
             "_renderTreeItems must set draggable=true on each item"
 
     def test_dragstart_stores_ws_path(self):
         """dragstart must store 'application/ws-path' with item.path."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "application/ws-path" in src, \
             "dragstart must setData with application/ws-path"
         assert "item.path" in src, \
@@ -26,19 +28,19 @@ class TestWorkspaceDragDrop:
 
     def test_dragstart_stores_ws_type(self):
         """dragstart must store 'application/ws-type' (file or dir)."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "application/ws-type" in src, \
             "dragstart must setData with application/ws-type"
 
     def test_dragstart_effectAllowed_copy(self):
         """Drag effect must be 'copy' (not move — we insert a reference)."""
-        src = _src("ui.js")
+        src = family_source("ui")
         assert "effectAllowed='copy'" in src, \
             "dragstart must set effectAllowed to 'copy'"
 
     def test_drop_handler_checks_ws_path(self):
         """Global drop handler must check for application/ws-path first."""
-        src = _src("panels.js")
+        src = family_source("panels")
         m = re.search(r"document\.addEventListener\('drop'", src)
         assert m, "Global drop listener must exist"
         after = src[m.start():m.start() + 2000]
@@ -47,7 +49,7 @@ class TestWorkspaceDragDrop:
 
     def test_workspace_drop_inserts_at_path(self):
         """Workspace drop must insert @path into composer textarea."""
-        src = _src("panels.js")
+        src = family_source("panels")
         m = re.search(r"document\.addEventListener\('drop'", src)
         after = src[m.start():m.start() + 2000]
         # Must insert @-prefixed path
@@ -62,7 +64,7 @@ class TestWorkspaceDragDrop:
 
     def test_workspace_drop_has_prefix_logic(self):
         """Workspace drop should add space prefix if cursor is mid-word."""
-        src = _src("panels.js")
+        src = family_source("panels")
         m = re.search(r"document\.addEventListener\('drop'", src)
         after = src[m.start():m.start() + 2000]
         assert "prefix" in after.lower(), \
@@ -70,7 +72,7 @@ class TestWorkspaceDragDrop:
 
     def test_dragenter_accepts_ws_path(self):
         """dragenter must highlight composer for workspace drags too."""
-        src = _src("panels.js")
+        src = family_source("panels")
         # Find dragenter listener
         m = re.search(r"document\.addEventListener\('dragenter'", src)
         assert m, "dragenter listener must exist"
@@ -80,7 +82,7 @@ class TestWorkspaceDragDrop:
 
     def test_os_file_drop_still_works(self):
         """OS file drag (dataTransfer.files) must still attach files."""
-        src = _src("panels.js")
+        src = family_source("panels")
         m = re.search(r"document\.addEventListener\('drop'", src)
         after = src[m.start():m.start() + 2000]
         assert "addFiles(files)" in after, \

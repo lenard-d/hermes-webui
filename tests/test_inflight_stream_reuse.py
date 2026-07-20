@@ -1,4 +1,6 @@
 """Regression tests for preserving live streams across session switches."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import shutil
@@ -7,9 +9,9 @@ from pathlib import Path
 from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO_ROOT = Path(__file__).parent.parent
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 SESSIONS_JS = SESSIONS_SOURCE
-UI_JS = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 

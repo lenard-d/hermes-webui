@@ -1,6 +1,8 @@
 """Regression coverage for #1823 Kanban stale-client/board-pointer failures."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 import io
 import json
@@ -11,7 +13,7 @@ from urllib.parse import urlparse
 from api import routes
 
 ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
-PANELS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS = family_source("panels")
 ROUTES = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
 

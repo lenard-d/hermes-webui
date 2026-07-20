@@ -6,6 +6,8 @@ Covers:
 - _deduplicate_model_ids() post-process in api/config.py
 - Frontend norm() regex in ui.js that strips @provider: prefixes
 """
+from tests.frontend_asset_contract import family_source
+
 import copy
 import unittest
 
@@ -185,8 +187,7 @@ class TestFrontendNormRegex(unittest.TestCase):
 
     @staticmethod
     def _read_js():
-        import pathlib
-        return (pathlib.Path(__file__).parent.parent / "static" / "ui.js").read_text()
+        return family_source("ui")
 
     def _extract_norm(self):
         """Extract the norm() lambda from ui.js source."""
@@ -235,8 +236,7 @@ class TestFrontendPreferredProviderMatch(unittest.TestCase):
 
     @staticmethod
     def _read_js():
-        import pathlib
-        return (pathlib.Path(__file__).parent.parent / "static" / "ui.js").read_text()
+        return family_source("ui")
 
     def test_find_model_prefers_matching_provider_for_slash_collision(self):
         import re

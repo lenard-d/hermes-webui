@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +46,7 @@ def test_streaming_usage_payload_includes_prompt_cache_counters():
 
 
 def test_context_indicator_surfaces_cache_hit_rate():
-    src = (ROOT / "static" / "ui.js").read_text()
+    src = family_source("ui")
 
     assert "cacheReadTok=usage.cache_read_tokens||0" in src
     assert "cacheWriteTok=usage.cache_write_tokens||0" in src
@@ -61,7 +63,7 @@ def test_context_indicator_surfaces_cache_hit_rate():
 
 
 def test_cache_usage_labels_are_localized():
-    src = (ROOT / "static" / "i18n.js").read_text()
+    src = family_source("i18n")
 
     assert src.count("usage_cache_hit_detail:") == 15
     assert src.count("usage_cached_percent:") == 15
@@ -70,7 +72,7 @@ def test_cache_usage_labels_are_localized():
 
 
 def test_done_handler_preserves_per_turn_cache_deltas():
-    src = (ROOT / "static" / "messages.js").read_text()
+    src = family_source("messages")
 
     assert "_prevCacheRead=(S.session&&S.session.cache_read_tokens)||0" in src
     assert "curCacheRead=d.usage.cache_read_tokens||0" in src

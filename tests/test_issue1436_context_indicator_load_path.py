@@ -30,6 +30,8 @@ often").  Confirmed live on the dev server: 23 of 75 sessions had
 """
 import json
 from pathlib import Path
+
+from tests.frontend_asset_contract import family_source
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
@@ -321,7 +323,7 @@ class TestIssue1436FrontendDefense:
         """Verify the line `promptTok = usage.last_prompt_tokens||usage.input_tokens||0`
         has been removed.  The old fallback divides cumulative input by the
         context window, producing the >100% bug."""
-        src = UI_JS.read_text(encoding="utf-8")
+        src = family_source("ui")
         # The bug shape: the `||usage.input_tokens` fragment must NOT appear
         # on any line that defines `promptTok`.
         for line_num, line in enumerate(src.splitlines(), 1):
@@ -337,7 +339,7 @@ class TestIssue1436FrontendDefense:
 
     def test_promptTok_assignment_uses_last_prompt_tokens_only(self):
         """Verify the new assignment: `promptTok = usage.last_prompt_tokens || 0`."""
-        src = UI_JS.read_text(encoding="utf-8")
+        src = family_source("ui")
         # Allow whitespace variations.
         normalized = "".join(src.split())
         assert "constpromptTok=usage.last_prompt_tokens||0" in normalized, (
@@ -350,7 +352,7 @@ class TestIssue1436FrontendDefense:
         must render '·' (U+00B7) on the ring instead of computing a percentage.
         This is the existing behavior; the test pins it so a future refactor
         doesn't accidentally re-introduce a numeric fallback."""
-        src = UI_JS.read_text(encoding="utf-8")
+        src = family_source("ui")
         assert "hasPromptTok=!!promptTok" in src.replace(" ", ""), (
             "hasPromptTok must be a boolean of promptTok"
         )

@@ -6,13 +6,15 @@ rows with `is_streaming: false`, `active_stream_id: null`, and
 open session can keep `S.busy = true`, so `_isSessionLocallyStreaming()` still
 makes the sidebar row render as streaming even after the server says idle.
 """
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 import json
 import subprocess
 
 REPO = Path(__file__).resolve().parents[1]
-SESSIONS_SRC = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
+SESSIONS_SRC = family_source("sessions")
 
 
 def _function_body(src: str, signature: str) -> str:

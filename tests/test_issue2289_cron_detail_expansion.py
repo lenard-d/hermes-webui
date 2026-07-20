@@ -1,13 +1,15 @@
 """Static coverage for issue #2289 cron detail expansion controls."""
 
 from __future__ import annotations
+from tests.frontend_asset_contract import family_source
+
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 
 
 def test_cron_prompt_and_run_expansion_helpers_are_persisted():

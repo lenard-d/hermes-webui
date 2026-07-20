@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
@@ -16,7 +18,7 @@ def test_session_new_route_accepts_worktree_flag_and_uses_worktree_info():
 
 
 def test_new_session_request_can_include_worktree_flag():
-    src = read("static/sessions.js")
+    src = family_source("sessions")
     assert "async function newSession(flash, options={})" in src
     # Three-value contract (#6022): explicit true/false forwarded verbatim,
     # absent key omitted so the server applies the config default.
@@ -24,7 +26,7 @@ def test_new_session_request_can_include_worktree_flag():
 
 
 def test_workspace_dropdown_exposes_new_worktree_conversation_action():
-    src = read("static/panels.js")
+    src = family_source("panels")
     assert "workspace_new_worktree_conversation" in src
     assert "workspace_new_worktree_conversation_meta" in src
     assert "newSession(false,{worktree:true})" in src
@@ -32,15 +34,15 @@ def test_workspace_dropdown_exposes_new_worktree_conversation_action():
 
 
 def test_session_sidebar_renders_worktree_indicator():
-    src = read("static/sessions.js")
+    src = family_source("sessions")
     assert "session-worktree-indicator" in src
     assert "s.worktree_path" in src
     assert "s.worktree_branch" in src
 
 
 def test_worktree_indicator_styles_and_i18n_exist():
-    css = read("static/style.css")
-    i18n = read("static/i18n.js")
+    css = family_source("style")
+    i18n = family_source("i18n")
     assert ".session-worktree-indicator" in css
     assert "workspace_new_worktree_conversation" in i18n
     assert "session_worktree_badge" in i18n
