@@ -8,7 +8,7 @@ import json
 import re
 import time
 
-from api.runs.journal import (
+from api.runs import (
     bound_run_journal_snapshot_args,
     find_run_summary,
     read_run_events,
@@ -696,29 +696,6 @@ def _sanitize_anchor_activity_scene(scene):
     if len(encoded) > _ANCHOR_ACTIVITY_SCENE_MAX_BYTES:
         raise ValueError("scene payload is too large")
     return json.loads(encoded.decode("utf-8"))
-
-
-def _anchor_scene_int_or_none(value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _anchor_scene_message_index_from_request(body):
-    if not isinstance(body, dict):
-        return None
-    message_index = _anchor_scene_int_or_none(body.get("message_index"))
-    message_offset = _anchor_scene_int_or_none(body.get("message_offset"))
-    message_window_index = _anchor_scene_int_or_none(body.get("message_window_index"))
-    if (
-        message_window_index is not None
-        and message_offset is not None
-        and message_offset > 0
-        and (message_index is None or message_index == message_window_index)
-    ):
-        return message_window_index + message_offset
-    return message_index
 
 
 def _anchor_scene_candidate_matches_scene(candidate, scene) -> bool:

@@ -17,7 +17,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     _handle_conversation_rounds = ctx["_handle_conversation_rounds"]
     _handle_goal_command = ctx["_handle_goal_command"]
     _handle_handoff_summary = ctx["_handle_handoff_summary"]
-    _handle_session_anchor_scene = ctx["_handle_session_anchor_scene"]
+    handle_session_anchor_scene = ctx["handle_session_anchor_scene"]
     _handle_session_compress = ctx["_handle_session_compress"]
     _handle_session_compress_start = ctx["_handle_session_compress_start"]
     _handle_terminal_close = ctx["_handle_terminal_close"]
@@ -66,7 +66,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     uuid = ctx["uuid"]
 
     if parsed.path == "/api/session/anchor-scene":
-        return _handle_session_anchor_scene(
+        return handle_session_anchor_scene(
             handler,
             body,
             get_or_materialize_session=_get_or_materialize_session,

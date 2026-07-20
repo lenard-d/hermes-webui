@@ -317,8 +317,10 @@ larger migration remains incremental:
   contract end to end: bounded input validation, journal-to-live-scene
   projection, settled transcript hydration, assistant-message identity, and
   atomic record replacement plus retention through the session repository.
-  `api/routes_parts/anchor_scene.py` is only the HTTP adapter and explicit
-  compatibility import surface. Authorization remains transport-owned, while
+  `api.sessions` exposes only persistence, hydration, live snapshot, and
+  journal-status operations from that owner. `api/routes_parts/anchor_scene.py`
+  is only the HTTP adapter; it no longer re-exports the owner's implementation
+  helpers through `api.routes`. Authorization remains transport-owned, while
   sidecar layout, cache freshness, sidebar projection, and recovery continue
   to belong to their existing session owners.
 - `api/session_sources.py` owns which foreign source-identity fields may enter

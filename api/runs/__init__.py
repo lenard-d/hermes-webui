@@ -10,11 +10,16 @@ from typing import Any
 
 
 _PUBLIC = {
+    "bound_run_journal_snapshot_args": (
+        ".journal",
+        "bound_run_journal_snapshot_args",
+    ),
     "LegacyJournalRuntimeAdapter": (".adapter", "LegacyJournalRuntimeAdapter"),
     "LocalTurnRequest": (".admission", "LocalTurnRequest"),
     "TurnExecution": (".execution", "TurnExecution"),
     "checkpoint_user_message": (".admission", "checkpoint_user_message"),
     "delete_run_journal": (".journal", "delete_run_journal"),
+    "find_run_summary": (".journal", "find_run_summary"),
     "get_background_results": (".background", "get_results"),
     "latest_run_summary": (".journal", "latest_run_summary"),
     "prepare_session_for_turn": (".admission", "prepare_session_for_turn"),

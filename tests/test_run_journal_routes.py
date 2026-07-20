@@ -33,7 +33,7 @@ def test_stream_status_exposes_replay_summary():
     assert "find_run_summary(stream_id)" in block
     assert '"replay_available"' in block
     assert '"journal"' in block
-    assert "_run_journal_status_payload" in block
+    assert "summarize_run_journal_status" in block
 
 
 def test_dead_stream_sse_replays_journal_before_404_fallback():
@@ -273,11 +273,14 @@ def test_replay_emits_event_ids_and_stale_restart_diagnostic():
 def test_session_payload_exposes_runtime_journal_for_stale_streams():
     import api.routes as routes
 
-    assert routes._run_journal_live_snapshot is anchor_scene_owner._run_journal_live_snapshot
+    assert (
+        routes.build_live_anchor_scene_snapshot
+        is anchor_scene_owner._run_journal_live_snapshot
+    )
     assert "original_stream_id = getattr(s, \"active_stream_id\", None)" in SESSION_QUERIES_SRC
     assert '"runtime_journal"' in SESSION_QUERIES_SRC
     assert '"runtime_journal_snapshot"' in SESSION_QUERIES_SRC
-    assert "snapshot = _run_journal_live_snapshot(original_stream_id)" in SESSION_QUERIES_SRC
+    assert "snapshot = build_live_anchor_scene_snapshot(" in SESSION_QUERIES_SRC
     assert 'terminal_state = "lost-worker-bookkeeping"' in ANCHOR_SCENE_SRC
     assert "active=journal_active" in SESSION_QUERIES_SRC
     assert "journal_active = bool(original_stream_id in active_stream_ids)" in SESSION_QUERIES_SRC
