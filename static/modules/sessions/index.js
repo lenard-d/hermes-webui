@@ -1,6 +1,9 @@
 // Native session-domain entrypoint. Internal modules use explicit imports;
 // only the legacy adapter writes compatibility globals for older frontend callers.
 import { sessionState } from './state.js';
+import { composerDrafts } from './composer-drafts.js';
+import { sessionRuntime } from './session-runtime.js';
+import { sessionUnread } from './session-unread.js';
 import { sessionLifecycle } from './lifecycle.js';
 import { sessionMessages } from './message-loading.js';
 import { messageTimeline } from './message-timeline.js';
@@ -24,6 +27,9 @@ import { publishCompatibilityDomain } from '../compatibility.js';
 
 export const parts=Object.freeze({
   sessionState,
+  composerDrafts,
+  sessionRuntime,
+  sessionUnread,
   sessionLifecycle,
   sessionMessages,
   messageTimeline,

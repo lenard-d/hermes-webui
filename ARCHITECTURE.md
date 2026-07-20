@@ -633,7 +633,10 @@ The main directly loaded families are:
    `activity-timing.js`; `composer-controls.js` is only their stable import facade.
 4. `workspace.js`, then ordered `workspace_parts/` for navigation, preview/editor,
    and upload behavior.
-5. Ordered `sessions_parts/`, then `sessions.js`, whose compatibility facade is intentionally installed last.
+5. `static/modules/sessions/index.js`, a native-module entrypoint whose semantic
+   owners include lifecycle, drafts, unread/visit persistence, runtime recovery,
+   list rendering, discovery, and management. Its compatibility domain is
+   published only by the entrypoint.
 6. Ordered `command_parts/`, then `commands.js`, preserving the command globals consumed by message sending.
 7. `messages.js`, then ordered `messages_parts/` for send, anchor modeling,
    stream rendering/lifecycle, approvals, clarification, and session events.
@@ -645,7 +648,13 @@ Most application assets remain classic scripts, while the UI family is loaded as
 native ES modules. Classic browser order and selected compatibility globals remain
 part of the contract, while family namespaces
 such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
-the semantic owners. A domain stays intact when splitting it would cross a
+the semantic owners. The sessions family is an exception: internal files are
+independently parseable native modules and `state.js` is a compatibility facade.
+`composer-drafts.js` owns draft persistence and restore suppression;
+`session-unread.js` owns viewed/completion markers; `session-runtime.js` owns
+sidebar stream reconciliation and journal recovery; and `session-state-store.js`
+owns their shared mutable identities and load-generation bindings. A domain stays
+intact when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
 `config/model_catalog.py`, `runs/local.py`, and
 `modules/ui/renderer.js` are deliberately larger than the line-count

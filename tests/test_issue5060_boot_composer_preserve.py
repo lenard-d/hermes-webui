@@ -13,6 +13,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SESSIONS_JS = family_source("sessions")
+COMPOSER_DRAFTS_JS = (
+    ROOT / "static" / "modules" / "sessions" / "composer-drafts.js"
+).read_text(encoding="utf-8").replace("sessionStateStoreBindings.", "")
 NODE = shutil.which("node")
 
 
@@ -41,15 +44,15 @@ def _draft_restore_block() -> str:
 
 
 def _draft_restore_suppression_block() -> str:
-    start = SESSIONS_JS.index("const _composerDraftRestoreSuppressedUntilBySid")
-    end = SESSIONS_JS.index("function _profileMatchesActiveProfile", start)
-    return SESSIONS_JS[start:end]
+    start = COMPOSER_DRAFTS_JS.index("const _composerDraftRestoreSuppressedUntilBySid")
+    end = COMPOSER_DRAFTS_JS.index("function _isRestorableNewChatDraftSession", start)
+    return COMPOSER_DRAFTS_JS[start:end]
 
 
 def _run_case(*, initial_text: str, draft: dict | None, opts: dict | None, current_sid, force_reload: bool, suppress_restore: bool | dict = False, remembered_server_draft: dict | None = None) -> dict:
     if NODE is None:
         pytest.skip("node not on PATH")
-    restore_fn = _function_block(SESSIONS_JS, "function _restoreComposerDraft(draft, targetSid, opts={}) {")
+    restore_fn = _function_block(COMPOSER_DRAFTS_JS, "function _restoreComposerDraft(draft, targetSid, opts={}) {")
     draft_block = _draft_restore_block()
     suppression_block = _draft_restore_suppression_block()
     if isinstance(suppress_restore, dict):

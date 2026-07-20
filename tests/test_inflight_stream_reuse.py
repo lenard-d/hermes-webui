@@ -17,6 +17,9 @@ LIVE_TOOLS_JS = LIVE_TOOLS_PATH.read_text(encoding="utf-8")
 RUN_JOURNAL_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
+SESSION_RUNTIME_JS = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "session-runtime.js"
+).read_text(encoding="utf-8")
 STREAM_PROGRESS_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
 ).read_text(encoding="utf-8")
@@ -1002,12 +1005,12 @@ def test_load_session_discards_cursor_only_inflight_before_reattach():
     that cursor makes the session look blank after switching away and back.
     """
     load_body = _load_session_flow_body()
-    helper_start = SESSIONS_JS.index("function _inflightHasVisibleLiveState")
-    helper_body = SESSIONS_JS[
-        helper_start : SESSIONS_JS.index("function _rememberRenderedSessionSnapshot", helper_start)
+    helper_start = SESSION_RUNTIME_JS.index("function _inflightHasVisibleLiveState")
+    helper_body = SESSION_RUNTIME_JS[
+        helper_start : SESSION_RUNTIME_JS.index("function _serverLiveSnapshotToolId", helper_start)
     ]
 
-    assert "function _inflightHasVisibleLiveState" in SESSIONS_JS
+    assert "function _inflightHasVisibleLiveState" in SESSION_RUNTIME_JS
     assert "lastAssistantText" in helper_body
     assert "lastReasoningText" in helper_body
     assert "liveTurnHtml" in helper_body

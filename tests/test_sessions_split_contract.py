@@ -13,8 +13,14 @@ from tests.test_sessions_split_support import (
 
 def test_sessions_use_a_semantic_module_inventory_without_runtime_manifests():
     modules = sessions_part_paths()
-    assert 10 <= len(modules) <= 14
+    assert len(modules) >= 10
     assert len(modules) == len(set(modules))
+    assert {
+        "composer-drafts.js",
+        "session-runtime.js",
+        "session-state-store.js",
+        "session-unread.js",
+    } <= {path.name for path in modules}
     assert modules[-1].name == "index.js"
     assert not (SESSIONS_PARTS_DIR / "manifest.json").exists()
     assert not any(path.name[:3].isdigit() for path in modules)
@@ -61,7 +67,10 @@ def test_sessions_modules_publish_semantic_interfaces_and_one_legacy_seam():
     assert positions == sorted(positions)
 
     expected_modules = {
+        "composerDrafts",
         "sessionState",
+        "sessionRuntime",
+        "sessionUnread",
         "sessionLifecycle",
         "sessionMessages",
         "messageTimeline",

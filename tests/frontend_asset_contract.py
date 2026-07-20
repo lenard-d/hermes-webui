@@ -89,6 +89,10 @@ _BOOT_MODULE_NAMES = (
 )
 
 _SESSION_MODULE_NAMES = (
+    "session-state-store.js",
+    "composer-drafts.js",
+    "session-unread.js",
+    "session-runtime.js",
     "state.js",
     "lifecycle.js",
     "message-loading.js",
