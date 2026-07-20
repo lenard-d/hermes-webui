@@ -86,6 +86,7 @@ from api.streaming_parts import context_replay as _streaming_context_replay
 from api.streaming_parts import message_sanitization as _streaming_message_sanitization
 from api.streaming_parts import post_compression_context as _streaming_post_compression
 from api.streaming_parts import provider_errors as _streaming_provider_errors
+from api.streaming_parts import runtime_resolution as _streaming_runtime_resolution
 from api.streaming_parts import stale_user_context as _streaming_stale_user_context
 from api.streaming_parts import thinking_content as _streaming_thinking
 from api.streaming_parts import terminal_outcomes as _streaming_terminal_outcomes
@@ -301,59 +302,23 @@ _PERSISTENT_MEMORY_FILES = (
 
 
 def _file_signature(path: Path) -> tuple[int, int] | None:
-    try:
-        st = path.stat()
-        return (int(st.st_mtime_ns), int(st.st_size))
-    except OSError:
-        return None
+    return _streaming_runtime_resolution.file_signature(_streaming_api(), path)
 
 
 def _persistent_state_snapshot(profile_home: str | None) -> dict:
     """Capture lightweight memory/skill file signatures for save toasts."""
-    if not profile_home:
-        return {"memory": {}, "skills": {}}
-    root = Path(profile_home)
-    memory = {}
-    for key, parts in _PERSISTENT_MEMORY_FILES:
-        sig = _file_signature(root.joinpath(*parts))
-        if sig is not None:
-            memory[key] = sig
-    skills = {}
-    skills_dir = root / "skills"
-    try:
-        for skill_md in skills_dir.rglob("SKILL.md"):
-            try:
-                rel = str(skill_md.relative_to(skills_dir)).replace("\\", "/")
-            except ValueError:
-                rel = str(skill_md)
-            sig = _file_signature(skill_md)
-            if sig is not None:
-                skills[rel] = sig
-    except OSError:
-        pass
-    return {"memory": memory, "skills": skills}
+    return _streaming_runtime_resolution.persistent_state_snapshot(
+        _streaming_api(),
+        profile_home,
+    )
 
 
 def _persistent_state_changes(before: dict | None, after: dict | None) -> dict:
-    before = before or {"memory": {}, "skills": {}}
-    after = after or {"memory": {}, "skills": {}}
-    memory_before = before.get("memory") or {}
-    memory_after = after.get("memory") or {}
-    skills_before = before.get("skills") or {}
-    skills_after = after.get("skills") or {}
-    memory_changed = any(memory_before.get(key) != sig for key, sig in memory_after.items())
-    skills = []
-    for rel, sig in skills_after.items():
-        old_sig = skills_before.get(rel)
-        if old_sig == sig:
-            continue
-        name = Path(rel).parent.name or Path(rel).stem
-        skills.append({
-            "name": name,
-            "path": rel,
-            "action": "created" if old_sig is None else "updated",
-        })
-    return {"memory_saved": memory_changed, "skills": skills[:10]}
+    return _streaming_runtime_resolution.persistent_state_changes(
+        _streaming_api(),
+        before,
+        after,
+    )
 
 
 def _apply_profile_provider_context_to_streaming_model(
@@ -363,43 +328,13 @@ def _apply_profile_provider_context_to_streaming_model(
     profile_default_model: str | None,
 ) -> tuple[str | None, str | None, bool]:
     """Attach profile provider context and repair stale cross-provider models."""
-    if provider_context or not profile_provider:
-        return model, provider_context, False
-
-    provider_context = profile_provider.lower()
-    if not profile_default_model:
-        return model, provider_context, False
-
-    from api.routes import _normalize_provider_id
-
-    profile_provider_normalized = _normalize_provider_id(profile_provider)
-    model_lower = (model or "").lower()
-    # Only run the bare-prefix family match on un-namespaced model ids. A custom
-    # namespace like "gemini_cli/..." or "claude-relay/..." merely *starts with* a
-    # first-party token; matching it here would clobber the model to the profile
-    # default on the send path (the #4278 collision — the slash-qualified branch
-    # below routes through the fixed _normalize_provider_id instead).
-    if "/" not in model_lower:
-        for prefix in ("gpt", "claude", "gemini"):
-            if model_lower.startswith(prefix):
-                if _normalize_provider_id(prefix) != profile_provider_normalized:
-                    return profile_default_model, provider_context, True
-                return model, provider_context, False
-
-    if "/" in model_lower:
-        slash_prefix = model_lower.split("/", 1)[0]
-        if provider_context == "openai-codex" and slash_prefix == "openai":
-            return profile_default_model, provider_context, True
-
-        slash_provider = _normalize_provider_id(slash_prefix)
-        if (
-            slash_provider
-            and slash_provider != profile_provider_normalized
-            and profile_provider_normalized not in {"openrouter", "custom", ""}
-        ):
-            return profile_default_model, provider_context, True
-
-    return model, provider_context, False
+    return _streaming_runtime_resolution.apply_profile_provider_context_to_streaming_model(
+        _streaming_api(),
+        model,
+        provider_context,
+        profile_provider,
+        profile_default_model,
+    )
 
 
 def _apply_profile_home_context_to_streaming_model(
@@ -409,34 +344,13 @@ def _apply_profile_home_context_to_streaming_model(
     has_profile: bool,
 ) -> tuple[str | None, str | None, bool]:
     """Apply profile provider/model context from a profile config if present."""
-    if not (profile_home and has_profile and not provider_context):
-        return model, provider_context, False
-
-    try:
-        import yaml as _yaml_pp
-
-        _pp_cfg_path = Path(profile_home) / "config.yaml"
-        if not _pp_cfg_path.is_file():
-            return model, provider_context, False
-
-        _pp_cfg = _yaml_pp.safe_load(_pp_cfg_path.read_text(encoding="utf-8")) or {}
-        if not isinstance(_pp_cfg, dict):
-            return model, provider_context, False
-
-        _pp = (_pp_cfg.get("model", {}).get("provider") or "").strip()
-        if not _pp:
-            return model, provider_context, False
-
-        _pp_default = (_pp_cfg.get("model", {}).get("default") or "").strip()
-        return _apply_profile_provider_context_to_streaming_model(
-            model,
-            provider_context,
-            _pp,
-            _pp_default,
-        )
-    except Exception:
-        logger.warning("profile provider read failed", exc_info=True)
-        return model, provider_context, False
+    return _streaming_runtime_resolution.apply_profile_home_context_to_streaming_model(
+        _streaming_api(),
+        model,
+        provider_context,
+        profile_home,
+        has_profile,
+    )
 
 
 def _resolve_custom_provider_runtime_overrides(
@@ -452,23 +366,12 @@ def _resolve_custom_provider_runtime_overrides(
     request; pass a harmless placeholder to the SDK and let the endpoint accept
     it or return its own auth error.
     """
-    if not (isinstance(resolved_provider, str) and resolved_provider.startswith("custom:")):
-        return resolved_provider, resolved_api_key, resolved_base_url
-
-    _cp_key, _cp_base = resolve_custom_provider_connection(resolved_provider)
-    if not resolved_api_key and _cp_key:
-        resolved_api_key = _cp_key
-    if not resolved_base_url and _cp_base:
-        resolved_base_url = _cp_base
-    if resolved_base_url:
-        # Route through the generic custom OpenAI-compatible client once the
-        # named provider has supplied the concrete endpoint. Keeping the
-        # provider as custom:<slug> would make Agent init synthesize invalid
-        # env-var hints like CUSTOM:SOMETHING-8000_API_KEY on keyless setups.
-        resolved_provider = "custom"
-        if not resolved_api_key:
-            resolved_api_key = _KEYLESS_CUSTOM_API_KEY
-    return resolved_provider, resolved_api_key, resolved_base_url
+    return _streaming_runtime_resolution.resolve_custom_provider_runtime_overrides(
+        _streaming_api(),
+        resolved_provider,
+        resolved_api_key,
+        resolved_base_url,
+    )
 
 
 def _same_base_url_endpoint(url_a: str, url_b: str) -> bool:
@@ -480,20 +383,11 @@ def _same_base_url_endpoint(url_a: str, url_b: str) -> bool:
     override at a different host/port that must be preserved). Path/query are
     intentionally ignored — the normalization #3895 fixes is path-only.
     """
-    from urllib.parse import urlsplit
-    try:
-        a = urlsplit((url_a or "").strip())
-        b = urlsplit((url_b or "").strip())
-    except Exception:
-        return False
-    _default_port = {"http": 80, "https": 443}
-    a_host = (a.hostname or "").lower()
-    b_host = (b.hostname or "").lower()
-    a_scheme = (a.scheme or "").lower()
-    b_scheme = (b.scheme or "").lower()
-    a_port = a.port or _default_port.get(a_scheme)
-    b_port = b.port or _default_port.get(b_scheme)
-    return bool(a_host) and a_host == b_host and a_scheme == b_scheme and a_port == b_port
+    return _streaming_runtime_resolution.same_base_url_endpoint(
+        _streaming_api(),
+        url_a,
+        url_b,
+    )
 
 
 def _runtime_preferred_base_url(
@@ -516,42 +410,20 @@ def _runtime_preferred_base_url(
                                       form of the same endpoint — the #3895 case)
       - different endpoint        -> configured override wins (no regression)
     """
-    runtime_base_url = None
-    if isinstance(runtime_provider, dict):
-        runtime_base_url = runtime_provider.get("base_url")
-    if not runtime_base_url:
-        return configured_base_url
-    if not configured_base_url:
-        return runtime_base_url
-
-    provider_id = str(
-        resolved_provider
-        or (runtime_provider or {}).get("provider")
-        or ""
-    ).strip().lower()
-    if provider_id.startswith("custom:"):
-        return configured_base_url or runtime_base_url
-
-    # An explicit configured override at a DIFFERENT endpoint must be preserved;
-    # only prefer the runtime URL when it's the same endpoint (path-normalized).
-    if _same_base_url_endpoint(configured_base_url, runtime_base_url):
-        return runtime_base_url
-    return configured_base_url
+    return _streaming_runtime_resolution.runtime_preferred_base_url(
+        _streaming_api(),
+        runtime_provider,
+        resolved_provider,
+        configured_base_url,
+    )
 
 
 def _is_fallback_lifecycle_message(kind: str, message: str) -> bool:
     """Return True if an agent lifecycle status should surface as a fallback warning."""
-    k = str(kind or '').strip().lower()
-    m = str(message or '').strip().lower()
-    return (
-        k == 'lifecycle'
-        and (
-            'rate limited' in m
-            or 'switching to fallback' in m
-            or 'falling back' in m
-            or 'fallback activated' in m
-            or 'trying fallback' in m
-        )
+    return _streaming_runtime_resolution.is_fallback_lifecycle_message(
+        _streaming_api(),
+        kind,
+        message,
     )
 
 
@@ -571,29 +443,10 @@ def _is_agent_compression_start_status(kind: str, message: str) -> bool:
     defer notices so "Skipping preflight compression…" never surfaces as a
     running compress divider.
     """
-    k = str(kind or '').strip().lower()
-    m = str(message or '').strip().lower()
-    if k != 'lifecycle' or not m:
-        return False
-    # Skip / cooldown / defer logs must never look like a live compression start.
-    if (
-        'skipping' in m
-        or 'defer' in m
-        or 'cooldown' in m
-        or 'will not start' in m
-    ):
-        return False
-    # Post-compress retry chatter is not a start event.
-    if 'compressed' in m and 'compressing' not in m and 'compression attempt' not in m:
-        return False
-    return (
-        'preflight compression:' in m
-        or 'pre-api compression:' in m
-        or 'compacting context' in m
-        or 'context too large' in m
-        or '— compressing (' in m
-        or '- compressing (' in m
-        or 'compression attempt' in m
+    return _streaming_runtime_resolution.is_agent_compression_start_status(
+        _streaming_api(),
+        kind,
+        message,
     )
 
 

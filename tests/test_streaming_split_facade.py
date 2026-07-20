@@ -2,6 +2,7 @@
 
 from api import streaming
 from api.streaming_parts import payloads
+from api.streaming_parts import runtime_resolution
 from api.streaming_parts.bindings import streaming_api
 
 
@@ -588,4 +589,85 @@ def test_webui_prefill_public_helpers_keep_streaming_module_identity():
         streaming._normalize_prefill_messages_before_user_turn,
     )
 
+    assert {helper.__module__ for helper in helpers} == {"api.streaming"}
+
+
+def test_runtime_snapshot_observes_facade_signature_patch(monkeypatch, tmp_path):
+    memory_path = tmp_path / "memories" / "MEMORY.md"
+    memory_path.parent.mkdir()
+    memory_path.write_text("memory", encoding="utf-8")
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_file_signature",
+        lambda path: seen.append(path) or (7, 8),
+    )
+
+    result = streaming._persistent_state_snapshot(str(tmp_path))
+
+    assert result["memory"] == {"memory": (7, 8), "user": (7, 8), "soul": (7, 8)}
+    assert memory_path in seen
+
+
+def test_profile_home_resolution_observes_facade_provider_helper(monkeypatch, tmp_path):
+    (tmp_path / "config.yaml").write_text(
+        "model:\n  provider: patched-provider\n  default: patched-model\n",
+        encoding="utf-8",
+    )
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_apply_profile_provider_context_to_streaming_model",
+        lambda *args: seen.append(args) or ("resolved", "provider", True),
+    )
+
+    assert streaming._apply_profile_home_context_to_streaming_model(
+        "old-model",
+        None,
+        str(tmp_path),
+        True,
+    ) == ("resolved", "provider", True)
+    assert seen == [("old-model", None, "patched-provider", "patched-model")]
+
+
+def test_custom_runtime_resolution_observes_facade_connection_and_key(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "resolve_custom_provider_connection",
+        lambda provider: (None, "http://patched.test/v1"),
+    )
+    monkeypatch.setattr(streaming, "_KEYLESS_CUSTOM_API_KEY", "patched-key")
+
+    assert streaming._resolve_custom_provider_runtime_overrides(
+        "custom:patched",
+        None,
+        None,
+    ) == ("custom", "patched-key", "http://patched.test/v1")
+
+
+def test_runtime_base_url_resolution_observes_facade_endpoint_matcher(monkeypatch):
+    monkeypatch.setattr(streaming, "_same_base_url_endpoint", lambda left, right: True)
+
+    assert streaming._runtime_preferred_base_url(
+        {"base_url": "http://runtime.test/v1"},
+        "openai",
+        "http://configured.test/v1/v1",
+    ) == "http://runtime.test/v1"
+
+
+def test_runtime_resolution_public_helpers_keep_streaming_module_identity():
+    helpers = (
+        streaming._file_signature,
+        streaming._persistent_state_snapshot,
+        streaming._persistent_state_changes,
+        streaming._apply_profile_provider_context_to_streaming_model,
+        streaming._apply_profile_home_context_to_streaming_model,
+        streaming._resolve_custom_provider_runtime_overrides,
+        streaming._same_base_url_endpoint,
+        streaming._runtime_preferred_base_url,
+        streaming._is_fallback_lifecycle_message,
+        streaming._is_agent_compression_start_status,
+    )
+
+    assert runtime_resolution.file_signature is not None
     assert {helper.__module__ for helper in helpers} == {"api.streaming"}

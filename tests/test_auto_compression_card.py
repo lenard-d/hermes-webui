@@ -444,6 +444,7 @@ def test_auto_compression_running_sse_uses_active_session_running_card():
 
 def test_agent_status_callback_emits_compressing_and_warning_events():
     src = _read("api/streaming.py")
+    runtime_src = _read("api/streaming_parts/runtime_resolution.py")
     start = src.find("def _agent_status_callback")
     assert start != -1, "agent status callback bridge not found"
     end = src.find("# Initialised here", start)
@@ -461,11 +462,11 @@ def test_agent_status_callback_emits_compressing_and_warning_events():
     # warning events with type:fallback for rate-limit/fallback lifecycle notices
     assert "put('warning'" in block
     assert "'type': 'fallback'" in block
-    assert "'rate limited'" in src
-    assert "'switching to fallback'" in src
-    assert "'falling back'" in src
-    assert "'fallback activated'" in src
-    assert "'trying fallback'" in src
+    assert "'rate limited'" in runtime_src
+    assert "'switching to fallback'" in runtime_src
+    assert "'falling back'" in runtime_src
+    assert "'fallback activated'" in runtime_src
+    assert "'trying fallback'" in runtime_src
 
     # Verify callback is wired to agent
     assert "'status_callback' in _agent_params" in src
