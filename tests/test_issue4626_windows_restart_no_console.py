@@ -20,7 +20,7 @@ from __future__ import annotations
 import pathlib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-UPDATE_TRANSACTION_PY = (REPO / "api" / "updates" / "transaction.py").read_text(encoding="utf-8")
+UPDATE_TRANSACTION_PY = (REPO / "api" / "updates" / "restart.py").read_text(encoding="utf-8")
 BOOTSTRAP_PY = (REPO / "bootstrap.py").read_text(encoding="utf-8")
 
 
@@ -82,5 +82,5 @@ class TestWindowsRestartConsoleSuppression:
             "bootstrap.py restart change must stay inside the win32 branch"
         )
         assert "sys.platform == 'win32'" in UPDATE_TRANSACTION_PY or 'sys.platform == "win32"' in UPDATE_TRANSACTION_PY, (
-            "api/updates/transaction.py restart change must stay inside the win32 branch"
+            "api/updates/restart.py restart change must stay inside the win32 branch"
         )

@@ -17,7 +17,7 @@ import subprocess
 import pytest
 
 import api.updates as updates
-from api.updates import policy, repository, transaction
+from api.updates import policy, repository, restart, transaction, transaction_state
 
 
 def _git(repo, *args):
@@ -199,14 +199,14 @@ def test_force_update_refuses_rewind_when_ref_is_ancestor(channel_repo, monkeypa
     """The rewind guard: apply_force_update must refuse to reset --hard onto a
     ref that is a strict ANCESTOR of HEAD (a downgrade). HEAD is on v0.52.5;
     we force to a ref resolving to the older v0.52.2 (an ancestor)."""
-    monkeypatch.setattr(transaction, 'REPO_ROOT', channel_repo)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', channel_repo)
     monkeypatch.setattr(
-        transaction, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0},
     )
     # Force the compare ref to the older stable tag (a strict ancestor of HEAD).
     monkeypatch.setattr(
-        transaction, '_select_apply_compare_ref',
+        policy, '_select_apply_compare_ref',
         lambda path, channel='stable', target=None: 'v0.52.2',
     )
     real_run_git = updates._run_git
@@ -259,9 +259,9 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
     lock-recovery retry silently falls back to stable (_apply_update_inner
     defaults to stable)."""
     (tmp_path / '.git').mkdir()
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        transaction, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0},
     )
     # No lock present → clear-lock takes the "re-run normal update" branch.
@@ -274,7 +274,7 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
                 'other_locks': []}
 
     monkeypatch.setattr(
-        transaction, '_inventory_locks',
+        repository, '_inventory_locks',
         fake_inventory,
     )
     # User's configured channel is experimental.

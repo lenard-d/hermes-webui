@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import api.updates as updates
-from api.updates import policy, repository, transaction
+from api.updates import policy, repository, restart, transaction, transaction_state
 
 def _fake_git_for_release_fetch_failure(args, cwd, timeout=10):
     if args == ['diff-index', '--quiet', 'HEAD', '--']:
@@ -157,8 +157,8 @@ def test_updates_package_preserves_public_import_and_owner_exports():
     assert imported._check_repo is policy._check_repo
     assert imported._run_git is repository._run_git
     assert imported.apply_update is transaction.apply_update
-    assert transaction._update_cache_current() is imported._update_cache
-    assert transaction._cache_lock_current() is imported._cache_lock
+    assert transaction_state._status_cache is imported._update_cache
+    assert transaction_state._status_cache_lock is imported._cache_lock
 
 
 def test_check_repo_webui_no_git_falls_back_to_old_payload_on_tags_failure(tmp_path, monkeypatch):
@@ -212,8 +212,8 @@ def test_apply_force_update_fetch_failure_reports_local_diagnostic(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with patch.object(repository, '_run_git', side_effect=fake_git), \
-         patch.object(transaction, 'REPO_ROOT', tmp_path), \
-         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+         patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+         patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_force_update('webui')
 
     assert result == {
@@ -232,8 +232,8 @@ def test_apply_update_fetch_failure_reports_local_diagnostic(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with patch.object(repository, '_run_git', side_effect=fake_git), \
-         patch.object(transaction, 'REPO_ROOT', tmp_path), \
-         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+         patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+         patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_update('webui')
 
     assert result == {
@@ -258,8 +258,8 @@ def test_apply_fetch_failure_keeps_connectivity_guidance_for_network_errors(tmp_
 
     for apply_fn, expected_message in cases:
         with patch.object(repository, '_run_git', side_effect=fake_git), \
-             patch.object(transaction, 'REPO_ROOT', tmp_path), \
-             patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+             patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+             patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
             result = apply_fn('webui')
 
         assert result == {'ok': False, 'message': expected_message}
@@ -281,8 +281,8 @@ def test_apply_fetch_failure_keeps_connectivity_guidance_for_timeout_shape(tmp_p
 
     for apply_fn, expected_message in cases:
         with patch.object(repository, '_run_git', side_effect=fake_git), \
-             patch.object(transaction, 'REPO_ROOT', tmp_path), \
-             patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+             patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+             patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
             result = apply_fn('webui')
 
         assert result == {'ok': False, 'message': expected_message}
@@ -302,8 +302,8 @@ def test_apply_force_update_fetch_failure_redacts_credentials(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with patch.object(repository, '_run_git', side_effect=fake_git), \
-         patch.object(transaction, 'REPO_ROOT', tmp_path), \
-         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+         patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+         patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_force_update('webui')
 
     assert secret not in result['message']
@@ -337,8 +337,8 @@ def test_apply_force_update_fetch_failure_redacts_query_secrets(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with patch.object(repository, '_run_git', side_effect=fake_git), \
-         patch.object(transaction, 'REPO_ROOT', tmp_path), \
-         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+         patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+         patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         result = updates.apply_force_update('webui')
 
     for name, value in secrets.items():
@@ -531,8 +531,8 @@ def test_apply_force_update_fetches_tags_with_force(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with patch.object(repository, '_run_git', side_effect=fake_git), \
-         patch.object(transaction, 'REPO_ROOT', tmp_path), \
-         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+         patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+         patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         updates.apply_force_update('webui')
 
     fetch_calls = [a for a in seen_args if a[:2] == ['fetch', 'origin']]
@@ -556,8 +556,8 @@ def test_apply_update_fetches_tags_with_force(tmp_path):
         raise AssertionError(f'unexpected git args: {args!r}')
 
     with patch.object(repository, '_run_git', side_effect=fake_git), \
-         patch.object(transaction, 'REPO_ROOT', tmp_path), \
-         patch.object(transaction, '_restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
+         patch.object(transaction_state, 'REPO_ROOT', tmp_path), \
+         patch.object(restart, 'restart_blocker_snapshot', return_value={'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}):
         updates.apply_update('webui')
 
     fetch_calls = [a for a in seen_args if a[:2] == ['fetch', 'origin']]
@@ -1047,7 +1047,7 @@ def test_apply_update_fetch_lock_error_returns_lock_conflict(tmp_path):
     """Fetch failure caused by .git/index.lock returns lock_conflict: True."""
     (tmp_path / '.git').mkdir()
     from api import updates as mod
-    with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
+    with patch('api.updates.transaction_state.REPO_ROOT', tmp_path), \
          patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ("fatal: Unable to create '/app/.git/index.lock': File exists.", False),
@@ -1060,7 +1060,7 @@ def test_apply_update_fetch_lock_error_does_not_attempt_pull(tmp_path):
     """If fetch fails with a lock error, no further git calls are made."""
     (tmp_path / '.git').mkdir()
     from api import updates as mod
-    with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
+    with patch('api.updates.transaction_state.REPO_ROOT', tmp_path), \
          patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ("fatal: Unable to create '.git/index.lock': File exists.", False),
@@ -1073,8 +1073,8 @@ def test_apply_update_status_lock_error_returns_lock_conflict(tmp_path):
     """Status failure caused by .git/index.lock returns lock_conflict: True."""
     (tmp_path / '.git').mkdir()
     from api import updates as mod
-    with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-         patch(f'{_MODULE}._select_apply_compare_ref', return_value='origin/main'), \
+    with patch('api.updates.transaction_state.REPO_ROOT', tmp_path), \
+         patch('api.updates.policy._select_apply_compare_ref', return_value='origin/main'), \
          patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ('', True),   # fetch succeeds
@@ -1088,9 +1088,8 @@ def test_apply_update_pull_lock_error_returns_lock_conflict(tmp_path):
     """Pull failure caused by .git/index.lock returns lock_conflict: True."""
     (tmp_path / '.git').mkdir()
     from api import updates as mod
-    with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
-         patch(f'{_MODULE}._select_apply_compare_ref', return_value='origin/main'), \
-         patch(f'{_MODULE}.STREAMS', {}), \
+    with patch('api.updates.transaction_state.REPO_ROOT', tmp_path), \
+         patch('api.updates.policy._select_apply_compare_ref', return_value='origin/main'), \
          patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ('', True),    # fetch succeeds
@@ -1105,7 +1104,7 @@ def test_apply_update_non_lock_fetch_failure_does_not_include_lock_conflict(tmp_
     """A non-lock fetch failure does NOT return lock_conflict."""
     (tmp_path / '.git').mkdir()
     from api import updates as mod
-    with patch(f'{_MODULE}.REPO_ROOT', tmp_path), \
+    with patch('api.updates.transaction_state.REPO_ROOT', tmp_path), \
          patch.object(repository, '_run_git') as mock_run_git:
         mock_run_git.side_effect = [
             ("fatal: unable to access 'https://github.com/repo.git/': Could not resolve host", False),
@@ -1138,9 +1137,9 @@ def test_apply_force_update_no_longer_touches_locks(tmp_path, monkeypatch):
 
     monkeypatch.setattr(repository, '_run_git',
                          MagicMock(return_value=('', True)))
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
     )
 
@@ -1240,9 +1239,9 @@ def test_apply_clear_lock_with_no_lock_runs_normal_update(tmp_path, monkeypatch)
     # No lock file written.
     monkeypatch.setattr(repository, '_run_git',
                          MagicMock(return_value=('', True)))
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
     )
     monkeypatch.setattr(
@@ -1277,9 +1276,9 @@ def test_apply_clear_lock_with_lock_present_returns_manual_instruction(tmp_path,
     # Patch os.remove + Path.unlink on the instance/module to record any
     # destructive attempt. apply_clear_lock must NOT call them.
     monkeypatch.setattr(updates.os, 'remove', forbid_delete)
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
     )
 
@@ -1308,9 +1307,9 @@ def test_apply_clear_lock_listing_includes_other_locks(tmp_path, monkeypatch):
     (tmp_path / '.git' / 'index.lock').write_text('')
     (tmp_path / '.git' / 'refs').mkdir()
     (tmp_path / '.git' / 'refs' / 'main.lock').write_text('')
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
     )
 
@@ -1321,9 +1320,9 @@ def test_apply_clear_lock_listing_includes_other_locks(tmp_path, monkeypatch):
 
 
 def test_apply_clear_lock_rejects_unknown_target(tmp_path, monkeypatch):
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
     )
     result = updates.apply_clear_lock('not-a-target')
@@ -1334,9 +1333,9 @@ def test_apply_clear_lock_rejects_unknown_target(tmp_path, monkeypatch):
 def test_apply_clear_lock_rejects_not_git_repo(tmp_path, monkeypatch):
     """If REPO_ROOT has no .git, apply_clear_lock must refuse."""
     # tmp_path has no .git
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
-        updates, '_restart_blocker_snapshot',
+        restart, 'restart_blocker_snapshot',
         lambda: {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0}
     )
     result = updates.apply_clear_lock('webui')
@@ -1361,7 +1360,7 @@ def test_apply_update_pull_lock_restores_stash(tmp_path, monkeypatch):
         return '', True
 
     monkeypatch.setattr(repository, '_run_git', fake_git)
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_select_apply_compare_ref',
         lambda path, channel='stable', target=None: 'origin/main'
@@ -1413,7 +1412,7 @@ def test_apply_update_pull_lock_no_stash_when_clean(tmp_path, monkeypatch):
         return '', True
 
     monkeypatch.setattr(repository, '_run_git', fake_git)
-    monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(
         updates, '_select_apply_compare_ref',
         lambda path, channel='stable', target=None: 'origin/main'

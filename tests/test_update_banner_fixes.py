@@ -28,7 +28,7 @@ from collections import defaultdict
 from urllib.parse import parse_qs
 
 import pytest
-from api.updates import policy, repository, transaction
+from api.updates import policy, repository, restart, transaction_state
 
 REPO = pathlib.Path(__file__).parent.parent
 
@@ -82,7 +82,7 @@ def _stub_pycache_purge(monkeypatch):
     test_schedule_restart_purges_pycache_before_execv, which re-patches with a
     recording spy.
     """
-    monkeypatch.setattr(transaction, "_purge_agent_pycache", lambda *a, **k: None)
+    monkeypatch.setattr(restart, "purge_python_bytecode", lambda *a, **k: None)
 
 
 def _extract_summary_cache_js():
@@ -389,8 +389,8 @@ class TestConflictError:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
 
         result = upd.apply_update('webui')
         assert result['ok'] is False
@@ -415,8 +415,8 @@ class TestConflictError:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
 
         result = upd.apply_update('agent')
         # Message must be actionable — should mention git checkout or pull
@@ -443,7 +443,7 @@ class TestScheduleRestart:
         # Monkeypatch os.execv inside the module's thread closure
         import os as _os
         monkeypatch.setattr(sys, 'platform', 'linux')
-        monkeypatch.setattr(transaction, '_wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
+        monkeypatch.setattr(restart, 'wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
         monkeypatch.setattr(_os, 'execv', fake_execv)
 
         start = time.monotonic()
@@ -475,8 +475,8 @@ class TestScheduleRestart:
 
         # Override the autouse no-op stub with a recording spy.
         monkeypatch.setattr(sys, 'platform', 'linux')
-        monkeypatch.setattr(transaction, '_wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
-        monkeypatch.setattr(transaction, "_purge_agent_pycache", spy_purge)
+        monkeypatch.setattr(restart, 'wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
+        monkeypatch.setattr(restart, "purge_python_bytecode", spy_purge)
         monkeypatch.setattr(os, "execv", fake_execv)
 
         upd._schedule_restart(delay=0.05)
@@ -500,11 +500,11 @@ class TestApplyUpdateRestartSafety:
         from api.config import STREAMS, STREAMS_LOCK
 
         (tmp_path / '.git').mkdir()
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         called = []
         monkeypatch.setattr(repository, '_run_git', lambda *a, **k: (called.append(a) or ('', True)))
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
 
         with STREAMS_LOCK:
             old = dict(STREAMS)
@@ -529,10 +529,10 @@ class TestApplyUpdateRestartSafety:
         from api.config import STREAMS, STREAMS_LOCK
 
         (tmp_path / '.git').mkdir()
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(repository, '_run_git', lambda *a, **k: (_ for _ in ()).throw(AssertionError('must not run git')))
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
 
         with STREAMS_LOCK:
             old = dict(STREAMS)
@@ -555,11 +555,11 @@ class TestApplyUpdateRestartSafety:
         from api.config import ACTIVE_RUNS, ACTIVE_RUNS_LOCK, STREAMS, STREAMS_LOCK
 
         (tmp_path / '.git').mkdir()
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         called = []
         monkeypatch.setattr(repository, '_run_git', lambda *a, **k: (called.append(a) or ('', True)))
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
 
         with STREAMS_LOCK:
             old_streams = dict(STREAMS)
@@ -590,10 +590,10 @@ class TestApplyUpdateRestartSafety:
         from api.config import ACTIVE_RUNS, ACTIVE_RUNS_LOCK, STREAMS, STREAMS_LOCK
 
         (tmp_path / '.git').mkdir()
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(repository, '_run_git', lambda *a, **k: (_ for _ in ()).throw(AssertionError('must not run git')))
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
 
         with STREAMS_LOCK:
             old_streams = dict(STREAMS)
@@ -626,7 +626,7 @@ class TestApplyUpdateRestartSafety:
             {'restart_blocked': False, 'active_streams': 0, 'active_runs': 0},
         ]
         sleeps = []
-        monkeypatch.setattr(transaction, '_restart_blocker_snapshot', lambda: snapshots.pop(0))
+        monkeypatch.setattr(restart, 'restart_blocker_snapshot', lambda: snapshots.pop(0))
         monkeypatch.setattr(upd.time, 'sleep', lambda seconds: sleeps.append(seconds))
 
         result = upd._wait_until_restart_safe(poll_seconds=0.25)
@@ -657,10 +657,10 @@ class TestSuccessfulUpdateReturnsRestartScheduled:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         # Don't actually restart
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
 
         result = upd.apply_update('webui')
         assert result['ok'] is True
@@ -693,9 +693,9 @@ class TestSuccessfulUpdateReturnsRestartScheduled:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
 
         result = upd.apply_update('webui')
         assert result['ok'] is True
@@ -726,11 +726,11 @@ class TestSuccessfulUpdateReturnsRestartScheduled:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
         monkeypatch.setattr(
-            'api.updates.transaction._default_restart_gateway',
+            'api.updates.restart._default_restart_gateway',
             lambda **kwargs: {'status': 'completed', 'message': 'Gateway service restarted successfully'},
         )
 
@@ -761,9 +761,9 @@ class TestApplyForceUpdate:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
 
         result = upd.apply_force_update('webui')
         assert result['ok'] is True
@@ -802,9 +802,9 @@ class TestApplyForceUpdate:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
 
         result = upd.apply_force_update('webui')
 
@@ -822,8 +822,8 @@ class TestApplyForceUpdate:
 
     def test_apply_force_update_rejects_unknown_target(self, tmp_path, monkeypatch):
         import api.updates as upd
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         result = upd.apply_force_update('invalid')
         assert result['ok'] is False
 
@@ -845,9 +845,9 @@ class TestAgentUpdateRequiresGatewayRestart:
             restart_calls.append(profile)
             return next(restart_results)
 
-        monkeypatch.setattr(transaction, '_default_restart_gateway', fake_restart)
+        monkeypatch.setattr(restart, '_default_restart_gateway', fake_restart)
         monkeypatch.setattr(upd.time, 'sleep', sleeps.append)
-        monkeypatch.setattr(transaction, '_default_gateway_pid', lambda *, profile=None: 101)
+        monkeypatch.setattr(restart, '_default_gateway_pid', lambda *, profile=None: 101)
 
         ok, result = upd._ensure_gateway_restart_for_agent_update()
 
@@ -868,10 +868,10 @@ class TestAgentUpdateRequiresGatewayRestart:
         sleeps = []
         gateway_pid_calls = []
 
-        monkeypatch.setattr(transaction, '_default_restart_gateway', lambda **kwargs: next(restart_results))
+        monkeypatch.setattr(restart, '_default_restart_gateway', lambda **kwargs: next(restart_results))
         monkeypatch.setattr(upd.time, 'sleep', sleeps.append)
         monkeypatch.setattr(
-            transaction,
+            restart,
             '_default_gateway_pid',
             lambda *, profile=None: gateway_pid_calls.append(profile) or 101,
         )
@@ -905,9 +905,9 @@ class TestAgentUpdateRequiresGatewayRestart:
             timeline.append(f'pid:{pid}')
             return pid
 
-        monkeypatch.setattr(transaction, '_default_restart_gateway', fake_restart)
+        monkeypatch.setattr(restart, '_default_restart_gateway', fake_restart)
         monkeypatch.setattr(upd.time, 'sleep', sleeps.append)
-        monkeypatch.setattr(transaction, '_default_gateway_pid', fake_gateway_pid)
+        monkeypatch.setattr(restart, '_default_gateway_pid', fake_gateway_pid)
 
         ok, result = upd._ensure_gateway_restart_for_agent_update()
 
@@ -937,9 +937,9 @@ class TestAgentUpdateRequiresGatewayRestart:
             restart_calls.append(profile)
             return next(restart_results)
 
-        monkeypatch.setattr(transaction, '_default_restart_gateway', fake_restart)
+        monkeypatch.setattr(restart, '_default_restart_gateway', fake_restart)
         monkeypatch.setattr(upd.time, 'sleep', sleeps.append)
-        monkeypatch.setattr(transaction, '_default_gateway_pid', lambda *, profile=None: 101)
+        monkeypatch.setattr(restart, '_default_gateway_pid', lambda *, profile=None: 101)
 
         ok, result = upd._ensure_gateway_restart_for_agent_update()
 
@@ -970,10 +970,10 @@ class TestAgentUpdateRequiresGatewayRestart:
                 return {'status': 'completed', 'message': 'wrong profile restarted'}
             return next(default_restart_results)
 
-        monkeypatch.setattr(transaction, '_default_active_profile_name', lambda: 'default')
-        monkeypatch.setattr(transaction, '_default_restart_gateway', fake_restart)
+        monkeypatch.setattr(restart, '_default_active_profile_name', lambda: 'default')
+        monkeypatch.setattr(restart, '_default_restart_gateway', fake_restart)
         monkeypatch.setattr(upd.time, 'sleep', lambda seconds: None)
-        monkeypatch.setattr(transaction, '_default_gateway_pid', lambda *, profile=None: 101)
+        monkeypatch.setattr(restart, '_default_gateway_pid', lambda *, profile=None: 101)
 
         ok, result = upd._ensure_gateway_restart_for_agent_update()
 
@@ -1414,10 +1414,10 @@ class TestAgentUpdateRequiresGatewayRestart:
             return {'status': 'completed', 'message': 'Gateway service restarted successfully'}
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
-        monkeypatch.setattr('api.updates.transaction._default_restart_gateway', fake_gateway_restart)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr('api.updates.restart._default_restart_gateway', fake_gateway_restart)
 
         result = upd.apply_update('agent')
         assert result['ok'] is True
@@ -1464,10 +1464,10 @@ class TestAgentUpdateRequiresGatewayRestart:
             return {'status': 'in_progress', 'message': 'Gateway service restart initiated (in progress)'}
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
-        monkeypatch.setattr('api.updates.transaction._default_restart_gateway', fake_gateway_restart)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr('api.updates.restart._default_restart_gateway', fake_gateway_restart)
 
         result = upd.apply_update('agent')
         assert result['ok'] is True
@@ -1499,10 +1499,10 @@ class TestAgentUpdateRequiresGatewayRestart:
 
         restart_calls = []
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
-        monkeypatch.setattr('api.updates.transaction._default_restart_gateway', lambda **kwargs: (
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
+        monkeypatch.setattr('api.updates.restart._default_restart_gateway', lambda **kwargs: (
             restart_calls.append(kwargs.get('profile')),
             {'status': 'busy', 'message': 'Restart already in progress. Please wait a moment and try again.'},
         )[1])
@@ -1534,10 +1534,10 @@ class TestAgentUpdateRequiresGatewayRestart:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
-        monkeypatch.setattr('api.updates.transaction._default_restart_gateway', lambda **kwargs: {'status': 'completed', 'message': 'Gateway service restarted successfully'})
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr('api.updates.restart._default_restart_gateway', lambda **kwargs: {'status': 'completed', 'message': 'Gateway service restarted successfully'})
 
         result = upd.apply_force_update('agent')
         assert result['ok'] is True
@@ -1562,11 +1562,11 @@ class TestAgentUpdateRequiresGatewayRestart:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
         monkeypatch.setattr(
-            'api.updates.transaction._default_restart_gateway',
+            'api.updates.restart._default_restart_gateway',
             lambda **kwargs: {'status': 'busy', 'message': 'Restart already in progress. Please wait a moment and try again.'},
         )
 
@@ -1581,7 +1581,7 @@ class TestAgentUpdateRequiresGatewayRestart:
 
         (tmp_path / '.git').mkdir()
         monkeypatch.setattr(
-            'api.updates.transaction._default_restart_gateway',
+            'api.updates.restart._default_restart_gateway',
             lambda: (_ for _ in ()).throw(AssertionError('helper must not run for webui updates')),
         )
 
@@ -1599,9 +1599,9 @@ class TestAgentUpdateRequiresGatewayRestart:
             return '', True
 
         monkeypatch.setattr(repository, '_run_git', fake_run)
-        monkeypatch.setattr(transaction, 'REPO_ROOT', tmp_path)
-        monkeypatch.setattr(transaction, '_AGENT_DIR', tmp_path)
-        monkeypatch.setattr(transaction, '_schedule_restart', lambda delay=2.0: None)
+        monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
+        monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
+        monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
 
         result = upd.apply_update('webui')
         assert result['ok'] is True
@@ -2581,7 +2581,7 @@ class TestSequentialUpdateRestartCoordination:
             execv_called.set()
 
         monkeypatch.setattr(sys, 'platform', 'linux')
-        monkeypatch.setattr(transaction, '_wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
+        monkeypatch.setattr(restart, 'wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
         monkeypatch.setattr(os, 'execv', fake_execv)
 
         # Hold _apply_lock from another thread (simulating an in-flight
@@ -2630,7 +2630,7 @@ class TestSequentialUpdateRestartCoordination:
         def fake_execv(exe, args):
             execv_called.append(True)
         monkeypatch.setattr(sys, 'platform', 'linux')
-        monkeypatch.setattr(transaction, '_wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
+        monkeypatch.setattr(restart, 'wait_until_restart_safe', lambda *a, **k: {'restart_blocked': False})
         monkeypatch.setattr(os, 'execv', fake_execv)
 
         upd._schedule_restart(delay=0.05)
