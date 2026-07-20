@@ -1,8 +1,14 @@
 import importlib
 import io
 import queue
+from pathlib import Path
 
 from tests.conftest import requires_agent_modules
+
+
+INTERACTIVE_RESPONSES_SRC = (
+    Path(__file__).parent.parent / "api" / "routes_parts" / "interactive_responses.py"
+).read_text(encoding="utf-8")
 
 
 def test_runtime_adapter_interface_and_legacy_journal_methods_exist():
@@ -268,13 +274,12 @@ def test_chat_cancel_route_uses_adapter_only_when_flag_enabled():
 
 
 def test_approval_and_clarify_routes_use_adapter_only_when_flag_enabled():
-    routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = INTERACTIVE_RESPONSES_SRC
 
     approval_idx = src.index("def _handle_approval_respond")
     approval_body = src[approval_idx:src.index("def _resolve_clarify_legacy", approval_idx)]
     clarify_idx = src.index("def _handle_clarify_respond")
-    clarify_body = src[clarify_idx:src.index("class _ManualCompressionMemoryHandler", clarify_idx)]
+    clarify_body = src[clarify_idx:src.index("__routes_exports__", clarify_idx)]
 
     assert "runtime_adapter_enabled()" in approval_body
     assert "LegacyJournalRuntimeAdapter(approval_delegate=_resolve_approval_legacy)" in approval_body
@@ -319,8 +324,7 @@ def test_goal_adapter_action_is_bounded_to_slice3c_actions():
 
 
 def test_approval_respond_does_not_fallback_to_oldest_when_explicit_id_is_stale():
-    routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = INTERACTIVE_RESPONSES_SRC
     helper_idx = src.index("def _resolve_approval_legacy")
     helper_body = src[helper_idx:src.index("def _handle_approval_respond", helper_idx)]
 
@@ -336,8 +340,7 @@ def test_approval_respond_peeks_gateway_queues_when_pending_empty() -> None:
     helper should extract pattern_keys from the gateway queue and call
     approve_session even though pending is None.
     """
-    routes = importlib.import_module("api.routes")
-    src = (routes.Path(__file__).parent.parent / "api" / "routes.py").read_text(encoding="utf-8")
+    src = INTERACTIVE_RESPONSES_SRC
     helper_idx = src.index("def _resolve_approval_legacy")
     helper_body = src[helper_idx:src.index("def _handle_approval_respond", helper_idx)]
 

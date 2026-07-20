@@ -16,7 +16,11 @@ ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 # Approval helpers moved to api.route_approvals after the #1907 extraction;
 # combine both files so static-analysis assertions still pass.
 _ROUTE_APPROVALS = REPO_ROOT / "api" / "route_approvals.py"
-ROUTES_SRC_FULL = ROUTES_SRC + (_ROUTE_APPROVALS.read_text(encoding="utf-8") if _ROUTE_APPROVALS.exists() else "")
+ROUTE_APPROVALS_SRC = _ROUTE_APPROVALS.read_text(encoding="utf-8") if _ROUTE_APPROVALS.exists() else ""
+ROUTES_SRC_FULL = ROUTES_SRC + ROUTE_APPROVALS_SRC
+INTERACTIVE_RESPONSES_SRC = (
+    REPO_ROOT / "api" / "routes_parts" / "interactive_responses.py"
+).read_text(encoding="utf-8")
 MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
@@ -34,7 +38,7 @@ def test_submit_pending_appends_to_list():
 
 def test_submit_pending_adds_approval_id():
     """Each queued entry must get a unique approval_id."""
-    assert "approval_id" in ROUTES_SRC and "uuid.uuid4().hex" in ROUTES_SRC, \
+    assert "approval_id" in ROUTE_APPROVALS_SRC and "uuid.uuid4().hex" in ROUTE_APPROVALS_SRC, \
         "submit_pending() must assign a uuid4 approval_id to each queued entry"
 
 
@@ -46,24 +50,24 @@ def test_handle_approval_pending_returns_count():
 
 def test_handle_approval_respond_pops_by_approval_id():
     """_handle_approval_respond must target entry by approval_id."""
-    assert 'approval_id = body.get("approval_id"' in ROUTES_SRC, \
+    assert 'approval_id = body.get("approval_id"' in INTERACTIVE_RESPONSES_SRC, \
         "_handle_approval_respond must read approval_id from request body"
-    assert 'entry.get("approval_id") == approval_id' in ROUTES_SRC, \
+    assert 'entry.get("approval_id") == approval_id' in INTERACTIVE_RESPONSES_SRC, \
         "_handle_approval_respond must find and pop the matching entry by approval_id"
 
 
 def test_handle_approval_respond_fallback_to_oldest():
     """When no approval_id is given, fall back to popping the oldest entry (FIFO)."""
     # The fallback path: queue.pop(0) when approval_id is empty
-    assert "queue.pop(0)" in ROUTES_SRC, \
+    assert "queue.pop(0)" in INTERACTIVE_RESPONSES_SRC, \
         "_handle_approval_respond must fall back to popping the oldest entry when approval_id is absent"
 
 
 def test_backward_compat_legacy_dict_value():
     """The respond handler must tolerate a legacy single-dict value in _pending."""
-    assert "Legacy single-dict value" in ROUTES_SRC or \
-           "# Legacy single-dict" in ROUTES_SRC or \
-           "elif queue:" in ROUTES_SRC, \
+    assert "Legacy single-dict value" in INTERACTIVE_RESPONSES_SRC or \
+           "# Legacy single-dict" in INTERACTIVE_RESPONSES_SRC or \
+           "elif queue:" in INTERACTIVE_RESPONSES_SRC, \
         "respond handler must handle legacy single-dict _pending values for backward compatibility"
 
 
