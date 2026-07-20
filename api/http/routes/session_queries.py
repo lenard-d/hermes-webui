@@ -7,7 +7,10 @@ from api.sessions import (
     foreign_session_access,
     is_messaging_session_record,
     requires_external_metadata_lookup,
+    session_continuation_lookup,
+    session_detail_cache,
     session_detail_projection,
+    session_message_window,
     session_sidebar_projection as sidebar_projection,
 )
 
@@ -119,7 +122,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
         # case (the client sees there are more rows than returned). Parsing +
         # clamping live in _parse_msg_limit so the expression has direct test
         # coverage; None means the bare no-msg_limit path (full transcript).
-        msg_limit = session_detail_projection.parse_message_limit(
+        msg_limit = session_message_window.parse_message_limit(
             query.get("msg_limit", [None])[0]
         )
         # ?msg_before=N — 0-based index into the full message array.
@@ -179,7 +182,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             _clear_stale_stream_state(s)
             if _detail_cache_candidate:
                 _detail_cache_key, _cached_detail_payload = (
-                    session_detail_projection.cached_tail(
+                    session_detail_cache.get_for(
                         s,
                         msg_limit=msg_limit,
                         expand_renderable=expand_renderable,
@@ -197,7 +200,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                     _session_profile = getattr(s, "profile", None) or None
                 # A full cached object may have changed while the metadata-only
                 # read was in flight. Re-evaluate eligibility before storing.
-                if not session_detail_projection.tail_cache_eligible(s):
+                if not session_detail_cache.eligible(s):
                     _detail_cache_key = None
             cli_meta = (
                 foreign_session_access.metadata(sid)
@@ -334,14 +337,14 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 _summary_message_count = None
                 _summary_last_message_at = None
             if load_messages:
-                _truncated_msgs, _messages_offset = session_detail_projection.message_window(
+                _truncated_msgs, _messages_offset = session_message_window.message_window(
                     _all_msgs,
                     msg_limit=msg_limit,
                     msg_before=msg_before,
                     expand_renderable=expand_renderable,
                 )
                 if msg_limit is not None:
-                    _truncated_msgs = session_detail_projection.bounded_messages(
+                    _truncated_msgs = session_message_window.bounded_messages(
                         _truncated_msgs
                     )
                 _truncated_msgs = _hydrate_anchor_activity_scenes(
@@ -425,7 +428,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             # in the session-level list).  The browser-side
             # _syncToolCallsForLoadedMessages handles deduplication by tid.
             if _windowed_messages:
-                _session_tool_calls = session_detail_projection.window_tool_calls(
+                _session_tool_calls = session_message_window.window_tool_calls(
                     _session_tool_calls,
                     _messages_offset,
                     len(_truncated_msgs),
@@ -521,7 +524,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 )
             # #2980: surface the visible continuation for a hidden pre-compression
             # snapshot so a mobile reload mid-compression can recover to it.
-            continuation_sid = session_detail_projection.continuation_session_id(s)
+            continuation_sid = session_continuation_lookup.continuation_session_id(s)
             if continuation_sid:
                 raw["continuation_session_id"] = continuation_sid
             if cli_meta and sidebar_projection.source_is_webui(cli_meta):
@@ -543,7 +546,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             )
             raw["_messages_truncated"] = _truncated
             raw["_messages_offset"] = _messages_offset
-            raw["_msg_limit_max"] = session_detail_projection.max_message_limit
+            raw["_msg_limit_max"] = session_message_window.max_message_limit
             _t4 = _time.monotonic()
             if _diag:
                 _diag.stage("t4_after_compact_and_merge")
@@ -573,7 +576,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 _diag.stage("t5_after_redact")
             _response_payload = {"session": redact}
             if _detail_cache_key is not None:
-                _fresh_detail_cache_key = session_detail_projection.tail_cache_key(
+                _fresh_detail_cache_key = session_detail_cache.key(
                     s,
                     msg_limit=msg_limit,
                     expand_renderable=expand_renderable,
@@ -582,7 +585,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 # snapshots. Store it only when no authoritative input changed
                 # during reconciliation/redaction (TOCTOU stale-cache guard).
                 if _fresh_detail_cache_key == _detail_cache_key:
-                    session_detail_projection.store_cached_tail(
+                    session_detail_cache.store(
                         _detail_cache_key,
                         _response_payload,
                     )

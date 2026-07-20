@@ -388,14 +388,19 @@ larger migration remains incremental:
   there. Callers and tests use the owning Module when they need an internal
   seam.
 - Session presentation and materialization cross package boundaries through
-  three cohesive interfaces exported by `api.sessions`: `foreign_session_access`
+  cohesive owner modules exported by `api.sessions`: `foreign_session_access`
   resolves, claims, and publishes foreign sessions;
-  `session_detail_projection` reconciles and bounds transcript detail; and
+  `session_detail_projection` reconciles transcript detail;
+  `session_message_window` bounds visible transcript windows;
+  `session_detail_cache` owns the final response-tail cache;
+  `session_continuation_lookup` resolves hidden compression snapshots; and
   `session_sidebar_projection` builds source-aware sidebar rows. Focused
-  compression recovery is likewise a session-owned atomic operation. HTTP
-  routes translate request and response semantics only; there is no
-  `api/routes_parts/session_projection.py` compatibility barrel and callers do
-  not import projection internals through `api.routes`.
+  continuation creation is likewise a session-owned atomic operation. These
+  interfaces are ordinary modules with explicit public functions, not singleton
+  facades or compatibility objects. HTTP routes translate request and response
+  semantics only; there is no `api/routes_parts/session_projection.py`
+  compatibility barrel and callers do not import projection internals through
+  `api.routes`.
 - `api/session_sources.py` owns which foreign source-identity fields may enter
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining

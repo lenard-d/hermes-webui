@@ -526,47 +526,42 @@ def resolve_branch_source(session_id: str) -> BranchSourceResolution:
     return BranchSourceResolution(source)
 
 
-class ForeignSessionAccess:
-    """Deep interface for foreign-session ownership and materialization."""
-
-    @staticmethod
-    def metadata(session_id: str, *, all_profiles: bool = False) -> dict:
-        if all_profiles:
-            return _lookup_cli_session_metadata(session_id, all_profiles=True)
-        return _lookup_cli_session_metadata(session_id)
-
-    @staticmethod
-    def resolve_import_metadata(
-        session_id: str,
-        *,
-        requested_profile=None,
-        allow_all_profiles: bool = False,
-    ) -> dict:
-        return _resolve_cli_import_metadata(
-            session_id,
-            requested_profile=requested_profile,
-            allow_all_profiles=allow_all_profiles,
-        )
-
-    @staticmethod
-    def claim(session_id: str, metadata: dict | None = None):
-        return _claim_or_synthesize_cli_session(session_id, metadata)
-
-    @staticmethod
-    def is_subagent_child(session_id: str) -> bool:
-        return _is_subagent_child_session_id(session_id)
-
-    @staticmethod
-    def is_view_only(session_id: str) -> bool:
-        return _session_is_subagent_view_only(session_id)
-
-    @staticmethod
-    def publish(session: Session, *, persist: bool = True) -> Session:
-        return _publish_materialized_session(session, persist=persist)
-
-    @staticmethod
-    def resolve_branch_source(session_id: str) -> BranchSourceResolution:
-        return resolve_branch_source(session_id)
+def metadata(session_id: str, *, all_profiles: bool = False) -> dict:
+    """Return foreign-store metadata for one session."""
+    if all_profiles:
+        return _lookup_cli_session_metadata(session_id, all_profiles=True)
+    return _lookup_cli_session_metadata(session_id)
 
 
-foreign_session_access = ForeignSessionAccess()
+def resolve_import_metadata(
+    session_id: str,
+    *,
+    requested_profile=None,
+    allow_all_profiles: bool = False,
+) -> dict:
+    """Resolve import metadata within the explicitly requested profile scope."""
+    return _resolve_cli_import_metadata(
+        session_id,
+        requested_profile=requested_profile,
+        allow_all_profiles=allow_all_profiles,
+    )
+
+
+def claim(session_id: str, metadata: dict | None = None):
+    """Materialize or synthesize a foreign session under ownership policy."""
+    return _claim_or_synthesize_cli_session(session_id, metadata)
+
+
+def is_subagent_child(session_id: str) -> bool:
+    """Return whether the session is owned by a delegated subagent."""
+    return _is_subagent_child_session_id(session_id)
+
+
+def is_view_only(session_id: str) -> bool:
+    """Return whether WebUI mutation must be refused for the session."""
+    return _session_is_subagent_view_only(session_id)
+
+
+def publish(session: Session, *, persist: bool = True) -> Session:
+    """Persist and publish a newly materialized session atomically."""
+    return _publish_materialized_session(session, persist=persist)

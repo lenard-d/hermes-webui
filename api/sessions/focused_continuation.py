@@ -1,4 +1,4 @@
-"""Focused-continuation materialization for exhausted session recovery."""
+"""Atomic creation of focused continuations for exhausted sessions."""
 
 from __future__ import annotations
 

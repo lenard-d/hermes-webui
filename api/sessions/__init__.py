@@ -47,7 +47,7 @@ from .repository import (
 )
 from .cache import get_session, new_session
 from .anchor_scene import AnchorSceneMessageNotFound, persist_anchor_activity_scene
-from .compression_recovery_projection import start_or_get_focused_continuation
+from .focused_continuation import start_or_get_focused_continuation
 from .external import clear_cli_sessions_cache
 from .pending_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 from .process_wakeup import clear_process_wakeup_pause
@@ -71,29 +71,23 @@ def active_state_db_path():
     return _active_state_db_path()
 
 
-_LAZY_PUBLIC = {
-    "foreign_session_access": (
-        ".materialization",
-        "foreign_session_access",
-    ),
-    "session_detail_projection": (
-        ".detail_projection",
-        "session_detail_projection",
-    ),
-    "session_sidebar_projection": (
-        ".sidebar_projection",
-        "sidebar_projection",
-    ),
+_LAZY_PUBLIC_MODULES = {
+    "foreign_session_access": ".materialization",
+    "session_continuation_lookup": ".continuation_lookup",
+    "session_detail_cache": ".detail_tail_cache",
+    "session_detail_projection": ".detail_projection",
+    "session_message_window": ".message_window",
+    "session_sidebar_projection": ".sidebar_projection",
 }
 
 
 def __getattr__(name: str) -> Any:
     """Load specialized session operations without widening import cycles."""
     try:
-        module_name, attribute = _LAZY_PUBLIC[name]
+        module_name = _LAZY_PUBLIC_MODULES[name]
     except KeyError as exc:
         raise AttributeError(name) from exc
-    value = getattr(import_module(module_name, __name__), attribute)
+    value = import_module(module_name, __name__)
     globals()[name] = value
     return value
 
@@ -178,6 +172,9 @@ __all__ = [
     "retry_last",
     "session_status",
     "session_detail_projection",
+    "session_message_window",
+    "session_detail_cache",
+    "session_continuation_lookup",
     "session_usage",
     "session_write_owner",
     "should_emit_session_updated",

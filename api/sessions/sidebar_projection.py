@@ -631,88 +631,82 @@ def _redact_sidebar_title_fields(item: dict, redact_enabled: bool | None = None)
             item[field] = _redact_text(value, _enabled=redact_enabled)
 
 
-class SidebarProjection:
-    """Deep interface for bounded, source-aware sidebar projections."""
-
-    cli_visible_session_cap = CLI_VISIBLE_SESSION_CAP
-
-    @staticmethod
-    def normalize_source_flags(session: dict) -> dict:
-        return _normalize_sidebar_source_flags(session)
-
-    @staticmethod
-    def is_cli_session(session: dict) -> bool:
-        return _is_cli_session_for_settings(session)
-
-    @staticmethod
-    def is_api_server_sidecar(session: dict) -> bool:
-        return _is_api_server_sidecar_row(session)
-
-    @staticmethod
-    def source_is_webui(session: dict) -> bool:
-        return _session_source_is_webui(session)
-
-    @staticmethod
-    def lineage_ids(session: dict) -> set[str]:
-        return _session_lineage_ids(session)
-
-    @staticmethod
-    def merge_external_metadata(session: dict, metadata: dict) -> dict:
-        return _merge_cli_sidebar_metadata(session, metadata)
-
-    @staticmethod
-    def dedupe_external_rows(
-        sessions: list[dict],
-        represented_webui_ids: set[str],
-        *,
-        show_cron_sessions: bool,
-        show_webhook_sessions: bool,
-    ) -> list[dict]:
-        return _dedupe_cli_sidebar_sessions_for_api(
-            sessions,
-            represented_webui_ids,
-            show_cron_sessions=show_cron_sessions,
-            show_webhook_sessions=show_webhook_sessions,
-        )
-
-    @staticmethod
-    def keep_latest_messaging(
-        sessions: list[dict],
-        *,
-        show_previous_messaging_sessions: bool = False,
-    ) -> list[dict]:
-        return _keep_latest_messaging_session_per_source(
-            sessions,
-            show_previous_messaging_sessions=show_previous_messaging_sessions,
-        )
-
-    @staticmethod
-    def cap_recent_cli(sessions: list[dict], *, cli_cap: int) -> list[dict]:
-        return _cap_recent_cli_sessions(sessions, cli_cap=cli_cap)
-
-    @staticmethod
-    def attention(session_id: str) -> dict | None:
-        return _session_attention_summary(session_id)
-
-    @staticmethod
-    def response_item(
-        session: dict,
-        *,
-        redact_enabled: bool | None = None,
-    ) -> dict:
-        return _sidebar_session_response_item(session, redact_enabled=redact_enabled)
-
-    @staticmethod
-    def redact_titles(item: dict, redact_enabled: bool | None = None) -> None:
-        _redact_sidebar_title_fields(item, redact_enabled)
-
-    @staticmethod
-    def reconcile_detail_source_flags(session: dict, metadata: dict) -> dict:
-        return _reconcile_session_detail_source_flags(session, metadata)
-
-    @staticmethod
-    def is_messaging_session(session_id: str) -> bool:
-        return _is_messaging_session_id(session_id)
+cli_visible_session_cap = CLI_VISIBLE_SESSION_CAP
 
 
-sidebar_projection = SidebarProjection()
+def normalize_source_flags(session: dict) -> dict:
+    return _normalize_sidebar_source_flags(session)
+
+
+def is_cli_session(session: dict) -> bool:
+    return _is_cli_session_for_settings(session)
+
+
+def is_api_server_sidecar(session: dict) -> bool:
+    return _is_api_server_sidecar_row(session)
+
+
+def source_is_webui(session: dict) -> bool:
+    return _session_source_is_webui(session)
+
+
+def lineage_ids(session: dict) -> set[str]:
+    return _session_lineage_ids(session)
+
+
+def merge_external_metadata(session: dict, metadata: dict) -> dict:
+    return _merge_cli_sidebar_metadata(session, metadata)
+
+
+def dedupe_external_rows(
+    sessions: list[dict],
+    represented_webui_ids: set[str],
+    *,
+    show_cron_sessions: bool = False,
+    show_webhook_sessions: bool = False,
+) -> list[dict]:
+    return _dedupe_cli_sidebar_sessions_for_api(
+        sessions,
+        represented_webui_ids,
+        show_cron_sessions=show_cron_sessions,
+        show_webhook_sessions=show_webhook_sessions,
+    )
+
+
+def keep_latest_messaging(
+    sessions: list[dict],
+    *,
+    show_previous_messaging_sessions: bool = False,
+) -> list[dict]:
+    return _keep_latest_messaging_session_per_source(
+        sessions,
+        show_previous_messaging_sessions=show_previous_messaging_sessions,
+    )
+
+
+def cap_recent_cli(sessions: list[dict], *, cli_cap: int) -> list[dict]:
+    return _cap_recent_cli_sessions(sessions, cli_cap=cli_cap)
+
+
+def attention(session_id: str) -> dict | None:
+    return _session_attention_summary(session_id)
+
+
+def response_item(
+    session: dict,
+    *,
+    redact_enabled: bool | None = None,
+) -> dict:
+    return _sidebar_session_response_item(session, redact_enabled=redact_enabled)
+
+
+def redact_titles(item: dict, redact_enabled: bool | None = None) -> None:
+    _redact_sidebar_title_fields(item, redact_enabled)
+
+
+def reconcile_detail_source_flags(session: dict, metadata: dict) -> dict:
+    return _reconcile_session_detail_source_flags(session, metadata)
+
+
+def is_messaging_session(session_id: str) -> bool:
+    return _is_messaging_session_id(session_id)
