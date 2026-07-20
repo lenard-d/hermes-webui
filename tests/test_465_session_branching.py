@@ -1,7 +1,7 @@
 """Tests for issue #465 — session branching (/branch).
 
 Verifies:
-  1. Backend endpoint POST /api/session/branch exists in routes.py
+  1. Backend endpoint POST /api/session/branch behavior
   2. Session model supports parent_session_id field
   3. Frontend /branch slash command is registered
   4. forkFromMessage function exists in commands.js
@@ -171,67 +171,71 @@ def _capture_route(monkeypatch):
     return cap
 
 def test_branch_endpoint_exists():
-    """Verify the POST /api/session/branch route handler exists."""
-    src = _read('api/routes.py')
-    assert '"POST /api/session/branch"' in src or '"/api/session/branch"' in src, \
-        "Missing /api/session/branch route"
+    """The extracted owner must handle the route rather than return UNHANDLED."""
+    from api.http.context import UNHANDLED
+    from api.http.routes import session_mutations
+
+    cap = {}
+    context = dict(routes.__dict__)
+    context["bad"] = lambda _handler, msg, code=400: cap.update(error=msg, status=code) or True
+    result = session_mutations.handle_post(
+        object(), urlparse("/api/session/branch"), {}, None, context
+    )
+
+    assert result is not UNHANDLED
+    assert cap == {"error": "Missing required field(s): session_id", "status": 400}
 
 
 def test_branch_endpoint_validates_session_id():
-    """Verify the branch endpoint requires session_id."""
-    src = _read('api/routes.py')
-    # Find the branch block
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
+    """A non-string session id is rejected before session lookup."""
+    handler = _FakeHandler()
+    cap = {}
+    context = dict(routes.__dict__)
+    context["bad"] = lambda _handler, msg, code=400: cap.update(error=msg, status=code) or True
+
+    from api.http.routes import session_mutations
+
+    session_mutations.handle_post(
+        handler,
+        urlparse("/api/session/branch"),
+        {"session_id": 123},
+        None,
+        context,
     )
-    assert branch_match, "Could not find /api/session/branch handler block"
-    block = branch_match.group(1)
-    assert 'require(body, "session_id")' in block, \
-        "Branch handler should validate session_id"
+    assert cap == {"error": "session_id must be a string", "status": 400}
 
 
-def test_branch_endpoint_consults_foreign_session_guard_on_missing_sidecar():
-    """Missing sidecars should classify foreign read-only sessions before 404ing.
-
-    The classification logic was extracted from the inline handler into the
-    ``_load_branch_source_or_refuse`` helper (#5449). Assert the handler
-    delegates to it, and that the helper carries the real not_claimable→403
-    provenance logic — not a stale inline copy.
-    """
-    src = _read('api/routes.py')
-    helper_src = _read('api/routes_parts/session_projection.py')
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
+def test_branch_helper_classifies_synthesized_foreign_sources(monkeypatch):
+    """Only canonical cron sources may fork from a synthesized read-only view."""
+    monkeypatch.setattr(
+        routes,
+        "get_session",
+        lambda _sid: (_ for _ in ()).throw(KeyError("missing")),
     )
-    assert branch_match, "Could not find /api/session/branch handler block"
-    block = branch_match.group(1)
-    assert '_load_branch_source_or_refuse(handler, body["session_id"])' in block, \
-        "Branch handler should delegate source-load/refusal to the shared helper"
-
-    # The helper itself must carry the foreign-session classification and pass
-    # read-only cron-like sources to the branch builder without saving them.
-    helper_match = re.search(
-        r'def _load_branch_source_or_refuse\(.*?\)(.*?)(?=\ndef )',
-        helper_src, re.DOTALL
+    responses = []
+    monkeypatch.setattr(
+        routes,
+        "bad",
+        lambda _handler, msg, code=400: responses.append((msg, code)) or True,
     )
-    assert helper_match, "Could not find _load_branch_source_or_refuse helper"
-    helper = helper_match.group(1)
-    assert '_claim_or_synthesize_cli_session(sid)' in helper, \
-        "Helper should classify missing-sidecar foreign sessions before returning"
-    assert 'if _reason == "not_claimable":' in helper, \
-        "Helper should branch on not_claimable foreign ownership"
-    assert '_source_kind == "cron"' in helper, \
-        "Helper should narrow read-only branch sources to resolved cron source metadata"
-    assert 'is_cron_session(' not in helper, \
-        "Helper should not use the cron_ session-id prefix as a branch permission gate"
-    assert '_foreign_session._branch_source_readonly = True' in helper, \
-        "Helper should mark synthesized read-only sources so branch does not save them"
-    assert 'return _foreign_session' in helper, \
-        "Helper should return synthesized read-only sources to the branch builder"
-    assert 'bad(handler, "Read-only sessions cannot be branched from WebUI", 403)' in helper, \
-        "Helper should keep non-cron not_claimable sources refused"
+
+    messaging = routes.Session(session_id="foreign-msg", source_tag="messaging", read_only=True)
+    monkeypatch.setattr(
+        routes,
+        "_claim_or_synthesize_cli_session",
+        lambda _sid: (messaging, "not_claimable"),
+    )
+    assert routes._load_branch_source_or_refuse(object(), "foreign-msg") is None
+    assert responses[-1] == ("Read-only sessions cannot be branched from WebUI", 403)
+
+    cron = routes.Session(session_id="foreign-cron", source_tag="cron", read_only=True)
+    monkeypatch.setattr(
+        routes,
+        "_claim_or_synthesize_cli_session",
+        lambda _sid: (cron, "not_claimable"),
+    )
+    assert routes._load_branch_source_or_refuse(object(), "foreign-cron") is cron
+    assert cron._branch_source_readonly is True
 
 
 def test_branch_helper_gates_persisted_read_only_sources_too():
@@ -244,71 +248,71 @@ def test_branch_helper_gates_persisted_read_only_sources_too():
     only allow a canonical-cron read-only source, mark it read-only-for-branch, and
     403 every other read-only source.
     """
-    helper_src = _read('api/routes_parts/session_projection.py')
-    helper_match = re.search(
-        r'def _load_branch_source_or_refuse\(.*?\)(.*?)(?=\ndef )',
-        helper_src, re.DOTALL
+    # Covered behaviorally alongside the synthesized path below; this name is
+    # retained because it documents the persisted-sidecar ownership case.
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        responses = []
+        source = routes.Session(
+            session_id="persisted-read-only", source_tag="messaging", read_only=True
+        )
+        monkeypatch.setattr(routes, "get_session", lambda _sid: source)
+        monkeypatch.setattr(
+            routes,
+            "bad",
+            lambda _handler, msg, code=400: responses.append((msg, code)) or True,
+        )
+        assert routes._load_branch_source_or_refuse(object(), source.session_id) is None
+        assert responses == [("Read-only sessions cannot be branched from WebUI", 403)]
+
+
+def test_branch_route_returns_materialized_fork_contract(monkeypatch):
+    """The route returns a fork whose state matches the requested prefix."""
+    from api.http.routes import session_mutations
+
+    source = routes.Session(
+        session_id="branch-source",
+        title="Source title",
+        workspace=".",
+        model="test/model",
+        messages=[
+            {"role": "user", "content": "one"},
+            {"role": "assistant", "content": "two"},
+            {"role": "user", "content": "three"},
+        ],
     )
-    assert helper_match, "Could not find _load_branch_source_or_refuse helper"
-    helper = helper_match.group(1)
-    # The loaded (non-KeyError) path assigns the session to a local, not a bare return.
-    assert 'source = get_session(sid)' in helper, \
-        "Loaded session must be captured so it can be gated (not returned unconditionally)"
-    # The loaded path applies the read-only gate.
-    assert 'getattr(source, "read_only", False)' in helper, \
-        "Loaded read-only sessions must be gated for branching"
-    # Only canonical cron read-only sources pass, marked so the fork won't save them.
-    assert 'source._branch_source_readonly = True' in helper, \
-        "Loaded read-only cron sources must be marked read-only-for-branch"
-    # Verify the read-only gate + 403 come BEFORE the final unconditional return.
-    ro_idx = helper.index('getattr(source, "read_only", False)')
-    final_return_idx = helper.rindex('return source')
-    assert ro_idx < final_return_idx, \
-        "The read-only gate must run before the loaded session is returned"
-    # The 403 refusal exists on the loaded path (two occurrences now: synth + loaded).
-    assert helper.count('bad(handler, "Read-only sessions cannot be branched from WebUI", 403)') >= 2, \
-        "Both the synthesized and persisted read-only non-cron paths must 403"
-
-
-def test_branch_endpoint_returns_new_session_id():
-    """Verify the branch endpoint returns session_id and title."""
-    src = _read('api/routes.py')
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
+    monkeypatch.setattr(source, "save", lambda: None)
+    monkeypatch.setattr(routes, "get_session", lambda _sid: source)
+    monkeypatch.setattr(routes, "_session_is_subagent_view_only", lambda _sid: False)
+    published = []
+    responses = []
+    context = dict(routes.__dict__)
+    context.update(
+        get_session=lambda _sid: source,
+        _session_is_subagent_view_only=lambda _sid: False,
+        _publish_materialized_session=lambda session, persist: published.append((session, persist)),
+        publish_session_list_changed=lambda *_args, **_kwargs: None,
+        j=lambda _handler, payload, **_kwargs: responses.append(payload) or True,
     )
-    assert branch_match
-    block = branch_match.group(1)
-    assert '"session_id"' in block, "Branch handler should return session_id"
-    assert '"title"' in block, "Branch handler should return title"
-    assert '"parent_session_id"' in block, \
-        "Branch handler should return parent_session_id"
 
-
-def test_branch_creates_session_with_parent():
-    """Verify the branch creates a Session with parent_session_id set."""
-    src = _read('api/routes.py')
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
+    assert session_mutations.handle_post(
+        object(),
+        urlparse("/api/session/branch"),
+        {"session_id": source.session_id, "keep_count": 2},
+        None,
+        context,
     )
-    assert branch_match
-    block = branch_match.group(1)
-    assert 'parent_session_id=source.session_id' in block, \
-        "Branch handler should set parent_session_id to source session"
 
-
-def test_branch_marks_explicit_forks_as_fork_sessions():
-    """Explicit branches must not be mistaken for compression lineage rows."""
-    src = _read('api/routes.py')
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
-    )
-    assert branch_match
-    block = branch_match.group(1)
-    assert 'session_source="fork"' in block, \
-        "Branch handler should mark explicit forks with session_source='fork'"
+    branch, persisted = published[-1]
+    assert persisted is True
+    assert branch.messages == source.messages[:2]
+    assert branch.title == "Source title (fork)"
+    assert branch.parent_session_id == source.session_id
+    assert branch.session_source == "fork"
+    assert responses[-1] == {
+        "session_id": branch.session_id,
+        "title": branch.title,
+        "parent_session_id": source.session_id,
+    }
 
 
 def test_branch_fork_sessions_do_not_collapse_into_parent_lineage():
@@ -372,32 +376,6 @@ def test_branch_nested_fork_rows_render_their_own_state_indicator():
         "Nested fork rows should render a per-row state indicator"
     assert "session-child-session-fork.streaming" in css, \
         "Nested fork rows should expose row-level streaming styling"
-
-
-def test_branch_keep_count_support():
-    """Verify the branch endpoint supports keep_count parameter."""
-    src = _read('api/routes.py')
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
-    )
-    assert branch_match
-    block = branch_match.group(1)
-    assert 'keep_count' in block, "Branch handler should support keep_count"
-    assert 'forked_messages = source_messages[:keep_count]' in block, \
-        "Branch handler should slice messages by keep_count"
-
-
-def test_branch_auto_title():
-    """Verify fork title defaults to '<original> (fork)'."""
-    src = _read('api/routes.py')
-    branch_match = re.search(
-        r'parsed\.path == "/api/session/branch"(.*?)(?=\n    if parsed\.path|$)',
-        src, re.DOTALL
-    )
-    assert branch_match
-    block = branch_match.group(1)
-    assert '(fork)' in block, "Branch handler should auto-title as '(fork)'"
 
 
 def test_branch_route_allows_not_claimable_cron_sessions_to_fork(monkeypatch):

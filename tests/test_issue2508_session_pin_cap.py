@@ -3,7 +3,6 @@ from tests.frontend_asset_contract import family_source
 
 
 import json
-import pathlib
 import time
 from types import SimpleNamespace
 import urllib.error
@@ -12,8 +11,6 @@ import urllib.request
 from tests._pytest_port import BASE, TEST_STATE_DIR
 
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 SESSIONS_JS = family_source("sessions")
 STYLE_CSS = family_source("style")
 
@@ -164,19 +161,9 @@ def test_hidden_in_memory_snapshot_does_not_count_toward_pin_quota():
     assert _session_counts_toward_pin_quota(snapshot) is False
 
 
-def test_session_pin_cap_has_backend_and_frontend_guards():
-    # #3288 renamed the in-LOCK pin counter to count visible lineages
-    # (pinned_lineage_ids) instead of raw session ids (pinned_ids), so a
-    # continuation lineage no longer consumes multiple pin slots. The guard
-    # behaviour (snapshot, merge under LOCK, compare against the limit, 400) is
-    # unchanged.
-    assert 'persisted_rows = [' in ROUTES_PY
-    assert 'candidate_rows.extend(' in ROUTES_PY
-    assert 'pinned_lineage_ids = _visible_pinned_lineage_ids(candidate_rows)' in ROUTES_PY
-    assert 'pinned_sessions_limit = int(load_settings().get("pinned_sessions_limit", 3) or 3)' in ROUTES_PY
-    assert 'if len(pinned_lineage_ids) >= pinned_sessions_limit:' in ROUTES_PY
-    assert 'Up to {pinned_sessions_limit} sessions can be pinned' in ROUTES_PY
-
+def test_session_pin_cap_frontend_uses_server_as_authority():
+    # The endpoint behavior above is the backend contract. The frontend must
+    # still submit the mutation and surface the server-owned quota response.
     assert 'function _pinnedSessionCount()' in SESSIONS_JS
     assert 'function _getPinnedSessionsLimit()' in SESSIONS_JS
     assert 'function _pinnedSessionsLimit()' not in SESSIONS_JS

@@ -25,9 +25,9 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = ROOT / "api" / "routes.py"
 CHAT_RUNS_PY = ROOT / "api" / "routes_parts" / "chat_runs.py"
 SESSION_PROJECTION_PY = ROOT / "api" / "routes_parts" / "session_projection.py"
+SESSION_QUERIES_PY = ROOT / "api" / "http" / "routes" / "session_queries.py"
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ def test_chat_start_no_longer_bare_404_on_keyerror():
 
 def test_get_session_route_uses_shared_synthesiser():
     """The GET KeyError path must also delegate to the same helper."""
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = SESSION_QUERIES_PY.read_text(encoding="utf-8")
     # Find the /api/session GET block (not /api/sessions).
     block = re.search(
         r'if parsed\.path == "/api/session":.*?return j\(handler, \{"session": redact_session_data\(sess\)\}\)',
@@ -188,7 +188,7 @@ def test_get_session_preserves_cli_read_only_flag():
     refusal paths."""
     block = re.search(
         r'if parsed\.path == "/api/session":.*?return j\(handler, \{"session": redact_session_data\(sess\)\}\)\)?',
-        ROUTES_PY.read_text(encoding="utf-8"),
+        SESSION_QUERIES_PY.read_text(encoding="utf-8"),
         re.DOTALL,
     )
     assert block, "could not locate /api/session GET block"
@@ -352,11 +352,19 @@ def isolated_state_db(tmp_path, monkeypatch):
     index_path = sessions_dir / "_index.json"
     index_path.write_text("[]", encoding="utf-8")
     import api.routes as _routes
+    import api.sessions.cache as _cache
+    import api.sessions.external as _external
+    import api.sessions.records as _records
+    import api.sessions.state_db as _state_db
     import api.sessions.store as _models
+
+    monkeypatch.setattr(_state_db, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(_external, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_models, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(_routes, "SESSION_INDEX_FILE", index_path)
-    monkeypatch.setattr(_models, "SESSION_INDEX_FILE", index_path)
-    monkeypatch.setattr(_models, "SESSION_DIR", sessions_dir)
+    for module in (_records, _cache, _external, _models):
+        monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_path)
+        monkeypatch.setattr(module, "SESSION_DIR", sessions_dir)
     return {"db": db, "state_dir": state_dir, "sessions_dir": sessions_dir,
             "index_path": index_path}
 
@@ -920,7 +928,7 @@ def test_helper_sets_read_only_for_source_refused_sessions(
     )
 
 
-def test_import_cli_reads_read_only_from_persisted_session():
+def test_import_cli_reads_read_only_from_persisted_session(monkeypatch):
     """Greptile #4911 follow-up: the import_cli refresh path
     (line ~15708) must read read_only from the persisted Session
     (existing.read_only), NOT from cli_meta directly.  The same
@@ -931,37 +939,36 @@ def test_import_cli_reads_read_only_from_persisted_session():
 
     This is the same pattern in two different response builders;
     the audit grep should also catch any future sibling paths."""
-    block = re.search(
-        r'def _handle_session_import_cli.*?(?=\n\ndef |\Z)',
-        ROUTES_PY.read_text(encoding="utf-8"),
-        re.DOTALL,
+    import contextlib
+    import api.routes as routes
+
+    existing = routes.Session(
+        session_id="persisted-read-only-import",
+        messages=[{"role": "user", "content": "keep"}],
+        read_only=True,
+        source_tag="messaging",
     )
-    assert block, "could not locate _handle_session_import_cli"
-    text = block.group(0)
-    # The refresh path (top branch) is the first 'return j(...)' that
-    # mentions existing.compact().  Find the read_only line within
-    # that return block and inspect the right-hand side.
-    refresh_block = re.search(
-        r'existing\.compact\(\)[\s\S]*?\}',
-        text, re.DOTALL,
+    responses = []
+
+    @contextlib.contextmanager
+    def edit_session(_sid, *, session=None, **_kwargs):
+        yield session
+
+    monkeypatch.setattr(routes.Session, "load", classmethod(lambda _cls, _sid: existing))
+    monkeypatch.setattr(routes, "_session_visible_to_active_profile", lambda *_args: True)
+    monkeypatch.setattr(routes, "_resolve_cli_import_metadata", lambda *_args, **_kwargs: {"read_only": False})
+    monkeypatch.setattr(routes, "get_cli_session_messages", lambda *_args, **_kwargs: list(existing.messages))
+    monkeypatch.setattr(routes, "edit_session", edit_session)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, **_kwargs: responses.append(payload) or True,
     )
-    assert refresh_block, "could not locate existing.compact() spread"
-    rb = refresh_block.group(0)
-    # Accept either the attribute access (`existing.read_only`) or the
-    # safer `getattr(existing, "read_only", False)` form — both
-    # correctly derive the value from the persisted Session.
-    assert (
-        "existing.read_only" in rb
-        or 'getattr(existing, "read_only"' in rb
-    ), (
-        "import_cli refresh path must read read_only from "
-        "existing (the persisted Session), not from cli_meta"
+
+    assert routes._handle_session_import_cli(
+        object(), {"session_id": existing.session_id}
     )
-    assert 'bool((cli_meta or {}).get("read_only"))' not in rb, (
-        "import_cli refresh path must not read read_only from cli_meta "
-        "directly — that misses source-refused cases (Greptile #4911 "
-        "follow-up)"
-    )
+    assert responses[-1]["session"]["read_only"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -1286,9 +1293,7 @@ def test_helper_denylist_includes_gateway_and_unknown():
     refactor that splits the denylist and forgets the gateway/
     unknown/cron literals."""
     import re
-    # Use the ROUTES_PY constant (defined at module top) instead of
-    # hardcoding the path so the test runs on any machine with the
-    # project checked out, not just at /opt/hermes-webui/.
+    # Read the semantic helper owner rather than the HTTP facade.
     src = SESSION_PROJECTION_PY.read_text(encoding="utf-8")
     # Find the function body
     m = re.search(

@@ -1,7 +1,7 @@
 from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
-import re
+from urllib.parse import urlsplit
 
 import api.config as cfg
 import yaml
@@ -62,16 +62,42 @@ def test_ui_posts_reasoning_context_with_effort():
 
 
 def test_reasoning_post_route_threads_model_context():
-    src = read("api/routes.py")
-    match = re.search(
-        r"if parsed\.path == \"/api/reasoning\":(.*?)return bad\(handler, \"reasoning: must supply 'display' or 'effort'\"\)",
-        src,
-        re.DOTALL,
+    from api.http.routes import provider_mutations
+
+    calls = []
+    responses = []
+    context = {
+        "_clear_live_models_cache": lambda: None,
+        "_handle_sessions_cleanup": lambda *_args, **_kwargs: None,
+        "bad": lambda *_args, **_kwargs: None,
+        "j": lambda _handler, payload, **_kwargs: responses.append(payload) or True,
+        "remove_provider_key": lambda *_args, **_kwargs: None,
+        "set_hermes_default_model": lambda *_args, **_kwargs: None,
+        "set_provider_key": lambda *_args, **_kwargs: None,
+        "set_reasoning_display": lambda *_args, **_kwargs: None,
+        "set_reasoning_effort": lambda effort, **kwargs: calls.append((effort, kwargs))
+        or {"reasoning_effort": effort},
+    }
+
+    assert provider_mutations.handle_post(
+        object(),
+        urlsplit("/api/reasoning"),
+        {
+            "effort": "high",
+            "model": "claude-opus-4-7",
+            "provider": "anthropic",
+        },
+        None,
+        context,
     )
-    assert match, "The /api/reasoning POST route block must exist"
-    body = match.group(1)
-    assert 'body.get("model")' in body
-    assert 'body.get("provider")' in body
-    assert 'set_reasoning_effort(' in body
-    assert "model_id=model_id" in body
-    assert "provider_id=provider_id" in body
+    assert calls == [
+        (
+            "high",
+            {
+                "model_id": "claude-opus-4-7",
+                "provider_id": "anthropic",
+                "base_url": None,
+            },
+        )
+    ]
+    assert responses == [{"reasoning_effort": "high"}]

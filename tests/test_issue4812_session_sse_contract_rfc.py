@@ -92,21 +92,23 @@ class TestEndpointDistinction:
 
     def test_rfc_cites_current_global_endpoint_source(self):
         """The RFC's source anchors for the existing global stream must be
-        ACCURATE against the route facade and stream owner, verified by SYMBOL
+        ACCURATE against the HTTP route owner and stream owner, verified by SYMBOL
         not by line number. The RFC cites the route string and handler function
         by name; this test confirms (a) each symbol still exists in its owner
         and (b) the RFC names that symbol. It deliberately does NOT check line
         numbers: a source line-shift must never break this test or the RFC
         (#5513 gate finding, chronic brittle failure #5542)."""
         text = _rfc()
-        routes_src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
+        route_owner_src = (
+            REPO / "api" / "http" / "routes" / "workspace_queries.py"
+        ).read_text(encoding="utf-8")
         stream_src = (
             REPO / "api" / "routes_parts" / "stream_transport.py"
         ).read_text(encoding="utf-8")
 
         # (RFC-cited symbol, existence probe, authoritative source owner)
         checks = [
-            ("/api/sessions/events", "/api/sessions/events", routes_src),
+            ("/api/sessions/events", "/api/sessions/events", route_owner_src),
             (
                 "_handle_session_events_stream",
                 "def _handle_session_events_stream",

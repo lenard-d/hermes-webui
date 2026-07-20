@@ -2,6 +2,7 @@
 import contextlib
 import json
 import threading
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -222,20 +223,42 @@ def test_clear_endpoint_resets_manual_title_lock():
     assert session.llm_title_generated is False
 
 
-def test_clear_route_uses_rename_helper_not_bare_title_assignment():
-    """Static guard: the /api/session/clear handler must reset the title via
-    apply_session_title_rename (which clears manual_title), not a bare
-    `s.title = "Untitled"` that would strand the manual-title lock (#3542)."""
-    import pathlib
-    routes_src = (pathlib.Path(__file__).resolve().parent.parent / "api" / "routes.py").read_text(
-        encoding="utf-8"
+def test_clear_route_resets_manual_title_lock(monkeypatch):
+    """Exercise the extracted HTTP owner instead of inspecting its source."""
+    import api.routes as routes
+    from api.http.routes import session_mutations
+
+    session = Session(
+        session_id="clear-route-manual-title",
+        title="My Deliberate Name",
+        messages=_exchange_messages(1),
+        manual_title=True,
+        llm_title_generated=True,
     )
-    clear_idx = routes_src.find('if parsed.path == "/api/session/clear"')
-    assert clear_idx != -1, "/api/session/clear handler not found"
-    # Window from the clear handler to the next route branch.
-    next_idx = routes_src.find('if parsed.path == "/api/session/truncate"', clear_idx)
-    clear_block = routes_src[clear_idx:next_idx if next_idx != -1 else clear_idx + 2000]
-    assert "apply_session_title_rename(s, \"Untitled\")" in clear_block, (
-        "clear handler must reset the title via apply_session_title_rename to "
-        "clear the manual_title lock"
+    responses = []
+
+    @contextlib.contextmanager
+    def edit_session(_sid, *, session=None, **_kwargs):
+        yield session
+
+    monkeypatch.setattr(routes, "get_session", lambda _sid: session)
+    monkeypatch.setattr(routes, "edit_session", edit_session)
+    monkeypatch.setattr(routes, "_session_is_subagent_view_only", lambda _sid: False)
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, **_kwargs: responses.append(payload) or True,
     )
+
+    assert session_mutations.handle_post(
+        object(),
+        SimpleNamespace(path="/api/session/clear"),
+        {"session_id": session.session_id},
+        None,
+        routes.__dict__,
+    )
+
+    assert session.title == "Untitled"
+    assert session.manual_title is False
+    assert session.llm_title_generated is False
+    assert responses[-1]["session"]["manual_title"] is False
