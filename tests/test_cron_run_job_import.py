@@ -7,21 +7,13 @@ Before the fix, run_job was only imported inside _handle_cron_run
 """
 import ast
 import inspect
-from pathlib import Path
-
-import pytest
-
-ROUTES_PY = Path(__file__).resolve().parent.parent / "api" / "routes.py"
 
 
 def _get_function_source(func_name: str) -> str:
-    """Extract a top-level function's source via AST for stability."""
-    tree = ast.parse(ROUTES_PY.read_text(encoding="utf-8"))
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
-            lines = ROUTES_PY.read_text(encoding="utf-8").splitlines()
-            return "\n".join(lines[node.lineno - 1 : node.end_lineno])
-    pytest.fail(f"Function {func_name} not found in {ROUTES_PY}")
+    """Read the implementation behind the stable ``api.routes`` facade."""
+    import api.routes as routes
+
+    return inspect.getsource(getattr(routes, func_name))
 
 
 class TestRunCronTrackedImport:
@@ -33,21 +25,6 @@ class TestRunCronTrackedImport:
         src = _get_function_source("_cron_job_subprocess_main")
         tree = ast.parse(src)
         names_used = set()
-
-        class NameCollector(ast.NodeVisitor):
-            def visit_Name(self, node):
-                names_used.add(node.id)
-
-        ImportCollector = type(
-            "ImportCollector",
-            (ast.NodeVisitor,),
-            {
-                "imports": set(),
-                "visit_ImportFrom": lambda self, node: (
-                    self.imports.add(a.name for a in node.names),
-                ),
-            },
-        )
 
         # Collect all names referenced in the function body
         for node in ast.walk(tree):

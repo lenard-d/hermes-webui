@@ -209,12 +209,10 @@ def _selected_profile_home_runner(profile_home, result_queue):
 
 def test_manual_cron_subprocess_uses_spawn_context():
     """Manual cron subprocesses must avoid fork-from-threaded-WebUI hazards."""
-    routes_src = (Path(__file__).resolve().parent.parent / "api" / "routes.py").read_text(
-        encoding="utf-8"
-    )
-    start = routes_src.find("def _run_cron_job_in_profile_subprocess")
-    assert start != -1, "_run_cron_job_in_profile_subprocess not found"
-    body = routes_src[start : start + 1200]
+    import inspect
+    import api.routes as routes
+
+    body = inspect.getsource(routes._run_cron_job_in_profile_subprocess)
 
     assert 'multiprocessing.get_context("spawn")' in body
     assert 'multiprocessing.get_context("fork")' not in body

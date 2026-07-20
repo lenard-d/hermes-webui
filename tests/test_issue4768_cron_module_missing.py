@@ -23,9 +23,10 @@ def _api_crons_branch() -> str:
 
 def _cross_profile_helper() -> str:
     """Return the source of _cron_jobs_cross_profile."""
-    marker = ROUTES.index("def _cron_jobs_cross_profile(")
-    nxt = ROUTES.index("\ndef ", marker + 1)
-    return ROUTES[marker:nxt]
+    import inspect
+    import api.routes as routes
+
+    return inspect.getsource(routes._cron_jobs_cross_profile)
 
 
 def test_api_crons_guards_missing_cron_module():
