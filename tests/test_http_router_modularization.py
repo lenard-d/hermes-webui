@@ -90,23 +90,15 @@ def test_route_inventory_lives_with_the_new_owners():
         assert path in owner_source
 
 
-def test_admin_reload_refreshes_the_live_route_context(monkeypatch):
-    import api.sessions as sessions
+def test_admin_reload_fails_closed_for_modular_session_state():
     from api.http.routes import provider_mutations
 
-    replacement_get_session = object()
-    replacement_session_type = object()
-    monkeypatch.setattr(
-        sessions,
-        "reload_store_interface",
-        lambda: (replacement_get_session, replacement_session_type),
-    )
     responses = []
     context = {
         "_clear_live_models_cache": lambda: None,
         "_handle_sessions_cleanup": lambda *_args, **_kwargs: None,
         "bad": lambda *_args, **_kwargs: None,
-        "j": lambda _handler, payload: responses.append(payload) or True,
+        "j": lambda _handler, payload, status=200: responses.append((status, payload)) or True,
         "remove_provider_key": lambda *_args, **_kwargs: None,
         "set_hermes_default_model": lambda *_args, **_kwargs: None,
         "set_provider_key": lambda *_args, **_kwargs: None,
@@ -117,6 +109,12 @@ def test_admin_reload_refreshes_the_live_route_context(monkeypatch):
     assert provider_mutations.handle_post(
         object(), urlsplit("/api/admin/reload"), {}, None, context
     )
-    assert context["get_session"] is replacement_get_session
-    assert context["Session"] is replacement_session_type
-    assert responses == [{"status": "ok", "reloaded": "api.sessions.store"}]
+    assert responses == [
+        (
+            409,
+            {
+                "status": "restart_required",
+                "error": "Session modules cannot be hot-reloaded safely; restart Hermes WebUI.",
+            },
+        )
+    ]

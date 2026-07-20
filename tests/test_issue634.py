@@ -12,13 +12,13 @@ Fixes:
 """
 import pathlib
 
-import api.sessions.store as models
+import api.sessions.external as models
 
-MODELS_PY = pathlib.Path(__file__).parent.parent / 'api' / 'models.py'
-AGENT_SESSIONS_PY = pathlib.Path(__file__).parent.parent / 'api' / 'agent_sessions.py'
-src = MODELS_PY.read_text(encoding='utf-8')
+AGENT_SESSIONS_PY = (
+    pathlib.Path(__file__).parent.parent / 'api' / 'agent_ops' / 'session_discovery.py'
+)
 agent_src = AGENT_SESSIONS_PY.read_text(encoding='utf-8')
-combined_src = src + "\n" + agent_src
+combined_src = agent_src
 def _exercise_cli_error(monkeypatch, caplog, tmp_path):
     db_path = tmp_path / "state.db"
 
@@ -32,7 +32,7 @@ def _exercise_cli_error(monkeypatch, caplog, tmp_path):
         lambda _source=None, **_kwargs: (tmp_path, db_path, None, ("issue-634",)),
     )
     monkeypatch.setattr(models, "_load_cli_sessions_uncached", fail_load)
-    caplog.set_level("WARNING", logger="api.models")
+    caplog.set_level("WARNING", logger="api.sessions.external")
     result = models.get_cli_sessions()
     return result, db_path, caplog.text
 

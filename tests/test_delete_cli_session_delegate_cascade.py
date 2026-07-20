@@ -861,7 +861,7 @@ def test_cleanup_manifest_process_lock_uses_windows_byte_lock(
     tmp_path, monkeypatch
 ):
     """The native-Windows fallback locks and unlocks one persistent byte."""
-    import api.sessions.store as models
+    import api.sessions.cleanup as models
 
     calls = []
 
@@ -920,7 +920,7 @@ def test_delete_cli_session_thread_lock_does_not_block_different_profiles(
             conn.close()
         _seed_transcript_artifacts(home, {name})
 
-    import api.sessions.store as models
+    import api.sessions.cleanup as models
     import api.profiles as profiles
 
     monkeypatch.setattr(
@@ -1353,7 +1353,7 @@ def test_delete_cli_session_releases_manifest_lock_after_unlink_error(
     empty_manifest.write_text("[]", encoding="utf-8")
 
     import api.profiles
-    import api.sessions.store as models
+    import api.sessions.cleanup as models
 
     monkeypatch.setattr(
         api.profiles, "get_active_hermes_home", lambda: str(tmp_path)
@@ -1467,7 +1467,7 @@ def test_delete_cli_session_unqueryable_db_preserves_manifested_live_artifacts(
     manifest.write_text(json.dumps(["live-session"]), encoding="utf-8")
 
     import api.profiles
-    import api.sessions.store as models
+    import api.sessions.cleanup as models
 
     monkeypatch.setattr(
         api.profiles, "get_active_hermes_home", lambda: str(tmp_path)

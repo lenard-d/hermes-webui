@@ -21,13 +21,15 @@ import json
 
 import pytest
 
-import api.sessions.store as M
+import api.sessions.cache as C
+import api.sessions.records as M
 
 
 @pytest.fixture
 def session_store(tmp_path, monkeypatch):
     sdir = tmp_path / "sessions"
     monkeypatch.setattr(M, "SESSION_DIR", sdir)
+    monkeypatch.setattr(C, "SESSION_DIR", sdir)
     sdir.mkdir(parents=True, exist_ok=True)
     return sdir
 
@@ -81,8 +83,8 @@ def test_metadata_only_stub_is_cheap_and_correct(session_store):
     assert stub._metadata_message_count == 2
     assert stub._loaded_metadata_only is True
     # fingerprint available on the stub; full scenes not materialized
-    assert M._session_scene_keys(stub) == {"scene0", "scene1", "scene2"}
-    assert M._session_scene_updated_at(stub) == 1002.0
+    assert C._session_scene_keys(stub) == {"scene0", "scene1", "scene2"}
+    assert C._session_scene_updated_at(stub) == 1002.0
 
 
 def test_full_load_round_trips_scene_bodies(session_store):
@@ -128,20 +130,20 @@ def test_cached_lags_disk_detects_new_scene_and_newer_timestamp(session_store):
     cached_behind = M.Session(session_id="s1", title="T", workspace=str(session_store.parent),
                               model="glm", messages=[{"role": "user", "content": "hi"},
                                                      {"role": "assistant", "content": "yo"}])
-    assert M._cached_session_lags_disk(cached_behind) is True
+    assert C._cached_session_lags_disk(cached_behind) is True
     # cached copy AT PARITY → must NOT lag
     cached_parity = M.Session(session_id="s1", title="T", workspace=str(session_store.parent),
                               model="glm", messages=[{"role": "user", "content": "hi"},
                                                      {"role": "assistant", "content": "yo"}])
     cached_parity.anchor_activity_scenes = {"scene0": {"updated_at": 1000.0, "scene": {}}}
-    assert M._cached_session_lags_disk(cached_parity) is False
+    assert C._cached_session_lags_disk(cached_parity) is False
     # cached copy AHEAD of disk (extra un-persisted scene) → must NOT force reload
     cached_ahead = M.Session(session_id="s1", title="T", workspace=str(session_store.parent),
                              model="glm", messages=[{"role": "user", "content": "hi"},
                                                     {"role": "assistant", "content": "yo"}])
     cached_ahead.anchor_activity_scenes = {"scene0": {"updated_at": 1000.0, "scene": {}},
                                            "scene1": {"updated_at": 2000.0, "scene": {}}}
-    assert M._cached_session_lags_disk(cached_ahead) is False
+    assert C._cached_session_lags_disk(cached_ahead) is False
 
 
 def test_cached_lags_disk_detects_newer_scene_updated_at(session_store):
@@ -150,7 +152,7 @@ def test_cached_lags_disk_detects_newer_scene_updated_at(session_store):
                              model="glm", messages=[{"role": "user", "content": "hi"},
                                                     {"role": "assistant", "content": "yo"}])
     cached_stale.anchor_activity_scenes = {"scene0": {"updated_at": 1000.0, "scene": {}}}
-    assert M._cached_session_lags_disk(cached_stale) is True
+    assert C._cached_session_lags_disk(cached_stale) is True
 
 
 def test_parity_cache_not_forced_reload_when_prefix_read_fails(session_store):
@@ -181,13 +183,13 @@ def test_parity_cache_not_forced_reload_when_prefix_read_fails(session_store):
     cached_parity.anchor_activity_scenes = {"scene0": {"updated_at": 1000.0, "scene": {}}}
     cached_parity._anchor_scene_index = {}  # stale/empty load-time fingerprint
     cached_parity.compression_anchor_summary = "Z" * 80000
-    assert M._cached_session_lags_disk(cached_parity) is False
+    assert C._cached_session_lags_disk(cached_parity) is False
     # But a genuinely-behind cache (disk has a newer scene) still reloads.
     cached_behind = M.Session(session_id="p1", title="T", workspace=str(session_store.parent),
                               model="glm", messages=[{"role": "user", "content": "hi"},
                                                      {"role": "assistant", "content": "yo"}])
     cached_behind.anchor_activity_scenes = {}
-    assert M._cached_session_lags_disk(cached_behind) is True
+    assert C._cached_session_lags_disk(cached_behind) is True
 
 
 # ── Legacy back-compat ──────────────────────────────────────────────────────
@@ -244,7 +246,7 @@ def test_legacy_missing_count_uses_authoritative_not_stale_index(session_store):
     M._LEGACY_SIDECAR_FACTS.clear()
     # Prefix stops at scenes (no count, no fingerprint) → must return the real
     # authoritative count (4), never None and never a stale index value.
-    assert M._persisted_message_count("leg3") == 4
+    assert C._persisted_message_count("leg3") == 4
 
 
 def test_legacy_disk_ahead_scene_detected_via_full_load(session_store):
@@ -264,7 +266,7 @@ def test_legacy_disk_ahead_scene_detected_via_full_load(session_store):
                               model="glm", messages=[{"role": "user", "content": "hi"},
                                                      {"role": "assistant", "content": "yo"}])
     cached_behind.anchor_activity_scenes = {}
-    assert M._cached_session_lags_disk(cached_behind) is True
+    assert C._cached_session_lags_disk(cached_behind) is True
 
 
 def test_fully_loaded_session_never_uses_stale_fingerprint(session_store):
@@ -275,16 +277,16 @@ def test_fully_loaded_session_never_uses_stale_fingerprint(session_store):
     full.anchor_activity_scenes = {"sceneA": {"updated_at": 30.0}}
     full._anchor_scene_index = {"sceneOLD": 10.0}  # stale load-time fingerprint
     # _loaded_metadata_only is falsy → must read the REAL records, not the index.
-    assert M._session_scene_keys(full) == {"sceneA"}
-    assert M._session_scene_updated_at(full) == 30.0
+    assert C._session_scene_keys(full) == {"sceneA"}
+    assert C._session_scene_updated_at(full) == 30.0
     # A metadata-only stub, by contrast, DOES use its fingerprint.
     stub = M.Session(session_id="f2", title="T", workspace=str(session_store.parent),
                      model="glm", messages=[])
     stub._loaded_metadata_only = True
     stub.anchor_activity_scenes = {}
     stub._anchor_scene_index = {"sceneB": 42.0}
-    assert M._session_scene_keys(stub) == {"sceneB"}
-    assert M._session_scene_updated_at(stub) == 42.0
+    assert C._session_scene_keys(stub) == {"sceneB"}
+    assert C._session_scene_updated_at(stub) == 42.0
 
 
 def _write_legacy_large(session_store, sid, n_msgs=5):
@@ -331,7 +333,7 @@ def test_legacy_session_stays_evictable(session_store):
     _write_legacy_large(session_store, "legevict", n_msgs=3)
     # Prime the facts cache via a full load (mirrors get_session materializing it).
     M.Session.load("legevict")
-    assert M._persisted_message_count("legevict") == 3
+    assert C._persisted_message_count("legevict") == 3
 
 
 def test_legacy_count_recovers_on_facts_cache_miss(session_store):
@@ -341,6 +343,6 @@ def test_legacy_count_recovers_on_facts_cache_miss(session_store):
     fresh new_session() can't evict its own unsaved session and 404 the first send."""
     _write_legacy_large(session_store, "legmiss", n_msgs=6)
     M._LEGACY_SIDECAR_FACTS.clear()  # simulate cold / evicted facts cache
-    assert M._persisted_message_count("legmiss") == 6
+    assert C._persisted_message_count("legmiss") == 6
     # and the miss re-populated the cache for the next call
     assert M._legacy_sidecar_facts_get("legmiss") is not None

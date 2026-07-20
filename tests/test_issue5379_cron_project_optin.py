@@ -70,6 +70,7 @@ def _write_projects(path, projects):
 def _isolate_projects(tmp_path, monkeypatch):
     """Point PROJECTS_FILE at a fresh tmp_path file; reset profile-alias caches."""
     import api.config as cfg
+    import api.sessions.projects as session_projects
     import api.sessions.store as models
     import api.profiles as profiles
 
@@ -79,6 +80,10 @@ def _isolate_projects(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "_projects_migrated", True)
     monkeypatch.setattr(models, "_CRON_PROJECT_LOCK", threading.Lock())
     monkeypatch.setattr(models, "_WEBHOOK_PROJECT_LOCK", threading.Lock())
+    monkeypatch.setattr(session_projects, "PROJECTS_FILE", projects_file)
+    monkeypatch.setattr(session_projects, "_projects_migrated", True)
+    monkeypatch.setattr(session_projects, "_CRON_PROJECT_LOCK", threading.Lock())
+    monkeypatch.setattr(session_projects, "_WEBHOOK_PROJECT_LOCK", threading.Lock())
     monkeypatch.setattr(profiles, "list_profiles_api", lambda: [])
     monkeypatch.setattr(profiles, "_active_profile", "default")
     profiles._invalidate_root_profile_cache()

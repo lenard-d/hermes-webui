@@ -143,15 +143,18 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             return bad(handler, str(e), 500)
 
     if parsed.path == "/api/admin/reload":
-        # Hot-reload the session store to pick up code changes without restart.
-        from api.sessions import reload_store_interface
-
-        # Refresh the explicit compatibility context without importing back
-        # into the legacy route facade from the HTTP implementation.
-        get_session, session_type = reload_store_interface()
-        ctx["get_session"] = get_session
-        ctx["Session"] = session_type
-        return j(handler, {"status": "ok", "reloaded": "api.sessions.store"})
+        # Reloading one file was only safe while session state lived in one
+        # module. The modular store owns locks, caches, records, and class
+        # identities across several modules; partial hot reload would split
+        # that state. Fail closed and require a normal process restart.
+        return j(
+            handler,
+            {
+                "status": "restart_required",
+                "error": "Session modules cannot be hot-reloaded safely; restart Hermes WebUI.",
+            },
+            status=409,
+        )
 
     if parsed.path == "/api/sessions/cleanup":
         return _handle_sessions_cleanup(handler, body, zero_only=False)

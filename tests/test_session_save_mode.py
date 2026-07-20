@@ -6,6 +6,8 @@ import pytest
 
 import api.config as config
 import api.sessions.store as models
+import api.sessions.pending_recovery as session_pending_recovery
+import api.sessions.records as session_records
 import api.sessions.recovery as session_recovery
 import api.streaming as streaming
 from api.runs import admission as turn_admission
@@ -18,8 +20,10 @@ def _isolate_state(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_pending_recovery, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_pending_recovery, "SESSION_INDEX_FILE", index_file)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", index_file, raising=False)
     models.SESSIONS.clear()
     config.STREAMS.clear()
@@ -242,7 +246,7 @@ def test_failed_eager_admission_cannot_be_restored_from_shrink_backup(
         backup_path.write_bytes(expected_backup)
 
     if failure_stage == "pending_index":
-        real_write_index = models._write_session_index
+        real_write_index = session_records._write_session_index
         calls = 0
 
         def fail_once(*args, **kwargs):
@@ -252,7 +256,7 @@ def test_failed_eager_admission_cannot_be_restored_from_shrink_backup(
                 raise OSError("index unavailable")
             return real_write_index(*args, **kwargs)
 
-        monkeypatch.setattr(models, "_write_session_index", fail_once)
+        monkeypatch.setattr(session_records, "_write_session_index", fail_once)
         monkeypatch.setattr(
             turn_admission,
             "append_turn_journal_event",
@@ -297,7 +301,7 @@ def test_failed_eager_admission_cannot_be_restored_from_shrink_backup(
     else:
         assert backup_path.read_bytes() == expected_backup
 
-    index = json.loads(models.SESSION_INDEX_FILE.read_text(encoding="utf-8"))
+    index = json.loads(session_records.SESSION_INDEX_FILE.read_text(encoding="utf-8"))
     indexed = next(row for row in index if row["session_id"] == session.session_id)
     assert indexed["message_count"] == 2
     assert indexed["active_stream_id"] is None
@@ -464,8 +468,8 @@ def test_failed_first_turn_does_not_create_an_empty_session_sidecar(
     assert session.messages == []
     assert goal_markers == {session.session_id}
     assert background_markers == {session.session_id}
-    if models.SESSION_INDEX_FILE.exists():
-        index = json.loads(models.SESSION_INDEX_FILE.read_text(encoding="utf-8"))
+    if session_records.SESSION_INDEX_FILE.exists():
+        index = json.loads(session_records.SESSION_INDEX_FILE.read_text(encoding="utf-8"))
         assert all(row["session_id"] != session.session_id for row in index)
 
 
@@ -494,7 +498,7 @@ def test_failed_compensation_keeps_pending_owner_and_markers_consumed(
         "append_turn_journal_event",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("journal unavailable")),
     )
-    real_replace = models._safe_replace
+    real_replace = session_records._safe_replace
     sidecar_writes = 0
 
     def fail_compensation_replace(src, dst):
@@ -505,7 +509,7 @@ def test_failed_compensation_keeps_pending_owner_and_markers_consumed(
                 raise OSError("compensation replace unavailable")
         return real_replace(src, dst)
 
-    monkeypatch.setattr(models, "_safe_replace", fail_compensation_replace)
+    monkeypatch.setattr(session_records, "_safe_replace", fail_compensation_replace)
 
     with pytest.raises(OSError, match="journal unavailable"):
         turn_admission.start_local_turn(

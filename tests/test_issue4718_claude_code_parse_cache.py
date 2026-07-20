@@ -27,7 +27,7 @@ def _rows(text: str = "hello") -> list:
 
 
 def test_parse_cache_hit_skips_reparse(tmp_path, monkeypatch):
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     fixture = tmp_path / "claude" / "projects" / "p" / "s.jsonl"
@@ -52,7 +52,7 @@ def test_parse_cache_hit_skips_reparse(tmp_path, monkeypatch):
 
 
 def test_parse_cache_invalidates_on_content_change(tmp_path, monkeypatch):
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     fixture = tmp_path / "claude" / "projects" / "p" / "s.jsonl"
@@ -86,7 +86,7 @@ def test_parse_cache_invalidates_on_content_change(tmp_path, monkeypatch):
 
 def test_parse_cache_returns_independent_message_lists(tmp_path):
     """A caller mutating the returned list must not corrupt the cached entry."""
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     fixture = tmp_path / "claude" / "projects" / "p" / "s.jsonl"
@@ -100,7 +100,7 @@ def test_parse_cache_returns_independent_message_lists(tmp_path):
 
 
 def test_parse_cache_is_bounded(tmp_path, monkeypatch):
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     monkeypatch.setattr(models, "_CLAUDE_CODE_PARSE_CACHE_MAX", 5)
@@ -114,7 +114,7 @@ def test_parse_cache_is_bounded(tmp_path, monkeypatch):
 
 
 def test_parse_cache_handles_missing_file(tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     missing = tmp_path / "nope.jsonl"
@@ -124,7 +124,7 @@ def test_parse_cache_handles_missing_file(tmp_path):
 
 def test_get_claude_code_sessions_warm_uses_cache(tmp_path, monkeypatch):
     """End-to-end: a 2nd get_claude_code_sessions() does not re-parse files."""
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     projects_dir = tmp_path / "claude" / "projects"
@@ -158,7 +158,7 @@ def test_epoch_zero_timestamps_fall_back_to_mtime(tmp_path):
     ``first_ts or last_ts or path.stat().st_mtime``. An identity (``is None``)
     guard would have left these rows with ``None``.
     """
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     projects_dir = tmp_path / "claude" / "projects"
@@ -190,7 +190,7 @@ def test_parse_cache_dicts_are_read_only_contract(tmp_path):
     caller that mutates a returned dict in place would corrupt the cache, and
     this test makes that sharing explicit so such a change is a conscious one.
     """
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     fixture = tmp_path / "claude" / "projects" / "p" / "s.jsonl"
@@ -208,7 +208,7 @@ def test_parse_cache_dicts_are_read_only_contract(tmp_path):
 def test_parse_cache_invalidates_on_same_size_mtime_ctime_edit(tmp_path, monkeypatch):
     """A same-size, same-mtime in-place edit still misses the cache via ctime_ns."""
     import os
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     models.clear_claude_code_parse_cache()
     fixture = tmp_path / "claude" / "projects" / "p" / "s.jsonl"

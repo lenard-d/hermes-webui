@@ -17,6 +17,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable, Iterator
 
+from . import cache as _cache
+from . import cleanup as _cleanup
+from . import records as _records
+
 
 logger = logging.getLogger(__name__)
 
@@ -384,27 +388,25 @@ class SessionRepository:
 
 
 def _default_repository() -> SessionRepository:
-    # Resolve collaborators at call time. ``/api/admin/reload`` can replace the
-    # session store while the process is running; retaining bound callables here
-    # would keep edits attached to the stale module and stale cache.
+    # Resolve configuration-owned locks at call time while keeping persistence
+    # and cache operations attached to their semantic owners.
     from api import config
-    from . import store as models
 
     def sidecar_path(sid: str):
-        root = models.SESSION_DIR.resolve()
+        root = _records.SESSION_DIR.resolve()
         path = (root / f"{sid}.json").resolve()
         path.relative_to(root)
         return path
 
     return SessionRepository(
-        load=models.get_session,
-        load_full=models.Session.load,
+        load=_cache.get_session,
+        load_full=_records.Session.load,
         lock_for=config._get_session_agent_lock,
-        cache_full=models.cache_full_session,
-        write_index=lambda sessions: models._write_session_index(updates=sessions),
+        cache_full=_cache.cache_full_session,
+        write_index=lambda sessions: _records._write_session_index(updates=sessions),
         sidecar_exists=lambda sid: sidecar_path(sid).is_file(),
         discard_sidecar=lambda sid: sidecar_path(sid).unlink(missing_ok=True),
-        prune_index=models.prune_session_from_index,
+        prune_index=_records.prune_session_from_index,
     )
 
 
@@ -506,31 +508,27 @@ def session_deleted_for_write(sid: str) -> bool:
     the same per-session owner lock as deletion.
     """
     from api import config
-    from . import store as models
-
     sid = str(sid or "")
-    if not models.is_safe_session_id(sid):
+    if not _records.is_safe_session_id(sid):
         return True
-    if sid not in models._load_webui_deleted_session_tombstone():
+    if sid not in _records._load_webui_deleted_session_tombstone():
         return False
     try:
-        sidecar = (models.SESSION_DIR.resolve() / f"{sid}.json").resolve()
-        sidecar.relative_to(models.SESSION_DIR.resolve())
+        sidecar = (_records.SESSION_DIR.resolve() / f"{sid}.json").resolve()
+        sidecar.relative_to(_records.SESSION_DIR.resolve())
     except (OSError, ValueError):
         return True
     if sidecar.exists():
         return False
     with config.LOCK:
-        return sid not in models.SESSIONS
+        return sid not in _records.SESSIONS
 
 
 def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
     """Remove empty sidecars and index-only ghosts as one reconciliation pass."""
     from api import config
-    from . import store as models
-
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = _records.SESSION_DIR
+    index_file = _records.SESSION_INDEX_FILE
     removed_sidecar_ids: set[str] = set()
     pruned_index_rows = 0
     skipped_active = 0
@@ -545,7 +543,7 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
                 # Reload only after acquiring the same lock as writers. An
                 # initially empty session may have gained messages while this
                 # cleanup pass waited.
-                session = models.Session.load(path.stem)
+                session = _records.Session.load(path.stem)
                 should_delete = bool(
                     session
                     and len(session.messages) == 0
@@ -563,7 +561,7 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
                     skipped_active += 1
                     continue
                 with config.LOCK:
-                    models.SESSIONS.pop(path.stem, None)
+                    _records.SESSIONS.pop(path.stem, None)
                 path.unlink(missing_ok=True)
                 removed_sidecar_ids.add(path.stem)
                 # Startup recovery treats an orphan .bak as recoverable state;
@@ -579,7 +577,7 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
     phase2_rewrote_index = False
     if index_file.exists():
         try:
-            with models._INDEX_WRITE_LOCK:
+            with _records._INDEX_WRITE_LOCK:
                 index_data = json.loads(index_file.read_bytes())
                 if isinstance(index_data, list):
                     live_ids = {
@@ -588,7 +586,7 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
                         if not path.name.startswith("_")
                     }
                     with config.LOCK:
-                        in_memory_ids = set(models.SESSIONS)
+                        in_memory_ids = set(_records.SESSIONS)
 
                     survivors = []
                     for entry in index_data:
@@ -612,7 +610,7 @@ def cleanup_session_store(*, zero_only: bool = False) -> SessionCleanupResult:
                                 handle.write(payload)
                                 handle.flush()
                                 os.fsync(handle.fileno())
-                            models._safe_replace(tmp, index_file)
+                            _records._safe_replace(tmp, index_file)
                             phase2_rewrote_index = True
                         except Exception:
                             try:
@@ -647,10 +645,8 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
     the Hermes state database.
     """
     from api import config
-    from . import store as models
-
     sid = str(sid or "")
-    if not models.is_safe_session_id(sid):
+    if not _records.is_safe_session_id(sid):
         raise ValueError("Invalid session_id")
 
     owner_lock = config._get_session_agent_lock(sid)
@@ -659,7 +655,7 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
     try:
         with owner_lock:
             try:
-                current = models.get_session(sid, metadata_only=True)
+                current = _cache.get_session(sid, metadata_only=True)
             except (KeyError, OSError):
                 current = None
             blocking_stream = config.blocking_runtime_stream(
@@ -672,13 +668,13 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
                 raise SessionActiveError(sid, blocking_stream)
 
             with config.LOCK:
-                models.SESSIONS.pop(sid, None)
+                _records.SESSIONS.pop(sid, None)
 
             # Eviction may flush lifecycle memory. Complete that work before
             # removing persisted artifacts while the same owner lock is held.
             config._evict_session_agent(sid)
 
-            session_dir = models.SESSION_DIR.resolve()
+            session_dir = _records.SESSION_DIR.resolve()
             sidecar = (session_dir / f"{sid}.json").resolve()
             try:
                 sidecar.relative_to(session_dir)
@@ -702,7 +698,7 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
                 )
 
             try:
-                models.prune_session_from_index(sid)
+                _records.prune_session_from_index(sid)
             except Exception:
                 logger.debug(
                     "Failed to prune deleted session from index: %s",
@@ -712,7 +708,7 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
 
             if sidecar_deleted and not messaging:
                 try:
-                    models._record_webui_deleted_session_tombstone(sid)
+                    _records._record_webui_deleted_session_tombstone(sid)
                 except Exception:
                     logger.debug(
                         "Failed to tombstone deleted WebUI session %s",
@@ -777,7 +773,7 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
 
             if not messaging:
                 try:
-                    state_db_cleanup_failed = not models.delete_cli_session(sid)
+                    state_db_cleanup_failed = not _cleanup.delete_cli_session(sid)
                 except Exception:
                     state_db_cleanup_failed = True
                     logger.warning(

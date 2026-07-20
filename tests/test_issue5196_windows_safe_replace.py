@@ -1,6 +1,6 @@
 # tests/test_issue5196_windows_safe_replace.py
 from unittest import mock
-from api.sessions import store as models
+from api.sessions import records as models
 
 def test_safe_replace_passthrough_off_windows():
     calls = []

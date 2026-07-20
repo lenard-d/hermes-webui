@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import api.sessions.store as M
+import api.sessions.external as M
 
 
 def _set_active_streams(monkeypatch, ids):
@@ -107,9 +107,11 @@ def test_structural_change_listener_clears_cli_cache(monkeypatch):
     signals fire the session-list-changed listener; per-token message writes never
     do — that is exactly what makes the freeze safe."""
     from api import routes as R
+    import api.sessions.store as compatibility_store
 
     cleared = {"n": 0}
     monkeypatch.setattr(M, "clear_cli_sessions_cache", lambda: cleared.__setitem__("n", cleared["n"] + 1))
+    monkeypatch.setattr(compatibility_store, "clear_cli_sessions_cache", M.clear_cli_sessions_cache)
     # The route module imports the symbol lazily inside the listener, so patching
     # api.sessions.store.clear_cli_sessions_cache is what the listener resolves.
     R._on_session_list_changed("default")
@@ -117,4 +119,3 @@ def test_structural_change_listener_clears_cli_cache(monkeypatch):
         "_on_session_list_changed must clear the CLI/cron projection cache so a "
         "structural mutation isn't masked by the streaming freeze (#4842)"
     )
-

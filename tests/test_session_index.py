@@ -20,7 +20,13 @@ from unittest.mock import patch
 import pytest
 
 import api.sessions.store as models
-from api.sessions.store import Session, _write_session_index, prune_session_from_index
+import api.sessions.cache as session_cache
+import api.sessions.external as session_external
+import api.sessions.pending_recovery as session_pending_recovery
+import api.sessions.projects as session_projects
+import api.sessions.records as session_records
+import api.sessions.sidebar as session_sidebar
+from api.sessions.records import Session, _write_session_index, prune_session_from_index
 
 
 @pytest.fixture(autouse=True)
@@ -32,10 +38,21 @@ def _isolate_session_dir(tmp_path, monkeypatch):
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
 
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
+    for module in (
+        session_cache,
+        session_external,
+        session_pending_recovery,
+        session_projects,
+        session_sidebar,
+    ):
+        if hasattr(module, "SESSION_DIR"):
+            monkeypatch.setattr(module, "SESSION_DIR", session_dir)
+        if hasattr(module, "SESSION_INDEX_FILE"):
+            monkeypatch.setattr(module, "SESSION_INDEX_FILE", index_file)
     # Also patch the module-level references that Session uses
-    monkeypatch.setattr(models.Session, "__module__", models.__name__)
+    monkeypatch.setattr(Session, "__module__", session_records.__name__)
 
     # Clear the in-memory SESSIONS and persisted-id caches to avoid bleed.
     models.SESSIONS.clear()
@@ -130,12 +147,12 @@ def test_full_index_rebuild_includes_hyphenated_sessions():
 
     _write_session_index(updates=None)
 
-    ids = [entry["session_id"] for entry in _read_index(models.SESSION_INDEX_FILE)]
+    ids = [entry["session_id"] for entry in _read_index(session_records.SESSION_INDEX_FILE)]
     assert sid in ids
 
 
 def test_prune_session_from_index_removes_requested_row_only():
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
     s_a = _make_session("sess_a", "A", updated_at=100)
     s_b = _make_session("sess_b", "B", updated_at=200)
     s_a.save()
@@ -152,7 +169,7 @@ def test_prune_session_from_index_removes_requested_row_only():
 
 
 def test_all_sessions_backfills_last_message_at_for_legacy_index_rows():
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
     s = Session(
         session_id="sess_legacy_index",
         title="Legacy Index",
@@ -177,7 +194,7 @@ def test_all_sessions_backfills_last_message_at_for_legacy_index_rows():
         ],
     )
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert rows[0]["session_id"] == s.session_id
     assert rows[0]["last_message_at"] == 100.0
@@ -193,7 +210,7 @@ def test_all_sessions_backfills_last_message_at_for_legacy_index_rows():
 
 def test_all_sessions_prune_batches_persisted_id_snapshot(monkeypatch):
     """Index pruning should not probe each backing file through the helper."""
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
     entries = [
         {
             "session_id": "sess_a",
@@ -221,7 +238,7 @@ def test_all_sessions_prune_batches_persisted_id_snapshot(monkeypatch):
         },
     ]
     for entry in entries:
-        (models.SESSION_DIR / f"{entry['session_id']}.json").write_text(
+        (session_records.SESSION_DIR / f"{entry['session_id']}.json").write_text(
             "{}",
             encoding="utf-8",
         )
@@ -230,10 +247,10 @@ def test_all_sessions_prune_batches_persisted_id_snapshot(monkeypatch):
     def _assert_not_called(session_id, in_memory_ids=None):
         raise AssertionError("all_sessions should batch persisted ids before pruning")
 
-    monkeypatch.setattr(models, "_index_entry_exists", _assert_not_called)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_records, "_index_entry_exists", _assert_not_called)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["sess_a", "sess_b"]
 
@@ -249,8 +266,8 @@ def test_incremental_patch_correctness():
 
     # We need to get the fixture values — but since it's autouse, the monkeypatch
     # has already been applied. Access the patched values directly.
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     # Create 3 sessions with different timestamps
     sA = _make_session("sess_a", "Alpha", updated_at=100.0)
@@ -295,8 +312,8 @@ def test_new_session_appended_to_index():
     """Pre-write index with sessions A, B. Call _write_session_index(updates=[C])
     where C is not in the existing index. Verify C appears in the index.
     """
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     sA = _make_session("sess_a", "Alpha", updated_at=100.0)
     sB = _make_session("sess_b", "Bravo", updated_at=200.0)
@@ -325,7 +342,7 @@ def test_incremental_update_prunes_stale_entries():
     This covers session-id rotation paths (e.g. compression) where the old id can
     linger in `_index.json` after the file has been renamed.
     """
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
 
     stale = {
         "session_id": "ghost_sid",
@@ -429,9 +446,9 @@ def test_pre_compression_snapshot_hidden_from_active_sidebar_but_file_remains(mo
     )
     snapshot.save(touch_updated_at=False)
     continuation.save(touch_updated_at=False)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert snapshot.path.exists(), "snapshot JSON must stay available for lineage traversal"
     assert [row["session_id"] for row in rows] == ["new_sid"]
@@ -472,9 +489,9 @@ def test_forked_child_of_snapshot_stays_visible_when_snapshot_is_fuller(monkeypa
     )
     snapshot.save(touch_updated_at=False)
     fork.save(touch_updated_at=False)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert snapshot.path.exists(), "snapshot JSON must stay available for lineage traversal"
     assert rows[0]["session_id"] == "manual_fork_child"
@@ -538,9 +555,9 @@ def test_fuller_pre_compression_snapshot_replaces_shorter_visible_segment(monkey
     )
     snapshot.save(touch_updated_at=False)
     continuation.save(touch_updated_at=False)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["full_parent"]
     assert rows[0]["message_count"] == 4
@@ -575,9 +592,9 @@ def test_complete_snapshot_refresh_ids_do_not_follow_mtime_when_sidebar_metadata
             "parent_session_id": "snapshot_complete",
         },
     ]
-    monkeypatch.setattr(models, "_sidecar_mtime_after_index_timestamp", lambda _row: True)
+    monkeypatch.setattr(session_sidebar, "_sidecar_mtime_after_index_timestamp", lambda _row: True)
 
-    assert models._stale_snapshot_metadata_refresh_ids(rows) == set()
+    assert session_sidebar._stale_snapshot_metadata_refresh_ids(rows) == set()
 
 
 def test_stale_zero_message_snapshot_refresh_ids_follow_mtime(monkeypatch):
@@ -603,9 +620,9 @@ def test_stale_zero_message_snapshot_refresh_ids_follow_mtime(monkeypatch):
             "parent_session_id": "snapshot_stale_zero",
         },
     ]
-    monkeypatch.setattr(models, "_sidecar_mtime_after_index_timestamp", lambda _row: True)
+    monkeypatch.setattr(session_sidebar, "_sidecar_mtime_after_index_timestamp", lambda _row: True)
 
-    assert models._stale_snapshot_metadata_refresh_ids(rows) == {"snapshot_stale_zero"}
+    assert session_sidebar._stale_snapshot_metadata_refresh_ids(rows) == {"snapshot_stale_zero"}
 
 
 def test_stale_index_fuller_pre_compression_snapshot_uses_sidecar_metadata(monkeypatch):
@@ -642,7 +659,7 @@ def test_stale_index_fuller_pre_compression_snapshot_uses_sidecar_metadata(monke
     snapshot.save(touch_updated_at=False)
     continuation.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "stale_full_parent",
@@ -669,9 +686,9 @@ def test_stale_index_fuller_pre_compression_snapshot_uses_sidecar_metadata(monke
             },
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["stale_full_parent"]
     assert rows[0]["message_count"] == 4
@@ -707,7 +724,7 @@ def test_indexed_fuller_pre_compression_snapshot_does_not_refresh_sidecar(monkey
     snapshot.save(touch_updated_at=False)
     continuation.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "indexed_full_parent",
@@ -734,10 +751,10 @@ def test_indexed_fuller_pre_compression_snapshot_does_not_refresh_sidecar(monkey
             },
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     with patch.object(Session, "load_metadata_only", side_effect=AssertionError("truthful snapshot index should not refresh sidecar")):
-        rows = models.all_sessions()
+        rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["indexed_full_parent"]
     assert rows[0]["message_count"] == 4
@@ -746,7 +763,7 @@ def test_indexed_fuller_pre_compression_snapshot_does_not_refresh_sidecar(monkey
 def test_orphan_pre_compression_snapshot_does_not_refresh_sidecar(monkeypatch):
     """Snapshot refresh stays scoped to lineages with a visible continuation."""
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "orphan_snapshot",
@@ -762,7 +779,7 @@ def test_orphan_pre_compression_snapshot_does_not_refresh_sidecar(monkeypatch):
             },
         ],
     )
-    (models.SESSION_DIR / "orphan_snapshot.json").write_text(
+    (session_records.SESSION_DIR / "orphan_snapshot.json").write_text(
         json.dumps(
             {
                 "session_id": "orphan_snapshot",
@@ -775,10 +792,10 @@ def test_orphan_pre_compression_snapshot_does_not_refresh_sidecar(monkeypatch):
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     with patch.object(Session, "load_metadata_only", side_effect=AssertionError("orphan snapshots must not refresh sidecars")):
-        rows = models.all_sessions()
+        rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["orphan_snapshot"]
     assert rows[0]["message_count"] == 3
@@ -818,9 +835,9 @@ def test_newer_continuation_stays_visible_alongside_older_fuller_snapshot(monkey
     )
     snapshot.save(touch_updated_at=False)
     continuation.save(touch_updated_at=False)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == [
         "newer_short_child",
@@ -846,7 +863,7 @@ def test_all_sessions_uses_sidecar_metadata_for_runtime_rows_when_index_message_
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "stale_index_sid",
@@ -861,9 +878,9 @@ def test_all_sessions_uses_sidecar_metadata_for_runtime_rows_when_index_message_
             }
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert rows[0]["session_id"] == "stale_index_sid"
     assert rows[0]["message_count"] == 3
@@ -885,7 +902,7 @@ def test_all_sessions_sidecar_refresh_stays_metadata_only(monkeypatch):
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "metadata_refresh_sid",
@@ -900,10 +917,10 @@ def test_all_sessions_sidecar_refresh_stays_metadata_only(monkeypatch):
             }
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     with patch.object(Session, "load", side_effect=AssertionError("full sidecar load should not run")):
-        rows = models.all_sessions()
+        rows = session_sidebar.all_sessions()
 
     assert rows[0]["session_id"] == "metadata_refresh_sid"
     assert rows[0]["message_count"] == 3
@@ -913,7 +930,7 @@ def test_all_sessions_sidecar_refresh_stays_metadata_only(monkeypatch):
 def test_all_sessions_does_not_refresh_fresh_lineage_rows_from_sidecars(monkeypatch):
     """Fresh lineage rows are enriched from state.db; do not read every sidecar per poll."""
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "lineage_sid",
@@ -930,7 +947,7 @@ def test_all_sessions_does_not_refresh_fresh_lineage_rows_from_sidecars(monkeypa
             }
         ],
     )
-    (models.SESSION_DIR / "lineage_sid.json").write_text(
+    (session_records.SESSION_DIR / "lineage_sid.json").write_text(
         json.dumps(
             {
                 "session_id": "lineage_sid",
@@ -942,10 +959,10 @@ def test_all_sessions_does_not_refresh_fresh_lineage_rows_from_sidecars(monkeypa
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     with patch.object(Session, "load_metadata_only", side_effect=AssertionError("fresh lineage rows must not refresh sidecars")):
-        rows = models.all_sessions()
+        rows = session_sidebar.all_sessions()
 
     assert rows[0]["session_id"] == "lineage_sid"
     assert rows[0]["message_count"] == 7
@@ -964,7 +981,7 @@ def test_complete_lineage_refresh_gate_ignores_mtime_when_sidebar_metadata_is_co
         "_lineage_root_id": "snapshot_parent",
         "_compression_segment_count": 2,
     }
-    monkeypatch.setattr(models, "_sidecar_mtime_after_index_timestamp", lambda _row: True)
+    monkeypatch.setattr(session_sidebar, "_sidecar_mtime_after_index_timestamp", lambda _row: True)
 
     assert models._row_may_need_sidecar_metadata_refresh(row) is False
 
@@ -993,7 +1010,7 @@ def test_all_sessions_does_not_refresh_complete_lineage_rows_with_newer_sidecar_
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "complete_lineage_child",
@@ -1013,15 +1030,15 @@ def test_all_sessions_does_not_refresh_complete_lineage_rows_with_newer_sidecar_
     )
     # Ensure the filesystem mtime still looks newer than the logical timestamp,
     # which is the production fan-out trigger we are guarding against.
-    assert models._sidecar_mtime_after_index_timestamp({
+    assert session_sidebar._sidecar_mtime_after_index_timestamp({
         "session_id": "complete_lineage_child",
         "last_message_at": 103.0,
         "updated_at": 103.0,
     })
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     with patch.object(Session, "load_metadata_only", side_effect=AssertionError("complete lineage rows must stay on the index fastpath")):
-        rows = models.all_sessions()
+        rows = session_sidebar.all_sessions()
 
     assert rows[0]["session_id"] == "complete_lineage_child"
     assert rows[0]["message_count"] == 4
@@ -1050,7 +1067,7 @@ def test_all_sessions_refreshes_stale_visible_continuation_metadata(monkeypatch)
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "stale_visible_child",
@@ -1067,9 +1084,9 @@ def test_all_sessions_refreshes_stale_visible_continuation_metadata(monkeypatch)
             }
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert rows[0]["session_id"] == "stale_visible_child"
     assert rows[0]["message_count"] == 4
@@ -1090,7 +1107,7 @@ def test_all_sessions_refreshes_stale_zero_count_row_from_sidecar(monkeypatch):
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "stale_zero_count",
@@ -1105,9 +1122,9 @@ def test_all_sessions_refreshes_stale_zero_count_row_from_sidecar(monkeypatch):
             },
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["stale_zero_count"]
     assert rows[0]["message_count"] == 2
@@ -1129,7 +1146,7 @@ def test_all_sessions_refreshes_stale_zero_count_snapshot_row_from_sidecar(monke
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "stale_zero_snapshot_count",
@@ -1145,9 +1162,9 @@ def test_all_sessions_refreshes_stale_zero_count_snapshot_row_from_sidecar(monke
             },
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
 
     assert [row["session_id"] for row in rows] == ["stale_zero_snapshot_count"]
     assert rows[0]["message_count"] == 2
@@ -1165,7 +1182,7 @@ def test_all_sessions_skips_refresh_for_real_empty_untitled_drafts(monkeypatch):
     )
     draft.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "untitled_empty_draft",
@@ -1180,10 +1197,10 @@ def test_all_sessions_skips_refresh_for_real_empty_untitled_drafts(monkeypatch):
             },
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     with patch.object(Session, "load_metadata_only", side_effect=AssertionError("empty draft should not refresh sidecar")):
-        rows = models.all_sessions()
+        rows = session_sidebar.all_sessions()
 
     assert rows == []
 
@@ -1213,7 +1230,7 @@ def test_all_sessions_does_not_refresh_plain_branch_fork_from_sidecar(monkeypatc
     )
     session.save(touch_updated_at=False)
     _write_index_file(
-        models.SESSION_INDEX_FILE,
+        session_records.SESSION_INDEX_FILE,
         [
             {
                 "session_id": "plain_fork_child",
@@ -1229,16 +1246,16 @@ def test_all_sessions_does_not_refresh_plain_branch_fork_from_sidecar(monkeypatc
             }
         ],
     )
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
     # A fork that has not been hydrated must not be promoted from the (stale)
     # indexed count — the row stays as the index reports it (no sidecar refresh).
     def _fail_load(_sid):
         raise AssertionError("plain fork must not trigger load_metadata_only refresh")
 
-    monkeypatch.setattr(models.Session, "load_metadata_only", staticmethod(_fail_load))
+    monkeypatch.setattr(session_records.Session, "load_metadata_only", staticmethod(_fail_load))
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
     fork_row = next(r for r in rows if r["session_id"] == "plain_fork_child")
     assert fork_row["message_count"] == 2  # left at the indexed value, not refreshed
 
@@ -1255,7 +1272,7 @@ def test_load_metadata_only_skips_index_read_when_sidecar_has_message_count(monk
     def _fail_index_lookup(_sid):
         raise AssertionError("message_count sidecar should not need index lookup")
 
-    monkeypatch.setattr(models, "_lookup_index_message_count", _fail_index_lookup)
+    monkeypatch.setattr(session_records, "_lookup_index_message_count", _fail_index_lookup)
 
     meta = Session.load_metadata_only("metadata_count_sid")
 
@@ -1267,7 +1284,7 @@ def test_load_metadata_only_skips_index_read_when_sidecar_has_message_count(monk
 
 def test_all_sessions_reuses_loaded_index_counts_for_legacy_sidecar_refresh(monkeypatch):
     """Refreshing multiple legacy lineage rows must not parse _index.json per row."""
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
     rows = []
     for sid, count in (("legacy_lineage_a", 3), ("legacy_lineage_b", 4)):
         payload = {
@@ -1285,7 +1302,7 @@ def test_all_sessions_reuses_loaded_index_counts_for_legacy_sidecar_refresh(monk
         }
         # Deliberately bypass Session.save(): pre-fix legacy sidecars do not have
         # a persisted message_count field in their metadata prefix.
-        (models.SESSION_DIR / f"{sid}.json").write_text(
+        (session_records.SESSION_DIR / f"{sid}.json").write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -1316,9 +1333,9 @@ def test_all_sessions_reuses_loaded_index_counts_for_legacy_sidecar_refresh(monk
         return original_read_bytes(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_bytes", _counting_read_bytes)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
+    monkeypatch.setattr(session_sidebar, "_enrich_sidebar_lineage_metadata", lambda _sessions: None)
 
-    result = models.all_sessions()
+    result = session_sidebar.all_sessions()
 
     counts = {row["session_id"]: row["message_count"] for row in result}
     assert counts["legacy_lineage_a"] == 3
@@ -1345,8 +1362,8 @@ def test_first_call_full_rebuild():
     """When no index file exists, calling _write_session_index(updates=[session])
     should fall back to full rebuild and create the index.
     """
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     # No index file yet
     assert not index_file.exists()
@@ -1372,8 +1389,8 @@ def test_corrupt_index_fallback():
     _write_session_index(updates=[session]). Verify it falls back to
     full rebuild and the result is valid JSON with correct entries.
     """
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     # Write corrupt data
     index_file.write_text("THIS IS NOT JSON {{{", encoding="utf-8")
@@ -1400,8 +1417,8 @@ def test_concurrent_saves_dont_lose_data():
     with a pre-existing index. Use a threading.Event barrier to force them
     to run concurrently. Assert both updates are present in the final index.
     """
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     sA = _make_session("sess_a", "Alpha", updated_at=100.0)
     sB = _make_session("sess_b", "Bravo", updated_at=200.0)
@@ -1460,8 +1477,8 @@ def test_atomic_write_no_tmp_remains():
     """After _write_session_index completes, no .tmp file should remain
     in SESSION_DIR.
     """
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     sA = _make_session("sess_a", "Alpha", updated_at=100.0)
     sA.path.write_text(json.dumps(sA.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1490,8 +1507,8 @@ def test_deadlock_guard_on_fallback():
     This tests that the fallback path (corrupt index -> full rebuild)
     is called outside the LOCK, so it doesn't deadlock.
     """
-    session_dir = models.SESSION_DIR
-    index_file = models.SESSION_INDEX_FILE
+    session_dir = session_records.SESSION_DIR
+    index_file = session_records.SESSION_INDEX_FILE
 
     # Create a valid index file so the incremental path is attempted
     _write_index_file(index_file, [
@@ -1545,7 +1562,7 @@ def test_deadlock_guard_on_fallback():
 
 def test_incremental_index_disk_io_runs_outside_lock(monkeypatch):
     """Fast-path disk I/O (fsync/replace) must run after releasing LOCK."""
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
 
     sA = _make_session("sess_a", "Alpha", updated_at=100.0)
     sA.path.write_text(json.dumps(sA.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1555,13 +1572,13 @@ def test_incremental_index_disk_io_runs_outside_lock(monkeypatch):
     sA.updated_at = 200.0
 
     fsync_lock_states = []
-    original_fsync = models.os.fsync
+    original_fsync = session_records.os.fsync
 
     def _observing_fsync(fd):
         fsync_lock_states.append(models.LOCK.locked())
         return original_fsync(fd)
 
-    monkeypatch.setattr(models.os, "fsync", _observing_fsync)
+    monkeypatch.setattr(session_records.os, "fsync", _observing_fsync)
 
     _write_session_index(updates=[sA])
 
@@ -1577,13 +1594,13 @@ def test_full_rebuild_index_disk_io_runs_outside_lock(monkeypatch):
     sA.path.write_text(json.dumps(sA.__dict__, ensure_ascii=False, indent=2), encoding="utf-8")
 
     fsync_lock_states = []
-    original_fsync = models.os.fsync
+    original_fsync = session_records.os.fsync
 
     def _observing_fsync(fd):
         fsync_lock_states.append(models.LOCK.locked())
         return original_fsync(fd)
 
-    monkeypatch.setattr(models.os, "fsync", _observing_fsync)
+    monkeypatch.setattr(session_records.os, "fsync", _observing_fsync)
 
     _write_session_index(updates=None)
 
@@ -1595,7 +1612,7 @@ def test_full_rebuild_index_disk_io_runs_outside_lock(monkeypatch):
 
 def test_all_sessions_ignores_stale_index_entries():
     """Reading via all_sessions() must not surface ghost rows from _index.json."""
-    index_file = models.SESSION_INDEX_FILE
+    index_file = session_records.SESSION_INDEX_FILE
 
     valid_session = _make_session("sess_a", "Alpha", updated_at=200.0)
     valid_session.path.write_text(
@@ -1617,7 +1634,7 @@ def test_all_sessions_ignores_stale_index_entries():
     }
     _write_index_file(index_file, [stale, valid])
 
-    rows = models.all_sessions()
+    rows = session_sidebar.all_sessions()
     ids = {e["session_id"] for e in rows}
     assert "sess_a" in ids
     assert "ghost_sid" not in ids
@@ -1625,19 +1642,19 @@ def test_all_sessions_ignores_stale_index_entries():
 
 def test_background_index_rebuild_skips_after_session_dir_switch(tmp_path, monkeypatch):
     """A delayed rebuild thread must not write into a newer isolated session dir."""
-    original_session_dir = models.SESSION_DIR
-    original_index_file = models.SESSION_INDEX_FILE
+    original_session_dir = session_records.SESSION_DIR
+    original_index_file = session_records.SESSION_INDEX_FILE
     new_session_dir = tmp_path / "other-sessions"
     new_session_dir.mkdir()
     new_index_file = new_session_dir / "_index.json"
 
-    monkeypatch.setattr(models, "_SESSION_INDEX_REBUILD_THREAD", object())
-    monkeypatch.setattr(models, "_SESSION_INDEX_REBUILD_THREAD_TARGET", (
+    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD", object())
+    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD_TARGET", (
         original_session_dir,
         original_index_file,
     ))
-    monkeypatch.setattr(models, "SESSION_DIR", new_session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", new_index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", new_session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", new_index_file)
 
     models._rebuild_session_index_background(
         original_session_dir,
@@ -1645,19 +1662,19 @@ def test_background_index_rebuild_skips_after_session_dir_switch(tmp_path, monke
     )
 
     assert not new_index_file.exists()
-    monkeypatch.setattr(models, "SESSION_DIR", original_session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", original_index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", original_session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", original_index_file)
     session = _make_session("late_switch_sid", "Late switch", updated_at=100.0)
     session.save(skip_index=True)
 
-    original_write_session_index = models._write_session_index
+    original_write_session_index = session_records._write_session_index
 
     def _switch_globals_then_write(*args, **kwargs):
-        monkeypatch.setattr(models, "SESSION_DIR", new_session_dir)
-        monkeypatch.setattr(models, "SESSION_INDEX_FILE", new_index_file)
+        monkeypatch.setattr(session_records, "SESSION_DIR", new_session_dir)
+        monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", new_index_file)
         return original_write_session_index(*args, **kwargs)
 
-    monkeypatch.setattr(models, "_write_session_index", _switch_globals_then_write)
+    monkeypatch.setattr(session_records, "_write_session_index", _switch_globals_then_write)
 
     models._rebuild_session_index_background(
         original_session_dir,
@@ -1676,22 +1693,22 @@ def test_background_rebuild_old_thread_finally_preserves_new_same_target_owner(t
     index_file = session_dir / "_index.json"
     target = (session_dir, index_file)
 
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", index_file)
 
     old_thread = object()
     new_thread = object()
-    monkeypatch.setattr(models, "_SESSION_INDEX_REBUILD_THREAD", old_thread)
-    monkeypatch.setattr(models, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
-    monkeypatch.setattr(models.threading, "current_thread", lambda: old_thread)
+    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD", old_thread)
+    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
+    monkeypatch.setattr(session_records.threading, "current_thread", lambda: old_thread)
 
     def _handoff_then_write(*args, **kwargs):
-        monkeypatch.setattr(models, "_SESSION_INDEX_REBUILD_THREAD", new_thread)
-        monkeypatch.setattr(models, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
+        monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD", new_thread)
+        monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
 
-    monkeypatch.setattr(models, "_write_session_index", _handoff_then_write)
+    monkeypatch.setattr(session_records, "_write_session_index", _handoff_then_write)
 
     models._rebuild_session_index_background(*target)
 
-    assert models._SESSION_INDEX_REBUILD_THREAD is new_thread
-    assert models._SESSION_INDEX_REBUILD_THREAD_TARGET == target
+    assert session_records._SESSION_INDEX_REBUILD_THREAD is new_thread
+    assert session_records._SESSION_INDEX_REBUILD_THREAD_TARGET == target

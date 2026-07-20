@@ -54,9 +54,8 @@ def test_is_safe_session_id_rejects_whitespace_and_control_chars():
 
 def test_session_delete_validator_accepts_hyphenated_ids():
     """``/api/session/delete`` validator path must accept hyphens (#3023)."""
-    import inspect
-    import api.routes as routes
-    src = inspect.getsource(routes.handle_post if hasattr(routes, "handle_post") else routes)
+    from pathlib import Path
+    src = Path("api/http/routes/session_mutations.py").read_text(encoding="utf-8")
     # Should call the shared helper, not the old magic-string check
     assert "is_safe_session_id" in src
     assert "'0123456789abcdefghijklmnopqrstuvwxyz_'" not in src
@@ -64,7 +63,7 @@ def test_session_delete_validator_accepts_hyphenated_ids():
 
 def test_session_worktree_remove_validator_accepts_hyphenated_ids():
     """``/api/session/worktree/remove`` validator path must accept hyphens (#3023)."""
-    routes_src = open("api/routes.py", encoding="utf-8").read()
+    routes_src = open("api/http/routes/session_mutations.py", encoding="utf-8").read()
     # The worktree-remove block must use the shared helper
     block_start = routes_src.find('/api/session/worktree/remove')
     block_end = routes_src.find('/api/session/delete', block_start)
@@ -77,9 +76,10 @@ def test_session_worktree_remove_validator_accepts_hyphenated_ids():
 def test_repair_stale_pending_validator_accepts_hyphenated_ids(monkeypatch, tmp_path):
     """``_repair_stale_pending`` in models.py must accept hyphens (#3023)."""
     import threading
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
+    from api.sessions.records import Session
 
-    session = models.Session(
+    session = Session(
         session_id="api-hyphenated-id",
         workspace=tmp_path,
         active_stream_id="stale-stream",

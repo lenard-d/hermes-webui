@@ -32,9 +32,16 @@ def temp_session_dir(tmp_path, monkeypatch):
     sd.mkdir()
     # api.models reads SESSION_DIR at import time; patch the module-level binding.
     import api.sessions.store as _m
+    import api.sessions.cache as session_cache
+    import api.sessions.pending_recovery as pending_recovery
+    import api.sessions.records as session_records
     from collections import OrderedDict
+    sessions = OrderedDict()
     monkeypatch.setattr(_m, "SESSION_DIR", sd)
-    monkeypatch.setattr(_m, "SESSIONS", OrderedDict())
+    monkeypatch.setattr(_m, "SESSIONS", sessions)
+    for module in (session_cache, pending_recovery, session_records):
+        monkeypatch.setattr(module, "SESSION_DIR", sd)
+        monkeypatch.setattr(module, "SESSIONS", sessions)
     yield sd
 
 
@@ -377,10 +384,12 @@ def test_recover_all_sessions_on_startup_skips_tombstoned_orphan_bak(temp_sessio
 def test_recover_all_sessions_on_startup_rebuilds_missing_index_without_restores(temp_session_dir, monkeypatch):
     """Startup recovery must rebuild a missing index even when no .bak restore runs."""
     import api.sessions.store as _m
+    import api.sessions.records as session_records
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=42)
     missing_index = temp_session_dir / "_index.json"
     monkeypatch.setattr(_m, "SESSION_INDEX_FILE", missing_index)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", missing_index)
     assert not missing_index.exists()
 
     from api.sessions.recovery import recover_all_sessions_on_startup
@@ -395,6 +404,7 @@ def test_recover_all_sessions_on_startup_rebuilds_missing_index_without_restores
 def test_recover_all_sessions_on_startup_rebuilds_index_after_orphan_restore(temp_session_dir, monkeypatch):
     """A restored orphan must be visible through the WebUI session index immediately."""
     import api.sessions.store as _m
+    import api.sessions.records as session_records
 
     sid = _make_session_on_disk(temp_session_dir, n_msgs=42)
     live_path = temp_session_dir / f"{sid}.json"
@@ -405,6 +415,7 @@ def test_recover_all_sessions_on_startup_rebuilds_index_after_orphan_restore(tem
     stale_index = temp_session_dir / "_index.json"
     stale_index.write_text(json.dumps([]), encoding="utf-8")
     monkeypatch.setattr(_m, "SESSION_INDEX_FILE", stale_index)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", stale_index)
 
     from api.sessions.recovery import recover_all_sessions_on_startup
     result = recover_all_sessions_on_startup(temp_session_dir, rebuild_index=True)

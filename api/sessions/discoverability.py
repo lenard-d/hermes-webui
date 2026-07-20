@@ -6,7 +6,7 @@ places that decide whether a session can be found from the WebUI sidebar:
 - JSON sidecars under the WebUI session directory
 - ``_index.json`` sidebar metadata
 - canonical ``state.db`` rows/messages
-- the live ``api.sessions.store.all_sessions()`` sidebar response, when available
+- the live ``api.sessions.sidebar.all_sessions()`` response, when available
 """
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ def _normalize_api_sessions(api_sessions: Iterable[dict] | None) -> dict[str, di
     records: dict[str, dict] = {}
     if api_sessions is None:
         try:
-            from api.sessions.store import all_sessions
+            from api.sessions.sidebar import all_sessions
 
             api_sessions = all_sessions()
         except Exception:

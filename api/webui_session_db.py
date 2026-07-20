@@ -14,7 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-import api.sessions.store as models
+from api.sessions import records as sessions
 
 
 _METADATA_FIELDS = frozenset(
@@ -88,7 +88,7 @@ class WebUIJsonSessionDB:
 
     @property
     def session_dir(self) -> Path:
-        return self._session_dir or models.SESSION_DIR
+        return self._session_dir or sessions.SESSION_DIR
 
     def list_sessions(self) -> list[dict[str, Any]]:
         """Return compact metadata for persisted WebUI JSON sessions.
@@ -106,7 +106,7 @@ class WebUIJsonSessionDB:
             if not isinstance(data, dict):
                 continue
             sid = str(data.get("session_id") or path.stem)
-            if not models.is_safe_session_id(sid):
+            if not sessions.is_safe_session_id(sid):
                 continue
             rows.append(self._metadata_row(sid, data))
         rows.sort(key=lambda row: (bool(row.get("pinned")), self._sort_timestamp(row)), reverse=True)
@@ -164,7 +164,7 @@ class WebUIJsonSessionDB:
         return copy.deepcopy(payload)
 
     def _path_for_sid(self, sid: str) -> Path | None:
-        if not models.is_safe_session_id(sid):
+        if not sessions.is_safe_session_id(sid):
             return None
         return self.session_dir / f"{sid}.json"
 
@@ -181,7 +181,7 @@ class WebUIJsonSessionDB:
         if not isinstance(data, dict):
             raise ValueError(f"Malformed session JSON: {path.name}")
         sid = data.get("session_id")
-        if not models.is_safe_session_id(sid):
+        if not sessions.is_safe_session_id(sid):
             raise ValueError(f"Unsafe session_id {sid!r}")
         if not isinstance(data.get("messages"), list):
             raise ValueError(f"Refusing to write metadata-only session stub: {sid!r}")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 
-import api.sessions.store as models
+import api.sessions.external as models
 import api.profiles as profiles
 
 

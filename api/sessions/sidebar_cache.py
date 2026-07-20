@@ -8,11 +8,9 @@ from collections import OrderedDict
 from pathlib import Path
 
 from api.config import LOCK, SESSION_DIR, SESSIONS, SETTINGS_FILE
-from api.sessions.store import (
-    _active_state_db_path,
-    _active_stream_ids,
-    _sqlite_content_fingerprint,
-)
+from api.sessions.external import _sqlite_content_fingerprint
+from api.sessions.records import _active_stream_ids
+from api.sessions.state_db import _active_state_db_path
 from api.profiles import _profiles_match
 
 

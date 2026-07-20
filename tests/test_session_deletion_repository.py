@@ -4,6 +4,9 @@ import weakref
 
 import api.config as config
 import api.sessions.store as models
+import api.sessions.cache as session_cache
+import api.sessions.cleanup as session_cleanup
+import api.sessions.records as session_records
 import pytest
 from api.sessions.store import Session
 
@@ -13,6 +16,10 @@ def _isolate_session_store(tmp_path, monkeypatch):
     session_dir.mkdir()
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     models.SESSIONS.clear()
     config.SESSION_AGENT_LOCKS.clear()
     return session_dir
@@ -62,7 +69,7 @@ def test_delete_session_state_owns_all_persisted_and_runtime_cleanup(tmp_path, m
     session.save()
     session.path.with_suffix(".json.bak").write_text("backup", encoding="utf-8")
     calls, attachment_dir = _patch_cleanup_collaborators(monkeypatch, tmp_path)
-    monkeypatch.setattr(models, "delete_cli_session", lambda value: False)
+    monkeypatch.setattr(session_cleanup, "delete_cli_session", lambda value: False)
     config._get_session_agent_lock(sid)
 
     result = delete_session_state(sid, messaging=False)
@@ -95,7 +102,7 @@ def test_delete_messaging_session_preserves_state_db_and_has_no_webui_tombstone(
     _patch_cleanup_collaborators(monkeypatch, tmp_path)
     state_db_calls = []
     monkeypatch.setattr(
-        models,
+        session_cleanup,
         "delete_cli_session",
         lambda value: state_db_calls.append(value) or True,
     )
@@ -118,7 +125,7 @@ def test_delete_session_state_waits_for_the_session_owner_lock(tmp_path, monkeyp
         messages=[{"role": "user", "content": "delete after writer"}],
     ).save()
     _patch_cleanup_collaborators(monkeypatch, tmp_path)
-    monkeypatch.setattr(models, "delete_cli_session", lambda value: True)
+    monkeypatch.setattr(session_cleanup, "delete_cli_session", lambda value: True)
     owner_lock = config._get_session_agent_lock(sid)
     started = threading.Event()
     finished = threading.Event()
@@ -150,7 +157,7 @@ def test_delete_preserves_lock_identity_for_existing_waiters(tmp_path, monkeypat
         messages=[{"role": "user", "content": "delete safely"}],
     ).save()
     _patch_cleanup_collaborators(monkeypatch, tmp_path)
-    monkeypatch.setattr(models, "delete_cli_session", lambda value: True)
+    monkeypatch.setattr(session_cleanup, "delete_cli_session", lambda value: True)
     waiter_lock = config._get_session_agent_lock(sid)
 
     delete_session_state(sid, messaging=False)

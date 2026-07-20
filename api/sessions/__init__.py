@@ -5,8 +5,6 @@ the owning module (for example ``api.sessions.recovery``) instead of depending
 on a broad compatibility facade.
 """
 
-import importlib
-
 from .channels import (
     SESSION_CHANNELS,
     SESSION_CHANNELS_LOCK,
@@ -44,21 +42,15 @@ from .repository import (
     get_full_session,
     session_write_owner,
 )
-from .store import (
-    SESSION_DIR,
-    Session,
-    _REPAIR_STALE_PENDING_GRACE_SECONDS,
-    all_sessions,
-    clear_cli_sessions_cache,
-    clear_process_wakeup_pause,
-    get_session,
-    get_session_for_file_ops,
-    is_safe_session_id,
-    merge_session_messages_append_only,
-    model_explicit_pick_signature,
-    new_session,
-    title_from,
-)
+from .cache import get_session, new_session
+from .external import clear_cli_sessions_cache
+from .pending_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
+from .process_wakeup import clear_process_wakeup_pause
+from .projects import title_from
+from .reconciliation import merge_session_messages_append_only
+from .records import SESSION_DIR, Session, is_safe_session_id, model_explicit_pick_signature
+from .sidebar import all_sessions
+from .state_db import get_session_for_file_ops
 
 REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
 
@@ -92,14 +84,6 @@ def unregister_background_commit_thread(thread) -> None:
     from . import lifecycle
 
     lifecycle._unregister_background_commit_thread(thread)
-
-
-def reload_store_interface():
-    """Reload the session store and return its compatibility route exports."""
-    from . import store
-
-    owner = importlib.reload(store)
-    return owner.get_session, owner.Session
 
 
 __all__ = [
@@ -140,7 +124,6 @@ __all__ = [
     "publish_session_list_changed",
     "register_agent",
     "register_background_commit_thread",
-    "reload_store_interface",
     "repair_safe_session_recovery",
     "retry_last",
     "session_status",

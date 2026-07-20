@@ -11,7 +11,7 @@ import logging
 from bisect import bisect_left
 from typing import Any
 
-from api.sessions.store import get_session
+from api.sessions.cache import get_session
 from api.sessions.repository import edit_session
 
 logger = logging.getLogger(__name__)

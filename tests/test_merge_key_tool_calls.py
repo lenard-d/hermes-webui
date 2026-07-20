@@ -10,12 +10,14 @@ a single key, losing tool calls during merge.
 """
 from __future__ import annotations
 
-from api.sessions import store as models
-from api.sessions.store import (
+from api.sessions import message_identity as models
+from api.sessions.message_identity import (
     _matching_visible_duplicate,
     _session_message_dedup_key,
     _session_message_merge_key,
     _session_message_visible_key,
+)
+from api.sessions.reconciliation import (
     merge_session_messages_append_only,
 )
 

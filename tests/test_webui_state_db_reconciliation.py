@@ -96,6 +96,13 @@ def _append_state_db_rows(path: Path, sid: str, rows):
 
 def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     import api.config as config
+    import api.sessions.cache as session_cache
+    import api.sessions.external as session_external
+    import api.sessions.pending_recovery as pending_recovery
+    import api.sessions.projects as session_projects
+    import api.sessions.records as session_records
+    import api.sessions.sidebar as session_sidebar
+    import api.sessions.state_db as session_state_db
     import api.sessions.store as models
     import api.routes as routes
     import api.profiles as profiles
@@ -104,11 +111,38 @@ def _install_test_session(monkeypatch, tmp_path, sid, sidecar_messages):
     session_dir = tmp_path / "sessions"
     monkeypatch.setattr(config, "SESSION_DIR", session_dir, raising=False)
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", session_dir / "_index.json", raising=False)
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir, raising=False)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json", raising=False)
-    monkeypatch.setattr(models, "SESSIONS", OrderedDict(), raising=False)
+    session_index_file = session_dir / "_index.json"
+    sessions = OrderedDict()
+    for module in (
+        models,
+        session_cache,
+        session_records,
+        session_sidebar,
+        pending_recovery,
+    ):
+        monkeypatch.setattr(module, "SESSIONS", sessions, raising=False)
+    for module in (
+        models,
+        session_cache,
+        session_external,
+        pending_recovery,
+        session_records,
+        session_sidebar,
+    ):
+        monkeypatch.setattr(module, "SESSION_DIR", session_dir, raising=False)
+    for module in (
+        models,
+        session_cache,
+        session_external,
+        pending_recovery,
+        session_projects,
+        session_records,
+        session_sidebar,
+    ):
+        monkeypatch.setattr(module, "SESSION_INDEX_FILE", session_index_file, raising=False)
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path, raising=False)
     monkeypatch.setattr(models, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
+    monkeypatch.setattr(session_state_db, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     monkeypatch.setattr(routes, "_active_state_db_path", lambda: tmp_path / "state.db", raising=False)
     session_dir.mkdir(parents=True, exist_ok=True)
 

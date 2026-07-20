@@ -39,7 +39,7 @@ class _FakeSession:
 def _setup_repair_environment(monkeypatch, tmp_path):
     """Stub out the costly side-channels in _repair_stale_pending so the
     tests exercise the guard logic alone, not the full lock+sidecar pipeline."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
 
     # No live streams — the predicate's "stream not in registry" branch fires.
     monkeypatch.setattr(models, "_active_stream_ids", lambda: set())
@@ -62,7 +62,7 @@ def _setup_repair_environment(monkeypatch, tmp_path):
 
 def test_repair_skips_fresh_turn(tmp_path, monkeypatch):
     """A turn that started 5 seconds ago is too fresh — repair must bail."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
 
     s = _FakeSession(pending_started_at=time.time() - 5.0)
@@ -73,7 +73,7 @@ def test_repair_skips_fresh_turn(tmp_path, monkeypatch):
 
 def test_repair_skips_almost_grace_window(tmp_path, monkeypatch):
     """A turn 1 second younger than the grace threshold must still bail."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
     grace = models._REPAIR_STALE_PENDING_GRACE_SECONDS
 
@@ -85,7 +85,7 @@ def test_repair_skips_almost_grace_window(tmp_path, monkeypatch):
 
 def test_repair_fires_after_grace_window(tmp_path, monkeypatch):
     """A turn older than the grace window should trigger repair as before."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
     grace = models._REPAIR_STALE_PENDING_GRACE_SECONDS
 
@@ -98,7 +98,7 @@ def test_repair_fires_after_grace_window(tmp_path, monkeypatch):
 def test_repair_fires_when_pending_started_at_missing(tmp_path, monkeypatch):
     """Legacy sidecars predate `pending_started_at`; missing/falsy must NOT
     block repair — preserves current behavior for legacy data."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
 
     s = _FakeSession(pending_started_at=None)
@@ -109,7 +109,7 @@ def test_repair_fires_when_pending_started_at_missing(tmp_path, monkeypatch):
 
 def test_repair_fires_when_pending_started_at_zero(tmp_path, monkeypatch):
     """Falsy 0 must also be treated as 'old enough' (defense against accidental zeroing)."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
 
     s = _FakeSession(pending_started_at=0)
@@ -119,7 +119,7 @@ def test_repair_fires_when_pending_started_at_zero(tmp_path, monkeypatch):
 
 def test_repair_fires_when_pending_started_at_garbage(tmp_path, monkeypatch):
     """Garbage values (string, dict, etc.) shouldn't crash and shouldn't block repair."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
 
     s = _FakeSession(pending_started_at="not-a-number")
@@ -129,7 +129,7 @@ def test_repair_fires_when_pending_started_at_garbage(tmp_path, monkeypatch):
 
 def test_repair_skips_when_no_pending_message(tmp_path, monkeypatch):
     """Without pending_user_message, repair must always bail (existing contract)."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     calls = _setup_repair_environment(monkeypatch, tmp_path)
 
     s = _FakeSession(pending="", pending_started_at=time.time() - 60)
@@ -140,7 +140,7 @@ def test_repair_skips_when_no_pending_message(tmp_path, monkeypatch):
 
 def test_repair_skips_when_stream_still_alive(tmp_path, monkeypatch):
     """If the stream is still in the registry, repair must bail even past grace."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     monkeypatch.setattr(models, "_active_stream_ids", lambda: {"stream_xyz"})
     monkeypatch.setattr(models, "_get_profile_home", lambda profile: tmp_path)
 
@@ -151,7 +151,7 @@ def test_repair_skips_when_stream_still_alive(tmp_path, monkeypatch):
 
 def test_grace_constant_exists_and_is_sane():
     """The grace constant is exposed and sized in a sane range (10s..120s)."""
-    import api.sessions.store as models
+    import api.sessions.pending_recovery as models
     grace = models._REPAIR_STALE_PENDING_GRACE_SECONDS
     assert isinstance(grace, (int, float))
     assert 10 <= grace <= 120, (

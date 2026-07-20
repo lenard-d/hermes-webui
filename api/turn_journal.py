@@ -34,7 +34,7 @@ class TurnJournalTurnNotFound(LookupError):
 
 
 def _default_session_dir() -> Path:
-    from api.sessions.store import SESSION_DIR
+    from api.sessions import SESSION_DIR
 
     return Path(SESSION_DIR)
 

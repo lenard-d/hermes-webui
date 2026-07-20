@@ -5,6 +5,7 @@ import pytest
 
 import api.config as config
 import api.sessions.store as models
+import api.sessions.records as session_records
 import api.webui_session_db as session_db
 from api.webui_session_db import WebUIJsonSessionDB
 
@@ -14,6 +15,7 @@ def session_dir(tmp_path, monkeypatch):
     path = tmp_path / "sessions"
     path.mkdir()
     monkeypatch.setattr(models, "SESSION_DIR", path)
+    monkeypatch.setattr(session_records, "SESSION_DIR", path)
     return path
 
 

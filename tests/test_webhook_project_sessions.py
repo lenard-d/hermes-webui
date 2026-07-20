@@ -102,7 +102,7 @@ def test_project_assigned_webhook_rows_are_returned_but_default_hidden():
 
 
 def test_webhook_rows_get_webhook_project_id(monkeypatch, tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     db = tmp_path / "state.db"
     db.write_text("", encoding="utf-8")
@@ -124,7 +124,7 @@ def test_webhook_rows_get_webhook_project_id(monkeypatch, tmp_path):
 
 
 def test_webhook_second_pass_keeps_older_project_rows_available(monkeypatch, tmp_path):
-    import api.sessions.store as models
+    import api.sessions.external as models
 
     db = tmp_path / "state.db"
     db.write_text("", encoding="utf-8")

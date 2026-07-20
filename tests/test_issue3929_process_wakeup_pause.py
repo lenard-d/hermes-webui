@@ -16,6 +16,8 @@ import pytest
 import api.config as config
 from api.runs import gateway as gateway_chat
 import api.sessions.store as models
+import api.sessions.records as session_records
+import api.sessions.process_wakeup as process_wakeup
 import api.profiles as profiles
 import api.providers.credentials as providers
 import api.routes as routes
@@ -30,6 +32,8 @@ def _isolate_session_dir(tmp_path, monkeypatch):
     session_dir.mkdir()
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     models.SESSIONS.clear()
     yield
     models.SESSIONS.clear()
@@ -395,7 +399,7 @@ def test_process_wakeup_pause_revalidates_when_credential_state_changes(tmp_path
     hermes_home.mkdir()
     auth_json = hermes_home / "auth.json"
     auth_json.write_text('{"credential_pool": {}}\n', encoding="utf-8")
-    monkeypatch.setattr(models, "_get_profile_home", lambda _profile: hermes_home)
+    monkeypatch.setattr(process_wakeup, "_get_profile_home", lambda _profile: hermes_home)
     session = Session(
         session_id="wakeup_pause_credential_refresh",
         workspace=str(tmp_path),
@@ -464,7 +468,7 @@ def test_process_wakeup_pause_keeps_changed_credential_state_until_provider_is_u
     hermes_home.mkdir()
     auth_json = hermes_home / "auth.json"
     auth_json.write_text('{"credential_pool": {}}\n', encoding="utf-8")
-    monkeypatch.setattr(models, "_get_profile_home", lambda _profile: hermes_home)
+    monkeypatch.setattr(process_wakeup, "_get_profile_home", lambda _profile: hermes_home)
     session = Session(
         session_id="wakeup_pause_credential_changed_still_unusable",
         workspace=str(tmp_path),
@@ -1039,7 +1043,7 @@ def test_process_wakeup_pause_survives_rotation_style_auth_rewrite(tmp_path, mon
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(models, "_get_profile_home", lambda _profile: hermes_home)
+    monkeypatch.setattr(process_wakeup, "_get_profile_home", lambda _profile: hermes_home)
     session = Session(
         session_id="wakeup_pause_auth_rotation",
         workspace=str(tmp_path),
@@ -1125,7 +1129,7 @@ def test_process_wakeup_pause_revalidates_status_recovery_without_fingerprint_ch
     pool_data = {"test-provider": [dict(exhausted_entry)]}
     auth_json.write_text(json.dumps({"credential_pool": pool_data}), encoding="utf-8")
     _install_fake_agent_credential_pool(monkeypatch, pool_data)
-    monkeypatch.setattr(models, "_get_profile_home", lambda _profile: hermes_home)
+    monkeypatch.setattr(process_wakeup, "_get_profile_home", lambda _profile: hermes_home)
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: hermes_home)
     monkeypatch.setattr(
         routes,
@@ -1829,7 +1833,7 @@ def test_process_wakeup_pause_keeps_empty_provider_lane_after_fingerprint_change
     hermes_home.mkdir()
     auth_json = hermes_home / "auth.json"
     auth_json.write_text('{"credential_pool": {}}\n', encoding="utf-8")
-    monkeypatch.setattr(models, "_get_profile_home", lambda _profile: hermes_home)
+    monkeypatch.setattr(process_wakeup, "_get_profile_home", lambda _profile: hermes_home)
     monkeypatch.setitem(config.cfg, "model", {"default": "claude-sonnet-test"})
     session = Session(
         session_id="wakeup_pause_empty_provider_probe",

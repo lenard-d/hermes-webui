@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import api.config as config
 import api.sessions.store as models
+import api.sessions.cache as session_cache
+import api.sessions.records as session_records
 from api.sessions.store import Session, get_session
 
 
@@ -12,6 +14,10 @@ def test_get_session_evicts_cached_object_with_wrong_session_id(tmp_path, monkey
     session_dir.mkdir()
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", session_dir / "_index.json", raising=False)
     models.SESSIONS.clear()
 
@@ -44,6 +50,10 @@ def test_get_session_metadata_only_evicts_cached_object_with_wrong_session_id(tm
     session_dir.mkdir()
     monkeypatch.setattr(models, "SESSION_DIR", session_dir)
     monkeypatch.setattr(models, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_cache, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_cache, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    monkeypatch.setattr(session_records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", session_dir / "_index.json")
     monkeypatch.setattr(config, "SESSION_INDEX_FILE", session_dir / "_index.json", raising=False)
     models.SESSIONS.clear()
 
