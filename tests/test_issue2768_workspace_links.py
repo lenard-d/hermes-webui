@@ -99,8 +99,13 @@ def test_workspace_html_iframe_allows_links_to_escape_sandbox():
 
 
 def test_file_raw_inline_html_preview_injects_base_target_blank():
-    raw_handler = MEDIA_FILES_PY[MEDIA_FILES_PY.index("def _handle_file_raw") :]
+    from api.media.preview import html_preview_with_blank_base, preview_policy
 
-    assert '<base target="_blank">' in MEDIA_FILES_PY
-    assert "_serve_inline_html_preview" in raw_handler
-    assert "html_inline_ok" in raw_handler
+    rendered = html_preview_with_blank_base(
+        b"<!doctype html><html><head><title>Preview</title></head><body></body></html>"
+    ).decode("utf-8")
+    policy = preview_policy("preview.html", inline_requested=True)
+
+    assert '<base target="_blank">' in rendered
+    assert policy.transform_html is True
+    assert policy.disposition == "inline"

@@ -12,7 +12,6 @@ import copy
 import json
 import logging
 import os
-import shutil
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -722,9 +721,9 @@ def delete_session_state(sid: str, *, messaging: bool) -> SessionDeletionResult:
                     )
 
             try:
-                from api.upload import _session_attachment_dir
+                from api.media.cleanup import cleanup_session_attachments
 
-                shutil.rmtree(_session_attachment_dir(sid), ignore_errors=True)
+                cleanup_session_attachments(sid)
             except Exception:
                 logger.debug(
                     "Failed to clean attachment dir for deleted session %s",

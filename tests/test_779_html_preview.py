@@ -1,5 +1,4 @@
 """Tests for inline HTML preview in workspace panel (issue #779)."""
-import pytest
 from tests.frontend_asset_contract import family_source
 
 
@@ -17,13 +16,13 @@ def _get_index_html():
 
 def test_inline_preview_param_in_file_raw():
     """?inline=1 must bypass Content-Disposition: attachment for text/html."""
-    content = _get_routes_content()
-    assert "inline_preview" in content, (
-        "_handle_file_raw must read the inline query parameter"
-    )
-    assert "html_inline_ok" in content, (
-        "_handle_file_raw must allow HTML inline when inline_preview=True"
-    )
+    from api.media.preview import preview_policy
+
+    policy = preview_policy("report.html", inline_requested=True)
+
+    assert policy.mime == "text/html"
+    assert policy.disposition == "inline"
+    assert policy.transform_html is True
 
 
 def test_iframe_uses_inline_param():
@@ -104,34 +103,23 @@ def test_inline_html_response_sets_csp_sandbox():
     localStorage. The CSP sandbox directive (no allow-same-origin) downgrades
     the document to a unique opaque origin server-side.
     """
-    content = _get_routes_content()
-    # Find the html_inline_ok block in _handle_file_raw
-    idx = content.find("html_inline_ok")
-    assert idx != -1, "html_inline_ok block not found"
-    block = content[idx:idx + 2500]
-    assert "Content-Security-Policy" in block, (
-        "_handle_file_raw must set Content-Security-Policy header on inline HTML responses"
-    )
-    assert "sandbox" in block, (
-        "CSP must include the sandbox directive"
-    )
-    # Must NOT have allow-same-origin in the sandbox directive
-    csp_sections = [line for line in block.splitlines() if "sandbox" in line and "Policy" in line]
-    for line in csp_sections:
-        # The line setting the CSP header — make sure it doesn't grant same-origin
-        if "send_header" in line:
-            assert "allow-same-origin" not in line, (
-                "CSP sandbox must NOT include allow-same-origin — that would defeat the isolation"
-            )
+    from api.media.preview import preview_policy
+
+    policy = preview_policy("report.html", inline_requested=True)
+
+    assert policy.csp is not None
+    assert "sandbox" in policy.csp
+    assert "allow-same-origin" not in policy.csp
 
 
 def test_file_raw_inline_responses_use_sandbox_csp():
     """The explicit inline-open contract should sandbox non-download raw files."""
-    content = _get_routes_content()
-    idx = content.find("def _handle_file_raw")
-    assert idx != -1, "_handle_file_raw not found"
-    block = content[idx:idx + 2200]
-    assert "sandbox_csp" in block
-    assert "inline_preview" in block
-    assert "disposition == \"inline\"" in block
-    assert "csp=sandbox_csp" in block or "csp=csp" in block
+    from api.media.preview import HTML_SANDBOX_CSP, preview_policy
+
+    html_policy = preview_policy("report.html", inline_requested=True)
+    image_policy = preview_policy("chart.png", inline_requested=True)
+
+    assert html_policy.disposition == "inline"
+    assert image_policy.disposition == "inline"
+    assert html_policy.csp == HTML_SANDBOX_CSP
+    assert image_policy.csp == HTML_SANDBOX_CSP

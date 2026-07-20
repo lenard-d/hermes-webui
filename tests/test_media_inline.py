@@ -282,40 +282,55 @@ class TestMediaEndpointUnit(unittest.TestCase):
 
     def test_allowed_roots_include_tmp(self):
         """Handler must allow /tmp so screenshot paths work."""
-        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
-        self.assertIn('/tmp', routes_src,
-                      '/tmp must be in the allowed roots list for /api/media')
+        from api.media.delivery import resolve_local_media
+
+        with tempfile.NamedTemporaryFile(dir="/tmp", suffix=".png") as media:
+            plan = resolve_local_media(media.name, workspace_getter=lambda: "/missing")
+        self.assertEqual(plan.target, pathlib.Path(media.name).resolve())
 
     def test_svg_forces_download(self):
         """.svg must not be served inline (XSS risk)."""
-        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
-        # SVG should be in _DOWNLOAD_TYPES or explicitly excluded from inline
-        self.assertIn("image/svg+xml", routes_src,
-                      "SVG MIME type must be handled (forced download) in _handle_media")
+        from api.media.preview import preview_policy
+
+        policy = preview_policy("image.svg", inline_requested=True, local_media=True)
+        self.assertEqual(policy.mime, "image/svg+xml")
+        self.assertEqual(policy.disposition, "attachment")
 
     def test_inline_preview_mime_whitelist_exists(self):
         """Only the explicit safe preview whitelist should be eligible for inline display."""
-        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
-        self.assertIn("_INLINE_IMAGE_TYPES", routes_src,
-                      "_INLINE_IMAGE_TYPES whitelist must exist in _handle_media")
-        self.assertIn("_AUDIO_VIDEO_PDF_TYPES", routes_src,
-                      "shared audio/video/PDF preview MIME whitelist must exist in _handle_media")
-        self.assertIn('{"text/html"}', routes_src,
-                      "HTML must be added only to the session-token whitelist")
+        from api.media.preview import (
+            AUDIO_VIDEO_PDF_TYPES,
+            INLINE_IMAGE_TYPES,
+            SESSION_MEDIA_TOKEN_TYPES,
+        )
+
+        self.assertIn("image/png", INLINE_IMAGE_TYPES)
+        self.assertIn("application/pdf", AUDIO_VIDEO_PDF_TYPES)
+        self.assertIn("text/html", SESSION_MEDIA_TOKEN_TYPES)
+        self.assertNotIn("text/html", INLINE_IMAGE_TYPES | AUDIO_VIDEO_PDF_TYPES)
 
     def test_media_allowed_roots_env_var_referenced(self):
         """Handler must reference MEDIA_ALLOWED_ROOTS for configurable roots."""
-        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
-        self.assertIn("MEDIA_ALLOWED_ROOTS", routes_src,
-                      "MEDIA_ALLOWED_ROOTS env var must be parsed in _handle_media")
+        from api.media.delivery import resolve_local_media
+
+        with tempfile.TemporaryDirectory() as root:
+            media = pathlib.Path(root) / "card.png"
+            media.write_bytes(b"png")
+            with mock.patch.dict(os.environ, {"MEDIA_ALLOWED_ROOTS": root}):
+                plan = resolve_local_media(media, workspace_getter=lambda: "/missing")
+        self.assertEqual(plan.target, media.resolve())
 
     def test_media_allowed_roots_uses_os_pathsep(self):
         """MEDIA_ALLOWED_ROOTS must use the platform path separator."""
-        routes_src = (REPO_ROOT / "api" / "routes_parts" / "media_files.py").read_text(encoding="utf-8")
-        start = routes_src.index("extra_roots =")
-        block = routes_src[start:start + 900]
-        self.assertIn(".split(_os.pathsep)", block)
-        self.assertNotIn('.split(":")', block)
+        from api.media.delivery import resolve_local_media
+
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            media = pathlib.Path(second) / "card.png"
+            media.write_bytes(b"png")
+            roots = os.pathsep.join((first, second))
+            with mock.patch.dict(os.environ, {"MEDIA_ALLOWED_ROOTS": roots}):
+                plan = resolve_local_media(media, workspace_getter=lambda: "/missing")
+        self.assertEqual(plan.target, media.resolve())
 
     def test_path_is_within_root_treats_commonpath_valueerror_as_not_within(self):
         """Windows cross-drive commonpath() errors must not crash /api/media."""

@@ -1,12 +1,6 @@
 """Regression coverage for WebUI chat upload path handoff."""
 from tests.frontend_asset_contract import family_source
 
-from pathlib import Path
-
-
-ROOT = Path(__file__).resolve().parents[1]
-UPLOAD_PY = ROOT / "api" / "upload.py"
-
 
 def test_image_uploads_use_server_path_in_attached_files_context():
     """The agent text context must include real uploaded paths for images.
@@ -70,7 +64,7 @@ def test_duplicate_upload_response_reports_actual_stored_filename(tmp_path, monk
     assert first.name == "photo.png"
     assert second.name == "photo-1.png"
 
-    src = UPLOAD_PY.read_text(encoding="utf-8")
-    handle_body = src[src.index("def handle_upload"):src.index("def extract_archive", src.index("def handle_upload"))]
-    assert "'filename': dest.name" in handle_body
-    assert "'filename': safe_name" not in handle_body
+    from api.media.uploads import store_chat_attachment_for_session
+
+    stored = store_chat_attachment_for_session("session-a", safe_name, b"second")
+    assert stored["filename"] == "photo-1.png"

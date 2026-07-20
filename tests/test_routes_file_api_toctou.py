@@ -9,7 +9,8 @@ ROUTES_PY = ROOT / "api" / "routes.py"
 MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
 WORKSPACE_ESCAPE_PY = ROOT / "api" / "workspace_parts" / "escape_navigation.py"
-UPLOAD_PY = ROOT / "api" / "upload.py"
+MEDIA_DELIVERY_PY = ROOT / "api" / "media" / "delivery.py"
+MEDIA_UPLOADS_PY = ROOT / "api" / "media" / "uploads.py"
 
 
 class _FakeHandler:
@@ -126,22 +127,23 @@ def test_folder_zip_reopens_members_through_anchor():
     src = MEDIA_FILES_PY.read_text(encoding="utf-8")
     body = _func_body(src, "_handle_folder_download")
 
-    assert "open_anchored_fd(workspace_root, fp.resolve(), want_dir=False)" in body
+    assert "anchored_open(workspace_root, entry.path.resolve(), want_dir=False)" in body
     assert "info.compress_type = zipfile.ZIP_DEFLATED" in body
-    assert "zf.open(info, \"w\")" in body
-    assert "zf.write(fp" not in body
+    assert "archive.open(info, \"w\")" in body
+    assert "archive.write(" not in body
 
 
 def test_raw_and_inline_file_targets_carry_anchor_root():
     src = MEDIA_FILES_PY.read_text(encoding="utf-8")
-    raw_target = _func_body(src, "_file_raw_target")
+    domain = MEDIA_DELIVERY_PY.read_text(encoding="utf-8")
+    raw_target = _func_body(domain, "resolve_raw_file")
     raw_handler = _func_body(src, "_handle_file_raw")
 
-    assert "return workspace_root, target" in raw_target
-    assert "return attachment_root, attachment_target" in raw_target
-    assert "anchor_root, target = resolved" in raw_handler
-    assert "_serve_inline_html_preview(handler, target, \"no-store\", csp=sandbox_csp, anchor_root=anchor_root)" in raw_handler
-    assert "_serve_file_bytes(handler, target, mime, disposition, \"no-store\", csp=csp, anchor_root=anchor_root)" in raw_handler
+    assert "anchor_root = workspace_root" in raw_target
+    assert "anchor_root = session_attachment_dir(session_id).resolve()" in raw_target
+    assert "anchor_root=plan.anchor_root" in raw_handler
+    assert "html_sender(" in raw_handler
+    assert "file_sender(" in raw_handler
 
 
 def test_escape_raw_and_read_routes_use_authorized_helpers():
@@ -164,9 +166,9 @@ def test_escape_raw_helper_reanchors_through_safe_resolve():
 
 
 def test_upload_archive_cleanup_uses_anchored_helpers():
-    src = UPLOAD_PY.read_text(encoding="utf-8")
+    src = MEDIA_UPLOADS_PY.read_text(encoding="utf-8")
 
-    assert "rmtree_anchored(workspace, dest_dir)" in src
-    assert "unlink_anchored(workspace, dest.resolve())" in src
-    assert "shutil.rmtree(dest_dir" not in src
-    assert "dest.unlink(" not in src
+    assert "rmtree_anchored(workspace, destination)" in src
+    assert "unlink_anchored(workspace, destination.resolve())" in src
+    assert "shutil.rmtree(" not in src
+    assert "destination.unlink(" not in src

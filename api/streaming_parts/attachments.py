@@ -161,8 +161,8 @@ def build_native_multimodal_message(api: ModuleType, workspace_ctx: str, msg_tex
     # _attachment_root() helper applies expanduser+resolve and is also reused
     # by _upload_destination — single source of truth for the inbox root.
     try:
-        from api.upload import _attachment_root
-        attachment_root = _attachment_root()
+        from api.media.uploads import attachment_root as resolve_attachment_root
+        attachment_root = resolve_attachment_root()
         _allowed_roots = (workspace_root, attachment_root)
     except Exception:
         _allowed_roots = (workspace_root,)

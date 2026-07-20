@@ -9,13 +9,13 @@ from tests.frontend_asset_contract import family_source
 ROOT = Path(__file__).resolve().parents[1]
 ROUTES_PY = ROOT / "api" / "routes.py"
 MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
+MEDIA_DELIVERY_PY = ROOT / "api" / "media" / "delivery.py"
 UI_JS = ROOT / "static" / "ui.js"
 
 
 def test_folder_download_handler_defined():
     src = MEDIA_FILES_PY.read_text(encoding="utf-8")
-    assert "def _handle_folder_download(handler, parsed):" in src
-    assert "/api/folder/download?session_id=" in src  # in handler docstring
+    assert "def _handle_folder_download(" in src
     assert 'Content-Type", "application/zip"' in src
     assert "zipfile.ZipFile(handler.wfile" in src
 
@@ -31,13 +31,13 @@ def test_folder_download_uses_safe_resolve():
     handler_idx = src.index("def _handle_folder_download")
     end_idx = src.index("\n\ndef ", handler_idx + 1)
     body = src[handler_idx:end_idx]
-    assert "safe_resolve(Path(s.workspace), rel)" in body
+    assert "safe_resolve(Path(session.workspace)" in body
     assert "ValueError" in body
 
 
 def test_folder_download_skips_escaping_symlinks():
-    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
-    collect_idx = src.index("def _folder_download_collect")
+    src = MEDIA_DELIVERY_PY.read_text(encoding="utf-8")
+    collect_idx = src.index("def collect_folder_download")
     end_idx = src.index("\n\ndef ", collect_idx + 1)
     body = src[collect_idx:end_idx]
     assert "followlinks=False" in body
@@ -46,14 +46,14 @@ def test_folder_download_skips_escaping_symlinks():
 
 
 def test_folder_download_respects_max_files_env():
-    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8") + MEDIA_DELIVERY_PY.read_text(encoding="utf-8")
     assert 'HERMES_WEBUI_FOLDER_ZIP_MAX_FILES' in src
     assert '"too many files"' in src
     assert 'status=413' in src
 
 
 def test_folder_download_respects_max_bytes_env():
-    src = MEDIA_FILES_PY.read_text(encoding="utf-8")
+    src = MEDIA_FILES_PY.read_text(encoding="utf-8") + MEDIA_DELIVERY_PY.read_text(encoding="utf-8")
     assert 'HERMES_WEBUI_FOLDER_ZIP_MAX_MB' in src
     assert '"folder too large"' in src
     assert 'limit_bytes' in src
@@ -65,7 +65,7 @@ def test_folder_download_preflights_before_streaming():
     handler_idx = src.index("def _handle_folder_download")
     end_idx = src.index("\n\n# ", handler_idx) if "\n\n# " in src[handler_idx:] else len(src)
     body = src[handler_idx:end_idx]
-    collect_call = body.index("_folder_download_collect")
+    collect_call = body.index("collect_folder_download")
     send_response = body.index("handler.send_response(200)")
     limit_check = body.index('"too many files"')
     assert collect_call < limit_check < send_response

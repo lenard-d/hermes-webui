@@ -6,6 +6,8 @@ on a broad compatibility facade.
 """
 
 from .channels import (
+    SESSION_CHANNELS,
+    SESSION_CHANNELS_LOCK,
     SessionChannel,
     active_stream_id_for_session,
     collect_expired_session_channels,
@@ -37,6 +39,7 @@ from .store import (
     all_sessions,
     clear_process_wakeup_pause,
     get_session,
+    get_session_for_file_ops,
     is_safe_session_id,
     merge_session_messages_append_only,
     model_explicit_pick_signature,
@@ -53,6 +56,8 @@ __all__ = [
     "SessionChannel",
     "SessionWriteRejected",
     "SESSION_DIR",
+    "SESSION_CHANNELS",
+    "SESSION_CHANNELS_LOCK",
     "REPAIR_STALE_PENDING_GRACE_SECONDS",
     "active_stream_id_for_session",
     "admission_write_owner",
@@ -67,6 +72,7 @@ __all__ = [
     "get_full_session",
     "get_or_create_session_channel",
     "get_session",
+    "get_session_for_file_ops",
     "get_session_channel",
     "is_safe_session_id",
     "mark_turn_completed",

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from api.helpers import _sanitize_error, bad, j, require, safe_resolve
-    from api.sessions.store import get_session_for_file_ops
+    from api.sessions import get_session_for_file_ops
     from api.routes import _read_anchored_file_bytes
     from api.workspace import (
         make_anchored_dir,
@@ -108,7 +108,9 @@ def _handle_office_file_save(handler, body):
             return bad(handler, "Office save is only available for .docx, .xlsx, and .pptx files")
         from api.office_documents import save_office_document
 
-        current_bytes = _read_anchored_file_bytes(ws_root, target)
+        from api.media.delivery import read_anchored_file_bytes
+
+        current_bytes = read_anchored_file_bytes(ws_root, target)
         preview, updated_bytes = save_office_document(body["path"], current_bytes, body.get("content", ""))
         fd = open_anchored_write_fd(ws_root, target)
         with os.fdopen(fd, "wb", closefd=True) as fh:

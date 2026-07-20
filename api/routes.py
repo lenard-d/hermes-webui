@@ -2524,7 +2524,7 @@ from api.workspace import (
     _is_remote_terminal_backend,
     _workspace_blocked_roots,
 )
-from api.upload import (
+from api.routes_parts.media_uploads import (
     handle_upload,
     handle_upload_extract,
     handle_workspace_upload,
@@ -8753,7 +8753,7 @@ def _handle_terminal_output(handler, parsed):
 
 
 
-from api.routes_parts import media_files as _media_files_routes_part
+from api.routes_parts import media_files as _media_http
 from api.routes_parts.media_files import (
     _content_disposition_value,
     _parse_range_header,
@@ -8778,8 +8778,97 @@ from api.routes_parts.media_files import (
     _read_anchored_file_bytes,
 )
 
-_install_routes_part(globals(), _media_files_routes_part)
-del _media_files_routes_part
+
+def _serve_file_bytes(
+    handler,
+    target,
+    mime,
+    disposition,
+    cache_control,
+    *,
+    csp=None,
+    anchor_root=None,
+):
+    return _media_http._serve_file_bytes(
+        handler,
+        target,
+        mime,
+        disposition,
+        cache_control,
+        csp=csp,
+        anchor_root=anchor_root,
+        anchored_open=open_anchored_fd,
+    )
+
+
+def _serve_inline_html_preview(
+    handler,
+    target,
+    cache_control,
+    *,
+    csp,
+    anchor_root=None,
+):
+    return _media_http._serve_inline_html_preview(
+        handler,
+        target,
+        cache_control,
+        csp=csp,
+        anchor_root=anchor_root,
+        anchored_open=open_anchored_fd,
+    )
+
+
+def _session_media_token_allows_path(session_id, target, allowed_mimes):
+    return _media_http._session_media_token_allows_path(
+        session_id,
+        target,
+        allowed_mimes,
+        session_loader=get_session,
+    )
+
+
+def _session_media_token_allows_image_path(session_id, target, image_mimes):
+    return _session_media_token_allows_path(session_id, target, image_mimes)
+
+
+def _handle_media(handler, parsed):
+    return _media_http._handle_media(
+        handler,
+        parsed,
+        workspace_getter=get_last_workspace,
+        session_loader=get_session,
+        file_sender=_serve_file_bytes,
+        html_sender=_serve_inline_html_preview,
+    )
+
+
+def _handle_folder_download(handler, parsed):
+    return _media_http._handle_folder_download(
+        handler,
+        parsed,
+        session_lookup=get_session_for_file_ops,
+        anchored_open=open_anchored_fd,
+    )
+
+
+def _handle_file_raw(handler, parsed):
+    return _media_http._handle_file_raw(
+        handler,
+        parsed,
+        session_lookup=get_session_for_file_ops,
+        file_sender=_serve_file_bytes,
+        html_sender=_serve_inline_html_preview,
+    )
+
+
+def _handle_file_read(handler, parsed):
+    return _media_http._handle_file_read(
+        handler,
+        parsed,
+        session_lookup=get_session_for_file_ops,
+        file_reader=read_file_content,
+    )
 
 
 from api.routes_parts import tts as _tts_routes_part

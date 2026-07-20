@@ -81,17 +81,17 @@ def test_html_media_open_full_uses_inline_new_tab_not_download():
 
 def test_media_html_inline_keeps_csp_sandbox():
     """api/media may serve HTML inline only behind a CSP sandbox."""
-    # Slice widened to 16000 (was 5000) after the #3234 security work landed a
-    # multi-profile-aware deny-list + named-profile-root enumeration +
-    # active-workspace carve-out + safety gate earlier in _handle_media, pushing
-    # the CSP block to ~12100 chars past the def. (Originally widened 4000→5000
-    # for PR #2044's MEDIA_ALLOWED_ROOTS parsing.) The assertion is structural,
-    # not positional — generous headroom avoids re-breaking on small future edits.
-    body = _slice_after(MEDIA_FILES_PY, "def _handle_media", 16000)
-    assert 'html_inline_ok = inline_preview and mime == "text/html"' in body
-    assert 'csp = "sandbox allow-scripts" if html_inline_ok else None' in body
-    assert "csp=csp" in body
-    assert "allow-same-origin" not in body
+    from api.media.preview import LOCAL_MEDIA_HTML_CSP, preview_policy
+
+    policy = preview_policy(
+        "attachment.html",
+        inline_requested=True,
+        local_media=True,
+    )
+
+    assert policy.disposition == "inline"
+    assert policy.csp == LOCAL_MEDIA_HTML_CSP
+    assert "allow-same-origin" not in policy.csp
 
 
 def test_sandboxed_file_responses_do_not_send_x_frame_options():

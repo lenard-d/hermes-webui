@@ -14,14 +14,12 @@ No mocking required for session CRUD, upload parser, or approval API.
 
 import io
 import json
-import os
 import sys
 import time
 import uuid
 import urllib.request
 import urllib.parse
 import urllib.error
-import tempfile
 import pathlib
 
 # Allow importing server modules directly for unit tests
@@ -248,27 +246,9 @@ def test_sessions_list_sorted():
 
 def test_parse_multipart_text_file():
     """parse_multipart correctly parses a text file field."""
-    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
-    # Import the function directly from the server module
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "server",
-        str(pathlib.Path(__file__).parent.parent / "server.py")
-    )
-    # We only need parse_multipart; import it without running the server
-    # Parse manually by reading the source and exec only the function
-    src = pathlib.Path(__file__).parent.parent.joinpath("api/upload.py").read_text()
-    # Extract and exec parse_multipart
-    import re
-    # Find the function
-    m = re.search(r"(def parse_multipart\(.*?)(?=\ndef )", src, re.DOTALL)
-    assert m, "Could not find parse_multipart in server.py"
-    ns = {}
-    exec("import re as _re, email.parser as _ep\n" + m.group(1), ns)
-    parse_multipart = ns["parse_multipart"]
+    from api.media.multipart import parse_multipart
 
     # Build a minimal multipart body
-    boundary = b"testboundary"
     body = (
         b"--testboundary\r\n"
         b"Content-Disposition: form-data; name=\"session_id\"\r\n\r\n"
@@ -293,16 +273,10 @@ def test_parse_multipart_text_file():
 
 def test_parse_multipart_binary_file():
     """parse_multipart handles binary (PNG header bytes) without corruption."""
-    src = pathlib.Path(__file__).parent.parent.joinpath("api/upload.py").read_text()
-    import re
-    m = re.search(r"(def parse_multipart\(.*?)(?=\ndef )", src, re.DOTALL)
-    ns = {}
-    exec("import re as _re, email.parser as _ep\n" + m.group(1), ns)
-    parse_multipart = ns["parse_multipart"]
+    from api.media.multipart import parse_multipart
 
     # Fake PNG: first 8 bytes of PNG magic
     png_magic = b"\x89PNG\r\n\x1a\n"
-    boundary = b"binboundary"
     body = (
         b"--binboundary\r\n"
         b"Content-Disposition: form-data; name=\"session_id\"\r\n\r\n"

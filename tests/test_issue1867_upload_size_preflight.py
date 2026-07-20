@@ -5,7 +5,6 @@ from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PY = ROOT / "api" / "config.py"
-UPLOAD_PY = ROOT / "api" / "upload.py"
 
 
 def _function_body(src: str, name: str) -> str:
@@ -69,8 +68,12 @@ def test_upload_too_large_has_user_facing_message():
     assert "_uploadTooLargeMessage(file)" in ui
 
 
-def test_archive_extraction_limit_tracks_upload_limit():
+def test_archive_extraction_limit_tracks_upload_limit(monkeypatch):
     """Archive extraction guard should scale with the configured upload limit."""
-    upload = UPLOAD_PY.read_text(encoding="utf-8")
+    from api.config import MAX_UPLOAD_BYTES
+    from api.media.uploads import MAX_EXTRACTED_BYTES, max_extracted_bytes
 
-    assert "_MAX_EXTRACTED_BYTES = 10 * MAX_UPLOAD_BYTES" in upload
+    monkeypatch.delenv("HERMES_WEBUI_MAX_EXTRACTED_MB", raising=False)
+
+    assert MAX_EXTRACTED_BYTES == 10 * MAX_UPLOAD_BYTES
+    assert max_extracted_bytes() == 10 * MAX_UPLOAD_BYTES

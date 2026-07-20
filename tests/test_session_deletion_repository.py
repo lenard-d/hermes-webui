@@ -23,7 +23,7 @@ def _patch_cleanup_collaborators(monkeypatch, tmp_path):
     attachment_dir = tmp_path / "attachments"
     attachment_dir.mkdir()
     monkeypatch.setattr(
-        "api.upload._session_attachment_dir",
+        "api.media.cleanup.session_attachment_dir",
         lambda sid: attachment_dir,
     )
     monkeypatch.setattr(
