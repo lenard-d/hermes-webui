@@ -16349,7 +16349,7 @@ def _handle_live_models(handler, parsed):
                     if custom_provider_entry is None:
                         custom_provider_entry = _cp
                     _config_ids.extend(_custom_provider_model_ids(_cp))
-            
+
             # Always try live fetch for custom providers — config entries are a
             # fallback, not a replacement.  The live endpoint should return ALL
             # models the key has access to, not just what's listed in config.yaml.
