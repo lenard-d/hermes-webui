@@ -206,9 +206,9 @@ class TestCancelledTurnPersistenceGuards:
         assert "return" in block
 
     def test_frontend_has_cancelled_and_interrupted_labels_for_apperror_fallbacks(self):
-        src = family_source("messages")
+        src = _read("static/modules/messages/stream.js")
         start = src.find("source.addEventListener('apperror'")
-        end = src.find("source.addEventListener('cancel'", start)
+        end = src.find("source.addEventListener('error'", start)
         assert start != -1 and end != -1, "apperror handler not found"
         block = src[start:end]
 
@@ -237,8 +237,10 @@ class TestCancelledTurnPersistenceGuards:
         )
 
     def test_worker_cancel_events_do_not_embed_session_payload(self):
+        entrypoint_src = _read("api/runs/local_entrypoint.py")
         worker_src = _read("api/runs/local.py")
         controls_src = _read("api/streaming/live_controls.py")
+        assert "_local_run.run_agent_streaming(" in entrypoint_src
         assert "def run_agent_streaming(" in worker_src
 
         assert "_cancel_event_payload('Cancelled by user', s)" not in worker_src

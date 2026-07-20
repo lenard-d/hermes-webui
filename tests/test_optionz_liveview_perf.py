@@ -257,10 +257,10 @@ def test_session_events_stream_arms_write_deadline():
 
 
 def test_streaming_exports_write_deadline_api():
-    from api import streaming
-    assert hasattr(streaming, "_sse_set_write_deadline")
-    assert hasattr(streaming, "SSE_WRITE_DEADLINE_SECONDS")
-    assert isinstance(streaming.SSE_WRITE_DEADLINE_SECONDS, (int, float))
+    from api.streaming import transport
+    assert hasattr(transport, "_sse_set_write_deadline")
+    assert hasattr(transport, "SSE_WRITE_DEADLINE_SECONDS")
+    assert isinstance(transport.SSE_WRITE_DEADLINE_SECONDS, (int, float))
 
 
 def test_sse_write_deadline_env_override(monkeypatch):
@@ -644,7 +644,6 @@ def test_persisted_message_count_uses_metadata_only(monkeypatch):
     # Lookup failure (e.g. corrupt sidecar) is swallowed → None, never raises.
     def _boom(_sid, metadata_only=False):
         raise RuntimeError("decode error")
-
     monkeypatch.setattr(session_cache, "get_session", _boom)
     assert bp.persisted_message_count_for_session(sid) is None
 

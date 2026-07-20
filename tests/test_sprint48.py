@@ -78,11 +78,15 @@ class TestXmlToolCallStrip:
         assert 'Answer' in result
         assert 'still streaming' in result
 
-    def test_public_interface_exports_sanitizer_owner(self):
-        from api.streaming import _strip_xml_tool_calls
-        from api.streaming.thinking_content import _strip_xml_tool_calls as owner
+    def test_run_owner_exposes_sanitizer(self):
+        from api.runs.thinking_content import _strip_xml_tool_calls
 
-        assert _strip_xml_tool_calls is owner
+        assert (
+            _strip_xml_tool_calls(
+                "Answer <function_calls><invoke>hidden</invoke></function_calls>"
+            )
+            == "Answer"
+        )
 
     def test_strip_applied_to_assistant_messages(self):
         """Verify the strip call is applied to assistant message content after

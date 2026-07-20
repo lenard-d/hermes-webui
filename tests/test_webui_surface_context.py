@@ -115,7 +115,7 @@ def test_prefill_boundary_normalizer_removes_terminal_user_tail():
 
 def test_prefill_boundary_normalizer_logs_when_user_tail_dropped(caplog):
     """Dropping trailing user messages is logged with the count."""
-    caplog.set_level(logging.DEBUG, logger="api.streaming")
+    caplog.set_level(logging.DEBUG, logger="api.runs.webui_prefill")
 
     messages = [
         {"role": "assistant", "content": "prefill"},
@@ -133,7 +133,7 @@ def test_prefill_boundary_normalizer_logs_when_user_tail_dropped(caplog):
 
 def test_prefill_boundary_normalizer_no_log_when_no_terminal_user(caplog):
     """No-op normalization must not emit the prefill-dropping debug log."""
-    caplog.set_level(logging.DEBUG, logger="api.streaming")
+    caplog.set_level(logging.DEBUG, logger="api.runs.webui_prefill")
 
     messages = [
         {"role": "assistant", "content": "turn 1"},

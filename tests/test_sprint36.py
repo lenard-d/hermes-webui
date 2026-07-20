@@ -220,7 +220,7 @@ def test_cancel_marker_flagged_as_error_to_skip_in_api_history():
     """
     from types import SimpleNamespace
 
-    from api.streaming import _persist_cancelled_turn
+    from api.runs.terminal_outcomes import _persist_cancelled_turn
 
     session = SimpleNamespace(
         active_stream_id="stream-1",

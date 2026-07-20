@@ -24,7 +24,7 @@ def test_live_usage_estimate_preserves_real_prompt_when_exact_prompt_advances():
 
 
 def test_live_usage_estimate_caps_cumulative_tool_delta_per_turn():
-    from api import streaming
+    from api.runs import tool_events as streaming
 
     base_prompt_tokens = 86_723
     turn_tool_prompt_tokens = 0

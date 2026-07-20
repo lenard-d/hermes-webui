@@ -9,7 +9,10 @@ import sys
 import types
 from pathlib import Path
 
-from api import config, streaming
+from api import config
+import api.sessions as sessions_pkg
+from api.runs import local as local_run
+from api.runs import local_entrypoint as streaming
 from api.sessions import records
 from api.sessions.records import Session
 from api.runs.transcript import _agent_result_terminal_failure, _session_lacks_final_assistant_answer
@@ -28,11 +31,11 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
     session_dir.mkdir()
     monkeypatch.setattr(records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(sessions_pkg, "SESSION_DIR", session_dir)
     records.SESSIONS.clear()
-    streaming.SESSIONS.clear()
-    streaming.STREAMS.clear()
-    streaming.AGENT_INSTANCES.clear()
+    config.SESSIONS.clear()
+    config.STREAMS.clear()
+    config.AGENT_INSTANCES.clear()
     config.SESSION_AGENT_LOCKS.clear()
     old_sid = "old_sid"
     new_sid = "new_sid"
@@ -50,9 +53,9 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
     session.pending_started_at = 1.0
     session.save()
     records.SESSIONS[old_sid] = session
-    streaming.SESSIONS[old_sid] = session
+    config.SESSIONS[old_sid] = session
     event_queue = queue.Queue()
-    streaming.STREAMS[stream_id] = event_queue
+    config.STREAMS[stream_id] = event_queue
 
     class FakeAgent:
         def __init__(
@@ -117,7 +120,7 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
         m.setattr("api.config.get_config", lambda *_args, **_kwargs: {})
         m.setattr("api.config._resolve_cli_toolsets", lambda *_args, **_kwargs: [])
         m.setitem(sys.modules, "hermes_state", fake_hermes_state)
-        streaming._run_agent_streaming(
+        streaming.run_agent_streaming(
             session_id=old_sid,
             msg_text="Do the long task.",
             model="gpt-4o",
@@ -152,8 +155,8 @@ def test_compression_exhausted_after_session_rotation_preserves_snapshot_and_err
     assert new_payload["messages"][-1]["_error"] is True
     assert new_payload["messages"][-1]["_compressionRecovery"]["recommended_action"] == "start_focused_continuation"
     assert "Context compression exhausted" in new_payload["messages"][-1]["content"]
-    assert old_sid not in streaming.SESSIONS
-    assert streaming.SESSIONS[new_sid].session_id == new_sid
+    assert old_sid not in config.SESSIONS
+    assert config.SESSIONS[new_sid].session_id == new_sid
 
 
 def test_compression_exhausted_result_is_terminal_failure_even_after_streamed_text():
@@ -325,11 +328,11 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
     session_dir.mkdir()
     monkeypatch.setattr(records, "SESSION_DIR", session_dir)
     monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
-    monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(sessions_pkg, "SESSION_DIR", session_dir)
     records.SESSIONS.clear()
-    streaming.SESSIONS.clear()
-    streaming.STREAMS.clear()
-    streaming.AGENT_INSTANCES.clear()
+    config.SESSIONS.clear()
+    config.STREAMS.clear()
+    config.AGENT_INSTANCES.clear()
     config.SESSION_AGENT_LOCKS.clear()
 
     old_sid = "old_sid_capture"
@@ -348,9 +351,9 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
     session.pending_started_at = 1.0
     session.save()
     records.SESSIONS[old_sid] = session
-    streaming.SESSIONS[old_sid] = session
+    config.SESSIONS[old_sid] = session
     captured = _CaptureQueue()
-    streaming.STREAMS[stream_id] = captured
+    config.STREAMS[stream_id] = captured
 
     class FakeAgent:
         def __init__(
@@ -414,9 +417,9 @@ def test_apperror_payload_enriched_before_enqueue(tmp_path, monkeypatch):
         m.setitem(sys.modules, "hermes_state", fake_hermes_state)
         m.setattr("api.config.get_config", lambda *_args, **_kwargs: {})
         m.setattr("api.config._resolve_cli_toolsets", lambda *_args, **_kwargs: [])
-        m.setattr(streaming, "redact_session_data", lambda s: s)
+        m.setattr(local_run, "redact_session_data", lambda s: s)
 
-        streaming._run_agent_streaming(
+        streaming.run_agent_streaming(
             session_id=old_sid,
             msg_text="Do the long task.",
             model="gpt-4o",
