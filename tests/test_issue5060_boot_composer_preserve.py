@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SESSIONS_JS = family_source("sessions")
 COMPOSER_DRAFTS_JS = (
     ROOT / "static" / "modules" / "sessions" / "composer-drafts.js"
-).read_text(encoding="utf-8").replace("sessionStateStoreBindings.", "")
+).read_text(encoding="utf-8")
 NODE = shutil.which("node")
 
 
@@ -86,7 +86,7 @@ function autoResize() {{
 function updateSendBtn() {{
   state.updateSendBtnCount += 1;
 }}
-let _loadingSessionId = null;
+const sessionLoadState = {{loadingSessionId: null}};
 const sid = 'boot-session';
 const S = {{
   session: {{

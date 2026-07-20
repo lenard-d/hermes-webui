@@ -876,7 +876,7 @@ class TestFrontendWiring:
         progress_helper = (ui_dir / "upload-status.js").read_text()
         upload_body = (ui_dir / "upload-transport.js").read_text()
         sessions = family_source("sessions")
-        load_body = _source_between(sessions, "async function loadSession", "\nfunction _isMessagingSession")
+        load_body = _source_between(sessions, "async function loadSession", "\nconst sessionLifecycle")
         assert "_uploadPendingFilesSyncProgressForSession(sid)" in load_body
         assert "_uploadPendingFilesProgressBySession.set(owner,{percent:clamped})" in progress_helper
         assert "function _uploadPendingFilesSyncProgressForSession" in progress_helper

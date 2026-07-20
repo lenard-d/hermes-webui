@@ -256,6 +256,15 @@ function _clearSessionCompletionUnread(sid){{
 {has_marker}
 {has_unread}
 {clear_helpers}
+// At runtime the sessions entrypoint publishes this state-owner operation
+// through a repainting compatibility boundary. Model that public boundary in
+// this extracted-function harness instead of calling the owner directly.
+const _clearInactiveCronMarkersOwner=_clearCronSessionCompletionUnreadForInactiveProfiles;
+_clearCronSessionCompletionUnreadForInactiveProfiles=(activeProfile)=>{{
+  const changed=_clearInactiveCronMarkersOwner(activeProfile);
+  if(changed) renderSessionListFromCache();
+  return changed;
+}};
 {reset}
 {switch}
 (async()=>{{

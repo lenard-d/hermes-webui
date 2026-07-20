@@ -29,7 +29,7 @@ def test_writable_imported_sessions_keep_regenerate_action_without_broadening_sh
     # so it does not silently disable rename/pin/archive/etc. for imported
     # sessions. Writable imported sessions should still expose regenerate.
     helper_idx = SESSIONS_JS.index("function _isReadOnlySession(session)")
-    next_helper_idx = SESSIONS_JS.index("function _sourceKeyForSession", helper_idx)
+    next_helper_idx = SESSIONS_JS.index("function _sessionSourceLabel", helper_idx)
     helper_block = SESSIONS_JS[helper_idx:next_helper_idx]
     assert "session.is_imported" not in helper_block, (
         "_isReadOnlySession must not include is_imported; writable imports need regenerate"

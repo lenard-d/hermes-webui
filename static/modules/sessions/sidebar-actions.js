@@ -1,7 +1,7 @@
-import { ICONS, _manualTitleRegenerateTimeoutMs, sessionStateBindings } from './state.js';
+import { SESSION_ICONS as ICONS, _manualTitleRegenerateTimeoutMs, _sessionDisplayTitle } from './session-display.js';
+import { sessionLoadState } from './session-load-state.js';
 import { _isCliSession, _isMessagingSession, _isReadOnlySession } from './message-loading.js';
 import { renderSessionList } from './session-list-render-port.js';
-import { _sessionDisplayTitle } from './session-display.js';
 import { renderSessionListFromCache } from './sidebar-render-port.js';
 import { _showProjectPicker, deleteSession, removeWorktree } from './management.js';
 import { _captureSessionReflowPositions, _sessionPrefersReducedMotion } from './sidebar-motion.js';
@@ -205,7 +205,7 @@ function _findSessionRenameRow(sessionId){
 function _buildSessionRenameStarter(session, displayEl, renderDisplay){
   return ()=>{
     if(_isReadOnlySession(session)){ if(typeof showToast==='function') showToast('Read-only imported sessions cannot be renamed.',3000); return; }
-    if(sessionStateBindings._loadingSessionId&&sessionStateBindings._loadingSessionId!==session.session_id) return;
+    if(sessionLoadState.loadingSessionId&&sessionLoadState.loadingSessionId!==session.session_id) return;
 
     closeSessionActionMenu();
     sidebarStateBindings._renamingSid=session.session_id;

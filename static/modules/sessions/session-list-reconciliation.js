@@ -1,12 +1,17 @@
-import { SESSION_LIST_INTERACTION_IDLE_MS, _sessionStreamingById, sessionStateStoreBindings as sessionStateBindings } from './session-state-store.js';
-import { _isServerIdleSessionRow, _isSessionEffectivelyStreaming, _isSessionLocallyStreaming, _markPollingCompletionUnreadTransitions, _purgeStaleInflightEntries, _reconcileActiveSessionIdleStateFromList, _rememberSessionListSource } from './session-runtime.js';
+import { SESSION_LIST_INTERACTION_IDLE_MS, sessionListCoordination } from './session-list-coordination.js';
+import { sessionRunRegistry } from './session-run-registry.js';
+
+const _sessionStreamingById=sessionRunRegistry.streamingById;
+import { _isServerIdleSessionRow, _isSessionEffectivelyStreaming, _isSessionLocallyStreaming, _markPollingCompletionUnreadTransitions, _purgeStaleInflightEntries, _reconcileActiveSessionIdleStateFromList, _rememberSessionListSource } from './session-run-state.js';
 import { _forgetObservedStreamingSession, _recordSessionProfileCount } from './session-unread.js';
 import { _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled } from './message-loading.js';
 import { _optimisticallyRemovedSessionIds, _sessionAttentionSoundState, sidebarStateBindings } from './sidebar-store.js';
 import { _pruneLineageReportCacheToVisibleSessions, sessionDiscoveryBindings } from './session-discovery.js';
 import { _activeSessionIdForSidebar } from './session-navigation.js';
 import { renderSessionListFromCache } from './sidebar-render-port.js';
-import { sessionListViewBindings } from './session-list-skeleton.js';
+import { _scheduleActiveSessionIdleReload, ensureActiveSessionExternalRefreshPoll, ensureSessionTimeRefreshPoll, startStreamingPoll, stopStreamingPoll } from './session-list-refresh.js';
+import { animateNextSessionListRefresh, sessionListViewBindings } from './session-list-skeleton.js';
+import { ensureSessionEventsSSE } from './sidebar-session-events.js';
 
 function _isOptimisticFirstTurnSessionRow(s){
   if(!s||!s.session_id||s.archived) return false;
@@ -95,23 +100,23 @@ function _isSessionListUserInteracting(){
   const list=$('sessionList');
   const pointerOverList=Boolean(list&&(list.matches(':hover')||list.matches(':focus-within')));
   return Boolean(
-    sessionStateBindings._sessionListPointerActive ||
+    sessionListCoordination.pointerActive ||
     pointerOverList ||
-    (sessionStateBindings._sessionListLastScrollAt && now-sessionStateBindings._sessionListLastScrollAt<SESSION_LIST_INTERACTION_IDLE_MS)
+    (sessionListCoordination.lastScrollAt && now-sessionListCoordination.lastScrollAt<SESSION_LIST_INTERACTION_IDLE_MS)
   );
 }
 
 function _schedulePendingSessionListApply(){
-  if(sessionStateBindings._pendingSessionListApplyTimer) clearTimeout(sessionStateBindings._pendingSessionListApplyTimer);
-  sessionStateBindings._pendingSessionListApplyTimer=setTimeout(()=>{
-    sessionStateBindings._pendingSessionListApplyTimer=0;
-    if(!sessionStateBindings._pendingSessionListPayload) return;
+  if(sessionListCoordination.pendingApplyTimer) clearTimeout(sessionListCoordination.pendingApplyTimer);
+  sessionListCoordination.pendingApplyTimer=setTimeout(()=>{
+    sessionListCoordination.pendingApplyTimer=0;
+    if(!sessionListCoordination.pendingPayload) return;
     if(_isSessionListUserInteracting()){
       _schedulePendingSessionListApply();
       return;
     }
-    const payload=sessionStateBindings._pendingSessionListPayload;
-    sessionStateBindings._pendingSessionListPayload=null;
+    const payload=sessionListCoordination.pendingPayload;
+    sessionListCoordination.pendingPayload=null;
     if(payload.gen!==sidebarStateBindings._renderSessionListGen) return;
     // Profile switch may have bumped unread gen after the list gen check
     // window; still drop completion-marking for the stale pre-switch payload.
@@ -219,7 +224,10 @@ function _applySessionListPayload(sessData, projData, opts){
   sidebarStateBindings._sidebarReferenceSessions = Array.isArray(sessData.sidebar_reference_sessions)
     ? sessData.sidebar_reference_sessions
     : [];
-  _reconcileActiveSessionIdleStateFromList(serverSessions);
+  const reconciledActiveSid=(S&&S.session&&S.session.session_id)||'';
+  if(_reconcileActiveSessionIdleStateFromList(serverSessions)===true){
+    _scheduleActiveSessionIdleReload(reconciledActiveSid);
+  }
   sidebarStateBindings._allSessions = _mergeOptimisticFirstTurnSessions(serverSessions);
   // Tag the cache with the scope it was loaded under (active profile +
   // all-profiles flag). If a later /api/sessions fails right after a profile
@@ -252,9 +260,9 @@ function _applySessionListPayload(sessData, projData, opts){
   // DOM was rendered outside the signature path, so if this payload heals with
   // rows identical to the last render, the identical-signature skip below would
   // leave the stale "Could not load conversations" banner on screen. (Codex #5467)
-  const _hadSessionListLoadError = !!sessionStateBindings._sessionListLoadError;
-  sessionStateBindings._sessionListLoadError = null;
-  sessionStateBindings._sessionListHasLoadedOnce = true;
+  const _hadSessionListLoadError = !!sessionListCoordination.loadError;
+  sessionListCoordination.loadError = null;
+  sessionListCoordination.hasLoadedOnce = true;
   // Greptile #5975 P1: a /api/sessions request started under profile A can
   // finish after a switch to B already cleared A's cron markers. The list gen
   // check can already have passed (TOCTOU) or a deferred apply can land later.

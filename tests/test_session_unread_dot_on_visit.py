@@ -57,7 +57,7 @@ def test_visit_ack_helpers_exist():
 
 
 def test_acknowledge_visit_syncs_viewed_snapshot_and_repaints():
-    body = _function_block("_acknowledgeSessionVisit", "function _sessionVisitHasUnreadState")
+    body = _extract("_acknowledgeSessionVisit")
     # Clears viewed count (which clears the stale completion-unread marker, #3020),
     # syncs the polling snapshot, and repaints the sidebar from cache.
     assert "_setSessionViewedCount(sid, messageCount);" in body

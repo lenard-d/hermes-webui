@@ -18,7 +18,7 @@ RUN_JOURNAL_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
 SESSION_RUNTIME_JS = (
-    REPO_ROOT / "static" / "modules" / "sessions" / "session-runtime.js"
+    REPO_ROOT / "static" / "modules" / "sessions" / "session-live-recovery.js"
 ).read_text(encoding="utf-8")
 STREAM_PROGRESS_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
@@ -233,7 +233,9 @@ def test_load_session_same_sid_noop_does_not_mask_pending_switch_back():
     )
     assert "_loadingSessionId===sid" in guard
     guard_pos = compact.find(guard)
-    assert guard_pos < compact.find("_loadingSessionId=sid;")
+    load_claim_pos = compact.find("_loadingSessionId=sid", guard_pos)
+    assert load_claim_pos != -1
+    assert guard_pos < load_claim_pos
     # The guarded block must still early-return for the same-session no-op,
     # while now also acknowledging the visit to clear a stale unread dot.
     assert "_sessionVisitHasUnreadState(sid)" in compact[guard_pos:guard_pos + 600]

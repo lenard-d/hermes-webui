@@ -1,4 +1,8 @@
-import { _acknowledgeSessionVisit, _inflightHasVisibleLiveState, _isSessionActivelyViewedForList, _rememberNewChatDraftSession, _renderRuntimeJournalAnchorActivityScene, _restoreComposerDraft, _saveComposerDraftNow, _selectLiveRecoveryInflight, _serverLiveSnapshotInflight, _sessionVisitHasUnreadState, _setSessionViewedCount, sessionStateBindings } from './state.js';
+import { _rememberNewChatDraftSession, _restoreComposerDraft, _saveComposerDraftNow } from './composer-drafts.js';
+import { _inflightHasVisibleLiveState, _renderRuntimeJournalAnchorActivityScene, _selectLiveRecoveryInflight, _serverLiveSnapshotInflight } from './session-live-recovery.js';
+import { sessionLoadState } from './session-load-state.js';
+import { _isSessionActivelyViewedForList, _sessionVisitHasUnreadState, _setSessionViewedCount } from './session-unread.js';
+import { _acknowledgeSessionVisit } from './session-visit.js';
 import { _captureSameSessionForceReloadHint, _checkAndShowHandoffHint, _clearSameSessionForceReloadHint, _deferWorkspaceRefreshForSession, _ensureMessagesLoaded, _hideHandoffHint, _isMessagingSession, _resolveSessionModelForDisplaySoon, messageLoadingBindings } from './message-loading.js';
 import { _dropCurrentTurnAssistantMessages, _ensureInflightLiveAssistantMessage, _hasCurrentTailUserDuplicate, _mergeInflightTailMessages, _prepareRunningLiveTail, _projectInflightMessagesForActivityBursts, messageTimelineBindings } from './message-timeline.js';
 import { NO_PROJECT_FILTER, sidebarStateBindings } from './sidebar-store.js';
@@ -602,7 +606,7 @@ async function _restoreLoadedSession(ctx){
         _msgInner.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:14px;padding:40px;text-align:center;">Failed to load messages. Try switching sessions or refreshing.</div>';
       }
       if (typeof showToast === 'function') showToast('Failed to load conversation messages', 3000, 'error');
-      if (_isCurrentLoad()) sessionStateBindings._loadingSessionId = null;
+      if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;
       return;
     }
     // Stale? A newer loadSession() call has already started (#1060).
@@ -728,7 +732,7 @@ async function loadSession(sid){
   // #2971: idempotent re-arm before the no-op guard revives a stream a prior
   // failed loadSession killed; no-ops on real switches.
   _rearmActiveSessionStream();
-  if(currentSid===sid && !forceReload && (!sessionStateBindings._loadingSessionId || sessionStateBindings._loadingSessionId===sid)){
+  if(currentSid===sid && !forceReload && (!sessionLoadState.loadingSessionId || sessionLoadState.loadingSessionId===sid)){
     // Re-selecting the already-open session is a no-op for transcript/scroll, but
     // it is still a *visit*: clear a stale sidebar unread dot (e.g. one a
     // background completion left on the open, unfocused pane) before returning.
@@ -743,9 +747,8 @@ async function loadSession(sid){
   }
   // Mark this session as the in-flight load. Subsequent loadSession() calls
   // will overwrite this; stale awaits use the mismatch to bail out (#1060).
-  const _loadGeneration = ++sessionStateBindings._loadSessionGeneration;
-  const _isCurrentLoad = () => sessionStateBindings._loadingSessionId === sid && sessionStateBindings._loadSessionGeneration === _loadGeneration;
-  sessionStateBindings._loadingSessionId = sid;
+  const _loadGeneration=sessionLoadState.begin(sid);
+  const _isCurrentLoad=()=>sessionLoadState.isCurrent(sid,_loadGeneration);
   if(currentSid!==sid&&typeof _uploadPendingFilesSyncProgressForSession==='function')_uploadPendingFilesSyncProgressForSession(sid);
   // Reset scroll state for fresh session navigation — the reader expects to
   // land at the bottom of the new transcript, not wherever a stale unpin flag
@@ -804,7 +807,7 @@ async function loadSession(sid){
     // no-op. The visible symptom is the token-usage badge vanishing ~10s
     // after each assistant turn completes. Stash the snapshot so the
     // carry-forward call can consume it.
-    sessionStateBindings._pendingCarryForwardSnapshot = (currentSid === sid && forceReload)
+    sessionLoadState.pendingCarryForwardSnapshot = (currentSid === sid && forceReload)
       ? (S.messages || []).slice()
       : null;
     // #3239: also capture a reload-width hint BEFORE clearing so the
@@ -870,7 +873,7 @@ async function loadSession(sid){
           _rearmActiveSessionStream();
           return;
         }
-        if (_isCurrentLoad()) sessionStateBindings._loadingSessionId = null;
+        if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;
         return loadSession(sid,{...opts,skipProfileResolve:true,force:true,_preloadNotified:true});
       }catch(switchErr){
         e=switchErr;
@@ -905,7 +908,7 @@ async function loadSession(sid){
         if(!currentSid || currentSid===sid){
           try{ localStorage.removeItem('hermes-webui-session'); }catch(_){ }
           try{ history.replaceState(null,'',_appRootPath()); }catch(_){ }
-          if (_isCurrentLoad()) sessionStateBindings._loadingSessionId = null;
+          if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;
           if(!currentSid){
             throw e;
           }
@@ -929,7 +932,7 @@ async function loadSession(sid){
     // NOT restart — doing so would spin the SSE reconnect loop against a dead
     // session_id.
     const _selfHealedCurrent = (e.status===404) && (currentSid===sid);
-    if (_isCurrentLoad()) sessionStateBindings._loadingSessionId = null;
+    if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;
     // The session stream was stopped unconditionally at the top of this load
     // (mirroring stopApprovalPolling). On the happy path it's restarted ~120
     // lines below, but this failure exit never reaches that point — leaving
@@ -945,7 +948,7 @@ async function loadSession(sid){
     // early-returns) because only here can the current session have just
     // self-healed away — re-arming a 404'd/deleted session_id would spin the
     // SSE reconnect loop against a dead session.
-    if (currentSid && !_selfHealedCurrent && sessionStateBindings._loadingSessionId === null
+    if (currentSid && !_selfHealedCurrent && sessionLoadState.loadingSessionId === null
         && typeof startSessionStream === 'function') {
       startSessionStream(currentSid);
     }
@@ -958,7 +961,7 @@ async function loadSession(sid){
   // send users to empty state after re-login (#4028 follow-up).
   if (!data) {
     _clearSameSessionForceReloadHint(sid);
-    if (_isCurrentLoad()) sessionStateBindings._loadingSessionId = null;
+    if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;
     // #2971: re-arm the still-displayed session's stream (defensive — harmless
     // if the 401 redirect is already tearing the page down). Idempotent.
     _rearmActiveSessionStream();
@@ -982,7 +985,7 @@ async function loadSession(sid){
   // cross-profile continuation can't poison restore state with an unusable id.
   const continuationSid=(data.session&&data.session.continuation_session_id)||'';
   if(continuationSid&&continuationSid!==sid&&!opts.skipContinuationResolve){
-    sessionStateBindings._loadingSessionId=null;
+    sessionLoadState.loadingSessionId=null;
     return loadSession(continuationSid,{...opts,skipLineageResolve:true,skipContinuationResolve:true,force:true,_preloadNotified:true});
   }
   S.session=data.session;
@@ -1096,7 +1099,7 @@ async function loadSession(sid){
   }
 
   // Clear the in-flight session marker now that this load has completed (#1060).
-  if (_isCurrentLoad()) sessionStateBindings._loadingSessionId = null;
+  if (_isCurrentLoad()) sessionLoadState.loadingSessionId = null;
 
   // Re-acknowledge the visit after the async message-load gap. A deferred
   // sidebar /api/sessions poll can land while _ensureMessagesLoaded is in

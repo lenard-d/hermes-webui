@@ -56,9 +56,9 @@ def test_active_session_idle_reconcile_clears_stale_busy_and_inflight_state():
     assert "hideApprovalCard(true)" in body, "stale approval UI must be cleared when server says the run is idle"
     assert "hideLiveRunStatus(sid)" in body, "stale live footer must be cleared when server says the run is idle"
     assert "clearLiveToolCards()" in body, "stale live-only tool cards must not survive idle reconciliation"
-    assert "_scheduleActiveSessionIdleReload(sid)" in body, (
-        "idle reconciliation must reload the current transcript from server truth "
-        "so missed stream_end events do not leave the active pane stale"
+    assert "return changed" in body, (
+        "the state owner must report that it reconciled stale active-session state "
+        "so the session-list orchestration owner can schedule transcript recovery"
     )
 
 
@@ -101,9 +101,10 @@ def test_active_session_idle_reconcile_schedules_forced_transcript_reload():
     helper_body = _function_body(SESSIONS_SRC, "function _scheduleActiveSessionIdleReload(")
 
     assert "setTimeout(async () =>" in helper_body
-    assert "S.session.session_id !== sid" in helper_body
-    assert "S.busy || S.activeStreamId" in helper_body
-    assert "loadSession(sid, {force:true, externalRefreshReason:'idle-reconcile'})" in helper_body
+    compact = "".join(helper_body.split())
+    assert "S.session.session_id!==sid" in compact
+    assert "S.busy||S.activeStreamId" in compact
+    assert "loadSession(sid,{force:true,externalRefreshReason:'idle-reconcile'})" in compact
 
 
 def test_session_list_payload_reconciles_active_idle_state_before_optimistic_merge_and_render():
@@ -111,14 +112,19 @@ def test_session_list_payload_reconciles_active_idle_state_before_optimistic_mer
 
     filter_pos = body.find("const serverSessions=_optimisticallyRemovedSessionIds.size")
     reconcile_pos = body.find("_reconcileActiveSessionIdleStateFromList(serverSessions)")
+    reload_pos = body.find("_scheduleActiveSessionIdleReload(reconciledActiveSid)")
     merge_pos = body.find("_allSessions = _mergeOptimisticFirstTurnSessions")
     render_pos = body.find("renderSessionListFromCache()")
 
     assert filter_pos != -1, "payload application must filter optimistic removals before row reconciliation"
     assert reconcile_pos != -1, "active-session idle reconciliation must run for refreshed rows"
+    assert reload_pos != -1, (
+        "the list orchestration owner must schedule transcript recovery after the "
+        "state owner reports an idle reconciliation"
+    )
     assert merge_pos != -1, "session rows must still be applied from /api/sessions"
     assert render_pos != -1, "payload application must still render from cache"
-    assert filter_pos < reconcile_pos < merge_pos < render_pos, (
+    assert filter_pos < reconcile_pos < reload_pos < merge_pos < render_pos, (
         "local S.busy/INFLIGHT state must be reconciled against raw server rows "
         "before optimistic merging can re-label a stale active session as streaming"
     )

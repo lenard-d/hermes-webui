@@ -1,7 +1,5 @@
-import { loadSession } from './lifecycle.js';
-import { _isCliSession } from './message-loading.js';
-import { _messageComparableText } from './message-timeline.js';
-import { _sessionListSnapshotById, _sessionListSourceById, _sessionStreamingById, sessionStateStoreBindings } from './session-state-store.js';
+import { _isCliSession } from './session-source.js';
+import { sessionRunRegistry } from './session-run-registry.js';
 import {
   _cronCompletionUnreadMetaForSession,
   _cronMarkerProfileMatchesActive,
@@ -13,8 +11,10 @@ import {
   _setSessionViewedCount,
 } from './session-unread.js';
 import { sidebarStateBindings } from './sidebar-store.js';
-import { _deferActiveSessionExternalRefresh, refreshActiveSessionIfExternallyUpdated } from './session-list-refresh.js';
-import { renderSessionListFromCache } from './sidebar-render-port.js';
+
+const _sessionListSnapshotById=sessionRunRegistry.snapshotById;
+const _sessionListSourceById=sessionRunRegistry.sourceById;
+const _sessionStreamingById=sessionRunRegistry.streamingById;
 
 function _isSessionLocallyStreaming(s) {
   if (!s || !s.session_id) return false;
@@ -76,42 +76,7 @@ function _reconcileActiveSessionIdleStateFromList(serverRows) {
   if (typeof hideLiveRunStatus==='function') hideLiveRunStatus(sid);
   if (typeof clearLiveToolCards==='function') clearLiveToolCards();
   if (changed&&typeof updateSendBtn==='function') updateSendBtn();
-  if (changed&&typeof _scheduleActiveSessionIdleReload==='function') _scheduleActiveSessionIdleReload(sid);
   return changed;
-}
-
-function _scheduleActiveSessionIdleReload(sid) {
-  if(!sid) return;
-  setTimeout(async () => {
-    if(!S||!S.session||S.session.session_id !== sid) return;
-    // #5409: skip idle reload while any loadSession() is in flight — avoids
-    // a race where the idle reload overwrites sessionStateStoreBindings._loadingSessionId and silently
-    // cancels an in-progress session switch (most visible on iOS PWA with
-    // large sessions where Phase 1 metadata fetch is slow).
-    if(typeof sessionStateStoreBindings._loadingSessionId !== 'undefined' && sessionStateStoreBindings._loadingSessionId) return;
-    if(S.busy || S.activeStreamId) return;
-    if(typeof _isMessageReaderUnpinned==='function'&&_isMessageReaderUnpinned()){
-      _deferActiveSessionExternalRefresh('idle-reconcile');
-      return;
-    }
-    try{
-      // Avoid an unconditional same-session force reload the moment streaming
-      // settles. On mobile PWA this produces a visible end-of-turn flash and can
-      // briefly restore the pane with stale layout geometry. Reconcile against
-      // server metadata for the just-finished active turn first
-      // (ignoreStreamJustFinished bypasses only the post-stream cooldown; the
-      // reconcile still reloads ONLY when the message count actually changed).
-      // The 'idle-reconcile' reason is non-'poll', so it coexists with the
-      // #3916/#4195 poll-only external gate without bypassing it. Preserve the
-      // original forced reload as a fallback when the probe request itself fails.
-      const outcome = await refreshActiveSessionIfExternallyUpdated('idle-reconcile', {
-        ignoreStreamJustFinished: true,
-      });
-      if(outcome === 'failed'){
-        await loadSession(sid, {force:true, externalRefreshReason:'idle-reconcile'});
-      }
-    }catch(_){}
-  },0);
 }
 
 function _purgeStaleInflightEntries() {
@@ -214,13 +179,13 @@ function _rememberRenderedSessionSnapshot(s) {
 }
 
 function _markSessionCompletedInList(session, previousSid = null) {
-  if (!session || !Array.isArray(sidebarStateBindings._allSessions)) return;
+  if (!session || !Array.isArray(sidebarStateBindings._allSessions)) return false;
   const finalSid = session.session_id || previousSid;
-  if (!finalSid) return;
+  if (!finalSid) return false;
   const finalIdx = sidebarStateBindings._allSessions.findIndex(s => s && s.session_id === finalSid);
   const previousIdx = previousSid ? sidebarStateBindings._allSessions.findIndex(s => s && s.session_id === previousSid) : -1;
   const idx = finalIdx >= 0 ? finalIdx : previousIdx;
-  if (idx < 0) return;
+  if (idx < 0) return false;
   const {messages: _messages, tool_calls: _toolCalls, ...sessionMeta} = session;
   const messageCount = Number(
     session.message_count != null
@@ -257,7 +222,7 @@ function _markSessionCompletedInList(session, previousSid = null) {
     message_count: messageCount,
     last_message_at: lastMessageAt,
   });
-  renderSessionListFromCache();
+  return true;
 }
 
 function _markPollingCompletionUnreadTransitions(sessions) {
@@ -352,161 +317,16 @@ function _markPollingCompletionUnreadTransitions(sessions) {
 }
 
 
-function _inflightHasVisibleLiveState(inflight) {
-  if (!inflight || typeof inflight !== 'object') return false;
-  if (String(inflight.lastAssistantText || '').trim()) return true;
-  if (String(inflight.lastReasoningText || '').trim()) return true;
-  if (String(inflight.liveTurnHtml || '').trim()) return true;
-  if (Array.isArray(inflight.toolCalls) && inflight.toolCalls.length) return true;
-  if (Array.isArray(inflight.activityBurstAnchors) && inflight.activityBurstAnchors.length) return true;
-  if (Array.isArray(inflight.messages)) {
-    return inflight.messages.some((msg) => {
-      if (!msg) return false;
-      if (msg.role === 'user') return Boolean(_messageComparableText(msg));
-      if (msg.role !== 'assistant') return false;
-      const content = msg.content;
-      if (typeof content === 'string') return content.trim();
-      if (Array.isArray(content)) return content.length > 0;
-      return Boolean(content);
-    });
-  }
-  return false;
-}
 
-function _serverLiveSnapshotToolId(tc){
-  return String(tc&&(tc.tid||tc.id||tc.tool_call_id||tc.tool_use_id||tc.call_id||'')||'').trim();
-}
-
-function _serverLiveSnapshotInflight(snapshot, uploaded){
-  if(!snapshot||typeof snapshot!=='object') return null;
-  const rawMessages=Array.isArray(snapshot.messages)?snapshot.messages:[];
-  const messages=rawMessages
-    .filter(m=>m&&m.role)
-    .map(m=>({...m,_live:m._live!==false,_journal_snapshot:true}));
-  const rawToolCalls=Array.isArray(snapshot.tool_calls)?snapshot.tool_calls:[];
-  const toolCalls=rawToolCalls
-    .filter(tc=>tc&&tc.name)
-    .map(tc=>{
-      const next={...tc,_live:true,_journal_snapshot:true};
-      const tid=_serverLiveSnapshotToolId(next);
-      if(tid&&!next.tid) next.tid=tid;
-      return next;
-    });
-  let lastAssistantText=String(snapshot.last_assistant_text||snapshot.lastAssistantText||'');
-  let lastReasoningText=String(snapshot.last_reasoning_text||snapshot.lastReasoningText||'');
-  const lastLiveAssistant=[...messages].reverse().find(m=>m&&m.role==='assistant'&&m._live);
-  if(lastLiveAssistant){
-    if(!lastAssistantText&&typeof lastLiveAssistant.content==='string') lastAssistantText=lastLiveAssistant.content;
-    if(!lastReasoningText&&typeof lastLiveAssistant.reasoning==='string') lastReasoningText=lastLiveAssistant.reasoning;
-  }
-  if((lastAssistantText||lastReasoningText)&&!lastLiveAssistant){
-    messages.push({
-      role:'assistant',
-      content:lastAssistantText,
-      reasoning:lastReasoningText||undefined,
-      _live:true,
-      _journal_snapshot:true,
-    });
-  }
-  const replayAfterSeq=Number(snapshot.last_seq||0);
-  const activityBurstAnchors=Array.isArray(snapshot.activity_burst_anchors)
-    ? snapshot.activity_burst_anchors
-    : (Array.isArray(snapshot.activityBurstAnchors)?snapshot.activityBurstAnchors:[]);
-  const anchorActivityScene=(snapshot.anchor_activity_scene&&snapshot.anchor_activity_scene.version==='activity_scene_v1')
-    ? snapshot.anchor_activity_scene
-    : ((snapshot.anchorActivityScene&&snapshot.anchorActivityScene.version==='activity_scene_v1')?snapshot.anchorActivityScene:null);
-  const hasAnchorActivityScene=!!(anchorActivityScene&&Array.isArray(anchorActivityScene.activity_rows)&&anchorActivityScene.activity_rows.length);
-  if(!messages.length&&!toolCalls.length&&!lastAssistantText&&!lastReasoningText&&!hasAnchorActivityScene) return null;
-  return {
-    streamId:String(snapshot.stream_id||snapshot.streamId||''),
-    messages,
-    uploaded:Array.isArray(uploaded)?[...uploaded]:[],
-    toolCalls,
-    todos:null,
-    todoStateMeta:null,
-    reattach:true,
-    journalSnapshot:true,
-    lastAssistantText,
-    lastReasoningText,
-    lastRunJournalSeq:Number.isFinite(replayAfterSeq)?Math.max(0,replayAfterSeq):0,
-    lastRunJournalEventId:String(snapshot.last_event_id||snapshot.lastEventId||''),
-    anchorActivityScene,
-    currentActivityBurstId:Number(snapshot.current_activity_burst_id||snapshot.currentActivityBurstId||0)||0,
-    currentLiveSegmentSeq:Number(snapshot.current_live_segment_seq||snapshot.currentLiveSegmentSeq||0)||0,
-    activityBurstAnchors,
-  };
-}
-
-function _selectLiveRecoveryInflight(localInflight, serverLiveSnapshot, activeStreamId){
-  if(!serverLiveSnapshot) return localInflight||null;
-  if(!localInflight||!_inflightHasVisibleLiveState(localInflight)) return serverLiveSnapshot;
-
-  // The run journal owns the Worklog projection. A same-stream browser tail
-  // wins only when it advanced after the metadata snapshot was read.
-  const requestedActiveId=String(activeStreamId||'').trim();
-  const localId=String(localInflight.streamId||'').trim();
-  const serverId=String(serverLiveSnapshot.streamId||'').trim();
-  const activeId=requestedActiveId||serverId;
-  const selectDurableSnapshot=()=>{
-    if(activeId&&localId===activeId&&Array.isArray(localInflight.todos)&&localInflight.todoStateMeta){
-      return {...serverLiveSnapshot,todos:localInflight.todos,todoStateMeta:localInflight.todoStateMeta};
-    }
-    return serverLiveSnapshot;
-  };
-  if(requestedActiveId&&serverId&&serverId!==requestedActiveId){
-    return localId===requestedActiveId?localInflight:null;
-  }
-  if(activeId&&localId!==activeId) return selectDurableSnapshot();
-
-  const localSeq=Math.max(0,Number(localInflight.lastRunJournalSeq)||0);
-  const serverSeq=Math.max(0,Number(serverLiveSnapshot.lastRunJournalSeq)||0);
-  return serverSeq>=localSeq?selectDurableSnapshot():localInflight;
-}
-
-function _anchorActivitySceneStreamId(scene){
-  if(!scene||typeof scene!=='object') return '';
-  const identity=scene.identity&&typeof scene.identity==='object'?scene.identity:null;
-  return String(scene.stream_id||scene.streamId||(identity&&(identity.stream_id||identity.streamId))||'').trim();
-}
-
-function _anchorActivitySceneMatchesStream(scene, activeStreamId){
-  const activeId=String(activeStreamId||'').trim();
-  if(!activeId) return true;
-  const sceneId=_anchorActivitySceneStreamId(scene);
-  return !sceneId||sceneId===activeId;
-}
-
-function _runtimeJournalAnchorActivitySceneForSession(sid, activeStreamId){
-  const inflight=INFLIGHT&&sid?INFLIGHT[sid]:null;
-  if(inflight&&inflight.anchorActivityScene&&inflight.anchorActivityScene.version==='activity_scene_v1'&&_anchorActivitySceneMatchesStream(inflight.anchorActivityScene, activeStreamId)){
-    return inflight.anchorActivityScene;
-  }
-  const snapshot=S.session&&S.session.runtime_journal_snapshot;
-  const scene=snapshot&&(snapshot.anchor_activity_scene||snapshot.anchorActivityScene);
-  return scene&&scene.version==='activity_scene_v1'&&_anchorActivitySceneMatchesStream(scene, activeStreamId)?scene:null;
-}
-
-function _renderRuntimeJournalAnchorActivityScene(activeStreamId, sid){
-  if(!activeStreamId||typeof window==='undefined'||typeof window._renderLiveAnchorActivitySceneSnapshotForStream!=='function') return false;
-  const scene=_runtimeJournalAnchorActivitySceneForSession(sid, activeStreamId);
-  if(!scene) return false;
-  return !!window._renderLiveAnchorActivitySceneSnapshotForStream(activeStreamId, scene, sid);
-}
-
-export const sessionRuntime=Object.freeze({
+export const sessionRunState=Object.freeze({
   isStreaming:_isSessionEffectivelyStreaming,
   purgeStaleInflight:_purgeStaleInflightEntries,
   reconcileActiveIdle:_reconcileActiveSessionIdleStateFromList,
   markCompleted:_markSessionCompletedInList,
   recordPollingTransitions:_markPollingCompletionUnreadTransitions,
-  hasVisibleLiveState:_inflightHasVisibleLiveState,
-  fromServerSnapshot:_serverLiveSnapshotInflight,
-  selectLiveRecovery:_selectLiveRecoveryInflight,
-  renderAnchorScene:_renderRuntimeJournalAnchorActivityScene,
 });
 
 export {
-  _inflightHasVisibleLiveState,
   _isServerIdleSessionRow,
   _isSessionEffectivelyStreaming,
   _isSessionLocallyStreaming,
@@ -517,7 +337,4 @@ export {
   _rememberRenderedSessionSnapshot,
   _rememberRenderedStreamingState,
   _rememberSessionListSource,
-  _renderRuntimeJournalAnchorActivityScene,
-  _selectLiveRecoveryInflight,
-  _serverLiveSnapshotInflight,
 };

@@ -1,5 +1,5 @@
-import { sessionStateBindings } from './state.js';
 import { _stripAttachedFilesMarker } from './session-display.js';
+import { sessionLoadState } from './session-load-state.js';
 import { _INITIAL_MSG_LIMIT, _msgLimitMax, _syncToolCallsForLoadedMessages, messageLoadingBindings } from './message-loading.js';
 
 function _messageComparableText(m){
@@ -442,7 +442,7 @@ async function _loadOlderMessages() {
     //    stale response could prepend onto the new session's S.messages.
     if (!data || !data.session) return;
     if (!S.session || S.session.session_id !== sid) return;
-    if (sessionStateBindings._loadingSessionId !== null && sessionStateBindings._loadingSessionId !== sid) return;
+    if (sessionLoadState.loadingSessionId !== null && sessionLoadState.loadingSessionId !== sid) return;
     // Generation guard: another code path (typically jumpToSessionStart →
     // _ensureAllMessagesLoaded) may have replaced S.messages while we were
     // awaiting. Prepending older messages onto that replacement would
@@ -492,7 +492,7 @@ async function _loadOlderMessages() {
         );
         if (!fallback || !fallback.session) { _loadingOlder = false; return; }
         if (!S.session || S.session.session_id !== sid) return;
-        if (sessionStateBindings._loadingSessionId !== null && sessionStateBindings._loadingSessionId !== sid) return;
+        if (sessionLoadState.loadingSessionId !== null && sessionLoadState.loadingSessionId !== sid) return;
         if (_messagesGeneration !== startGeneration) return;
         responseSession = fallback.session;
       }
@@ -608,7 +608,7 @@ async function _ensureAllMessagesLoaded() {
     // Session may have been switched while we awaited. Bail rather than
     // overwrite the new session's messages.
     if (!S.session || S.session.session_id !== sid) return;
-    if (sessionStateBindings._loadingSessionId !== null && sessionStateBindings._loadingSessionId !== sid) return;
+    if (sessionLoadState.loadingSessionId !== null && sessionLoadState.loadingSessionId !== sid) return;
     const msgs = (data.session.messages || []).filter(m => m && m.role);
     // Bump the generation BEFORE the wholesale replace so any racing
     // prefetch (whose snapshot was taken before this call's mutex

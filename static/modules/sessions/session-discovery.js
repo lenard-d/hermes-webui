@@ -1,4 +1,5 @@
-import { _hasUnreadForSession, _isSessionEffectivelyStreaming } from './state.js';
+import { _isSessionEffectivelyStreaming } from './session-run-state.js';
+import { _hasUnreadForSession } from './session-unread.js';
 import { _isExternalSession, _isMessagingSession, _isReadOnlySession } from './message-loading.js';
 import { _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportCache, _lineageReportInflight, sidebarStateBindings } from './sidebar-store.js';
 import { renderSessionList } from './session-list-render-port.js';

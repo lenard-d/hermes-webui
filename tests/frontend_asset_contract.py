@@ -95,11 +95,17 @@ _BOOT_MODULE_NAMES = (
 )
 
 _SESSION_MODULE_NAMES = (
-    "session-state-store.js",
+    "session-load-state.js",
+    "session-list-coordination.js",
+    "session-profile-scope.js",
+    "session-run-registry.js",
+    "session-display.js",
+    "session-source.js",
     "composer-drafts.js",
     "session-unread.js",
-    "session-runtime.js",
-    "state.js",
+    "session-run-state.js",
+    "session-live-recovery.js",
+    "session-visit.js",
     "lifecycle.js",
     "message-loading.js",
     "message-timeline.js",
@@ -107,7 +113,6 @@ _SESSION_MODULE_NAMES = (
     "sidebar-store.js",
     "sidebar-motion.js",
     "session-navigation.js",
-    "session-display.js",
     "sidebar-cache.js",
     "sidebar-selection.js",
     "sidebar-actions.js",
@@ -261,6 +266,45 @@ const transparentWorklogBindings = _uiTestBindingProxy();
 """
 
 
+def normalize_session_source_for_harnesses(source: str) -> str:
+    """Project native owner state onto legacy local names for Node fixtures."""
+
+    source = re.sub(
+        r"(?m)^export\s+(?=(?:async\s+)?function|const|let|class)",
+        "",
+        source,
+    )
+    source = re.sub(r"\b[A-Za-z][A-Za-z0-9]*Bindings\.", "", source)
+    source = source.replace(
+        "const _loadGeneration=sessionLoadState.begin(sid);",
+        "const _loadGeneration = ++_loadSessionGeneration;\n  _loadingSessionId = sid;",
+    )
+    source = source.replace(
+        "sessionLoadState.isCurrent(sid,_loadGeneration)",
+        "(_loadingSessionId===sid&&_loadSessionGeneration===_loadGeneration)",
+    )
+    source = source.replace(
+        "const _isCurrentLoad=()=>"
+        "(_loadingSessionId===sid&&_loadSessionGeneration===_loadGeneration);",
+        "const _isCurrentLoad = () => _loadingSessionId === sid "
+        "&& _loadSessionGeneration === _loadGeneration;",
+    )
+    owner_aliases = {
+        "sessionLoadState.loadingSessionId": "_loadingSessionId",
+        "sessionLoadState.generation": "_loadSessionGeneration",
+        "sessionLoadState.pendingCarryForwardSnapshot": "_pendingCarryForwardSnapshot",
+        "sessionListCoordination.pendingApplyTimer": "_pendingSessionListApplyTimer",
+        "sessionListCoordination.pendingPayload": "_pendingSessionListPayload",
+        "sessionListCoordination.hasLoadedOnce": "_sessionListHasLoadedOnce",
+        "sessionListCoordination.lastScrollAt": "_sessionListLastScrollAt",
+        "sessionListCoordination.loadError": "_sessionListLoadError",
+        "sessionListCoordination.pointerActive": "_sessionListPointerActive",
+    }
+    for owner_path, fixture_name in owner_aliases.items():
+        source = source.replace(owner_path, fixture_name)
+    return source
+
+
 def ui_module_paths() -> tuple[Path, ...]:
     """Return the semantic UI modules in stable inventory order."""
 
@@ -366,7 +410,7 @@ def family_source(family: str) -> str:
         # Transitional source-extraction harnesses evaluate individual functions
         # outside their module. Present owner-backed mutable bindings under their
         # former local names there; production tests import the real ESM graph.
-        source = re.sub(r"\b[A-Za-z][A-Za-z0-9]*Bindings\.", "", source)
+        source = normalize_session_source_for_harnesses(source)
     return source
 
 

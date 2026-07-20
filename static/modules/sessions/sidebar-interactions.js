@@ -1,4 +1,10 @@
-import { SESSION_ARCHIVE_SWIPE_THRESHOLD_PX, SESSION_DELETE_SWIPE_THRESHOLD_PX, SESSION_LONG_PRESS_DELAY_MS, SESSION_SWIPE_CANCEL_RATIO, _forgetObservedStreamingSession, _isSessionEffectivelyStreaming, _rememberSessionListSource, _sessionStreamingById, sessionStateBindings } from './state.js';
+import { SESSION_ARCHIVE_SWIPE_THRESHOLD_PX, SESSION_DELETE_SWIPE_THRESHOLD_PX, SESSION_LONG_PRESS_DELAY_MS, SESSION_SWIPE_CANCEL_RATIO, sessionListCoordination } from './session-list-coordination.js';
+import { sessionLoadState } from './session-load-state.js';
+import { sessionRunRegistry } from './session-run-registry.js';
+import { _isSessionEffectivelyStreaming, _rememberSessionListSource } from './session-run-state.js';
+import { _forgetObservedStreamingSession } from './session-unread.js';
+
+const _sessionStreamingById=sessionRunRegistry.streamingById;
 import { _newSessionInFlight, newSession } from './lifecycle.js';
 import { _isCliSession, _isMessagingSession, _openSidebarSession, _setActiveProjectFilter } from './message-loading.js';
 import { _archiveSession, _openSessionActionMenu, closeSessionActionMenu } from './sidebar-actions.js';
@@ -145,7 +151,7 @@ function _sessionVirtualSpacer(height, where){
 }
 
 function _scheduleSessionVirtualizedRender(){
-  sessionStateBindings._sessionListLastScrollAt=Date.now();
+  sessionListCoordination.lastScrollAt=Date.now();
   // While a profile-switch skeleton is up, ignore virtual-scroll events: the
   // cached rows are the PREVIOUS profile's, and repainting them here would
   // clobber the skeleton before the new /api/sessions response lands (#4662
@@ -201,14 +207,14 @@ function _ensureSessionVirtualScrollHandler(list){
 }
 
 function _markSessionListPointerDown(){
-  sessionStateBindings._sessionListPointerActive=true;
-  sessionStateBindings._sessionListLastScrollAt=Date.now();
+  sessionListCoordination.pointerActive=true;
+  sessionListCoordination.lastScrollAt=Date.now();
 }
 
 function _markSessionListPointerUp(){
-  sessionStateBindings._sessionListPointerActive=false;
-  sessionStateBindings._sessionListLastScrollAt=Date.now();
-  if(sessionStateBindings._pendingSessionListPayload) _schedulePendingSessionListApply();
+  sessionListCoordination.pointerActive=false;
+  sessionListCoordination.lastScrollAt=Date.now();
+  if(sessionListCoordination.pendingPayload) _schedulePendingSessionListApply();
 }
 
 let _sessionVirtualResyncRaf = 0;
@@ -853,7 +859,7 @@ el.ondblclick=(e)=>{
   if(actions&&actions.contains(e.target)) return;
   if(sidebarStateBindings._sessionSelectMode){e.stopPropagation();if(!readOnly)toggleSessionSelect(s.session_id);return;}
   // Guard: prevent renaming if session is currently being loaded
-  if (sessionStateBindings._loadingSessionId && sessionStateBindings._loadingSessionId !== s.session_id) return;
+  if (sessionLoadState.loadingSessionId && sessionLoadState.loadingSessionId !== s.session_id) return;
   startRename();
 };
 el.addEventListener('touchstart',(e)=>{

@@ -1,4 +1,7 @@
-import { ICONS, SESSION_LIST_FLIP_TIMEOUT_MS, SESSION_REFLOW_TIMEOUT_MS, SESSION_SWIPE_DURATION_MS, SESSION_SWIPE_REFLOW_LEAD_MS, _formatSessionModelWithGateway, _hasUnreadForSession, _isSessionEffectivelyStreaming, _purgeStaleInflightEntries, _rememberRenderedSessionSnapshot, _rememberRenderedStreamingState, sessionStateBindings } from './state.js';
+import { SESSION_LIST_FLIP_TIMEOUT_MS, SESSION_REFLOW_TIMEOUT_MS, SESSION_SWIPE_DURATION_MS, SESSION_SWIPE_REFLOW_LEAD_MS, sessionListCoordination } from './session-list-coordination.js';
+import { SESSION_ICONS as ICONS, _formatSessionModelWithGateway } from './session-display.js';
+import { _isSessionEffectivelyStreaming, _purgeStaleInflightEntries, _rememberRenderedSessionSnapshot, _rememberRenderedStreamingState } from './session-run-state.js';
+import { _hasUnreadForSession } from './session-unread.js';
 import { _getChannelLabel, _isCliSession, _isMessagingSession, _isReadOnlySession, _openSidebarSession, _sessionArchivePagingFilterActive, _sessionSourceLabel, _sessionSourceTabCount, _setActiveProjectFilter, _setSessionSourceFilter, _sourceKeyForSession } from './message-loading.js';
 import { _buildSessionRenameStarter, _openSessionActionMenu, closeSessionActionMenu } from './sidebar-actions.js';
 import { _captureSessionReflowPositions, _makeSessionSwipeAffordance, _playSessionRowsReflowFromPositions, _sessionPrefersReducedMotion } from './sidebar-motion.js';
@@ -547,7 +550,7 @@ function renderSessionListFromCache(){
   list.appendChild(batchBar);
   if(sidebarStateBindings._sessionSelectMode&&_selectedSessions.size>0){batchBar.style.display='flex';_renderBatchActionBar();}
   else{batchBar.style.display='none';}
-  if(sessionStateBindings._sessionListLoadError){
+  if(sessionListCoordination.loadError){
     const note=_renderSessionListLoadErrorNote();
     if(note) list.appendChild(note);
   }

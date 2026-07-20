@@ -1,4 +1,7 @@
-import { _clearSessionCompletionUnread, _clearSessionViewedCount, _forgetObservedStreamingSession, _isSessionActivelyViewedForList, _profileMatchesActiveProfile, _setSessionViewedCount, sessionStateBindings } from './state.js';
+import { sessionLoadState } from './session-load-state.js';
+import { _profileMatchesActiveProfile } from './session-profile-scope.js';
+import { _getChannelLabel, _isCliSession, _isExternalSession, _isMessagingSession, _sourceKeyForSession } from './session-source.js';
+import { _clearSessionCompletionUnread, _clearSessionViewedCount, _forgetObservedStreamingSession, _isSessionActivelyViewedForList, _setSessionViewedCount } from './session-unread.js';
 import { loadSession } from './lifecycle.js';
 import { messageTimelineBindings } from './message-timeline.js';
 import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, _selectedSessions, sidebarStateBindings } from './sidebar-store.js';
@@ -9,49 +12,6 @@ const _HANDOFF_THRESHOLD = 10;  // conversation rounds
 const _HANDOFF_STORAGE_PREFIX = 'handoff:';
 const _HANDOFF_SUFFIX_DISMISSED_AT = 'dismissed_at';
 const _HANDOFF_SUFFIX_SUMMARY_HANDLED_AT = 'summary_handled_at';
-const _MESSAGING_RAW_SOURCES = new Set(['weixin', 'telegram', 'discord', 'slack', 'email', 'wecom', 'wecom_callback']);
-const _MESSAGING_SOURCE_LABELS = {
-  weixin: 'WeChat',
-  telegram: 'Telegram',
-  discord: 'Discord',
-  slack: 'Slack',
-  email: 'Email',
-  wecom: 'WeCom',
-  wecom_callback: 'WeCom Callback',
-};
-
-function _isMessagingSession(session) {
-  if (!session) return false;
-  // session_source is set by PR #1294 source normalization
-  if (session.session_source === 'messaging') return true;
-  // Fallback: check raw_source directly
-  const raw = (session.raw_source || session.source_tag || session.source || '').toLowerCase();
-  return _MESSAGING_RAW_SOURCES.has(raw);
-}
-
-/**
- * Returns true when a session originates from an external channel (CLI bridge,
- * Discord, Telegram, Slack, etc.) and therefore needs a server-side import
- * before the WebUI can read or send messages into it.
- * Covers both legacy CLI sessions and messaging-source sessions.
- */
-function _isWebUiSourceSession(session) {
-  if (!session) return false;
-  const source = (
-    session.session_source
-    || session.raw_source
-    || session.source_tag
-    || session.source
-    || ''
-  ).toLowerCase();
-  return source === 'webui';
-}
-
-function _isExternalSession(session) {
-  if (!session || _isWebUiSourceSession(session)) return false;
-  return !!(session.is_cli_session || _isMessagingSession(session));
-}
-
 function _externalImportPayload(session) {
   const payload = {session_id: session.session_id};
   if (sidebarStateBindings._showAllProfiles && session && typeof session.profile === 'string' && session.profile) {
@@ -113,28 +73,6 @@ function _isBranchableReadOnlySession(session) {
     session && session.source,
   ].map(v => String(v || '').trim().toLowerCase());
   return sources.includes('cron');
-}
-
-function _sourceKeyForSession(session) {
-  return (session && (session.raw_source || session.source_tag || session.source || '') || '').toLowerCase();
-}
-
-function _isCliSession(session) {
-  if (!session) return false;
-  // session_source is set by upstream normalization for CLI sessions as 'cli'
-  if (session.session_source === 'cli') return true;
-  // Legacy payloads often use raw/source tags to convey the source.
-  const raw = (
-    session.raw_source
-    || session.source_tag
-    || session.source
-    || session.source_label
-    || ''
-  ).toLowerCase();
-  if (raw === 'cli' || raw === 'tui' || raw === 'acp') return true;
-  // If messaging-like, don't classify as legacy CLI even when is_cli_session is true.
-  if (_isMessagingSession(session)) return false;
-  return session.is_cli_session === true;
 }
 
 function _sessionSourceLabel(filter, count) {
@@ -323,14 +261,6 @@ function _syncHandoffDockSpace(open) {
   };
   requestAnimationFrame(measure);
   setTimeout(measure, 360);
-}
-
-function _getChannelLabel(session) {
-  if (!session) return '';
-  // Use source_label from PR #1294 if available
-  if (session.source_label) return session.source_label;
-  const raw = (session.raw_source || session.source_tag || session.source || '').toLowerCase();
-  return _MESSAGING_SOURCE_LABELS[raw] || raw || '';
 }
 
 async function _checkAndShowHandoffHint(sid) {
@@ -724,7 +654,7 @@ async function _ensureMessagesLoaded(sid, opts) {
   // S.messages in a single frame.
   opts = opts || {};
   const _loadGeneration = Number.isFinite(opts.loadGeneration) ? Number(opts.loadGeneration) : null;
-  const _ownsLoad = () => sessionStateBindings._loadingSessionId === sid && (_loadGeneration === null || sessionStateBindings._loadSessionGeneration === _loadGeneration);
+  const _ownsLoad = () => sessionLoadState.loadingSessionId === sid && (_loadGeneration === null || sessionLoadState.generation === _loadGeneration);
   if (!_ownsLoad()) return;
   // Already have messages? (e.g. from INFLIGHT restore path, already set)
   if (!opts.force && S.messages && S.messages.length > 0 && S.messages[0] && S.messages[0].role) {
@@ -781,11 +711,11 @@ async function _ensureMessagesLoaded(sid, opts) {
     // #3306: Prefer the pre-clear snapshot stashed by loadSession() on a
     // force-reload of the active session; S.messages was reset to [] there
     // and would otherwise yield an empty carry-forward.
-    const _prev = (Array.isArray(sessionStateBindings._pendingCarryForwardSnapshot) && sessionStateBindings._pendingCarryForwardSnapshot.length)
-      ? sessionStateBindings._pendingCarryForwardSnapshot
+    const _prev = (Array.isArray(sessionLoadState.pendingCarryForwardSnapshot) && sessionLoadState.pendingCarryForwardSnapshot.length)
+      ? sessionLoadState.pendingCarryForwardSnapshot
       : (S.messages || []);
     msgs=window._carryForwardEphemeralTurnFields(_prev, msgs);
-    sessionStateBindings._pendingCarryForwardSnapshot = null;
+    sessionLoadState.pendingCarryForwardSnapshot = null;
   }
   if(typeof clearVisibleMessageRowCache==='function') clearVisibleMessageRowCache();
   S.messages = msgs;

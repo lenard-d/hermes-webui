@@ -1,10 +1,11 @@
-import { _SESSION_LIST_BOOT_TIMEOUT_MS, sessionStateStoreBindings as sessionStateBindings } from './session-state-store.js';
+import { _SESSION_LIST_BOOT_TIMEOUT_MS, sessionListCoordination } from './session-list-coordination.js';
 import { _clearSessionSourceTabCounts, _requestedSessionSidebarSource, _sessionListExcludeHiddenEnabled, _sessionListQueryString } from './message-loading.js';
 import { sessionDiscoveryBindings } from './session-discovery.js';
 import { _applySessionListPayload, _isSessionListUserInteracting, _schedulePendingSessionListApply } from './session-list-reconciliation.js';
 import { sessionListViewBindings } from './session-list-skeleton.js';
 import { sidebarStateBindings } from './sidebar-store.js';
 import { registerSessionListRenderer } from './session-list-render-port.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 let _profileSwitchListEmbargo = false;
 function _setProfileSwitchListEmbargo(on){ _profileSwitchListEmbargo = !!on; }
@@ -25,8 +26,8 @@ function _showSessionListLoadError(error){
   // If this error is landing while a retry was in flight, flag the fresh Retry
   // button (rebuilt by the repaint) to reclaim keyboard focus so keyboard users
   // aren't dropped to <body> on a failed retry.
-  const wasRetrying=Boolean(sessionStateBindings._sessionListLoadError&&sessionStateBindings._sessionListLoadError.retrying);
-  sessionStateBindings._sessionListLoadError={
+  const wasRetrying=Boolean(sessionListCoordination.loadError&&sessionListCoordination.loadError.retrying);
+  sessionListCoordination.loadError={
     message:isTimeout
       ? 'Session list is taking longer than expected.'
       : 'Could not load conversations.',
@@ -38,7 +39,7 @@ function _showSessionListLoadError(error){
 }
 
 function _renderSessionListLoadErrorNote(){
-  if(!sessionStateBindings._sessionListLoadError) return null;
+  if(!sessionListCoordination.loadError) return null;
   const note=document.createElement('div');
   note.className='session-list-error session-empty-note';
   // a11y: announce load-error / retry-failure transitions to screen readers
@@ -46,18 +47,18 @@ function _renderSessionListLoadErrorNote(){
   note.setAttribute('role','status');
   note.setAttribute('aria-live','polite');
   const title=document.createElement('div');
-  title.textContent=sessionStateBindings._sessionListLoadError.message||'Could not load conversations.';
+  title.textContent=sessionListCoordination.loadError.message||'Could not load conversations.';
   note.appendChild(title);
-  if(sessionStateBindings._sessionListLoadError.detail){
+  if(sessionListCoordination.loadError.detail){
     const detail=document.createElement('div');
     detail.className='session-list-error-detail';
-    detail.textContent=sessionStateBindings._sessionListLoadError.detail;
+    detail.textContent=sessionListCoordination.loadError.detail;
     note.appendChild(detail);
   }
   const retry=document.createElement('button');
   retry.type='button';
   retry.className='session-list-error-retry';
-  const retrying=Boolean(sessionStateBindings._sessionListLoadError.retrying);
+  const retrying=Boolean(sessionListCoordination.loadError.retrying);
   // Use aria-disabled (not the disabled property) for the pending state so the
   // button can keep keyboard focus across the sidebar rebuild; the click/keydown
   // guards below make it inert while busy.
@@ -70,13 +71,13 @@ function _renderSessionListLoadErrorNote(){
   const bindRetry=()=>{
     retry.onclick=(e)=>{
       e.stopPropagation();
-      if(!sessionStateBindings._sessionListLoadError||sessionStateBindings._sessionListLoadError.retrying) return;
+      if(!sessionListCoordination.loadError||sessionListCoordination.loadError.retrying) return;
       if(retry.getAttribute('aria-disabled')==='true') return;
       setPending();
-      sessionStateBindings._sessionListLoadError={...sessionStateBindings._sessionListLoadError,retrying:true};
+      sessionListCoordination.loadError={...sessionListCoordination.loadError,retrying:true};
       renderSessionListFromCache();
       void renderSessionList({deferWhileInteracting:false}).finally(()=>{
-        if(!retry.parentNode||(sessionStateBindings._sessionListLoadError&&sessionStateBindings._sessionListLoadError.retrying)) return;
+        if(!retry.parentNode||(sessionListCoordination.loadError&&sessionListCoordination.loadError.retrying)) return;
         retry.textContent='Retry';
         retry.removeAttribute('aria-disabled');
         retry.removeAttribute('aria-busy');
@@ -92,8 +93,8 @@ function _renderSessionListLoadErrorNote(){
     bindRetry();
     // On a failure repaint that replaces a pending button, restore keyboard
     // focus to the fresh Retry button so keyboard users aren't dropped to body.
-    if(sessionStateBindings._sessionListLoadError._retryFailedFocus){
-      delete sessionStateBindings._sessionListLoadError._retryFailedFocus;
+    if(sessionListCoordination.loadError._retryFailedFocus){
+      delete sessionListCoordination.loadError._retryFailedFocus;
       const _refocus=()=>{ try{ if(typeof retry.focus==='function') retry.focus(); }catch(_e){} };
       if(typeof requestAnimationFrame==='function') requestAnimationFrame(_refocus); else _refocus();
     }
@@ -104,7 +105,7 @@ function _renderSessionListLoadErrorNote(){
 
 async function _runRenderSessionListRefresh(opts, _gen){
   const deferWhileInteracting=Boolean(opts&&opts.deferWhileInteracting);
-  if(!deferWhileInteracting) sessionStateBindings._pendingSessionListPayload=null;
+  if(!deferWhileInteracting) sessionListCoordination.pendingPayload=null;
   // Capture profile-switch unread generation BEFORE the await so a switch
   // mid-flight (which increments _cronPollGeneration) invalidates completion
   // marking for this response even if list gen checks already passed.
@@ -123,7 +124,7 @@ async function _runRenderSessionListRefresh(opts, _gen){
       retries:1,
       retryStatuses:[502,503,504],
     };
-    if(!sessionStateBindings._sessionListHasLoadedOnce){
+    if(!sessionListCoordination.hasLoadedOnce){
       sessionRequestOpts.timeoutMs=_SESSION_LIST_BOOT_TIMEOUT_MS;
       sessionRequestOpts.retryTimeouts=true;
     }
@@ -137,7 +138,7 @@ async function _runRenderSessionListRefresh(opts, _gen){
     // renderSessionList(), so that render's payload is the first allowed to paint.
     if (_profileSwitchListEmbargo) return;
     if(deferWhileInteracting&&_isSessionListUserInteracting()){
-      sessionStateBindings._pendingSessionListPayload={gen:_gen,sessData,projData,unreadGen};
+      sessionListCoordination.pendingPayload={gen:_gen,sessData,projData,unreadGen};
       _schedulePendingSessionListApply();
       return;
     }

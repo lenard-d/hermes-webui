@@ -1,7 +1,7 @@
-import { _sessionEventProfilesMatch } from './session-state-store.js';
+import { _sessionEventProfilesMatch } from './session-profile-scope.js';
 import { _externalImportPayload, _isCliImportRefreshPrefixMatch, _isCliSession, _isExternalSession, _isMessagingSession } from './message-loading.js';
 import { sidebarStateBindings } from './sidebar-store.js';
-import { renderSessionList } from './session-list-loader.js';
+import { renderSessionList } from './session-list-render-port.js';
 import { _mergeSessionListRefreshOptions, refreshSessionList } from './session-list-refresh.js';
 
 let _gatewaySSE = null;

@@ -1,7 +1,11 @@
-import { _sourceKeyForSession } from './message-loading.js';
-import { _profileMatchesActiveProfile, _sessionListSnapshotById, _sessionStreamingById, sessionStateStoreBindings } from './session-state-store.js';
+import { _sourceKeyForSession } from './session-source.js';
+import { sessionLoadState } from './session-load-state.js';
+import { _profileMatchesActiveProfile } from './session-profile-scope.js';
+import { sessionRunRegistry } from './session-run-registry.js';
 import { sidebarStateBindings } from './sidebar-store.js';
-import { renderSessionListFromCache } from './sidebar-render-port.js';
+
+const _sessionListSnapshotById=sessionRunRegistry.snapshotById;
+const _sessionStreamingById=sessionRunRegistry.streamingById;
 
 const SESSION_VIEWED_COUNTS_KEY = 'hermes-session-viewed-counts';
 const SESSION_COMPLETION_UNREAD_KEY = 'hermes-session-completion-unread';
@@ -134,11 +138,9 @@ function _markSessionCompletionUnreadIfBackground(sid, messageCount = null, meta
   }
   if (_isSessionActivelyViewedForList(sid)) {
     _setSessionViewedCount(sid, count);
-    if (typeof renderSessionListFromCache === 'function') renderSessionListFromCache();
     return false;
   }
   _markSessionCompletionUnread(sid, count, meta);
-  if (typeof renderSessionListFromCache === 'function') renderSessionListFromCache();
   return true;
 }
 
@@ -272,7 +274,6 @@ function _clearCronSessionCompletionUnreadForInactiveProfiles(activeProfile) {
   }
   if (!changed) return false;
   _saveSessionCompletionUnread();
-  if (typeof renderSessionListFromCache === 'function') renderSessionListFromCache();
   return true;
 }
 
@@ -339,50 +340,6 @@ function _hasUnreadForSession(s) {
   return s.message_count > Number(counts[s.session_id] || 0);
 }
 
-// Keep the sidebar polling snapshot current for a just-visited session so a
-// deferred /api/sessions list refresh landing across the async message-load gap
-// cannot treat the unchanged, already-open session as a fresh background
-// completion and re-flag a stale unread dot (#4946).
-function _syncSessionListSnapshotOnVisit(sid, messageCount, lastMessageAt) {
-  if (!sid) return;
-  const count = Number(messageCount || 0);
-  const last = Number(lastMessageAt || 0);
-  _sessionListSnapshotById.set(sid, {message_count: count, last_message_at: last});
-  // #5917 gate finding: derive the visited session's streaming state from its
-  // OWN (target-owned) metadata, NOT the global S.busy / S.activeStreamId
-  // flags. When switching from a BUSY session A to an IDLE session B, those
-  // globals can still belong to A at this point in the load, so reading them
-  // here would wrongly record idle B as streaming — a later hidden-tab poll
-  // would then see a streaming->stopped transition and manufacture a phantom
-  // unread completion for B. Only the session object's own is_streaming /
-  // active_stream_id / pending-message fields describe THIS session.
-  const target = (S.session && S.session.session_id === sid) ? S.session : null;
-  const isStreaming = Boolean(
-    target && (
-      target.is_streaming ||
-      target.active_stream_id ||
-      target.pending_user_message ||
-      target.has_pending_user_message
-    )
-  );
-  _sessionStreamingById.set(sid, isStreaming);
-  if (!isStreaming) _forgetObservedStreamingSession(sid);
-}
-
-// Acknowledge that the user actually visited/opened `sid`: clear its viewed
-// count (which also clears any stale completion-unread marker, #3020), sync the
-// polling snapshot so a deferred list poll cannot re-flag it, then repaint from
-// cache. Repainting via renderSessionListFromCache() recomputes each row's
-// aggregated unread state (own + children) authoritatively, so a lineage
-// PARENT keeps its own / other children's unread dot instead of being stripped
-// by ad-hoc DOM surgery (Greptile concern (b) on #4946).
-function _acknowledgeSessionVisit(sid, messageCount = 0, lastMessageAt = 0) {
-  if (!sid) return;
-  _setSessionViewedCount(sid, messageCount);
-  _syncSessionListSnapshotOnVisit(sid, messageCount, lastMessageAt);
-  if (typeof renderSessionListFromCache === 'function') renderSessionListFromCache();
-}
-
 // Does the session currently carry any unread state that a visit should clear?
 // Used by the same-session no-op guard so re-selecting the already-open session
 // still clears a stale dot before short-circuiting.
@@ -395,7 +352,7 @@ function _sessionVisitHasUnreadState(sid) {
 
 function _isSessionActivelyViewedForList(sid) {
   if (!sid || !S.session || S.session.session_id !== sid) return false;
-  if (typeof sessionStateStoreBindings._loadingSessionId !== 'undefined' && sessionStateStoreBindings._loadingSessionId && sessionStateStoreBindings._loadingSessionId !== sid) return false;
+  if (sessionLoadState.loadingSessionId && sessionLoadState.loadingSessionId !== sid) return false;
   if (typeof document !== 'undefined' && document.visibilityState && document.visibilityState !== 'visible') return false;
   if (typeof document !== 'undefined' && typeof document.hasFocus === 'function' && !document.hasFocus()) return false;
   return true;
@@ -403,7 +360,6 @@ function _isSessionActivelyViewedForList(sid) {
 
 
 export const sessionUnread=Object.freeze({
-  acknowledgeVisit:_acknowledgeSessionVisit,
   hasUnread:_hasUnreadForSession,
   markCompletion:_markSessionCompletionUnread,
   markBackgroundCompletion:_markSessionCompletionUnreadIfBackground,
@@ -411,7 +367,6 @@ export const sessionUnread=Object.freeze({
 });
 
 export {
-  _acknowledgeSessionVisit,
   _clearCronSessionCompletionUnreadForInactiveProfiles,
   _clearSessionCompletionUnread,
   _clearSessionViewedCount,

@@ -23,8 +23,3 @@ export * from './session-list-reconciliation.js';
 export * from './session-list-refresh.js';
 export * from './session-list-skeleton.js';
 export * from './sidebar-session-events.js';
-
-export const sessionListBindings=Object.freeze({
-  get _sessionListSkeletonActive(){ return sessionListViewBindings._sessionListSkeletonActive; },
-  set _sessionListSkeletonActive(value){ sessionListViewBindings._sessionListSkeletonActive=value; },
-});

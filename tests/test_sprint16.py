@@ -717,7 +717,7 @@ def test_inline_md_used_in_blockquote_handler(cleanup_test_sessions):
 def test_sessions_js_has_svg_icons(cleanup_test_sessions):
     """sessions.js must define ICONS object with SVG strings for sidebar buttons."""
     code = family_source("sessions")
-    assert "const ICONS=" in code or "const ICONS =" in code, "ICONS constant not found"
+    assert "const SESSION_ICONS=" in code or "const SESSION_ICONS =" in code, "session icons owner not found"
     for icon in ["pin", "folder", "archive", "trash", "dup"]:
         assert icon + ":" in code or f"'{icon}'" in code, f"ICONS.{icon} not found"
     assert "<svg" in code, "SVG content not found in ICONS"

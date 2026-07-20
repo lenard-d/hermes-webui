@@ -1,4 +1,4 @@
-import { sessionStateStoreBindings as sessionStateBindings } from './session-state-store.js';
+import { sessionListCoordination } from './session-list-coordination.js';
 import { sidebarStateBindings } from './sidebar-store.js';
 
 // Invalidate every in-flight or queued list projection before a profile switch
@@ -6,13 +6,13 @@ import { sidebarStateBindings } from './sidebar-store.js';
 // fetch completions, deferred applies, and retry affordances.
 function _invalidateSessionListRenders(){
   sidebarStateBindings._renderSessionListGen++;
-  sessionStateBindings._pendingSessionListPayload = null;
+  sessionListCoordination.pendingPayload = null;
   sidebarStateBindings._renderSessionListQueuedRequest = null;
-  const loadError=sessionStateBindings._sessionListLoadError;
+  const loadError=sessionListCoordination.loadError;
   if(loadError && (loadError.retrying || loadError._retryFailedFocus)){
-    sessionStateBindings._sessionListLoadError = {...loadError};
-    delete sessionStateBindings._sessionListLoadError.retrying;
-    delete sessionStateBindings._sessionListLoadError._retryFailedFocus;
+    sessionListCoordination.loadError = {...loadError};
+    delete sessionListCoordination.loadError.retrying;
+    delete sessionListCoordination.loadError._retryFailedFocus;
   }
 }
 

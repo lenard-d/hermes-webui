@@ -828,20 +828,24 @@ Most application assets remain classic scripts, while the UI family is loaded as
 native ES modules. Classic browser order and selected compatibility globals remain
 part of the contract, while family namespaces
 such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
-the semantic owners. The sessions family is an exception: internal files are
-independently parseable native modules and `state.js` is a compatibility facade.
-`composer-drafts.js` owns draft persistence and restore suppression;
-`session-unread.js` owns viewed/completion markers; `session-runtime.js` owns
-sidebar stream reconciliation and journal recovery; and `session-state-store.js`
-owns their shared mutable identities and load-generation bindings. The session
-sidebar follows the same ownership model: `sidebar-store.js` is the sole mutable
-list-state owner; navigation, selection, motion, cache, row actions, and stream
-events live in dedicated modules; and session-list loading, reconciliation,
-refresh, and skeleton rendering have separate lifecycle owners. `sidebar-state.js`
-and `session-list.js` are stable public facades only. Small render ports keep
-state and action owners independent of concrete DOM renderers without creating
-reverse imports. A domain stays
-intact when splitting it would cross a
+the semantic owners. Session internals are independently parseable native modules
+and import owners directly; only `modules/sessions/index.js` publishes the legacy
+global boundary. `composer-drafts.js` owns draft persistence and restore
+suppression, `session-load-state.js` owns load generations and carry-forward state,
+and `session-list-coordination.js` owns deferred list application. Runtime state is
+split between `session-run-registry.js`, `session-run-state.js`, and the durable
+projection/recovery owner `session-live-recovery.js`. `session-unread.js` owns
+persisted viewed/completion markers, while `session-visit.js` commits a visit across
+unread, polling snapshot, and sidebar projection as one transaction. Source and
+profile identity normalization live in `session-source.js` and
+`session-profile-scope.js`. The sidebar follows the same ownership model:
+`sidebar-store.js` is the sole mutable list-state owner; navigation, selection,
+motion, cache, row actions, and stream events live in dedicated modules; and
+session-list loading, reconciliation, refresh, and skeleton rendering have
+separate lifecycle owners. `sidebar-state.js` and `session-list.js` are stable
+public facades only. Small render ports keep state and action owners independent
+of concrete DOM renderers without creating reverse imports. A domain stays intact
+when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
 `config/model_catalog.py` and
 `modules/ui/renderer.js` are deliberately larger than the line-count

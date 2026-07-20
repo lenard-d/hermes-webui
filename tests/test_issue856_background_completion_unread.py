@@ -149,7 +149,7 @@ def test_polling_transition_marks_completion_unread_without_sse_done():
     assert apply_idx != -1, "_applySessionListPayload not found"
     apply_block = SESSIONS_JS[apply_idx:render_idx]
 
-    assert "const _sessionStreamingById = new Map();" in SESSIONS_JS
+    assert "streamingById:new Map()" in SESSIONS_JS
     assert "const wasStreaming = _sessionStreamingById.get(sid);" in transition_block
     assert "const isStreaming = _isSessionEffectivelyStreaming(s);" in transition_block
     assert "s.is_streaming" in effective_block
@@ -357,7 +357,7 @@ def test_polling_transition_marks_completion_when_long_running_stream_snapshot_a
     assert render_idx != -1, "_renderOneSession not found"
     render_block = SESSIONS_JS[render_idx:SESSIONS_JS.find("const hasUnread=", render_idx)]
 
-    assert "const _sessionListSnapshotById = new Map();" in SESSIONS_JS
+    assert "snapshotById:new Map()" in SESSIONS_JS
     assert "SESSION_OBSERVED_STREAMING_KEY = 'hermes-session-observed-streaming'" in SESSIONS_JS
     assert "function _rememberObservedStreamingSession(" in SESSIONS_JS
     assert "function _forgetObservedStreamingSession(" in SESSIONS_JS

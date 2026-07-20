@@ -1,8 +1,9 @@
-import { sessionStateStoreBindings as sessionStateBindings } from './session-state-store.js';
+import { sessionLoadState } from './session-load-state.js';
 import { loadSession } from './lifecycle.js';
 import { _isExternalSession } from './message-loading.js';
 import { renderSessionListFromCache } from './sidebar-render-port.js';
-import { renderSessionList } from './session-list-loader.js';
+import { renderSessionList } from './session-list-render-port.js';
+import { _scheduleSessionEventsRefresh } from './sidebar-session-events.js';
 
 const _streamingPollMs = 30000;
 const _sessionTimeRefreshMs = 60000;
@@ -89,6 +90,27 @@ function _flushDeferredActiveSessionExternalRefresh(){
   if(!reason) return;
   _deferredActiveSessionExternalRefreshReason = '';
   void refreshActiveSessionIfExternallyUpdated(reason);
+}
+
+function _scheduleActiveSessionIdleReload(sid){
+  if(!sid) return;
+  setTimeout(async () => {
+    if(!S||!S.session||S.session.session_id!==sid) return;
+    if(sessionLoadState.loadingSessionId) return;
+    if(S.busy || S.activeStreamId) return;
+    if(typeof _isMessageReaderUnpinned==='function'&&_isMessageReaderUnpinned()){
+      _deferActiveSessionExternalRefresh('idle-reconcile');
+      return;
+    }
+    try{
+      const outcome=await refreshActiveSessionIfExternallyUpdated('idle-reconcile',{
+        ignoreStreamJustFinished:true,
+      });
+      if(outcome==='failed'){
+        await loadSession(sid,{force:true,externalRefreshReason:'idle-reconcile'});
+      }
+    }catch(_){}
+  },0);
 }
 
 // Reconcile the active session against server-side metadata. Returns a status
@@ -182,7 +204,7 @@ async function refreshActiveSessionIfExternallyUpdated(reason){
       // is in flight — avoids overwriting _loadingSessionId and silently
       // cancelling an in-progress session switch. All four call paths
       // (idle-reconcile, poll, visibility, focus) funnel through here.
-      if(typeof sessionStateBindings._loadingSessionId !== 'undefined' && sessionStateBindings._loadingSessionId && sessionStateBindings._loadingSessionId !== sid) return 'skipped';
+      if(sessionLoadState.loadingSessionId && sessionLoadState.loadingSessionId !== sid) return 'skipped';
       await loadSession(sid, {force:true, externalRefreshReason:reason||'poll', keepStaleUntilLoaded:_keepStaleUntilLoaded});
       if(typeof renderSessionList==='function') void renderSessionList();
       return 'reloaded';
@@ -245,4 +267,4 @@ async function refreshSessionList(reason='manual', opts={}){
 
 if(typeof window!=='undefined') window.refreshSessionList = refreshSessionList;
 
-export { _clearDeferredActiveSessionExternalRefresh, _deferActiveSessionExternalRefresh, _flushDeferredActiveSessionExternalRefresh, _mergeSessionListRefreshOptions, ensureActiveSessionExternalRefreshPoll, ensureSessionTimeRefreshPoll, refreshActiveSessionIfExternallyUpdated, refreshSessionList, startStreamingPoll, stopStreamingPoll };
+export { _clearDeferredActiveSessionExternalRefresh, _deferActiveSessionExternalRefresh, _flushDeferredActiveSessionExternalRefresh, _mergeSessionListRefreshOptions, _scheduleActiveSessionIdleReload, ensureActiveSessionExternalRefreshPoll, ensureSessionTimeRefreshPoll, refreshActiveSessionIfExternallyUpdated, refreshSessionList, startStreamingPoll, stopStreamingPoll };

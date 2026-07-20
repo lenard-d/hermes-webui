@@ -17,9 +17,16 @@ def test_sessions_use_a_semantic_module_inventory_without_runtime_manifests():
     assert len(modules) == len(set(modules))
     assert {
         "composer-drafts.js",
-        "session-runtime.js",
-        "session-state-store.js",
+        "session-display.js",
+        "session-list-coordination.js",
+        "session-live-recovery.js",
+        "session-load-state.js",
+        "session-profile-scope.js",
+        "session-run-registry.js",
+        "session-run-state.js",
+        "session-source.js",
         "session-unread.js",
+        "session-visit.js",
     } <= {path.name for path in modules}
     assert modules[-1].name == "index.js"
     assert not (SESSIONS_PARTS_DIR / "manifest.json").exists()
@@ -50,7 +57,9 @@ def test_sessions_modules_are_individually_parseable_and_entrypoint_typechecks()
 
 
 def test_sessions_modules_publish_semantic_interfaces_and_one_legacy_seam():
-    source = read_sessions_source()
+    source = "".join(
+        path.read_text(encoding="utf-8") for path in sessions_part_paths()
+    )
 
     ordered_sentinels = [
         "async function newSession(",
@@ -71,6 +80,7 @@ def test_sessions_modules_publish_semantic_interfaces_and_one_legacy_seam():
         "sessionState",
         "sessionRuntime",
         "sessionUnread",
+        "sessionVisits",
         "sessionLifecycle",
         "sessionMessages",
         "messageTimeline",

@@ -161,9 +161,9 @@ def test_apperror_path_calls_render_session_list():
     messages_js = family_source("messages")
     apperror_idx = messages_js.find("source.addEventListener('apperror'")
     assert apperror_idx != -1, "apperror handler not found in messages.js"
-    warning_idx = messages_js.find("source.addEventListener('warning'", apperror_idx)
-    assert warning_idx != -1, "warning handler not found after apperror handler"
-    apperror_block = messages_js[apperror_idx:warning_idx]
+    next_handler_idx = messages_js.find("source.addEventListener('error'", apperror_idx)
+    assert next_handler_idx != -1, "network error handler not found after apperror handler"
+    apperror_block = messages_js[apperror_idx:next_handler_idx]
     assert "renderSessionList()" in apperror_block, (
         "apperror handler must call renderSessionList() so the streaming indicator "
         "clears immediately on server errors, not after the polling fallback delay"

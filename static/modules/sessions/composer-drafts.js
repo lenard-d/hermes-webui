@@ -1,5 +1,5 @@
-import { loadSession } from './lifecycle.js';
-import { _profileMatchesActiveProfile, sessionStateStoreBindings } from './session-state-store.js';
+import { sessionLoadState } from './session-load-state.js';
+import { _profileMatchesActiveProfile } from './session-profile-scope.js';
 
 // ── Composer draft persistence ────────────────────────────────────────────────
 
@@ -146,7 +146,8 @@ function _clearRememberedNewChatDraftSession(sid) {
   } catch (_) {}
 }
 
-async function _restoreRememberedNewChatDraftSession() {
+async function _restoreRememberedNewChatDraftSession(loadSession) {
+  if(typeof loadSession!=='function') return false;
   let sid = '';
   try { sid = localStorage.getItem(NEW_CHAT_DRAFT_SESSION_KEY) || ''; } catch (_) { sid = ''; }
   if (!sid || (S.session && S.session.session_id === sid)) return false;
@@ -240,8 +241,8 @@ function _restoreComposerDraft(draft, targetSid, opts={}) {
   const ta = $('msg');
   if (!ta) return;
   // targetSid is the session that was requested — if it no longer matches
-  // sessionStateStoreBindings._loadingSessionId, a newer switch already began.
-  if (targetSid && sessionStateStoreBindings._loadingSessionId !== null && sessionStateStoreBindings._loadingSessionId !== targetSid) return;
+  // the load owner's active target, a newer switch already began.
+  if (targetSid && sessionLoadState.loadingSessionId !== null && sessionLoadState.loadingSessionId !== targetSid) return;
   const text = (draft && typeof draft.text === 'string') ? draft.text : '';
   const files = (draft && Array.isArray(draft.files)) ? draft.files : [];
   const current = ta.value || '';
