@@ -147,7 +147,7 @@ def test_native_module_family_imports_are_explicit_and_precached(family: str):
     entrypoint = family_entrypoint_path(family)
     assert entrypoint is not None
     family_dir = entrypoint.parent.resolve()
-    graph = {path for path in _module_graph(entrypoint) if path.parent == family_dir}
+    graph = {path for path in _module_graph(entrypoint) if family_dir in path.parents}
 
     assert graph == {path.resolve() for path in paths}
 
