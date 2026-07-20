@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-MESSAGES_JS = family_source("messages")
+MESSAGES_JS = (REPO / "static" / "modules" / "messages" / "terminal-events.js").read_text(encoding="utf-8")
 
 
 def _compact(text: str) -> str:

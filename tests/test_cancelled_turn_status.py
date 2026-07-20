@@ -206,9 +206,9 @@ class TestCancelledTurnPersistenceGuards:
         assert "return" in block
 
     def test_frontend_has_cancelled_and_interrupted_labels_for_apperror_fallbacks(self):
-        src = _read("static/modules/messages/stream.js")
+        src = _read("static/modules/messages/terminal-events.js")
         start = src.find("source.addEventListener('apperror'")
-        end = src.find("source.addEventListener('error'", start)
+        end = src.find("source.addEventListener('cancel'", start)
         assert start != -1 and end != -1, "apperror handler not found"
         block = src[start:end]
 
@@ -221,9 +221,9 @@ class TestCancelledTurnPersistenceGuards:
         assert "Interruption details" in block
 
     def test_frontend_cancel_prefers_embedded_session_payload(self):
-        src = family_source("messages")
+        src = _read("static/modules/messages/terminal-events.js")
         start = src.find("source.addEventListener('cancel'")
-        end = src.find("for(const _runJournalEventName", start)
+        end = src.find("\n  }\n\n  return Object.freeze({attach});", start)
         assert start != -1 and end != -1, "cancel handler not found"
         block = src[start:end]
 

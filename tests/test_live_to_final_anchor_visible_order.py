@@ -341,7 +341,7 @@ def test_already_streamed_interim_does_not_duplicate_token_prose_in_anchor():
 
     already_idx = interim.index("if(alreadyStreamed)")
     return_idx = interim.index("return;", already_idx)
-    apply_idx = interim.index("_applyToAnchor('interim_assistant'", return_idx)
+    apply_idx = interim.index("anchor.apply('interim_assistant'", return_idx)
     assert already_idx < return_idx < apply_idx
 
 
@@ -646,7 +646,7 @@ def test_live_anchor_scene_removes_legacy_interim_collapse_toggle():
     assert cleanup_idx < hide_idx < group_idx
 
     guard_idx = interim.index("data-anchor-scene-live-owner")
-    remove_idx = interim.index("blocks.querySelectorAll('.interim-collapse-toggle').forEach(el=>el.remove())")
+    remove_idx = interim.index("blocks.querySelectorAll('.interim-collapse-toggle').forEach(element=>element.remove())")
     legacy_create_idx = interim.index("let toggle=blocks.querySelector('.interim-collapse-toggle')")
     assert guard_idx < remove_idx < legacy_create_idx
 
@@ -1659,4 +1659,4 @@ def test_runtime_journal_anchor_scene_seeds_live_registry_before_new_events():
     assert "anchorActivityScene:inflight.anchorActivityScene||null" in persist
     assert "applyAssistantTurnAnchorSourceEvent" in hydrate
     assert "_sourceEventTypeForSnapshotAnchorRow" in hydrate
-    assert "_hydrateAnchorRegistryFromActivityScene(INFLIGHT[activeSid]&&INFLIGHT[activeSid].anchorActivityScene);" in MESSAGES_JS
+    assert "_hydrateAnchorRegistryFromActivityScene(_getInflight()&&_getInflight().anchorActivityScene);" in MESSAGES_JS

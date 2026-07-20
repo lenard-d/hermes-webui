@@ -54,7 +54,7 @@ class TestLiveReasoningTextResetOnTool:
 
     def test_live_reasoning_text_also_reset_in_tool_listener(self):
         body = self._tool_listener_body()
-        assert "liveReasoningText=''" in body, (
+        assert "clearReasoning();" in body, (
             "liveReasoningText must also be reset in the tool listener"
         )
 
@@ -66,7 +66,7 @@ class TestLiveReasoningTextResetOnInterimAssistant:
     def test_durable_reasoning_text_not_reset_in_interim_assistant_listener(self):
         src = family_source("messages")
         m = re.search(
-            r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev)\s*=>\s*\{(.*?)\n\s*\}\);",
+            r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev|event)\s*=>\s*\{(.*?)\n\s*\}\);",
             src, re.DOTALL,
         )
         assert m, "interim_assistant listener not found in messages.js"
@@ -79,12 +79,12 @@ class TestLiveReasoningTextResetOnInterimAssistant:
     def test_live_reasoning_text_reset_in_interim_assistant_listener(self):
         src = family_source("messages")
         m = re.search(
-            r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev)\s*=>\s*\{(.*?)\n\s*\}\);",
+            r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev|event)\s*=>\s*\{(.*?)\n\s*\}\);",
             src, re.DOTALL,
         )
         assert m
         body = m.group(1)
-        assert "liveReasoningText=''" in body, (
+        assert "turn.setLiveReasoningText('');" in body, (
             "liveReasoningText must be reset in the interim_assistant listener"
         )
 
@@ -146,7 +146,7 @@ class TestDoneEventReasoningPersist:
 
     def test_done_event_persists_reasoning_text(self):
         src = family_source("messages")
-        assert 'lastAsst.reasoning=reasoningText' in src, (
+        assert 'lastAsst.reasoning=_reasoningText()' in src, (
             "done event must still persist reasoningText to lastAsst.reasoning "
             "for providers that stream reasoning events without populating "
             "reasoning_content on the final API message"

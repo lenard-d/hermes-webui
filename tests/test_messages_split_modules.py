@@ -6,11 +6,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIR = ROOT / "static" / "modules" / "messages"
 MODULE_NAMES = {
+    "anchor-live.js",
     "anchor-scene.js",
     "approvals.js",
     "clarify.js",
     "composer-context.js",
     "compression-events.js",
+    "content-events.js",
     "control-events.js",
     "core.js",
     "index.js",
@@ -21,9 +23,13 @@ MODULE_NAMES = {
     "run-journal.js",
     "send.js",
     "session-events.js",
+    "session-recovery.js",
     "stream-lifecycle.js",
     "stream-progress.js",
+    "stream-transcript.js",
+    "stream-transport.js",
     "stream.js",
+    "terminal-events.js",
 }
 
 
@@ -65,11 +71,14 @@ def test_internal_modules_use_imports_exports_not_classic_assembly():
     assert "from './stream-lifecycle.js'" in stream
     assert "from './compression-events.js'" in stream
     assert "from './control-events.js'" in stream
-    assert "from './anchor-scene.js'" in stream
+    assert "from './anchor-live.js'" in stream
+    assert "from './content-events.js'" in stream
     assert "from './live-tools.js'" in stream
     assert "from './rendering.js'" in stream
     assert "from './run-journal.js'" in stream
     assert "from './stream-progress.js'" in stream
+    assert "from './stream-transport.js'" in stream
+    assert "from './terminal-events.js'" in stream
     assert "HermesMessages.createStream" not in stream
 
 
@@ -85,6 +94,19 @@ globalThis.location={href:'http://localhost/'};
 const api=await import('./static/modules/messages/index.js');
 for(const name of ['createStreamRunJournalCursor','createStreamLiveToolTracker','createStreamRenderer']){
   if(!Object.isFrozen(api[name]())) throw new Error('unfrozen interface: '+name);
+}
+globalThis.setTimeout=()=>0;
+const internalFactories=[
+  ['./static/modules/messages/anchor-live.js','createStreamAnchorLiveRuntime'],
+  ['./static/modules/messages/content-events.js','createStreamContentEventOwner'],
+  ['./static/modules/messages/session-recovery.js','createStreamSessionRecovery'],
+  ['./static/modules/messages/stream-transcript.js','createStreamTranscriptProjection'],
+  ['./static/modules/messages/stream-transport.js','createStreamTransportOwner'],
+  ['./static/modules/messages/terminal-events.js','createStreamTerminalEventOwner'],
+];
+for(const [path,name] of internalFactories){
+  const module=await import(path);
+  if(!Object.isFrozen(module[name]())) throw new Error('unfrozen interface: '+name);
 }
 """
     result = subprocess.run(
@@ -118,12 +140,14 @@ def test_page_and_service_worker_use_the_native_entrypoint_contract():
     assert "static/messages_parts/" not in worker
 
 
-def test_module_sizes_keep_the_cohesive_stream_owner_intact():
+def test_module_sizes_keep_each_cohesive_stream_owner_intact():
     sizes = {
         path.name: len(path.read_text(encoding="utf-8").splitlines())
         for path in MODULE_DIR.glob("*.js")
     }
-    assert 1200 < sizes["stream.js"] < 5000
-    assert all(lines <= 1200 for name, lines in sizes.items() if name != "stream.js")
+    assert 700 < sizes["stream.js"] < 1200
+    assert all(lines <= 1200 for lines in sizes.values())
+    assert 450 < sizes["anchor-live.js"] < 700
+    assert 500 < sizes["terminal-events.js"] < 800
     stream = (MODULE_DIR / "stream.js").read_text(encoding="utf-8")
     assert stream.count("function attachLiveStream(") == 1

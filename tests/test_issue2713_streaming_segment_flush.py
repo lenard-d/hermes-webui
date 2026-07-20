@@ -161,7 +161,7 @@ class TestInterimAssistantHandlerFlush:
     def test_interim_handler_calls_flush(self):
         src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
-        assert "_flushPendingSegmentRender({force:true})" in fn, (
+        assert "renderer.flushPendingSegment({force:true})" in fn, (
             "interim_assistant handler must call _flushPendingSegmentRender() "
             "before _resetAssistantSegment()"
         )
@@ -171,9 +171,9 @@ class TestInterimAssistantHandlerFlush:
         the segment for new content (not the early alreadyStreamed branch)."""
         src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
-        flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
+        flush_pos = fn.index("renderer.flushPendingSegment({force:true})")
         # Find the _resetAssistantSegment call that comes AFTER the flush
-        reset_pos = fn.index("_resetAssistantSegment()", flush_pos)
+        reset_pos = fn.index("renderer.resetAssistantSegment()", flush_pos)
         assert flush_pos < reset_pos, (
             "_flushPendingSegmentRender must be called BEFORE the final "
             "_resetAssistantSegment in the interim_assistant handler"
@@ -190,12 +190,12 @@ class TestInterimAssistantHandlerFlush:
         src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
         branch_start = fn.index("if(alreadyStreamed)")
-        branch = fn[branch_start : fn.index("assistantText +=", branch_start)]
-        assert "ensureAssistantRow(true)" in branch, (
+        branch = fn[branch_start : fn.index("turn.appendInterimAssistantText", branch_start)]
+        assert "renderer.ensureAssistantRow(true)" in branch, (
             "already_streamed interim boundaries must materialize the current "
             "token segment before reset"
         )
-        assert "_flushPendingSegmentRender({force:true})" in branch, (
+        assert "renderer.flushPendingSegment({force:true})" in branch, (
             "already_streamed interim boundaries must flush pending token DOM "
             "before reset"
         )
@@ -204,8 +204,8 @@ class TestInterimAssistantHandlerFlush:
             active_branch_start = branch.index(inactive_guard) + branch[branch.index(inactive_guard):].index("}") + 1
         else:
             active_branch_start = 0
-        flush_pos = branch.index("_flushPendingSegmentRender({force:true})", active_branch_start)
-        reset_pos = branch.index("_resetAssistantSegment()", active_branch_start)
+        flush_pos = branch.index("renderer.flushPendingSegment({force:true})", active_branch_start)
+        reset_pos = branch.index("renderer.resetAssistantSegment()", active_branch_start)
         assert flush_pos < reset_pos, (
             "already_streamed interim flush must happen before segment reset"
         )
@@ -213,9 +213,9 @@ class TestInterimAssistantHandlerFlush:
     def test_interim_handler_creates_visible_segment_before_forced_flush(self):
         src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
-        ensure_pos = fn.index("ensureAssistantRow(true)")
-        flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
-        reset_pos = fn.index("_resetAssistantSegment()", flush_pos)
+        ensure_pos = fn.index("renderer.ensureAssistantRow(true)")
+        flush_pos = fn.index("renderer.flushPendingSegment({force:true})")
+        reset_pos = fn.index("renderer.resetAssistantSegment()", flush_pos)
         assert ensure_pos < flush_pos < reset_pos, (
             "visible interim assistant progress must create a live assistant "
             "segment, synchronously flush it, then reset for the next segment"
@@ -224,9 +224,9 @@ class TestInterimAssistantHandlerFlush:
     def test_interim_handler_closes_activity_after_visible_progress_boundary(self):
         src = family_source("messages")
         fn = _extract_handler(src, "interim_assistant")
-        flush_pos = fn.index("_flushPendingSegmentRender({force:true})")
+        flush_pos = fn.index("renderer.flushPendingSegment({force:true})")
         close_pos = fn.index("closeCurrentLiveActivityGroup()", flush_pos)
-        reset_pos = fn.index("_resetAssistantSegment()", close_pos)
+        reset_pos = fn.index("renderer.resetAssistantSegment()", close_pos)
         assert flush_pos < close_pos < reset_pos, (
             "visible interim assistant progress is timeline content; it must "
             "close the current live Activity burst before later tools append"

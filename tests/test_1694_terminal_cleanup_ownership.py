@@ -132,10 +132,10 @@ def test_done_handler_is_idempotent_for_replay_or_duplicate_done_events():
     """Duplicate/replayed done events must not replay completion sound or duplicate render."""
     body = _event_body("done")
     first_stmt = body.strip().splitlines()[0].strip()
-    assert "_streamFinalized" in first_stmt and "return" in first_stmt, (
+    assert "_terminalState.streamFinalized" in first_stmt and "return" in first_stmt, (
         "done handler must return early when the stream was already finalized"
     )
-    guard_idx = body.find("if(_streamFinalized) return;")
+    guard_idx = body.find("if(_terminalState.streamFinalized) return;")
     sound_idx = body.find("playNotificationSound();")
     assert sound_idx != -1, "done handler should still play completion sound once"
     assert guard_idx != -1 and guard_idx < sound_idx, (

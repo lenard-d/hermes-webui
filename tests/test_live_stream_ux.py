@@ -12,8 +12,8 @@ def test_stale_interrupted_event_marks_recovery_control():
 
 def test_done_and_restore_filters_recovery_messages_from_frontend_state():
     assert "_filterRecoveryControlMessages(S.messages || [])" in MESSAGES_JS
-    assert "if(!m||m.role==='tool') return false;" in MESSAGES_JS
-    assert "if(m.recovery_control===true) return true;" in MESSAGES_JS
+    assert "if(!message||message.role==='tool') return false;" in MESSAGES_JS
+    assert "if(message.recovery_control===true) return true;" in MESSAGES_JS
     assert "continue exactly where you left off" in MESSAGES_JS
     assert "do not retry the same tool call" in MESSAGES_JS
 

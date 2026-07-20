@@ -1267,21 +1267,22 @@ def test_slice6_live_shadow_feed_wires_anchor_scene_for_visible_order_handoff():
         assert (
             f"_applyToAnchor('{event_name}'" in event_body
             or f"applyToAnchor('{event_name}'" in event_body
+            or f"anchor.apply('{event_name}'" in event_body
         )
 
     token_body = _event_listener_body(src, "token")
-    assert "_scheduleRender(" in token_body
+    assert "renderer.scheduleRender(" in token_body
     assert "function _upsertAnchorProcessProse" in src
     assert "_upsertAnchorProcessProse(displayText" in src
     reasoning_body = _event_listener_body(src, "reasoning")
     assert "_applyToAnchor" not in reasoning_body
-    assert "const liveThinkingText=_liveThinkingText();" in reasoning_body
-    assert "const anchorReasoningFallback={};" in reasoning_body
-    assert "if(!_upsertAnchorReasoning(liveThinkingText, anchorReasoningFallback))" in reasoning_body
-    assert "_updateLiveThinkingCard(liveThinkingText,{" in reasoning_body
-    assert "...anchorReasoningFallback" in reasoning_body
+    assert "const liveThinkingText=turn.liveThinkingText();" in reasoning_body
+    assert "const fallback={};" in reasoning_body
+    assert "if(!anchor.upsertReasoning(liveThinkingText,fallback))" in reasoning_body
+    assert "renderer.updateLiveThinking(liveThinkingText,{" in reasoning_body
+    assert "...fallback" in reasoning_body
     assert "anchorRenderFallback:true" in reasoning_body
-    assert "sessionId:activeSid" in reasoning_body
+    assert "sessionId" in reasoning_body
     assert "streamId" in reasoning_body
     assert "function _flushReasoningToAnchor()" in src
     assert "_upsertAnchorReasoning(reasoningText" in src
@@ -1315,4 +1316,4 @@ def test_slice6_live_shadow_feed_wires_anchor_scene_for_visible_order_handoff():
     assert "lastAsst._anchor_activity_scene=scene" in attach_body
     assert "'_anchor_stream_id'" in src
     assert "'_anchor_activity_scene'" in src
-    assert src.index("'_anchor_stream_id'") < src.index("function _carryForwardEphemeralTurnFields")
+    assert src.index("'_anchor_stream_id'") < src.index("function carryForwardEphemeralTurnFields")

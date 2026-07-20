@@ -488,12 +488,18 @@ larger migration remains incremental:
   is not duplicated in the Adapter. The owner also computes transcript render
   signatures from message, tool-call, and session inputs, so cache validity is
   behavior-tested without parsing `ui.js` source layout.
-- The native `static/modules/messages/` graph keeps live response orchestration
-  in `stream.js` while `stream-progress.js` exclusively owns its delayed
-  INFLIGHT persistence and DOM-snapshot jobs. `control-events.js` owns
-  non-content SSE application plus the consume-once goal continuation state;
-  token, tool, anchor, and terminal transcript projection remain with the live
-  turn owner instead of being split across callback fragments.
+- The native `static/modules/messages/` graph keeps only per-turn composition
+  and shared mutable turn state in `stream.js`. `anchor-live.js` owns the
+  live Anchor registry, hydration, projection, reasoning/prose upserts, and
+  identity-guarded cleanup; `content-events.js` owns transcript-growth SSE
+  events; `terminal-events.js` owns done, application-error, cancel, metering,
+  and stream-end settlement; `stream-transport.js` owns EventSource preflight,
+  reconnect/replay, hidden-tab deferral, and timeout fallback; and
+  `session-recovery.js` converges disconnected turns on canonical session
+  snapshots. `stream-transcript.js` owns recovery-control filtering and
+  ephemeral turn-field carry-forward, while `stream-progress.js` owns delayed
+  INFLIGHT persistence and DOM snapshots. These modules are complete native
+  modules; no handler or function body is split across files.
 
 These Interfaces are intentionally deep: route and rendering code state the
 operation they need while lock ordering, cache accounting, and multi-registry

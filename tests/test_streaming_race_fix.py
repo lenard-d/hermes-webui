@@ -26,6 +26,12 @@ def read(rel):
     return (REPO / rel).read_text(encoding='utf-8')
 
 
+TERMINAL_EVENTS = read("static/modules/messages/terminal-events.js")
+TRANSPORT = read("static/modules/messages/stream-transport.js")
+SESSION_RECOVERY = read("static/modules/messages/session-recovery.js")
+STREAM = read("static/modules/messages/stream.js")
+
+
 class TestStreamFinalized:
     """_streamFinalized flag and rAF cancellation."""
 
@@ -60,12 +66,12 @@ class TestStreamFinalized:
         )
 
     def test_done_sets_stream_finalized(self):
-        src = family_source("messages")
+        src = TERMINAL_EVENTS
         m = re.search(r"source\.addEventListener\('done'.*?\}\);", src, re.DOTALL)
         assert m, "'done' handler not found"
         fn = m.group(0)
-        assert '_streamFinalized=true' in fn or '_streamFinalized = true' in fn, (
-            "'done' handler must set _streamFinalized=true"
+        assert '_terminalState.streamFinalized=true' in fn, (
+            "'done' handler must set the shared terminal state"
         )
         assert 'cancelAnimationFrame' in fn, (
             "'done' handler must cancel any pending rAF"
@@ -82,14 +88,14 @@ class TestStreamFinalized:
         and overwrites S.messages with stale server data (assistant text between
         tool-call blocks vanishes on switching back to a settled session).
         """
-        src = family_source("messages")
+        src = TERMINAL_EVENTS
         m = re.search(r"source\.addEventListener\('done'.*?\}\);", src, re.DOTALL)
         assert m, "'done' handler not found"
         fn = m.group(0)
-        guard_idx = fn.find('if(_streamFinalized) return;')
+        guard_idx = fn.find('if(_terminalState.streamFinalized) return;')
         assert guard_idx != -1, "'done' handler must early-return on _streamFinalized"
-        finalize_idx = fn.find('_streamFinalized=true', guard_idx)
-        terminal_idx = fn.find('_terminalStateReached=true', guard_idx)
+        finalize_idx = fn.find('_terminalState.streamFinalized=true', guard_idx)
+        terminal_idx = fn.find('_terminalState.terminalStateReached=true', guard_idx)
         assert finalize_idx != -1, "'done' handler must set _streamFinalized=true"
         assert terminal_idx != -1, "'done' handler must set _terminalStateReached"
         assert finalize_idx < terminal_idx, (
@@ -98,22 +104,22 @@ class TestStreamFinalized:
         )
 
     def test_apperror_sets_stream_finalized(self):
-        src = family_source("messages")
+        src = TERMINAL_EVENTS
         m = re.search(r"source\.addEventListener\('apperror'.*?\}\);", src, re.DOTALL)
         assert m, "'apperror' handler not found"
         fn = m.group(0)
-        assert '_streamFinalized=true' in fn or '_streamFinalized = true' in fn, (
-            "'apperror' handler must set _streamFinalized=true"
+        assert '_terminalState.streamFinalized=true' in fn, (
+            "'apperror' handler must settle the shared terminal state"
         )
         assert 'cancelAnimationFrame' in fn
 
     def test_cancel_sets_stream_finalized(self):
-        src = family_source("messages")
+        src = TERMINAL_EVENTS
         m = re.search(r"source\.addEventListener\('cancel'.*?\}\);", src, re.DOTALL)
         assert m, "'cancel' handler not found"
         fn = m.group(0)
-        assert '_streamFinalized=true' in fn or '_streamFinalized = true' in fn, (
-            "'cancel' handler must set _streamFinalized=true"
+        assert '_terminalState.streamFinalized=true' in fn, (
+            "'cancel' handler must settle the shared terminal state"
         )
         assert 'cancelAnimationFrame' in fn
 
@@ -149,7 +155,7 @@ class TestReconnectAccumulatorPreservation:
         interim_assistant) are intentional (#2565) and not covered by
         this guard — they prevent reasoning from accumulating across
         multi-turn agent sessions."""
-        src = family_source("messages")
+        src = STREAM
         m = re.search(r'function _wireSSE\(source\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_wireSSE not found"
         fn = m.group(0)
@@ -172,7 +178,7 @@ class TestReconnectAccumulatorPreservation:
         the closure scope in attachLiveStream, not inside _wireSSE.  That
         covers the first call; reconnects must preserve whatever was
         accumulated before the drop."""
-        src = family_source("messages")
+        src = STREAM
         m = re.search(
             r'function attachLiveStream\(.*?function _closeSource',
             src,
@@ -195,24 +201,24 @@ class TestReconnectAccumulatorPreservation:
         """`error` must still bail out when `_streamFinalized` is true —
         otherwise a trailing network 'error' event after `done` would
         attempt a reconnect against a stream that already completed."""
-        src = family_source("messages")
+        src = TRANSPORT
         m = re.search(r"source\.addEventListener\('error'.*?\}\);", src, re.DOTALL)
         assert m, "'error' handler not found"
         fn = m.group(0)
-        assert '_streamFinalized' in fn, (
-            "'error' reconnect handler must bail if _streamFinalized is true"
+        assert '_terminalState.streamFinalized' in fn, (
+            "'error' reconnect handler must bail if the turn is finalized"
         )
 
     def test_handle_stream_error_sets_stream_finalized(self):
         """Opus review Q1: _handleStreamError is called after the reconnect fails.
         It calls renderMessages() which settles the DOM. Any pending rAF must be
         cancelled before that renderMessages call — same as done/apperror/cancel."""
-        src = family_source("messages")
+        src = SESSION_RECOVERY
         m = re.search(r'function _handleStreamError\(source\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_handleStreamError(source) not found"
         fn = m.group(0)
-        assert '_streamFinalized=true' in fn or '_streamFinalized = true' in fn, (
-            "_handleStreamError must set _streamFinalized=true (Opus Q1 fix)"
+        assert '_terminalState.streamFinalized=true' in fn, (
+            "_handleStreamError must settle the shared terminal state (Opus Q1 fix)"
         )
         assert 'cancelAnimationFrame' in fn, (
             "_handleStreamError must cancel any pending rAF before renderMessages() runs"
@@ -221,7 +227,7 @@ class TestReconnectAccumulatorPreservation:
     def test_deferred_stream_recovery_bails_after_session_switch(self):
         """Deferred hidden-tab recovery must not reattach an old stream after
         the user has switched to a different session in the same tab."""
-        src = family_source("messages")
+        src = TRANSPORT
         m = re.search(r'function _reattachOrRestoreAfterDeferredStreamError\(source\)\{.*?\n  \}', src, re.DOTALL)
         assert m, "_reattachOrRestoreAfterDeferredStreamError(source) not found"
         fn = m.group(0)

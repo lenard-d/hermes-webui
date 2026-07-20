@@ -14,7 +14,7 @@ UI = family_source("ui")
 
 def _interim_listener_body() -> str:
     match = re.search(
-        r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev)\s*=>\s*\{(.*?)\n\s*\}\);",
+        r"source\.addEventListener\('interim_assistant'\s*,\s*(?:e|ev|event)\s*=>\s*\{(.*?)\n\s*\}\);",
         MESSAGES,
         re.DOTALL,
     )
@@ -25,22 +25,22 @@ def _interim_listener_body() -> str:
 def test_interim_reasoning_echo_cleans_live_and_anchor_thinking():
     body = _interim_listener_body()
 
-    assert "const reasoningEcho=!!(d&&d.reasoning_echo);" in body
-    assert "if(reasoningEcho) _stripLiveReasoningEcho(visible);" in body
+    assert "if(data&&data.reasoning_echo) anchor.stripReasoningEcho(visible);" in body
     assert "function _stripAnchorReasoningEcho(visible)" in MESSAGES
     assert "function _removeLiveReasoningEchoRows(visible)" in MESSAGES
     assert "events.splice(i,1);" in MESSAGES
     assert '.agent-activity-thinking[data-anchor-scene-row="1"]' in MESSAGES
     assert "_removeLiveReasoningEchoRows(visible)" in MESSAGES
-    assert "reasoningText=durable.text;" in MESSAGES
-    assert "liveReasoningText=live.text;" in MESSAGES
+    assert "reasoningText:nextReasoning" in MESSAGES
+    assert "liveReasoningText:nextLiveReasoning" in MESSAGES
+    assert "_writeReasoning({" in MESSAGES
 
 
 def test_interim_anchor_render_runs_after_legacy_segment_flush_without_duplicate_process_row():
     body = _interim_listener_body()
 
-    flush_idx = body.index("_flushPendingSegmentRender({force:true,skipAnchorProcessProse:true});")
-    anchor_idx = body.index("_applyToAnchor('interim_assistant',d,e);")
+    flush_idx = body.index("renderer.flushPendingSegment({force:true,skipAnchorProcessProse:true});")
+    anchor_idx = body.index("anchor.apply('interim_assistant',data,event);")
     flush_fn_start = MESSAGES.index("function _flushPendingSegmentRender")
     flush_fn = MESSAGES[flush_fn_start : MESSAGES.index("function _resetAssistantSegment", flush_fn_start)]
 
@@ -50,7 +50,7 @@ def test_interim_anchor_render_runs_after_legacy_segment_flush_without_duplicate
         "Anchor live scene must render after the legacy interim segment is flushed, "
         "so renderLiveAnchorActivityScene can hide that source segment immediately."
     )
-    assert "_flushPendingSegmentRender({force:true});" in body, (
+    assert "renderer.flushPendingSegment({force:true});" in body, (
         "already_streamed interim updates must still flush the token-owned prose row."
     )
 

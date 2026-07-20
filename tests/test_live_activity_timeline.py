@@ -14,6 +14,8 @@ import subprocess
 REPO = pathlib.Path(__file__).parent.parent
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
+CONTENT_EVENTS_JS = (REPO / "static" / "modules" / "messages" / "content-events.js").read_text(encoding="utf-8")
+LIVE_TOOLS_JS = (REPO / "static" / "modules" / "messages" / "live-tools.js").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 NODE = shutil.which("node")
 
@@ -260,7 +262,7 @@ def test_inactive_interim_assistant_still_records_activity_boundary():
     Otherwise later tool calls keep an activityBurstId with no text anchor and
     Activity groups pile up at the tail after switching back.
     """
-    wire_fn = MESSAGES_JS.split("function _wireSSE(source)", 1)[1].split("source.addEventListener('reasoning'", 1)[0]
+    wire_fn = CONTENT_EVENTS_JS.split("source.addEventListener('interim_assistant'", 1)[1].split("source.addEventListener('reasoning'", 1)[0]
     inactive_returns = [
         idx for idx in range(len(wire_fn))
         if wire_fn.startswith("if(!S.session||S.session.session_id!==activeSid){", idx)
@@ -268,8 +270,8 @@ def test_inactive_interim_assistant_still_records_activity_boundary():
     assert len(inactive_returns) >= 2
     for idx in inactive_returns[:2]:
         branch = wire_fn[idx:wire_fn.find("}", idx) + 1]
-        assert "recordActivityBoundary();" in branch
-        assert "_resetAssistantSegment();" in branch
+        assert "turn.recordActivityBoundary();" in branch
+        assert "renderer.resetAssistantSegment();" in branch
 
 
 def test_tool_event_flushes_pending_text_before_inserting_activity():
@@ -282,9 +284,9 @@ def test_tool_event_flushes_pending_text_before_inserting_activity():
     segment above it a frame later, which looks like process text was inserted
     before an already-visible Activity row.
     """
-    tool_handler = MESSAGES_JS.split("source.addEventListener('tool',e=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
-    flush_pos = tool_handler.find("_flushPendingSegmentRender({force:true});")
-    append_pos = tool_handler.find("appendLiveToolCard(tc")
+    tool_handler = LIVE_TOOLS_JS.split("source.addEventListener('tool',event=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
+    flush_pos = tool_handler.find("flushPendingSegment({force:true});")
+    append_pos = tool_handler.find("appendToolCard(toolCall")
     assert flush_pos != -1 and append_pos != -1
     assert flush_pos < append_pos
 
@@ -325,27 +327,27 @@ def test_tool_event_does_not_create_blank_text_segment_without_pending_text():
     above every Activity group, making Live Stream look unstable during long
     polling turns.
     """
-    tool_handler = MESSAGES_JS.split("source.addEventListener('tool',e=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
-    upsert_pos = tool_handler.find("const tc=upsertLiveToolCall(d,'start');")
-    guard_pos = tool_handler.find("String(pendingDisplayText||'').trim()")
+    tool_handler = LIVE_TOOLS_JS.split("source.addEventListener('tool',event=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
+    upsert_pos = tool_handler.find("const toolCall=upsertLiveToolCall(payload,'start');")
+    guard_pos = tool_handler.find("hasAssistantOutput()||displayText.trim()")
     force_pos = tool_handler.find("ensureAssistantRow(true);")
-    append_pos = tool_handler.find("appendLiveToolCard(tc")
+    append_pos = tool_handler.find("appendToolCard(toolCall")
     assert upsert_pos != -1 and guard_pos != -1 and force_pos != -1 and append_pos != -1
     assert upsert_pos < guard_pos < force_pos < append_pos
-    assert "if(!assistantRow||!assistantBody) ensureAssistantRow(true);" not in tool_handler
+    assert "if(!hasAssistantOutput()) ensureAssistantRow(true);" not in tool_handler
 
 
 def test_orphan_tool_complete_does_not_create_blank_text_segment_without_pending_text():
     """An orphan tool_complete should not manufacture an empty assistant segment."""
-    complete_handler = MESSAGES_JS.split("source.addEventListener('tool_complete',e=>{", 1)[1].split("source.addEventListener('approval'", 1)[0]
-    orphan_branch = complete_handler.split("if(tc._createdByComplete){", 1)[1].split("} else {", 1)[0]
-    guard_pos = orphan_branch.find("String(pendingDisplayText||'').trim()")
+    complete_handler = LIVE_TOOLS_JS.split("source.addEventListener('tool_complete',event=>{", 1)[1].split("return source;", 1)[0]
+    orphan_branch = complete_handler.split("if(toolCall._createdByComplete){", 1)[1].split("}else{", 1)[0]
+    guard_pos = orphan_branch.find("hasAssistantOutput()||displayText.trim()")
     force_pos = orphan_branch.find("ensureAssistantRow(true);")
-    flush_pos = orphan_branch.find("_flushPendingSegmentRender({force:true});")
-    append_pos = orphan_branch.find("appendLiveToolCard(tc")
+    flush_pos = orphan_branch.find("flushPendingSegment({force:true});")
+    append_pos = orphan_branch.find("appendToolCard(toolCall")
     assert guard_pos != -1 and force_pos != -1 and flush_pos != -1 and append_pos != -1
     assert guard_pos < force_pos < flush_pos < append_pos
-    assert "if(!assistantRow||!assistantBody) ensureAssistantRow(true);" not in orphan_branch
+    assert "if(!hasAssistantOutput()) ensureAssistantRow(true);" not in orphan_branch
 
 
 def test_reattach_segment_start_aligns_with_last_burst_anchor():

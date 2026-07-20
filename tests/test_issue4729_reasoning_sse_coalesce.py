@@ -84,7 +84,7 @@ def test_reasoning_buffer_flushed_at_every_boundary(monkeypatch):
 def test_frontend_appends_reasoning_deltas():
     # The whole coalesce requirement hinges on the frontend APPENDING (not replacing).
     # If this ever changes to assignment, the throttle design must change with it.
-    assert "reasoningText += text" in MESSAGES, (
+    assert "appendReasoning:text=>{ reasoningText+=text;liveReasoningText+=text; }" in MESSAGES, (
         "frontend reasoning handler must append deltas — if this changes, revisit the "
         "server-side coalescing throttle (#4729)"
     )

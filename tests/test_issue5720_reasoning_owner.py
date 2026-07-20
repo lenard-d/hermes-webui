@@ -37,15 +37,21 @@ def _run_reasoning_scene(
     env.setdefault(
         "ISSUE5720_STREAM_MODULE_JS_PATHS",
         json.dumps(
-            [
-                str(ROOT / "static" / "modules" / "messages" / "anchor-scene.js"),
-                str(ROOT / "static" / "modules" / "messages" / "compression-events.js"),
-                str(ROOT / "static" / "modules" / "messages" / "control-events.js"),
-                str(ROOT / "static" / "modules" / "messages" / "run-journal.js"),
-                str(ROOT / "static" / "modules" / "messages" / "live-tools.js"),
-                str(ROOT / "static" / "modules" / "messages" / "rendering.js"),
-                str(ROOT / "static" / "modules" / "messages" / "stream-progress.js"),
-            ]
+                [
+                    str(ROOT / "static" / "modules" / "messages" / "anchor-scene.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "anchor-live.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "compression-events.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "content-events.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "control-events.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "run-journal.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "live-tools.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "rendering.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "session-recovery.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "stream-progress.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "stream-transcript.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "stream-transport.js"),
+                    str(ROOT / "static" / "modules" / "messages" / "terminal-events.js"),
+                ]
         ),
     )
     env["ISSUE5720_ACTIVITY_MODE"] = activity_mode

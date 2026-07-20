@@ -465,7 +465,7 @@ class TestToolEventSmdEnd:
 
     def test_smd_end_parser_called_on_tool(self):
         fn = self.get_fn()
-        assert fn and "_smdEndParser(" in fn, (
+        assert fn and ("_smdEndParser(" in fn or "endParser();" in fn), (
             "The 'tool' event handler must call _smdEndParser() to finalise the "
             "current segment before creating a new assistantBody for post-tool text"
         )
@@ -640,18 +640,21 @@ class TestExistingStreamingGuardsIntact:
         fn = extract_event_handler(MESSAGES_JS, "done")
         assert fn and (
             "_streamFinalized=true" in fn or "_streamFinalized = true" in fn
+            or "_terminalState.streamFinalized=true" in fn
         ), "'done' must still set _streamFinalized=true"
 
     def test_apperror_still_sets_stream_finalized(self):
         fn = extract_event_handler(MESSAGES_JS, "apperror")
         assert fn and (
             "_streamFinalized=true" in fn or "_streamFinalized = true" in fn
+            or "_terminalState.streamFinalized=true" in fn
         ), "'apperror' must still set _streamFinalized=true"
 
     def test_cancel_still_sets_stream_finalized(self):
         fn = extract_event_handler(MESSAGES_JS, "cancel")
         assert fn and (
             "_streamFinalized=true" in fn or "_streamFinalized = true" in fn
+            or "_terminalState.streamFinalized=true" in fn
         ), "'cancel' must still set _streamFinalized=true"
 
     def test_wire_sse_does_not_reset_accumulators(self):
@@ -672,6 +675,7 @@ class TestExistingStreamingGuardsIntact:
         fn = extract_event_handler(MESSAGES_JS, "tool")
         assert fn and (
             "_freshSegment=true" in fn or "_freshSegment = true" in fn
+            or "startFreshSegment();" in fn
         ), "_freshSegment must still be set on tool events"
 
 
