@@ -77,6 +77,10 @@ from api.process_event_utils import (
     schedule_async_delegation_claim_retry,
 )
 from api.streaming_parts import payloads as _streaming_payloads
+from api.streaming_parts import attachments as _streaming_attachments
+from api.streaming_parts import provider_errors as _streaming_provider_errors
+from api.streaming_parts import thinking_content as _streaming_thinking
+from api.streaming_parts import terminal_outcomes as _streaming_terminal_outcomes
 from api.streaming_parts.bindings import streaming_api as _streaming_api
 
 
@@ -1151,204 +1155,28 @@ def _cancelled_turn_hint(agent_name: str | None = None) -> str:
 
 
 def _provider_error_probe_text(value) -> tuple[str, int | None]:
-    """Flatten structured provider-error payloads into searchable text."""
-    _texts: list[str] = []
-    _status_code: int | None = None
-    _seen: set[int] = set()
-
-    def _walk(node):
-        nonlocal _status_code
-        if node is None:
-            return
-        if isinstance(node, (dict, list, tuple, set)):
-            _node_id = id(node)
-            if _node_id in _seen:
-                return
-            _seen.add(_node_id)
-        if isinstance(node, dict):
-            for _key in ('type', 'code', 'message', 'detail', 'details', 'name', 'status', 'status_code'):
-                _val = node.get(_key)
-                if _val is None:
-                    continue
-                if _key in ('status', 'status_code') and _status_code is None:
-                    try:
-                        _status_code = int(_val)
-                    except Exception:
-                        pass
-                _texts.append(str(_val))
-            for _key, _val in node.items():
-                if _key in ('type', 'code', 'message', 'detail', 'details', 'name', 'status', 'status_code'):
-                    continue
-                _walk(_val)
-            return
-        if isinstance(node, (list, tuple, set)):
-            for _item in node:
-                _walk(_item)
-            return
-        _texts.append(str(node))
-
-    _walk(value)
-    return ' '.join(t for t in _texts if t).strip(), _status_code
+    return _streaming_provider_errors.provider_error_probe_text(
+        _streaming_api(),
+        value,
+    )
 
 
 def _classify_provider_error(err_str: str, exc=None, *, silent_failure: bool = False) -> dict:
-    """Classify provider/agent failure text for WebUI apperror UX.
-
-    Keep this string-based until hermes-agent exposes stable structured
-    provider error classes for Codex OAuth plan limits.
-    """
-    _probe_text, _probe_status_code = _provider_error_probe_text(err_str)
-    if exc is not None:
-        _exc_probe_text, _exc_status_code = _provider_error_probe_text(exc)
-        if _exc_probe_text:
-            _probe_text = f"{_probe_text} {_exc_probe_text}".strip()
-        if _probe_status_code is None:
-            _probe_status_code = _exc_status_code
-    err_str = str(_probe_text or err_str or '')
-    _err_lower = err_str.lower()
-    _exc_name = type(exc).__name__ if exc is not None else ''
-    _is_cancelled = (
-        'cancelled by user' in _err_lower
-        or 'canceled by user' in _err_lower
-        or 'user cancelled' in _err_lower
-        or 'user canceled' in _err_lower
-        or 'task cancelled' in _err_lower
-        or 'task canceled' in _err_lower
-        or 'cancellederror' in _err_lower
-        or (exc is not None and _exc_name in ('CancelledError', 'CanceledError'))
+    return _streaming_provider_errors.classify_provider_error(
+        _streaming_api(),
+        err_str,
+        exc,
+        silent_failure=silent_failure,
     )
-    _is_interrupted = (
-        not _is_cancelled
-        and (
-            'interrupted by user' in _err_lower
-            or 'response interrupted' in _err_lower
-            or 'operation interrupted' in _err_lower
-            or 'operation was interrupted' in _err_lower
-            or 'operation aborted' in _err_lower
-            or 'request was aborted' in _err_lower
-            or 'aborterror' in _err_lower
-            or (exc is not None and type(exc).__name__ in ('KeyboardInterrupt', 'AbortError'))
-        )
-    )
-    if _is_cancelled:
-        return {
-            'label': 'Task cancelled',
-            'type': 'cancelled',
-            'hint': _cancelled_turn_hint(),
-        }
-    if _is_interrupted:
-        return {
-            'label': 'Response interrupted',
-            'type': 'interrupted',
-            'hint': 'The run stopped before a provider response completed. If you did not cancel it, try again.',
-        }
-    _is_quota = _is_quota_error_text(err_str)
-    # A credential-POOL exhaustion ("All 0 credential(s) exhausted for <provider>")
-    # is a distinct shape from account/plan quota: it means the profile's
-    # credential pool has no usable keys for that provider (a config problem),
-    # not that a funded account ran out of credits. It is NOT matched by
-    # _is_quota_error_text ('credential(s) exhausted' != 'credits exhausted'), so
-    # without this it fell through to the generic error label/hint. Classify it
-    # explicitly so the user gets a pool-specific, actionable hint. (#3929)
-    _is_credential_pool_empty = (
-        'credential(s) exhausted' in _err_lower
-        or 'credentials exhausted' in _err_lower
-        or ('credential' in _err_lower and 'exhausted' in _err_lower)
-    )
-    _is_auth = (
-        not _is_quota and not _is_credential_pool_empty and (
-            _probe_status_code == 401
-            or
-            '401' in err_str
-            or (exc is not None and 'AuthenticationError' in _exc_name)
-            or 'authentication' in _err_lower
-            or 'unauthorized' in _err_lower
-            or 'invalid api key' in _err_lower
-            or 'invalid_api_key' in _err_lower
-            or 'no cookie auth credentials' in _err_lower
-        )
-    )
-    _is_not_found = (
-        # model_not_found hints mention Settings / `hermes model` below.
-        '404' in err_str
-        or 'not found' in _err_lower
-        or 'does not exist' in _err_lower
-        or 'model not found' in _err_lower
-        or 'model_not_found' in _err_lower  # hint below points to Settings / `hermes model`
-        or 'invalid model' in _err_lower
-        or 'does not match any known model' in _err_lower
-        or 'unknown model' in _err_lower
-    )
-    _is_rate_limit = (not _is_quota) and (
-        'rate limit' in _err_lower or '429' in err_str or (exc is not None and 'RateLimitError' in _exc_name)
-    )
-    _is_compression_exhausted = (
-        'compression_exhausted' in _err_lower
-        or 'compression exhausted' in _err_lower
-        or ('context length exceeded' in _err_lower and 'cannot compress further' in _err_lower)
-        or ('context compression' in _err_lower and 'max compression attempts' in _err_lower)
-    )
-    if _is_credential_pool_empty:
-        return {
-            'label': 'No usable credentials',
-            'type': 'credential_pool_empty',
-            'hint': 'The credential pool for this provider has no usable keys left (all entries exhausted or unconfigured). Add or refresh a key for this provider in your Hermes config / credential pool, or switch providers via `hermes model`.',
-        }
-    if _is_quota:
-        return {
-            'label': 'Out of credits',
-            'type': 'quota_exhausted',
-            'hint': 'Your provider account is out of credits or usage. Top up, wait for the plan window to reset, or switch providers via `hermes model`.',
-        }
-    if _is_rate_limit:
-        return {
-            'label': 'Rate limit reached',
-            'type': 'rate_limit',
-            'hint': 'Rate limit reached. The fallback model (if configured) was also exhausted. Try again in a moment.',
-        }
-    if _is_auth:
-        return {
-            'label': 'Authentication failed',
-            'type': 'auth_mismatch',
-            'hint': 'The selected model may not be supported by your configured provider or your API key is invalid. Run `hermes model` in your terminal to update credentials, then restart the WebUI.',
-        }
-    if _is_not_found:
-        return {
-            'label': 'Model not found',
-            'type': 'model_not_found',
-            'hint': 'The selected model was not found by the provider. Check the model ID in Settings or run `hermes model` to verify it exists for your provider.',
-        }
-    if _is_compression_exhausted:
-        return {
-            'label': 'Context compression exhausted',
-            'type': 'compression_exhausted',
-            'hint': 'The conversation context is too large to compress safely. Start a new conversation or retry with a narrower task.',
-        }
-    if silent_failure:
-        return {
-            'label': 'No response from provider',
-            # Preserve the existing no_response event type (#373) while making
-            # the catch-all silent-failure message more specific for #1765.
-            'type': 'no_response',
-            'hint': 'The provider returned no content and no error. This often means a usage/rate limit was hit silently. Check provider status, switch providers via `hermes model`, or try again in a moment.',
-        }
-    return {'label': 'Error', 'type': 'error', 'hint': ''}
 
 
 def _provider_error_payload(message: str, err_type: str, hint: str = '') -> dict:
-    """Build a bounded, redacted apperror payload with provider details."""
-    _message = str(message or '')
-    _safe_message = _redact_text(_message).strip() if _message else ''
-    payload: dict = {'message': _safe_message or _message, 'type': err_type}
-    if hint:
-        payload['hint'] = hint
-    if _safe_message:
-        _details = _safe_message
-        if len(_details) > 1200:
-            _details = _details[:1197].rstrip() + '…'
-        if _details:
-            payload['details'] = _details
-    return payload
+    return _streaming_provider_errors.provider_error_payload(
+        _streaming_api(),
+        message,
+        err_type,
+        hint,
+    )
 
 
 _MAX_ITERATION_SUMMARY_REQUEST = (
@@ -1359,23 +1187,18 @@ _MAX_ITERATION_SUMMARY_REQUEST = (
 
 
 def _is_synthetic_max_iteration_summary_request(message) -> bool:
-    """Return True for Hermes Agent's internal max-iteration summary prompt."""
-    if not isinstance(message, dict) or message.get('role') != 'user':
-        return False
-    text = " ".join(_message_text(message.get('content', '')).split())
-    expected = " ".join(_MAX_ITERATION_SUMMARY_REQUEST.split())
-    return text == expected
+    return _streaming_terminal_outcomes.is_synthetic_max_iteration_summary_request(
+        _streaming_api(),
+        message,
+    )
 
 
 def _drop_synthetic_max_iteration_summary_requests(messages, *, enabled: bool = True):
-    """Remove Agent-internal max-iteration summary prompts from WebUI state."""
-    if not enabled:
-        return list(messages or [])
-    return [
-        msg
-        for msg in list(messages or [])
-        if not _is_synthetic_max_iteration_summary_request(msg)
-    ]
+    return _streaming_terminal_outcomes.drop_synthetic_max_iteration_summary_requests(
+        _streaming_api(),
+        messages,
+        enabled=enabled,
+    )
 
 
 # Structured markers the Hermes Agent stamps on synthetic scaffolding turns that
@@ -1396,246 +1219,92 @@ _SYNTHETIC_CONTROL_MESSAGE_FLAGS = (
 
 
 def _is_synthetic_control_message(message) -> bool:
-    """Return True for an Agent-internal synthetic scaffolding turn flagged by marker."""
-    return isinstance(message, dict) and any(
-        message.get(flag) for flag in _SYNTHETIC_CONTROL_MESSAGE_FLAGS
+    return _streaming_terminal_outcomes.is_synthetic_control_message(
+        _streaming_api(),
+        message,
     )
 
 
 def _drop_synthetic_control_messages(messages):
-    """Remove Agent-internal synthetic scaffolding turns from the WebUI transcript.
-
-    Honors the structured ``_verification_stop_synthetic`` / ``_pre_verify_synthetic``
-    markers the agent already sets, rather than string-matching the nudge copy.
-    """
-    return [
-        msg
-        for msg in list(messages or [])
-        if not _is_synthetic_control_message(msg)
-    ]
+    return _streaming_terminal_outcomes.drop_synthetic_control_messages(
+        _streaming_api(),
+        messages,
+    )
 
 
 def _agent_result_tool_limit_reached(result) -> bool:
-    """Return True when current-turn metadata says the tool iteration cap fired."""
-    if not isinstance(result, dict):
-        return False
-    fields = [
-        result.get('turn_exit_reason'),
-        result.get('terminal_reason'),
-        result.get('status'),
-        result.get('state'),
-        result.get('error'),
-    ]
-    haystack = " ".join(str(value or '') for value in fields).lower()
-    if (
-        'max_iterations_reached' in haystack
-        or 'maximum number of tool-calling iterations' in haystack
-        or ('tool-calling iterations' in haystack and 'maximum' in haystack)
-    ):
-        return True
-    return False
+    return _streaming_terminal_outcomes.agent_result_tool_limit_reached(
+        _streaming_api(),
+        result,
+    )
 
 
 def _maybe_inject_max_iteration_summary_fallback(messages, result) -> list:
-    """Append the agent's graceful summary text as an assistant turn when one is missing.
-
-    When ``AIAgent`` exhausts its iteration budget, ``agent.handle_max_iterations``
-    always returns a non-empty ``final_response`` — either the model-generated
-    summary or a graceful fallback (e.g. ``"I reached the iteration limit and
-    couldn't generate a summary."``). Hermes Agent surfaces that string as the
-    final answer to the user; the WebUI, by contrast, reads only ``messages``,
-    so an empty summary (common with reasoning-only responses) left the user
-    with a bare ``tool_limit_reached`` error instead of any closure text.
-
-    When ``_tool_limit_reached`` is true and ``messages`` ends without a final
-    assistant answer, inject ``result['final_response']`` as a new assistant
-    turn so ``_mark_latest_assistant_tool_limit_status`` can attach the status
-    card in the normal flow and the user sees the same closure text as
-    hermes-agent. Returns the (possibly new) messages list; does nothing when
-    a usable assistant answer already exists or when ``result`` carries no
-    graceful fallback text.
-    """
-    if not isinstance(result, dict):
-        return list(messages or [])
-    fallback = result.get('final_response')
-    if not isinstance(fallback, str) or not fallback.strip():
-        return list(messages or [])
-    out = list(messages or [])
-    if not _session_lacks_final_assistant_answer(out):
-        return out
-    # Append a synthetic summary turn. Tag it so downstream consumers can
-    # distinguish it from model-emitted assistant turns if needed; mirrors the
-    # synthetic-scaffolding flag convention already used elsewhere (#5334).
-    out.append({"role": "assistant", "content": fallback, "_max_iteration_summary_fallback": True})
-    return out
+    return _streaming_terminal_outcomes.maybe_inject_max_iteration_summary_fallback(
+        _streaming_api(),
+        messages,
+        result,
+    )
 
 
 def _mark_latest_assistant_tool_limit_status(messages) -> bool:
-    """Annotate the latest usable assistant final answer as limit-stopped."""
-    for msg in reversed(list(messages or [])):
-        if not isinstance(msg, dict):
-            continue
-        if msg.get('_error') or msg.get('role') != 'assistant':
-            continue
-        content = msg.get('content')
-        if isinstance(content, list):
-            text = '\n'.join(
-                str(part.get('text') or part.get('content') or '')
-                for part in content
-                if isinstance(part, dict)
-            )
-        else:
-            text = str(content or '')
-        if msg.get('tool_calls') or not text.strip():
-            continue
-        msg['_terminal_state'] = 'tool_limit_reached'
-        msg['_terminal_reason'] = 'max_iterations'
-        msg.setdefault('_statusCard', {
-            'title': 'Tool iteration limit reached',
-            'subtitle': 'Stopped because the tool iteration limit was reached.',
-            'rows': [
-                {'label': 'State', 'value': 'Limit reached'},
-                {'label': 'Next step', 'value': 'Start a new turn to continue.'},
-            ],
-        })
-        return True
-    return False
+    return _streaming_terminal_outcomes.mark_latest_assistant_tool_limit_status(
+        _streaming_api(),
+        messages,
+    )
 
 
 def _session_has_cancel_marker(session) -> bool:
-    """Return True if a visible cancel/interrupted marker is already persisted."""
-    for msg in reversed(getattr(session, 'messages', None) or []):
-        if not isinstance(msg, dict):
-            continue
-        if msg.get('role') == 'user':
-            return False
-        if msg.get('role') != 'assistant':
-            continue
-        content = msg.get('content')
-        text = ''
-        if isinstance(content, str):
-            text = content
-        elif isinstance(content, list):
-            parts = []
-            for part in content:
-                if isinstance(part, dict):
-                    parts.append(str(part.get('text') or part.get('content') or ''))
-            text = '\n'.join(parts)
-        normalized = text.strip().lower()
-        if any(pattern in normalized for pattern in _CANCEL_MARKER_PATTERNS):
-            return True
-    return False
+    return _streaming_terminal_outcomes.session_has_cancel_marker(
+        _streaming_api(),
+        session,
+    )
 
 
-def _cancelled_turn_content(message: str = 'Task cancelled.', agent_name: str | None = None) -> str:
-    """Return cancelled-turn copy matching the verbose provider-error layout."""
-    _message = str(message or 'Task cancelled.').strip()
-    if not _message.endswith('.'):
-        _message += '.'
-    return (
-        f"**Task cancelled:** {_message}\n\n"
-        f"*{_cancelled_turn_hint(agent_name)}*"
+def _cancelled_turn_content(
+    message: str = 'Task cancelled.',
+    agent_name: str | None = None,
+) -> str:
+    return _streaming_terminal_outcomes.cancelled_turn_content(
+        _streaming_api(),
+        message,
+        agent_name,
     )
 
 
 def _persist_cancelled_turn(session, *, message: str = 'Task cancelled.') -> None:
-    """Persist a user-cancelled terminal state without provider-error wording.
-
-    cancel_stream() usually writes this marker first, but the streaming thread can
-    later unwind through the silent-failure or exception path. Those paths must
-    not append a misleading provider no-response error after an explicit cancel.
-    """
-    _materialize_pending_user_turn_before_error(session)
-    session.active_stream_id = None
-    session.pending_user_message = None
-    session.pending_attachments = []
-    session.pending_started_at = None
-    session.pending_user_source = None
-    if not _session_has_cancel_marker(session):
-        agent_name = _preferred_agent_display_name_for_session(session)
-        session.messages.append({
-            'role': 'assistant',
-            'content': _cancelled_turn_content(message, agent_name),
-            '_error': True,
-            'provider_details': str(message or 'Task cancelled.').strip(),
-            'provider_details_label': 'Cancellation details',
-            'timestamp': int(time.time()),
-        })
+    _streaming_terminal_outcomes.persist_cancelled_turn(
+        _streaming_api(),
+        session,
+        message=message,
+    )
 
 
 def _cleanup_ephemeral_cancelled_turn(session) -> None:
-    """Remove transient /btw session state after a cancel without saving it."""
-    session.active_stream_id = None
-    session.pending_user_message = None
-    session.pending_attachments = []
-    session.pending_started_at = None
-    session.pending_user_source = None
-    try:
-        import pathlib
-        pathlib.Path(session.path).unlink(missing_ok=True)
-    except Exception:
-        logger.debug("Failed to clean up ephemeral cancelled session", exc_info=True)
+    _streaming_terminal_outcomes.cleanup_ephemeral_cancelled_turn(
+        _streaming_api(),
+        session,
+    )
 
 
-def _finalize_cancelled_turn(session, *, ephemeral: bool = False, message: str = 'Task cancelled.') -> None:
-    """Finalize a cancelled turn for persistent or ephemeral sessions."""
-    if ephemeral:
-        _cleanup_ephemeral_cancelled_turn(session)
-        return
-    _persist_cancelled_turn(session, message=message)
-    try:
-        session.save()
-    except Exception:
-        logger.debug("Failed to persist cancelled turn", exc_info=True)
+def _finalize_cancelled_turn(
+    session,
+    *,
+    ephemeral: bool = False,
+    message: str = 'Task cancelled.',
+) -> None:
+    _streaming_terminal_outcomes.finalize_cancelled_turn(
+        _streaming_api(),
+        session,
+        ephemeral=ephemeral,
+        message=message,
+    )
 
 
 def _aiagent_import_error_detail() -> str:
-    """Return a multi-line diagnostic string for the "AIAgent not available" path.
-
-    The bare ImportError ("AIAgent not available -- check that hermes-agent is
-    on sys.path") leaves users guessing at which python is running, where it's
-    looking, and what to fix. We assemble the same evidence a maintainer would
-    ask for first (issue #1695): the python that's running, the agent_dir env
-    var if set, the sys.path entries that mention 'hermes', and the most-common
-    fix (`pip install -e .` in the agent dir).
-
-    Kept as a separate helper so it stays out of the hot path until we actually
-    need to raise — building it on every successful import would be wasted work.
-    """
-    import os as _os
-    import sys as _sys
-
-    lines = ["AIAgent not available -- check that hermes-agent is on sys.path"]
-    lines.append("")
-    lines.append(f"  python:  {_sys.executable}")
-    agent_dir = _os.environ.get("HERMES_WEBUI_AGENT_DIR")
-    if agent_dir:
-        lines.append(f"  HERMES_WEBUI_AGENT_DIR: {agent_dir}")
-    else:
-        lines.append("  HERMES_WEBUI_AGENT_DIR: (not set)")
-
-    # Show only the sys.path entries that look relevant — full sys.path is noisy.
-    relevant = [p for p in _sys.path if "hermes" in p.lower() or "agent" in p.lower()]
-    if relevant:
-        lines.append("  sys.path entries mentioning hermes/agent:")
-        for entry in relevant[:6]:
-            lines.append(f"    - {entry}")
-        if len(relevant) > 6:
-            lines.append(f"    ... and {len(relevant) - 6} more")
-    else:
-        lines.append("  sys.path: (no entries mention hermes or agent)")
-
-    lines.append("")
-    lines.append("  Most common fix: install the agent in editable mode so its modules")
-    lines.append("  appear on sys.path:")
-    lines.append("")
-    lines.append("    cd /path/to/hermes-agent")
-    lines.append("    pip install -e .")
-    lines.append("")
-    lines.append("  Then restart the WebUI.")
-    lines.append("")
-    lines.append('  Full troubleshooting: docs/troubleshooting.md ("AIAgent not available")')
-    return "\n".join(lines)
+    return _streaming_terminal_outcomes.aiagent_import_error_detail(
+        _streaming_api(),
+    )
 from api.models import get_session, title_from
 from api.workspace import set_last_workspace
 
@@ -2218,9 +1887,7 @@ def _accept_pending_async_delegations(
 
 
 def _attachment_name(att) -> str:
-    if isinstance(att, dict):
-        return str(att.get('name') or att.get('filename') or att.get('path') or '').strip()
-    return str(att or '').strip()
+    return _streaming_attachments.attachment_name(_streaming_api(), att)
 
 
 _IMAGE_MAGIC: dict[bytes | None, frozenset[str]] = {
@@ -2235,190 +1902,33 @@ _IMAGE_MAGIC: dict[bytes | None, frozenset[str]] = {
 
 
 def _is_valid_image(path: Path, mime: str) -> bool:
-    """Check that the file's first bytes match the expected image MIME type.
-
-    Uses simple magic-number detection (no external dependency). SVG is
-    allowed through because it is text-based and has no binary signature.
-    """
-    if not mime.startswith('image/'):
-        return False
-    mime_base = mime.split(';', 1)[0]
-    if mime_base == 'image/svg+xml':
-        return True
-    try:
-        with path.open('rb') as fh:
-            head = fh.read(16)
-    except OSError:
-        return False
-    for magic, mimes in _IMAGE_MAGIC.items():
-        if magic is not None and head.startswith(magic) and mime_base in mimes:
-            return True
-    return False
+    return _streaming_attachments.is_valid_image(_streaming_api(), path, mime)
 
 
 def _explicit_text_signal(cfg: dict) -> bool:
-    """True when the user has explicitly opted into the text (vision_analyze)
-    image pipeline.
-
-    Two explicit signals, either of which means "the user chose text on
-    purpose" and we must honour it rather than forwarding images natively:
-
-      * ``agent.image_input_mode: text`` — a direct mode override.
-      * a configured ``auxiliary.vision`` backend (provider not ``auto``/empty,
-        or an explicit model / base_url) — the user is paying for a dedicated
-        vision model and wants the text pipeline regardless of the main model.
-
-    This mirrors the explicit-signal portion of
-    ``agent/image_routing.py:decide_image_input_mode`` and is used both to
-    interpret *why* the canonical router returned ``"text"`` (so the
-    unknown-model carve-out only fires when there's no explicit user choice)
-    and as the fallback decision when the agent package is unavailable.
-    """
-    if not isinstance(cfg, dict):
-        return False
-    agent_cfg = cfg.get("agent") or {}
-    if isinstance(agent_cfg, dict):
-        mode = str(agent_cfg.get("image_input_mode", "auto") or "auto").strip().lower()
-        if mode == "text":
-            return True
-    aux = cfg.get("auxiliary") or {}
-    vision = (aux.get("vision") or {}) if isinstance(aux, dict) else {}
-    if not isinstance(vision, dict):
-        return False
-    provider = str(vision.get("provider") or "").strip().lower()
-    model_name = str(vision.get("model") or "").strip()
-    base_url = str(vision.get("base_url") or "").strip()
-    return provider not in ("", "auto") or bool(model_name) or bool(base_url)
+    return _streaming_attachments.explicit_text_signal(_streaming_api(), cfg)
 
 
 def _resolve_image_input_mode(cfg: dict) -> str:
-    """Return ``"native"`` or ``"text"`` for current-turn image uploads.
-
-    Delegates the routing decision to ``agent/image_routing.py:
-    decide_image_input_mode`` — the single source of truth — instead of the
-    local re-implementation that previously lived here. That copy had DIVERGED
-    from the canonical function: it returned ``"text"`` (dropping the image) in
-    cases the canonical router would have forwarded natively, because it never
-    consulted the active model's vision capability and instead hard-coded a
-    handful of config heuristics.
-
-    The WebUI keeps one deliberate carve-out on top of the canonical decision:
-    for UNKNOWN / custom models (no models.dev capability data) the canonical
-    router conservatively returns ``"text"``, but the WebUI historically
-    forwards images NATIVELY and relies on the agent's strip-and-retry guard
-    (``run_agent._try_shrink_image_parts_in_messages`` /
-    ``_strip_images_from_messages``) to downgrade on a provider rejection. We
-    preserve that behaviour here: a canonical ``"text"`` verdict is only
-    honoured when there is a real signal — an explicit user choice
-    (``image_input_mode: text`` or a configured ``auxiliary.vision`` backend)
-    or a model KNOWN to lack vision. Otherwise we forward native.
-
-    When the agent package is unavailable (e.g. the WebUI standalone test
-    environment, where ``import agent`` fails), we fall back to the historical
-    WebUI behaviour: honour an explicit text signal, otherwise native.
-    """
-    if not isinstance(cfg, dict):
-        cfg = {}
-
-    try:
-        from agent.image_routing import decide_image_input_mode, _lookup_supports_vision
-        from agent.auxiliary_client import _read_main_provider, _read_main_model
-
-        provider = (_read_main_provider() or "").strip()
-        model = (_read_main_model() or "").strip()
-
-        mode = decide_image_input_mode(provider, model, cfg)
-        if mode == "native":
-            return "native"
-
-        # Canonical returned "text". Honour it only when it reflects a genuine
-        # signal; otherwise apply the WebUI unknown-model native carve-out.
-        if _explicit_text_signal(cfg):
-            return "text"
-        if _lookup_supports_vision(provider, model, cfg) is False:
-            # Model is KNOWN to be text-only — respect the canonical verdict.
-            return "text"
-        # Unknown / custom model (capability is None): WebUI forwards native
-        # and lets the agent's strip-and-retry guard downgrade on rejection.
-        return "native"
-    except Exception:
-        # Agent package unavailable or import error — preserve historical WebUI
-        # behaviour: explicit text signal wins, otherwise native.
-        pass
-
-    if _explicit_text_signal(cfg):
-        return "text"
-    return "native"
+    return _streaming_attachments.resolve_image_input_mode(_streaming_api(), cfg)
 
 
-def _build_native_multimodal_message(workspace_ctx: str, msg_text: str, attachments, workspace: str, *, cfg: dict = None):
-    """Build native multimodal content parts for current-turn image uploads.
-
-    WebUI uploads files into the active workspace. For image files, pass the
-    bytes to Hermes as OpenAI-style image_url data URLs so vision-capable main
-    models can consume them in the same request. Non-image files intentionally
-    stay as text path attachments so the agent can inspect them with file tools.
-
-    When *cfg* is provided, respects ``agent.image_input_mode`` — if the resolved
-    mode is ``"text"``, returns a plain string (attachments are not embedded) so
-    the agent's text-mode pipeline (``vision_analyze``) handles images.
-    """
-    if not attachments:
-        return workspace_ctx + msg_text
-
-    # ── Check image_input_mode before embedding anything ──
-    if cfg is not None and _resolve_image_input_mode(cfg) == "text":
-        return workspace_ctx + msg_text
-
-    parts = [{'type': 'text', 'text': workspace_ctx + msg_text}]
-    workspace_root = Path(workspace).expanduser().resolve()
-    # Stage-361 maintainer fix (Opus SHOULD-FIX): chat uploads from #2319 now
-    # land in ~/.hermes/webui/attachments/<sid>/ (outside workspace_root by
-    # design). The pre-existing `path.relative_to(workspace_root)` guard would
-    # silently reject every image upload for vision-capable models. Allow the
-    # configured attachment root in addition to workspace_root so native
-    # multimodal embeds still build the base64 image_url part. The
-    # _attachment_root() helper applies expanduser+resolve and is also reused
-    # by _upload_destination — single source of truth for the inbox root.
-    try:
-        from api.upload import _attachment_root
-        attachment_root = _attachment_root()
-        _allowed_roots = (workspace_root, attachment_root)
-    except Exception:
-        _allowed_roots = (workspace_root,)
-    image_count = 0
-
-    for att in attachments or []:
-        if not isinstance(att, dict):
-            continue
-        raw_path = str(att.get('path') or '').strip()
-        if not raw_path:
-            continue
-        try:
-            path = Path(raw_path).expanduser().resolve()
-            # Uploads should live inside the selected workspace OR the
-            # session attachment inbox (#2319). Do not read arbitrary paths
-            # from client-provided attachment metadata.
-            if not any(path.is_relative_to(r) for r in _allowed_roots):
-                continue
-            if not path.is_file():
-                continue
-            size = path.stat().st_size
-            if size <= 0 or size > _NATIVE_IMAGE_MAX_BYTES:
-                continue
-            mime = str(att.get('mime') or '').strip() or (mimetypes.guess_type(path.name)[0] or '')
-            if not mime.startswith('image/') or not _is_valid_image(path, mime):
-                continue
-            data = base64.b64encode(path.read_bytes()).decode('ascii')
-        except Exception:
-            continue
-        parts.append({
-            'type': 'image_url',
-            'image_url': {'url': f'data:{mime};base64,{data}'},
-        })
-        image_count += 1
-
-    return parts if image_count else workspace_ctx + msg_text
+def _build_native_multimodal_message(
+    workspace_ctx: str,
+    msg_text: str,
+    attachments,
+    workspace: str,
+    *,
+    cfg: dict = None,
+):
+    return _streaming_attachments.build_native_multimodal_message(
+        _streaming_api(),
+        workspace_ctx,
+        msg_text,
+        attachments,
+        workspace,
+        cfg=cfg,
+    )
 
 
 _INLINE_THINKING_TAG_PAIRS = (
@@ -2429,427 +1939,116 @@ _INLINE_THINKING_TAG_PAIRS = (
 
 
 def _inline_thinking_fence_marker_at(text, index):
-    # A fenced code block opener may be indented up to 3 spaces in Markdown
-    # (4+ spaces is an indented code block, handled separately). The marker is
-    # only a fence when it sits at the start of a line (after optional 1-3
-    # spaces of indentation).
-    if index > 0 and text[index - 1] != '\n':
-        # Allow up to 3 leading spaces: walk back over spaces to a line start.
-        back = index - 1
-        spaces = 0
-        while back >= 0 and text[back] == ' ' and spaces < 3:
-            back -= 1
-            spaces += 1
-        if not (back < 0 or text[back] == '\n'):
-            return ''
-    if text.startswith('```', index):
-        return '```'
-    if text.startswith('~~~', index):
-        return '~~~'
-    return ''
+    return _streaming_thinking.inline_thinking_fence_marker_at(
+        _streaming_api(),
+        text,
+        index,
+    )
 
 
 def _next_inline_thinking_opener(text, start):
-    """Index of the earliest complete thinking opener at/after `start`, or -1.
-    Cheap str.find per opener — lets the scanner bulk-skip plain trailing content
-    instead of walking it char-by-char (#3633 Codex per-token perf catch)."""
-    best = -1
-    for open_tag, _close in _INLINE_THINKING_TAG_PAIRS:
-        i = text.find(open_tag, start)
-        if i != -1 and (best == -1 or i < best):
-            best = i
-    return best
+    return _streaming_thinking.next_inline_thinking_opener(
+        _streaming_api(),
+        text,
+        start,
+    )
 
 
 def _text_tail_is_partial_opener(text):
-    """True when the END of `text` is a non-empty proper prefix of some thinking
-    opener (e.g. ``<thi`` for ``<think>``). Used to decide whether a streaming
-    tail might be a forming block worth code-aware handling."""
-    for open_tag, _close in _INLINE_THINKING_TAG_PAIRS:
-        m = min(len(open_tag) - 1, len(text))
-        for n in range(m, 0, -1):
-            if open_tag.startswith(text[-n:]):
-                return True
-    return False
+    return _streaming_thinking.text_tail_is_partial_opener(
+        _streaming_api(),
+        text,
+    )
 
 
 def _line_is_indented_code(text, line_start):
-    """True when the line beginning at `line_start` is a markdown indented code
-    block line (>=4 leading spaces or a leading tab, and not blank). `line_start`
-    must be the index of the first character of the line. O(1)-ish: only inspects
-    the line's leading characters, not the whole document (the per-character
-    variant was O(n^2) on long no-newline content — #3633 Codex perf catch)."""
-    if line_start >= len(text):
-        return False
-    if text[line_start] == '\t':
-        # A leading tab is indented code only if the line isn't otherwise blank.
-        nl = text.find('\n', line_start)
-        seg = text[line_start:(nl if nl != -1 else len(text))]
-        return bool(seg.strip())
-    if text.startswith('    ', line_start):
-        nl = text.find('\n', line_start)
-        seg = text[line_start:(nl if nl != -1 else len(text))]
-        return bool(seg.strip())
-    return False
+    return _streaming_thinking.line_is_indented_code(
+        _streaming_api(),
+        text,
+        line_start,
+    )
 
 
 def _merge_inline_thinking_reasoning(existing_reasoning, extracted_parts):
-    out = str(existing_reasoning or '').strip()
-    for part in extracted_parts or ():
-        item = str(part or '').strip()
-        if not item:
-            continue
-        if not out:
-            out = item
-            continue
-        if out == item or any(existing.strip() == item for existing in out.split('\n\n')):
-            continue
-        out = out + '\n\n' + item
-    return out
+    return _streaming_thinking.merge_inline_thinking_reasoning(
+        _streaming_api(),
+        existing_reasoning,
+        extracted_parts,
+    )
 
 
-def _extract_inline_thinking_from_content(raw_content, existing_reasoning='', *, streaming=False):
-    """Split inline thinking blocks out of assistant content.
-
-    Code-aware: thinking tags inside a triple-fence (``` / ~~~), an inline
-    single-backtick code span, or an indented (>=4-space / tab) code block are
-    LEFT VISIBLE — they are literal text a user typed/pasted, not a real thinking
-    trace. (#3633 deep-review / Codex catch: the earlier full-scan version only
-    protected triple fences, so a literal `<think>` in an inline code span got
-    silently extracted.)
-
-    ``streaming`` gates partial/unclosed-block handling: during live streaming an
-    unmatched open tag means "still thinking" and its tail is shown as reasoning;
-    on the persist/reload path (streaming=False) an unclosed tag is LEFT VISIBLE
-    so prose after a literal ``<think>`` is never silently truncated on save.
-    """
-    text = '' if raw_content is None else str(raw_content)
-    if not text:
-        return text, str(existing_reasoning or '').strip()
-    # Fast path (#3633 Codex perf catch — _parseStreamState / syncInflight call
-    # this on the FULL accumulator on every streamed token, so the common no-tag
-    # case must not do the O(length) char walk per call). If the text contains no
-    # complete thinking opener AND — when streaming — its tail is not a prefix of
-    # any opener (a partial opener mid-stream), there is nothing to extract:
-    # return the text unchanged. Two cheap substring scans instead of a full walk.
-    if not any(open_tag in text for open_tag, _close in _INLINE_THINKING_TAG_PAIRS):
-        tail_is_partial_opener = False
-        if streaming:
-            for open_tag, _close in _INLINE_THINKING_TAG_PAIRS:
-                # Does the END of text look like the START of an opener?
-                max_prefix = min(len(open_tag) - 1, len(text))
-                for n in range(max_prefix, 0, -1):
-                    if open_tag.startswith(text[-n:]):
-                        tail_is_partial_opener = True
-                        break
-                if tail_is_partial_opener:
-                    break
-        if not tail_is_partial_opener:
-            return text, str(existing_reasoning or '').strip()
-    visible = []
-    extracted = []
-    cursor = 0
-    index = 0
-    fence = ''
-    in_backtick = False
-    length = len(text)
-    # Incremental, O(1)-per-iteration line state (the previous per-character line
-    # scan made the whole pass O(n^2) on long no-newline content — #3633 Codex
-    # perf catch). `line_is_indented_code` is recomputed only at a line start.
-    line_is_indented_code = _line_is_indented_code(text, 0)
-    # Whether any non-whitespace char appeared in text[:index] — the cheap
-    # equivalent of the old `text[:index].strip() != ''` leading check.
-    seen_nonspace = False
-    # Whether a LEADING thinking block/prefix was removed — only then do we
-    # lstrip the final content (so a reply that legitimately starts with
-    # indented code / whitespace and has NO leading thinking wrapper keeps its
-    # leading whitespace — #3633 Codex catch).
-    leading_removed = False
-    # Index of the next opener at/after `index` (recomputed only when we pass it).
-    # When no opener remains ahead, the rest of the text is plain and can be
-    # appended in one slice — this keeps a stream that DID contain a leading
-    # thinking block from re-walking the whole growing answer tail every token
-    # (#3633 Codex perf catch: the per-token full walk was O(n^2) over a stream).
-    next_opener = _next_inline_thinking_opener(text, 0)
-    while index < length:
-        if next_opener == -1 or index > next_opener:
-            next_opener = _next_inline_thinking_opener(text, index)
-        if next_opener == -1:
-            # No further COMPLETE opener ahead. The remaining tail is plain
-            # visible content and can be appended in one slice — EXCEPT during
-            # streaming when the tail is a prefix of an opener (e.g. "...<thi"):
-            # that may be a forming block and must be suppressed, but ONLY if it
-            # is outside code context (a partial opener inside inline-backtick /
-            # fenced / indented code stays visible — master parity). Determining
-            # code state needs the char walk, so in that case fall through to the
-            # normal loop (bounded — a partial tail is a transient single token)
-            # rather than bulk-skipping. Otherwise stop (avoids re-walking the
-            # growing answer tail every token — #3633 perf catch).
-            if streaming and _text_tail_is_partial_opener(text):
-                pass  # fall through to the code-aware char walk for the tail
-            else:
-                break
-        ch = text[index]
-        if index > 0 and text[index - 1] == '\n':
-            line_is_indented_code = _line_is_indented_code(text, index)
-        marker = _inline_thinking_fence_marker_at(text, index)
-        if marker:
-            fence = '' if fence == marker else (fence or marker)
-        # Inline single-backtick code span toggles on each lone backtick that is
-        # not part of a triple fence. Only tracked outside a triple fence.
-        if not fence and not marker and ch == '`':
-            in_backtick = not in_backtick
-        in_code = bool(fence) or in_backtick or line_is_indented_code
-        if not in_code:
-            pair = None
-            for open_tag, close_tag in _INLINE_THINKING_TAG_PAIRS:
-                if text.startswith(open_tag, index):
-                    pair = (open_tag, close_tag)
-                    break
-            if pair:
-                open_tag, close_tag = pair
-                close_index = text.find(close_tag, index + len(open_tag))
-                if close_index == -1:
-                    # Unclosed open tag. A LEADING unclosed block (nothing
-                    # visible before it) is a genuine thinking trace that got
-                    # cut off / persisted mid-thought → reasoning (master #3455
-                    # leading-only intent, and the live-stream "still thinking"
-                    # case). An unclosed tag AFTER visible content on the persist
-                    # path is almost always a literal typed tag — leave it (and
-                    # the prose after it) visible so nothing is silently
-                    # truncated (#3633 Codex catch). During live streaming any
-                    # unmatched open tag is treated as in-progress thinking.
-                    leading = not seen_nonspace
-                    if not streaming and not leading:
-                        break
-                    if leading:
-                        leading_removed = True
-                    visible.append(text[cursor:index])
-                    partial = text[index + len(open_tag):]
-                    if partial:
-                        extracted.append(partial)
-                    cursor = length
-                    index = length
-                    break
-                visible.append(text[cursor:index])
-                extracted.append(text[index + len(open_tag):close_index])
-                if not seen_nonspace:
-                    leading_removed = True
-                seen_nonspace = True  # the extracted tag span is non-whitespace
-                index = close_index + len(close_tag)
-                cursor = index
-                continue
-            if streaming:
-                matched_partial = False
-                for open_tag, _close_tag in _INLINE_THINKING_TAG_PAIRS:
-                    rest = text[index:]
-                    if len(rest) < len(open_tag) and open_tag.startswith(rest):
-                        if not seen_nonspace:
-                            leading_removed = True
-                        visible.append(text[cursor:index])
-                        cursor = length
-                        index = length
-                        matched_partial = True
-                        break
-                if matched_partial or index >= length:
-                    break
-        if not ch.isspace():
-            seen_nonspace = True
-        index += 1
-    if cursor < length:
-        visible.append(text[cursor:])
-    content = ''.join(visible)
-    if leading_removed:
-        content = content.lstrip()
-    reasoning = _merge_inline_thinking_reasoning(existing_reasoning, extracted)
-    return content, reasoning
+def _extract_inline_thinking_from_content(
+    raw_content,
+    existing_reasoning='',
+    *,
+    streaming=False,
+):
+    return _streaming_thinking.extract_inline_thinking_from_content(
+        _streaming_api(),
+        raw_content,
+        existing_reasoning,
+        streaming=streaming,
+    )
 
 
 def _split_thinking_from_content(raw_content, existing_reasoning=''):
-    """Split inline thinking blocks out of assistant content for persistence.
-
-    Persistence path: streaming=False, so an unclosed tag stays visible content
-    (a partial block only means "still thinking" during a live stream).
-    """
-    return _extract_inline_thinking_from_content(
+    return _streaming_thinking.split_thinking_from_content(
+        _streaming_api(),
         raw_content,
-        existing_reasoning=existing_reasoning,
-        streaming=False,
+        existing_reasoning,
     )
 
 
 def _strip_thinking_markup(text: str) -> str:
-    """Remove common reasoning/thinking wrappers from model text."""
-    if not text:
-        return ''
-    s = str(text)
-    # Treat provider thinking wrappers as metadata only when they lead the
-    # response. Literal discussion of these tags later in normal prose should
-    # stay visible (#2152).
-    s = re.sub(r'^\s*<think>.*?</think>\s*', ' ', s, flags=re.IGNORECASE | re.DOTALL)
-    s = re.sub(r'^\s*<\|channel\|?>thought\n?.*?<channel\|>\s*', ' ', s, flags=re.IGNORECASE | re.DOTALL)
-    s = re.sub(r'^\s*<\|turn\|>thinking\n.*?<turn\|>\s*', ' ', s, flags=re.IGNORECASE | re.DOTALL)  # Gemma 4
-    s = re.sub(r'^\s*(the|ther)\s+user\s+is\s+asking[^\n]*(?:\n|$)', ' ', s, flags=re.IGNORECASE)
-    # Strip plain-text thinking preambles from models that don't use <think> tags (e.g. Qwen3).
-    # These appear as the very first sentence of the assistant response and are not useful as titles.
-    s = re.sub(
-        r"^\s*(?:here(?:'s| is) (?:a |my )?(?:thinking|thought) (?:process|trace|through)\b[^\n]*\n?"
-        r"|let me (?:think|work|reason|analyze|walk) (?:through|about|this|step)\b[^\n]*\n?"
-        r"|i(?:'ll| will) (?:think|work|reason|analyze|break this down)\b[^\n]*\n?"
-        r"|(?:okay|alright|sure|of course),?\s+let me\b[^\n]*\n?)",
-        ' ', s, flags=re.IGNORECASE
-    )
-    s = re.sub(r'\s+', ' ', s).strip()
-    return s
+    return _streaming_thinking.strip_thinking_markup(_streaming_api(), text)
 
 
 def _strip_xml_tool_calls(text: str) -> str:
-    """Strip XML-style function_calls blocks that DeepSeek and similar models
-    emit in their raw response text.  These blocks are processed separately as
-    tool calls; leaving them in the assistant content causes them to render
-    visibly in the chat bubble.
-
-    Handles both complete blocks (<function_calls>…</function_calls>) and
-    partial/orphaned opening tags that may appear at the tail of a stream.
-    Also handles variants like <｜DSML｜function_calls> from DeepSeek on Bedrock.
-    """
-    if not text:
-        return text
-    s = str(text)
-    # Check if contains any function_calls/DSML marker (case-insensitive)
-    _lo = s.lower()
-    if 'function_calls' not in _lo and 'dsml' not in _lo:
-        return text
-    
-    _dsml_prefix = r'(?:\s*｜\s*DSML\s*[｜|]\s*)?'
-    open_tag = rf'<{_dsml_prefix}function_calls'
-    close_tag = rf'</{_dsml_prefix}function_calls>'
-    # Strip complete blocks for both <function_calls> and <｜DSML｜function_calls>.
-    s = re.sub(
-        rf'{open_tag}>.*?{close_tag}',
-        '',
-        s,
-        flags=re.IGNORECASE | re.DOTALL
-    )
-    # Strip orphaned/truncated opening tags, including missing ">" at stream tail.
-    s = re.sub(
-        rf'{open_tag}(?:>|$).*$',
-        '',
-        s,
-        flags=re.IGNORECASE | re.DOTALL
-    )
-    # Remove malformed DSML fragments like "<｜DSML |" that can leak in tokens.
-    s = re.sub(r'<\s*｜\s*DSML\s*[｜|]\s*', '', s, flags=re.IGNORECASE)
-    return s.strip()
+    return _streaming_thinking.strip_xml_tool_calls(_streaming_api(), text)
 
 
 def _sanitize_generated_title(text: str) -> str:
-    """Sanitize LLM-generated title text before persisting to session."""
-    s = _strip_thinking_markup(text or '')
-    s = re.sub(
-        r'^\s*(?:[*_`~]+\s*)?(?:session\s+title|title)\s*:\s*(?:[*_`~]+\s*)?',
-        '',
-        s,
-        flags=re.IGNORECASE,
-    )
-    s = re.sub(r'^\s*title\s*:\s*', '', s, flags=re.IGNORECASE)
-    s = s.strip(" \t\r\n\"'`*_~")
-    s = re.sub(r'\s+', ' ', s).strip()
-    # Guard against chain-of-thought leakage and meta-reasoning patterns.
-    if _looks_invalid_generated_title(s):
-        return ''
-    return s[:80]
+    return _streaming_thinking.sanitize_generated_title(_streaming_api(), text)
 
 
 def _looks_invalid_generated_title(text: str) -> bool:
-    s = str(text or '')
-    if not s.strip():
-        return True
-    return bool(
-        re.search(r'<think>|<\|channel\|>thought|<\|turn\|>thinking', s, flags=re.IGNORECASE)
-        or re.search(r'^\s*(the|ther)\s+user\s+', s, flags=re.IGNORECASE)
-        or re.search(r'^\s*user\s+\w+\s+', s, flags=re.IGNORECASE)
-        or re.search(r'\b(they|user)\s+want(s)?\s+me\s+to\b', s, flags=re.IGNORECASE)
-        or re.search(r'^\s*(i|we)\s+(should|need to|will|can)\b', s, flags=re.IGNORECASE)
-        or re.search(r'^\s*let me\b', s, flags=re.IGNORECASE)
-        or re.search(r"^\s*here(?:'s| is) (?:a |my )?(?:thinking|thought)", s, flags=re.IGNORECASE)
-        or re.search(r'^\s*(ok|okay|done|all set|complete|completed|finished)\b[\s.!?]*$', s, flags=re.IGNORECASE)
+    return _streaming_thinking.looks_invalid_generated_title(
+        _streaming_api(),
+        text,
     )
 
 
 def _structured_visible_text(value, *, depth: int = 0) -> str:
-    """Extract provider text without stringifying metadata-only objects."""
-    if isinstance(value, str):
-        return value
-    if not isinstance(value, dict) or depth >= 4:
-        return ''
-    for key in ('value', 'text', 'content', 'input_text', 'output_text'):
-        text = _structured_visible_text(value.get(key), depth=depth + 1)
-        if text:
-            return text
-    return ''
+    return _streaming_thinking.structured_visible_text(
+        _streaming_api(),
+        value,
+        depth=depth,
+    )
 
 
 def _message_content_part_text(part) -> str:
-    """Extract visible text from a structured content part."""
-    if not isinstance(part, dict):
-        return ''
-    for key in ('text', 'content', 'input_text', 'output_text'):
-        text = _structured_visible_text(part.get(key))
-        if text:
-            return text
-    return ''
+    return _streaming_thinking.message_content_part_text(
+        _streaming_api(),
+        part,
+    )
 
 
 def _message_text(value) -> str:
-    """Extract plain text from mixed message content payloads."""
-    if isinstance(value, list):
-        parts = []
-        for p in value:
-            if not isinstance(p, dict):
-                continue
-            ptype = str(p.get('type') or '').lower()
-            if ptype in ('', 'text', 'input_text', 'output_text'):
-                parts.append(_message_content_part_text(p))
-        return _strip_thinking_markup('\n'.join(parts).strip())
-    return _strip_thinking_markup(str(value or '').strip())
+    return _streaming_thinking.message_text(_streaming_api(), value)
 
 
 def _assistant_content_part_is_tool_use(part) -> bool:
-    """Return True when a content[] part represents a tool invocation boundary."""
-    if not isinstance(part, dict):
-        return False
-    part_type = str(part.get('type') or '').lower()
-    if part_type in {'tool_use', 'tool_call'}:
-        return True
-    if part_type:
-        return False
-    if _message_content_part_text(part).strip():
-        return False
-    return any(key in part for key in ('tool_use_id', 'tool_call_id', 'call_id')) and any(
-        key in part for key in ('name', 'tool_name', 'input', 'args')
+    return _streaming_thinking.assistant_content_part_is_tool_use(
+        _streaming_api(),
+        part,
     )
 
 
 def _assistant_message_has_final_visible_text(message) -> bool:
-    """Return True when an assistant row carries a settled visible answer."""
-    if not isinstance(message, dict) or message.get('role') != 'assistant':
-        return False
-    content = message.get('content', '')
-    if isinstance(content, list):
-        last_tool_idx = -1
-        for idx, part in enumerate(content):
-            if _assistant_content_part_is_tool_use(part):
-                last_tool_idx = idx
-        if last_tool_idx >= 0:
-            tail_parts = content[last_tool_idx + 1:]
-            return bool(_message_text(tail_parts).strip())
-        if message.get('tool_calls'):
-            return False
-        return bool(_message_text(content).strip())
-    if message.get('tool_calls'):
-        return False
-    return bool(_message_text(content).strip())
+    return _streaming_thinking.assistant_message_has_final_visible_text(
+        _streaming_api(),
+        message,
+    )
 
 
 

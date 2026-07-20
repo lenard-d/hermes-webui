@@ -132,9 +132,15 @@ def test_synthetic_max_iteration_summary_request_is_dropped_from_agent_result():
 
 
 def test_tool_limit_detection_uses_explicit_boolean_grouping():
-    streaming_py = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
-
-    assert "or ('tool-calling iterations' in haystack and 'maximum' in haystack)" in streaming_py
+    assert streaming._agent_result_tool_limit_reached({
+        "turn_exit_reason": "maximum tool-calling iterations reached",
+    }) is True
+    assert streaming._agent_result_tool_limit_reached({
+        "turn_exit_reason": "tool-calling iterations stopped",
+    }) is False
+    assert streaming._agent_result_tool_limit_reached({
+        "turn_exit_reason": "maximum response size reached",
+    }) is False
 
 
 def test_historical_synthetic_summary_prompt_does_not_mark_normal_result_as_tool_limit():

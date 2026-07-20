@@ -25,36 +25,10 @@ class TestXmlToolCallStrip:
     <function_calls>...</function_calls> blocks from assistant content."""
 
     def _load_fn(self):
-        """Import the helper from streaming.py without triggering full server
-        initialisation (which would fail in unit-test contexts)."""
-        import importlib, sys, types
+        """Use the public streaming facade, independent of implementation file."""
+        from api.streaming import _strip_xml_tool_calls
 
-        # Stub heavy transitive imports so we can import the module cleanly.
-        for mod in ('api.config', 'api.helpers', 'api.models', 'api.workspace'):
-            if mod not in sys.modules:
-                sys.modules[mod] = types.ModuleType(mod)
-
-        # Provide minimal symbols that streaming.py needs at import time.
-        cfg = sys.modules.setdefault('api.config', types.ModuleType('api.config'))
-        for attr in ('STREAMS', 'STREAMS_LOCK', 'CANCEL_FLAGS', 'AGENT_INSTANCES',
-                     'LOCK', 'SESSIONS', 'SESSION_DIR',
-                     '_get_session_agent_lock', '_set_thread_env',
-                     '_clear_thread_env', 'resolve_model_provider'):
-            if not hasattr(cfg, attr):
-                setattr(cfg, attr, None)
-
-        # Fall back to reading the source and exec-ing just the function.
-        src = read('api/streaming.py')
-        ns: dict = {}
-        # Extract the function definition with regex so we don't need to import
-        # the whole module (avoids all the heavy deps).
-        match = re.search(
-            r'(def _strip_xml_tool_calls\(.*?)\n(?=\ndef |\nclass )',
-            src, re.DOTALL
-        )
-        assert match, "_strip_xml_tool_calls not found in api/streaming.py"
-        exec(compile('import re\n' + match.group(1), '<streaming_extract>', 'exec'), ns)
-        return ns['_strip_xml_tool_calls']
+        return _strip_xml_tool_calls
 
     def test_complete_block_removed(self):
         fn = self._load_fn()

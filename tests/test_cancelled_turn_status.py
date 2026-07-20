@@ -13,6 +13,7 @@ from api.streaming import (
     _cancelled_turn_content,
     _classify_provider_error,
     _finalize_cancelled_turn,
+    _session_has_cancel_marker,
 )
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
@@ -123,9 +124,20 @@ class TestCancelledTurnFinalizer:
 class TestCancelledTurnPersistenceGuards:
     def test_cancel_marker_patterns_are_centralized_for_dedupe(self):
         assert _CANCEL_MARKER_PATTERNS == ('task cancelled', 'task canceled', 'response interrupted')
-        src = _read("api/streaming.py")
-        assert "any(pattern in normalized for pattern in _CANCEL_MARKER_PATTERNS)" in src
-        assert "any(pattern in _content for pattern in _CANCEL_MARKER_PATTERNS)" in src
+
+        for content in (
+            'Task cancelled while waiting.',
+            'Task canceled while waiting.',
+            'Response interrupted by user.',
+            [{'type': 'text', 'text': 'Response interrupted by user.'}],
+        ):
+            session = _DummySession()
+            session.messages = [{'role': 'assistant', 'content': content}]
+            assert _session_has_cancel_marker(session) is True
+
+        session = _DummySession()
+        session.messages = [{'role': 'assistant', 'content': 'Task completed normally.'}]
+        assert _session_has_cancel_marker(session) is False
 
     def test_silent_failure_path_checks_cancel_event_before_persisting_provider_error(self):
         src = _read("api/streaming.py")

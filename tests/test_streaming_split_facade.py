@@ -87,3 +87,70 @@ def test_cancel_payload_public_shape_is_unchanged():
 def test_late_binding_resolves_the_canonical_facade():
     assert streaming_api() is streaming
     assert payloads.session_payload_with_full_messages is not None
+
+
+def test_provider_classifier_observes_facade_helpers(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        streaming,
+        "_provider_error_probe_text",
+        lambda value: (str(value), None),
+    )
+    monkeypatch.setattr(
+        streaming,
+        "_is_quota_error_text",
+        lambda value: seen.append(value) or True,
+    )
+
+    result = streaming._classify_provider_error("account exhausted")
+
+    assert result["type"] == "quota_exhausted"
+    assert seen == ["account exhausted"]
+
+
+def test_multimodal_builder_observes_facade_mode_patch(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "_resolve_image_input_mode",
+        lambda cfg: "text",
+    )
+
+    result = streaming._build_native_multimodal_message(
+        "[workspace] ",
+        "question",
+        [{"path": "/must/not/be/read.png", "mime": "image/png"}],
+        "/must/not/be/read",
+        cfg={"agent": {"image_input_mode": "auto"}},
+    )
+
+    assert result == "[workspace] question"
+
+
+def test_thinking_extractor_observes_facade_merge_patch(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "_merge_inline_thinking_reasoning",
+        lambda existing, extracted: f"patched:{'|'.join(extracted)}",
+    )
+
+    content, reasoning = streaming._extract_inline_thinking_from_content(
+        "<think>inspect</think>Answer",
+    )
+
+    assert content == "Answer"
+    assert reasoning == "patched:inspect"
+
+
+def test_title_sanitizer_observes_facade_validation_patch(monkeypatch):
+    monkeypatch.setattr(
+        streaming,
+        "_strip_thinking_markup",
+        lambda text: "Candidate title",
+    )
+    monkeypatch.setattr(
+        streaming,
+        "_looks_invalid_generated_title",
+        lambda text: text == "Candidate title",
+    )
+
+    assert streaming._sanitize_generated_title("ignored") == ""

@@ -11,6 +11,8 @@ Covers:
 import pathlib
 import re
 
+from api.streaming import _classify_provider_error
+
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 
 
@@ -25,73 +27,43 @@ class TestStreamingModelNotFoundDetection:
 
     def test_model_not_found_type_defined_in_streaming(self):
         """'model_not_found' type must be emitted for 404 errors."""
-        src = _read("api/streaming.py")
-        assert "model_not_found" in src, (
-            "model_not_found type not found in streaming.py — "
-            "404 errors will not be surfaced with a helpful message"
-        )
+        assert _classify_provider_error("404")['type'] == "model_not_found"
 
-    def test_is_not_found_flag_defined(self):
-        """_exc_is_not_found variable must exist in the exception handler."""
-        src = _read("api/streaming.py")
-        assert "_exc_is_not_found" in src, (
-            "_exc_is_not_found flag not found in streaming.py"
+    def test_structured_404_status_is_classified(self):
+        """Structured provider status also drives not-found classification."""
+        result = _classify_provider_error(
+            "request failed",
+            {"status_code": 404, "message": "missing model"},
         )
+        assert result['type'] == "model_not_found"
 
     def test_not_found_detects_404(self):
         """'404' must be part of the model-not-found detection logic."""
-        src = _read("api/streaming.py")
-        idx = src.find("_exc_is_not_found")
-        assert idx != -1, "_exc_is_not_found not found"
-        block = src[idx:idx + 600]
-        assert "'404'" in block or '"404"' in block, (
-            "'404' not in model-not-found detection block"
-        )
+        assert _classify_provider_error("provider returned 404")['type'] == "model_not_found"
 
     def test_not_found_detects_not_found_string(self):
         """'not found' must be part of the detection logic."""
-        src = _read("api/streaming.py")
-        idx = src.find("_exc_is_not_found")
-        block = src[idx:idx + 600]
-        assert "not found" in block.lower(), (
-            "'not found' not in model-not-found detection block"
-        )
+        assert _classify_provider_error("model not found")['type'] == "model_not_found"
 
     def test_not_found_detects_does_not_exist(self):
         """'does not exist' must be part of the detection logic."""
-        src = _read("api/streaming.py")
-        idx = src.find("_exc_is_not_found")
-        block = src[idx:idx + 600]
-        assert "does not exist" in block.lower(), (
-            "'does not exist' not in model-not-found detection block"
-        )
+        assert _classify_provider_error("model does not exist")['type'] == "model_not_found"
 
     def test_not_found_detects_invalid_model(self):
         """'invalid model' must be part of the detection logic."""
-        src = _read("api/streaming.py")
-        idx = src.find("_exc_is_not_found")
-        block = src[idx:idx + 600]
-        assert "invalid model" in block.lower(), (
-            "'invalid model' not in model-not-found detection block"
-        )
+        assert _classify_provider_error("invalid model")['type'] == "model_not_found"
 
     def test_not_found_hint_mentions_settings(self):
         """The model_not_found hint must mention Settings or hermes model."""
-        src = _read("api/streaming.py")
-        idx = src.find("model_not_found")
-        block = src[idx:idx + 500]
-        assert "Settings" in block or "hermes model" in block, (
+        hint = _classify_provider_error("model not found")['hint']
+        assert "Settings" in hint or "hermes model" in hint, (
             "model_not_found hint must mention Settings or hermes model command"
         )
 
     def test_not_found_check_order_after_auth(self):
         """model_not_found must be checked after auth_mismatch (auth first)."""
-        src = _read("api/streaming.py")
-        auth_idx = src.find("elif _exc_is_auth")
-        nf_idx = src.find("elif _exc_is_not_found")
-        assert auth_idx != -1, "_exc_is_auth not found"
-        assert nf_idx != -1, "_exc_is_not_found not found"
-        assert auth_idx < nf_idx, (
+        result = _classify_provider_error("401 unauthorized: model not found")
+        assert result['type'] == "auth_mismatch", (
             "auth_mismatch should be checked before model_not_found — "
             "auth errors must not be mistaken for not-found errors"
         )
