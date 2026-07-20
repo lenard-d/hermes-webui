@@ -12,9 +12,9 @@ import {
   _rememberObservedStreamingSession,
   _setSessionViewedCount,
 } from './session-unread.js';
-import { sidebarStateBindings } from './sidebar-state.js';
-import { _deferActiveSessionExternalRefresh, refreshActiveSessionIfExternallyUpdated } from './session-list.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { sidebarStateBindings } from './sidebar-store.js';
+import { _deferActiveSessionExternalRefresh, refreshActiveSessionIfExternallyUpdated } from './session-list-refresh.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 function _isSessionLocallyStreaming(s) {
   if (!s || !s.session_id) return false;

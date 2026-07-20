@@ -798,7 +798,14 @@ independently parseable native modules and `state.js` is a compatibility facade.
 `composer-drafts.js` owns draft persistence and restore suppression;
 `session-unread.js` owns viewed/completion markers; `session-runtime.js` owns
 sidebar stream reconciliation and journal recovery; and `session-state-store.js`
-owns their shared mutable identities and load-generation bindings. A domain stays
+owns their shared mutable identities and load-generation bindings. The session
+sidebar follows the same ownership model: `sidebar-store.js` is the sole mutable
+list-state owner; navigation, selection, motion, cache, row actions, and stream
+events live in dedicated modules; and session-list loading, reconciliation,
+refresh, and skeleton rendering have separate lifecycle owners. `sidebar-state.js`
+and `session-list.js` are stable public facades only. Small render ports keep
+state and action owners independent of concrete DOM renderers without creating
+reverse imports. A domain stays
 intact when splitting it would cross a
 function, transaction, or owner-closure boundary. Large modules such as
 `config/model_catalog.py`, `runs/local.py`, and

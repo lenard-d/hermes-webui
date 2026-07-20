@@ -89,7 +89,7 @@ const legacyBindings=Object.freeze({
   "_sameTranscriptMessage":Object.freeze({get:()=>messageTimelineModule._sameTranscriptMessage}),
   "_saveComposerDraft":Object.freeze({get:()=>stateModule._saveComposerDraft}),
   "_saveComposerDraftNow":Object.freeze({get:()=>stateModule._saveComposerDraftNow}),
-  "_sessionActionMenu":Object.freeze({get:()=>sidebarStateModule._sessionActionMenu}),
+  "_sessionActionMenu":Object.freeze({get:()=>sidebarStateModule.sidebarStateBindings._sessionActionMenu}),
   "_sessionIdFromLocation":Object.freeze({get:()=>sidebarStateModule._sessionIdFromLocation}),
   "_sessionListSkeletonActive":Object.freeze({get:()=>sessionListModule.sessionListBindings._sessionListSkeletonActive,set:(value)=>{sessionListModule.sessionListBindings._sessionListSkeletonActive=value;}}),
   "_sessionUrlForSid":Object.freeze({get:()=>sidebarStateModule._sessionUrlForSid}),

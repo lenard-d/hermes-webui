@@ -1,4 +1,5 @@
 import { sessionStateBindings } from './state.js';
+import { _stripAttachedFilesMarker } from './session-display.js';
 import { _INITIAL_MSG_LIMIT, _msgLimitMax, _syncToolCallsForLoadedMessages, messageLoadingBindings } from './message-loading.js';
 
 function _messageComparableText(m){
@@ -8,10 +9,6 @@ function _messageComparableText(m){
     catch(_){}
   }
   return String(m.content||'').trim();
-}
-
-function _stripAttachedFilesMarker(text){
-  return String(text||'').replace(/\n\n\[Attached files: [^\]]+\]$/,'').trim();
 }
 
 function _stripForcedSkillEnvelope(text){

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_sidebar_has_separate_webui_and_cli_session_source_tabs():
     src = family_source("sessions")
-    assert "let _sessionSourceFilter = 'webui'" in src
+    assert "_sessionSourceFilter: 'webui'," in src
     assert "hermes-session-source-filter" in src
     assert "session-source-tabs" in src
     assert "WebUI sessions" in src

@@ -19,6 +19,24 @@ def _sessions_block(start_marker: str, end_marker: str) -> str:
     return _block(SESSIONS_JS, start_marker, end_marker)
 
 
+def _sessions_function(marker: str) -> str:
+    start = SESSIONS_JS.find(marker)
+    assert start != -1, f"{marker!r} not found"
+    signature_end = SESSIONS_JS.find("){", start)
+    assert signature_end != -1, f"{marker!r} body not found"
+    brace = signature_end + 1
+    depth = 1
+    cursor = brace + 1
+    while cursor < len(SESSIONS_JS) and depth:
+        if SESSIONS_JS[cursor] == "{":
+            depth += 1
+        elif SESSIONS_JS[cursor] == "}":
+            depth -= 1
+        cursor += 1
+    assert depth == 0, f"{marker!r} body did not close"
+    return SESSIONS_JS[start:cursor]
+
+
 def test_session_menu_uses_viewport_height_not_fixed_scroll_cap():
     assert "max-height:calc(100vh - 16px)" in STYLE_CSS
     session_menu = STYLE_CSS[STYLE_CSS.find(".session-action-menu{"):STYLE_CSS.find(".session-action-menu.open")]
@@ -247,7 +265,7 @@ def test_session_swipe_actions_use_circular_icon_badges():
 
 
 def test_session_removal_reflows_surviving_rows_smoothly():
-    assert "let _pendingSessionReflowPositions = null;" in SESSIONS_JS
+    assert "_pendingSessionReflowPositions: null," in SESSIONS_JS
     assert "const _optimisticallyRemovedSessionIds = new Set();" in SESSIONS_JS
     assert "const _sessionSwipeReturnOffsets = new Map();" in SESSIONS_JS
     capture = _sessions_block("function _captureSessionReflowPositions(){", "function _waitForSessionMotion")
@@ -294,7 +312,7 @@ def test_session_removal_reflows_surviving_rows_smoothly():
     response_await = delete_body.find("const deleteResult=await deleteRequest;")
     rollback = delete_body.find("_optimisticallyRemovedSessionIds.delete(sid);")
     final_render = delete_body.find("void renderSessionList().finally(()=>_optimisticallyRemovedSessionIds.delete(sid));")
-    cached_remove = _sessions_block("function _optimisticallyRemoveSessionFromList(sid){", "function _sessionIdFromLocation")
+    cached_remove = _sessions_function("function _optimisticallyRemoveSessionFromList(sid){")
     assert "_allSessions=_allSessions.filter(s=>!s||s.session_id!==sid);" in cached_remove
     assert "renderSessionListFromCache();" in cached_remove
     assert delete_body.find("const reflowPositions=_captureSessionReflowPositions();") < hold_start < delete_request < hold_await < optimistic_set < optimistic_remove < response_await < rollback < final_render

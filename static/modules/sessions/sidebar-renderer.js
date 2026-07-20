@@ -1,9 +1,17 @@
 import { ICONS, SESSION_LIST_FLIP_TIMEOUT_MS, SESSION_REFLOW_TIMEOUT_MS, SESSION_SWIPE_DURATION_MS, SESSION_SWIPE_REFLOW_LEAD_MS, _formatSessionModelWithGateway, _hasUnreadForSession, _isSessionEffectivelyStreaming, _purgeStaleInflightEntries, _rememberRenderedSessionSnapshot, _rememberRenderedStreamingState, sessionStateBindings } from './state.js';
 import { _getChannelLabel, _isCliSession, _isMessagingSession, _isReadOnlySession, _openSidebarSession, _sessionArchivePagingFilterActive, _sessionSourceLabel, _sessionSourceTabCount, _setActiveProjectFilter, _setSessionSourceFilter, _sourceKeyForSession } from './message-loading.js';
-import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, _buildSessionRenameStarter, _captureSessionReflowPositions, _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportInflight, _makeSessionSwipeAffordance, _openSessionActionMenu, _playSessionRowsReflowFromPositions, _renderBatchActionBar, _selectedSessions, _sessionActionMenu, _sessionPrefersReducedMotion, _sessionSwipeReturnOffsets, _setShowAllProfiles, closeSessionActionMenu, exitSessionSelectMode, selectAllSessions, setSessionSelected, toggleSessionSelectMode, sidebarStateBindings } from './sidebar-state.js';
-import { _renderSessionListLoadErrorNote, renderSessionList, sessionListBindings } from './session-list.js';
+import { _buildSessionRenameStarter, _openSessionActionMenu, closeSessionActionMenu } from './sidebar-actions.js';
+import { _captureSessionReflowPositions, _makeSessionSwipeAffordance, _playSessionRowsReflowFromPositions, _sessionPrefersReducedMotion } from './sidebar-motion.js';
+import { _renderBatchActionBar, exitSessionSelectMode, selectAllSessions, setSessionSelected, toggleSessionSelectMode } from './sidebar-selection.js';
+import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportInflight, _selectedSessions, _sessionSwipeReturnOffsets, _setShowAllProfiles, sidebarStateBindings } from './sidebar-store.js';
+import { _renderSessionListLoadErrorNote } from './session-list-loader.js';
+import { renderSessionList } from './session-list-render-port.js';
+import { sessionListViewBindings as sessionListBindings } from './session-list-skeleton.js';
+import { registerSidebarRenderer } from './sidebar-render-port.js';
 import { _appendHighlightedText, _fetchLineageReportForRow, _formatRelativeSessionTime, _lineageReportCacheKey, _lineageReportNeedsFetch, _lineageSegmentsForRender, _serverNowMs, _sessionChildBadgeTooltip, _sessionForkTooltip, _sessionFullTitleTooltip, _sessionLineageBadgeTooltip, _sessionLineageContainsSession, _sessionSearchContentPreview, _sessionSearchMergeMatches, _sessionSegmentCount, _sessionSidebarSortCompare, _sessionSortTimestampMs, _sessionStateTooltip, _sessionTimeBucketLabel, _sessionTimestampMs, _sessionTitleForForkParent, _sidebarLineageKeyForRow, _syncSidebarExpansionForActiveSession, _truncatedSessionId, filterSessions, sessionDiscoveryBindings } from './session-discovery.js';
-import { _activeSessionIdForSidebar, _attachProjectQuickCreateButton, _ensureActiveSessionRowPresent, _ensureSessionVirtualScrollHandler, _installForkChildSwipe, _installSessionRowGestures, _partitionSidebarSessionRows, _renderSidebarRowsFromRawSessions, _resyncSessionVirtualWindowAfterRender, _scopedSidebarReferenceRows, _sessionAttentionState, _sessionDisplayTitle, _sessionRowsWithActiveEphemeralSession, _sessionTitleTags, _sessionVirtualSpacer, _sessionVirtualWindow } from './sidebar-interactions.js';
+import { _attachProjectQuickCreateButton, _ensureActiveSessionRowPresent, _ensureSessionVirtualScrollHandler, _installForkChildSwipe, _installSessionRowGestures, _partitionSidebarSessionRows, _renderSidebarRowsFromRawSessions, _resyncSessionVirtualWindowAfterRender, _scopedSidebarReferenceRows, _sessionAttentionState, _sessionRowsWithActiveEphemeralSession, _sessionVirtualSpacer, _sessionVirtualWindow } from './sidebar-interactions.js';
+import { _sessionDisplayTitle, _sessionTitleTags } from './session-display.js';
+import { _activeSessionIdForSidebar } from './session-navigation.js';
 import { _showProjectContextMenu, _startProjectCreate, _startProjectRename } from './management.js';
 
 function _renderOneSession(s, isPinnedGroup=false, renderContext){
@@ -462,7 +470,7 @@ function renderSessionListFromCache(){
   // click it. Sidebar syncs, stream/unread updates, and panel-resync repairs can
   // all call this while the fixed-position menu is open; rebuilding the row DOM
   // here removes the anchor and makes the menu feel unclickable.
-  if(_sessionActionMenu) return;
+  if(sidebarStateBindings._sessionActionMenu) return;
   closeSessionActionMenu();
   // Purge stale INFLIGHT entries for sessions the server confirms are NOT
   // streaming. This runs on every list refresh to prevent memory leaks from
@@ -872,6 +880,8 @@ function renderSessionListFromCache(){
   _playSessionRowsReflowFromPositions(reflowBefore,reflowTimeout,_sessionPrefersReducedMotion);
 
 }
+
+registerSidebarRenderer(renderSessionListFromCache);
 
 
 

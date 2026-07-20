@@ -41,7 +41,7 @@ def test_sidebar_attention_state_plays_distinct_sound_on_new_attention_only():
     sync_body = _function_body(SESSIONS_JS, "_syncSessionAttentionSoundState")
     apply_body = _function_body(SESSIONS_JS, "_applySessionListPayload")
 
-    assert "let _sessionAttentionSoundPrimed = false;" in SESSIONS_JS
+    assert "_sessionAttentionSoundPrimed: false," in SESSIONS_JS
     assert "const _sessionAttentionSoundState = new Map();" in SESSIONS_JS
     assert "_syncSessionAttentionSoundState(_allSessions);" in apply_body
     assert "if(!_sessionAttentionSoundPrimed)" in sync_body

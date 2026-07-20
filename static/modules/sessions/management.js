@@ -1,8 +1,12 @@
 import { loadSession } from './lifecycle.js';
 import { _clearHandoffStorageForSession, _sessionListQueryString } from './message-loading.js';
-import { SHOW_ALL_PROFILES_STORAGE_KEY, _captureSessionReflowPositions, _optimisticallyRemoveSessionFromList, _optimisticallyRemovedSessionIds, _sessionIdFromLocation, _sessionResponseRetainsWorktree, _sessionSnapshotById, exitSessionSelectMode, sidebarStateBindings } from './sidebar-state.js';
-import { renderSessionList } from './session-list.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { SHOW_ALL_PROFILES_STORAGE_KEY, _optimisticallyRemovedSessionIds, sidebarStateBindings } from './sidebar-store.js';
+import { _captureSessionReflowPositions } from './sidebar-motion.js';
+import { _optimisticallyRemoveSessionFromList, _sessionResponseRetainsWorktree, _sessionSnapshotById } from './sidebar-cache.js';
+import { _sessionIdFromLocation } from './session-navigation.js';
+import { exitSessionSelectMode } from './sidebar-selection.js';
+import { renderSessionList } from './session-list-render-port.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 async function _handleActiveSessionStorageEvent(e){
   if(!e || e.key !== 'hermes-webui-session') return;

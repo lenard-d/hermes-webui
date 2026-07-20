@@ -1,9 +1,9 @@
 import { _hasUnreadForSession, _isSessionEffectivelyStreaming } from './state.js';
 import { _isExternalSession, _isMessagingSession, _isReadOnlySession } from './message-loading.js';
-import { _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportCache, _lineageReportInflight, sidebarStateBindings } from './sidebar-state.js';
-import { renderSessionList } from './session-list.js';
-import { _sessionDisplayTitle } from './sidebar-interactions.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { _expandedChildSessionKeys, _expandedLineageKeys, _lineageReportCache, _lineageReportInflight, sidebarStateBindings } from './sidebar-store.js';
+import { renderSessionList } from './session-list-render-port.js';
+import { _sessionDisplayTitle } from './session-display.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 let _searchDebounceTimer = null;
 let _contentSearchResults = [];  // results from /api/sessions/search content scan

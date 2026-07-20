@@ -27,7 +27,7 @@ def _family_path_arg(family: str) -> str:
 def _session_list_owner_path_arg() -> str:
     owner = next(
         path for path in module_family_paths("sessions")
-        if path.name == "session-list.js"
+        if path.name == "session-list-skeleton.js"
     )
     return json.dumps([str(owner)])
 
@@ -124,6 +124,10 @@ const wsSrc = JSON.parse(process.argv[3]).map(p=>fs.readFileSync(p, 'utf8')).joi
 // Module-scope state the session builder references.
 var _sessionListSkeletonActive = false;
 var _sessionVirtualScrollRaf = 0;
+global.sessionListViewBindings = {
+  get _sessionListSkeletonActive() { return _sessionListSkeletonActive; },
+  set _sessionListSkeletonActive(value) { _sessionListSkeletonActive = value; },
+};
 global.sidebarStateBindings = {
   _sessionVirtualScrollRaf: 0,
   _activeProject: null,

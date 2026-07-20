@@ -1,7 +1,7 @@
 import { _sourceKeyForSession } from './message-loading.js';
 import { _profileMatchesActiveProfile, _sessionListSnapshotById, _sessionStreamingById, sessionStateStoreBindings } from './session-state-store.js';
-import { sidebarStateBindings } from './sidebar-state.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { sidebarStateBindings } from './sidebar-store.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 const SESSION_VIEWED_COUNTS_KEY = 'hermes-session-viewed-counts';
 const SESSION_COMPLETION_UNREAD_KEY = 'hermes-session-completion-unread';

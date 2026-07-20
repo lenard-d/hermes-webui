@@ -1,37 +1,18 @@
 import { SESSION_ARCHIVE_SWIPE_THRESHOLD_PX, SESSION_DELETE_SWIPE_THRESHOLD_PX, SESSION_LONG_PRESS_DELAY_MS, SESSION_SWIPE_CANCEL_RATIO, _forgetObservedStreamingSession, _isSessionEffectivelyStreaming, _rememberSessionListSource, _sessionStreamingById, sessionStateBindings } from './state.js';
 import { _newSessionInFlight, newSession } from './lifecycle.js';
 import { _isCliSession, _isMessagingSession, _openSidebarSession, _setActiveProjectFilter } from './message-loading.js';
-import { _stripAttachedFilesMarker } from './message-timeline.js';
-import { NO_PROJECT_FILTER, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, _archiveSession, _openSessionActionMenu, _sessionActionMenu, _sessionIdFromLocation, _waitForSessionMotion, closeSessionActionMenu, toggleSessionSelect, sidebarStateBindings } from './sidebar-state.js';
-import { _schedulePendingSessionListApply, renderSessionList, sessionListBindings } from './session-list.js';
+import { _archiveSession, _openSessionActionMenu, closeSessionActionMenu } from './sidebar-actions.js';
+import { _waitForSessionMotion } from './sidebar-motion.js';
+import { toggleSessionSelect } from './sidebar-selection.js';
+import { NO_PROJECT_FILTER, SESSION_VIRTUAL_BUFFER_ROWS, SESSION_VIRTUAL_ROW_HEIGHT, SESSION_VIRTUAL_THRESHOLD_ROWS, sidebarStateBindings } from './sidebar-store.js';
+import { _activeSessionIdForSidebar, _sessionIdFromLocation } from './session-navigation.js';
+import { _sessionDisplayTitle, _sessionTitleIsDefaultWebUI, _sessionTitleTags } from './session-display.js';
+import { renderSessionList } from './session-list-render-port.js';
+import { _schedulePendingSessionListApply } from './session-list-reconciliation.js';
+import { sessionListViewBindings as sessionListBindings } from './session-list-skeleton.js';
 import { _attachChildSessionsToSidebarRows, _collapseSessionLineageForSidebar, _isChildSession, sessionDiscoveryBindings } from './session-discovery.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 import { deleteSession } from './management.js';
-
-function _sessionDisplayTitle(s){
-  const rawTitle=String((s&&(s.display_title||s._state_db_title||s.title))||'Untitled').trim();
-  const strip=(typeof _stripAttachedFilesMarker==='function')
-    ? _stripAttachedFilesMarker
-    : (text)=>String(text||'').replace(/\n\n\[Attached files: [^\]]+\]$/,'').trim();
-  const title=strip(rawTitle);
-  return title||'Untitled';
-}
-
-function _sessionTitleIsDefaultWebUI(rawTitle){
-  const title=String(rawTitle||'').replace(/\s+/g,' ').trim();
-  return title==='Hermes WebUI'||/^Hermes WebUI #\d+$/.test(title);
-}
-
-function _sessionTitleTags(rawTitle){
-  if(_sessionTitleIsDefaultWebUI(rawTitle)) return [];
-  return String(rawTitle||'').match(/#(?!\d+\b)[\w-]+/g)||[];
-}
-
-function _activeSessionIdForSidebar(){
-  if(S.session&&S.session.session_id) return S.session.session_id;
-  if(typeof _sessionIdFromLocation==='function') return _sessionIdFromLocation();
-  return null;
-}
 
 function upsertActiveSessionForLocalTurn({title='', messageCount=0, timestampMs=Date.now()}={}){
   if(!S.session||!S.session.session_id) return;
@@ -798,7 +779,7 @@ const _finishSessionGesture=(clientX,clientY,target,pointerType)=>{
   _commitSessionSwipe();
   if(_longPressMenuOpened){_gestureState='idle';return true;}
   if(_gestureState==='committed') return true;
-  if(_sessionActionMenu&&!_sessionActionMenu.contains(target)){
+  if(sidebarStateBindings._sessionActionMenu&&!sidebarStateBindings._sessionActionMenu.contains(target)){
     closeSessionActionMenu();
     return true;
   }

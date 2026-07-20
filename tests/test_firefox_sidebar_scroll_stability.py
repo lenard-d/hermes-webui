@@ -13,6 +13,24 @@ def _block(start_marker: str, end_marker: str) -> str:
     return SESSIONS_JS[start:end]
 
 
+def _function_block(marker: str) -> str:
+    start = SESSIONS_JS.find(marker)
+    assert start != -1, f"{marker} not found"
+    signature_end = SESSIONS_JS.find("){", start)
+    brace = signature_end + 1 if signature_end != -1 else -1
+    assert brace != -1, f"{marker} body not found"
+    depth = 1
+    cursor = brace + 1
+    while cursor < len(SESSIONS_JS) and depth:
+        if SESSIONS_JS[cursor] == "{":
+            depth += 1
+        elif SESSIONS_JS[cursor] == "}":
+            depth -= 1
+        cursor += 1
+    assert depth == 0, f"{marker} body did not close"
+    return SESSIONS_JS[start:cursor]
+
+
 def test_session_list_disables_browser_scroll_anchoring():
     session_list_rule_start = STYLE_CSS.find(".session-list{")
     assert session_list_rule_start != -1
@@ -24,7 +42,7 @@ def test_session_list_disables_browser_scroll_anchoring():
 
 
 def test_polling_payloads_are_deferred_while_user_scrolls_sidebar():
-    render_block = _block("async function renderSessionList", "// ── Gateway session SSE")
+    render_block = _function_block("async function renderSessionList")
     refresh_block = _block("async function _runRenderSessionListRefresh", "async function _drainRenderSessionListQueue")
     apply_block = _block("function _applySessionListPayload", "function _mergeRenderSessionListOptions")
 

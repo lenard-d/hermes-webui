@@ -1,9 +1,9 @@
 import { _clearSessionCompletionUnread, _clearSessionViewedCount, _forgetObservedStreamingSession, _isSessionActivelyViewedForList, _profileMatchesActiveProfile, _setSessionViewedCount, sessionStateBindings } from './state.js';
 import { loadSession } from './lifecycle.js';
 import { messageTimelineBindings } from './message-timeline.js';
-import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, _selectedSessions, sidebarStateBindings } from './sidebar-state.js';
-import { renderSessionList } from './session-list.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_PAGE_SIZE, _selectedSessions, sidebarStateBindings } from './sidebar-store.js';
+import { renderSessionList } from './session-list-render-port.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 const _HANDOFF_THRESHOLD = 10;  // conversation rounds
 const _HANDOFF_STORAGE_PREFIX = 'handoff:';

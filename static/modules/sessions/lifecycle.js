@@ -1,10 +1,15 @@
 import { _acknowledgeSessionVisit, _inflightHasVisibleLiveState, _isSessionActivelyViewedForList, _rememberNewChatDraftSession, _renderRuntimeJournalAnchorActivityScene, _restoreComposerDraft, _saveComposerDraftNow, _selectLiveRecoveryInflight, _serverLiveSnapshotInflight, _sessionVisitHasUnreadState, _setSessionViewedCount, sessionStateBindings } from './state.js';
 import { _captureSameSessionForceReloadHint, _checkAndShowHandoffHint, _clearSameSessionForceReloadHint, _deferWorkspaceRefreshForSession, _ensureMessagesLoaded, _hideHandoffHint, _isMessagingSession, _resolveSessionModelForDisplaySoon, messageLoadingBindings } from './message-loading.js';
 import { _dropCurrentTurnAssistantMessages, _ensureInflightLiveAssistantMessage, _hasCurrentTailUserDuplicate, _mergeInflightTailMessages, _prepareRunningLiveTail, _projectInflightMessagesForActivityBursts, messageTimelineBindings } from './message-timeline.js';
-import { NO_PROJECT_FILTER, _appRootPath, _invalidateSessionListRenders, _setActiveSessionUrl, sidebarStateBindings } from './sidebar-state.js';
-import { _clearDeferredActiveSessionExternalRefresh, _setProfileSwitchListEmbargo, refreshSessionList, renderSessionList, showSessionListSkeleton, startGatewaySSE, sessionListBindings } from './session-list.js';
+import { NO_PROJECT_FILTER, sidebarStateBindings } from './sidebar-store.js';
+import { _appRootPath, _setActiveSessionUrl } from './session-navigation.js';
+import { _invalidateSessionListRenders } from './sidebar-render-state.js';
+import { _setProfileSwitchListEmbargo, renderSessionList } from './session-list-loader.js';
+import { _clearDeferredActiveSessionExternalRefresh, refreshSessionList } from './session-list-refresh.js';
+import { sessionListViewBindings as sessionListBindings, showSessionListSkeleton } from './session-list-skeleton.js';
+import { startGatewaySSE } from './sidebar-session-events.js';
 import { _resolveSessionIdFromSidebarLineage } from './session-discovery.js';
-import { renderSessionListFromCache } from './sidebar-renderer.js';
+import { renderSessionListFromCache } from './sidebar-render-port.js';
 
 let _newSessionInFlight=null;
 const _newSessionPendingText=()=>t('new_session_creating')||'Creating new conversation…';
