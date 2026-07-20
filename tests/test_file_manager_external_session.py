@@ -81,7 +81,7 @@ def test_routes_file_handlers_use_fallback():
 
 
 # ---------------------------------------------------------------------------
-# Functional tests against api.sessions.store.get_session_for_file_ops
+# Functional tests against the api.sessions.state_db owner
 # ---------------------------------------------------------------------------
 
 pytestmark_models = pytest.mark.requires_agent_modules
@@ -118,12 +118,13 @@ def _make_state_db(path: Path, sid: str) -> None:
 
 
 @pytest.fixture
-def models_module():
-    return pytest.importorskip("api.sessions.store")
+def state_db_module():
+    return pytest.importorskip("api.sessions.state_db")
 
 
-def test_get_session_for_file_ops_webui_passthrough(models_module, monkeypatch):
+def test_get_session_for_file_ops_webui_passthrough(state_db_module, monkeypatch):
     """(a) WebUI session — delegates to get_session, no state.db consulted."""
+    cache_module = pytest.importorskip("api.sessions.cache")
     profiles_module = pytest.importorskip("api.profiles")
     sentinel = SimpleNamespace(profile=None)
     called = {"get_session": 0, "profile_match": 0, "state_db": 0}
@@ -142,19 +143,20 @@ def test_get_session_for_file_ops_webui_passthrough(models_module, monkeypatch):
         called["state_db"] += 1
         return True
 
-    monkeypatch.setattr(models_module, "get_session", fake_get_session)
-    monkeypatch.setattr(models_module, "state_db_has_session", fake_has)
+    monkeypatch.setattr(cache_module, "get_session", fake_get_session)
+    monkeypatch.setattr(state_db_module, "state_db_has_session", fake_has)
     monkeypatch.setattr(profiles_module, "_profiles_match", fake_profiles_match)
     monkeypatch.setattr(profiles_module, "get_active_profile_name", lambda: "default")
-    result = models_module.get_session_for_file_ops("webui-sid")
+    result = state_db_module.get_session_for_file_ops("webui-sid")
     assert result is sentinel
     assert called == {"get_session": 1, "profile_match": 1, "state_db": 0}
 
 
 def test_get_session_for_file_ops_rejects_foreign_profile(
-    models_module, monkeypatch, tmp_path, caplog
+    state_db_module, monkeypatch, tmp_path, caplog
 ):
     """WebUI sessions must belong to the active profile before file access."""
+    cache_module = pytest.importorskip("api.sessions.cache")
     profiles_module = pytest.importorskip("api.profiles")
     foreign_session = SimpleNamespace(profile="research", workspace=str(tmp_path))
     called = {"get_session": 0, "profile_match": 0, "state_db": 0}
@@ -173,14 +175,14 @@ def test_get_session_for_file_ops_rejects_foreign_profile(
         called["state_db"] += 1
         return True
 
-    monkeypatch.setattr(models_module, "get_session", fake_get_session)
-    monkeypatch.setattr(models_module, "state_db_has_session", fake_has)
+    monkeypatch.setattr(cache_module, "get_session", fake_get_session)
+    monkeypatch.setattr(state_db_module, "state_db_has_session", fake_has)
     monkeypatch.setattr(profiles_module, "_profiles_match", fake_profiles_match)
     monkeypatch.setattr(profiles_module, "get_active_profile_name", lambda: "default")
 
-    with caplog.at_level(logging.DEBUG, logger=models_module.logger.name):
+    with caplog.at_level(logging.DEBUG, logger=state_db_module.logger.name):
         with pytest.raises(KeyError):
-            models_module.get_session_for_file_ops("foreign-webui-sid")
+            state_db_module.get_session_for_file_ops("foreign-webui-sid")
     # A found-but-foreign WebUI sidecar is an authorization failure, not a
     # missing-session condition that can fall through to the state.db fallback.
     assert called == {"get_session": 1, "profile_match": 1, "state_db": 0}
@@ -191,20 +193,21 @@ def test_get_session_for_file_ops_rejects_foreign_profile(
 
 
 def test_file_read_rejects_foreign_profile_session(
-    models_module, monkeypatch, tmp_path
+    monkeypatch, tmp_path
 ):
     """A default-profile file route cannot read a named-profile workspace."""
     profiles_module = pytest.importorskip("api.profiles")
     routes_module = pytest.importorskip("api.routes")
+    records_module = pytest.importorskip("api.sessions.records")
     workspace = tmp_path / "named-workspace"
     workspace.mkdir()
     (workspace / "marker.txt").write_text("foreign profile marker")
-    session = models_module.Session(
+    session = records_module.Session(
         session_id="foreign-profile-file-read",
         workspace=str(workspace),
         profile="research",
     )
-    models_module.SESSIONS[session.session_id] = session
+    records_module.SESSIONS[session.session_id] = session
 
     class Handler:
         command = "GET"
@@ -236,13 +239,14 @@ def test_file_read_rejects_foreign_profile_session(
         assert handler.status == 404
         assert b"foreign profile marker" not in handler.wfile.getvalue()
     finally:
-        models_module.SESSIONS.pop(session.session_id, None)
+        records_module.SESSIONS.pop(session.session_id, None)
 
 
 def test_get_session_for_file_ops_state_db_fallback(
-    models_module, monkeypatch, tmp_path
+    state_db_module, monkeypatch, tmp_path
 ):
     """(b) state.db-only session — returns view with workspace populated."""
+    cache_module = pytest.importorskip("api.sessions.cache")
     db = tmp_path / "state.db"
     _make_state_db(db, "tg-123")
     workspace = tmp_path / "ws"
@@ -252,13 +256,13 @@ def test_get_session_for_file_ops_state_db_fallback(
     def raise_key(sid, metadata_only=False):
         raise KeyError(sid)
 
-    monkeypatch.setattr(models_module, "get_session", raise_key)
-    monkeypatch.setattr(models_module, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(cache_module, "get_session", raise_key)
+    monkeypatch.setattr(state_db_module, "_active_state_db_path", lambda: db)
     monkeypatch.setattr(
-        models_module, "get_last_workspace", lambda: str(workspace)
+        state_db_module, "get_last_workspace", lambda: str(workspace)
     )
 
-    view = models_module.get_session_for_file_ops("tg-123")
+    view = state_db_module.get_session_for_file_ops("tg-123")
     assert view.session_id == "tg-123"
     assert Path(view.workspace) == workspace
     # The workspace is real and readable — file-manager handlers will
@@ -267,33 +271,34 @@ def test_get_session_for_file_ops_state_db_fallback(
 
 
 def test_get_session_for_file_ops_unknown_session_raises(
-    models_module, monkeypatch, tmp_path
+    state_db_module, monkeypatch, tmp_path
 ):
     """(c) Unknown session — KeyError propagates so callers still 404."""
+    cache_module = pytest.importorskip("api.sessions.cache")
     db = tmp_path / "state.db"
     _make_state_db(db, "tg-123")
 
     def raise_key(sid, metadata_only=False):
         raise KeyError(sid)
 
-    monkeypatch.setattr(models_module, "get_session", raise_key)
-    monkeypatch.setattr(models_module, "_active_state_db_path", lambda: db)
-    monkeypatch.setattr(models_module, "get_last_workspace", lambda: str(tmp_path))
+    monkeypatch.setattr(cache_module, "get_session", raise_key)
+    monkeypatch.setattr(state_db_module, "_active_state_db_path", lambda: db)
+    monkeypatch.setattr(state_db_module, "get_last_workspace", lambda: str(tmp_path))
 
     with pytest.raises(KeyError):
-        models_module.get_session_for_file_ops("does-not-exist")
+        state_db_module.get_session_for_file_ops("does-not-exist")
 
 
-def test_state_db_has_session_missing_db(models_module, monkeypatch, tmp_path):
+def test_state_db_has_session_missing_db(state_db_module, monkeypatch, tmp_path):
     monkeypatch.setattr(
-        models_module, "_active_state_db_path", lambda: tmp_path / "missing.db"
+        state_db_module, "_active_state_db_path", lambda: tmp_path / "missing.db"
     )
-    assert models_module.state_db_has_session("any") is False
+    assert state_db_module.state_db_has_session("any") is False
 
 
-def test_state_db_has_session_present(models_module, monkeypatch, tmp_path):
+def test_state_db_has_session_present(state_db_module, monkeypatch, tmp_path):
     db = tmp_path / "state.db"
     _make_state_db(db, "cli-9")
-    monkeypatch.setattr(models_module, "_active_state_db_path", lambda: db)
-    assert models_module.state_db_has_session("cli-9") is True
-    assert models_module.state_db_has_session("nope") is False
+    monkeypatch.setattr(state_db_module, "_active_state_db_path", lambda: db)
+    assert state_db_module.state_db_has_session("cli-9") is True
+    assert state_db_module.state_db_has_session("nope") is False
