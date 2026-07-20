@@ -45,9 +45,15 @@ import logging
 import queue
 import threading
 import time
-import uuid
-from typing import Any, Optional
+import uuid  # noqa: F401 -- completion-events owner resolves this facade for monkeypatching.
+from typing import Any  # noqa: F401 -- historical public facade export.
+from typing import Optional
 
+from api.background_process_parts import completion_events as _completion_events
+from api.background_process_parts import deferred_wakeups as _deferred_wakeups
+from api.background_process_parts.bindings import (
+    bind_background_process_api as _bind_background_process_api,
+)
 from api.process_event_utils import (
     ASYNC_DELIVERY_ROUTING_RETRY_SECONDS,
     claim_async_delegation_delivery,
@@ -76,6 +82,56 @@ persisted_message_count_for_session = (
 should_emit_session_updated = _session_channel.should_emit_session_updated
 subscribe_to_session_channel = _session_channel.subscribe_to_session_channel
 
+# Completion-event delivery compatibility surface. State aliases deliberately
+# share the owner's exact objects; function implementations resolve this facade
+# late so monkeypatches applied here remain authoritative.
+_EMIT_COALESCE_WINDOW_SECS = _completion_events.EMIT_COALESCE_WINDOW_SECS
+_EMIT_COALESCE_LOCK = _completion_events.EMIT_COALESCE_LOCK
+_LAST_EMIT_TS = _completion_events.LAST_EMIT_TS
+_PENDING_EMIT_PAYLOADS = _completion_events.PENDING_EMIT_PAYLOADS
+_PENDING_EMIT_TIMERS = _completion_events.PENDING_EMIT_TIMERS
+_REGISTRY_CONSUMED_CONTRACT = _completion_events.REGISTRY_CONSUMED_CONTRACT
+_truncate = _bind_background_process_api(globals(), _completion_events.truncate)
+format_wakeup_prompt = _bind_background_process_api(
+    globals(), _completion_events.format_wakeup_prompt
+)
+_build_payload = _bind_background_process_api(
+    globals(), _completion_events.build_payload
+)
+_emit_to_session_streams = _bind_background_process_api(
+    globals(), _completion_events.emit_to_session_streams
+)
+_emit_bg_task_complete_events_now = _bind_background_process_api(
+    globals(), _completion_events.emit_now
+)
+_flush_coalesced_bg_task_complete = _bind_background_process_api(
+    globals(), _completion_events.flush_coalesced
+)
+_emit_bg_task_complete_events_coalesced = _bind_background_process_api(
+    globals(), _completion_events.emit_coalesced
+)
+_mark_registry_completion_consumed = _bind_background_process_api(
+    globals(), _completion_events.mark_registry_completion_consumed
+)
+
+# Deferred-wakeup compatibility surface. The owner keeps claim, launch, and
+# re-defer behavior together; callers retain their historical import names.
+record_deferred_wakeup = _bind_background_process_api(
+    globals(), _deferred_wakeups.record_deferred_wakeup
+)
+claim_deferred_wakeups = _bind_background_process_api(
+    globals(), _deferred_wakeups.claim_deferred_wakeups
+)
+drain_deferred_wakeups_for_session = _bind_background_process_api(
+    globals(), _deferred_wakeups.drain_for_session
+)
+_session_has_active_turn = _bind_background_process_api(
+    globals(), _deferred_wakeups.session_has_active_turn
+)
+_start_server_side_wakeup_turn = _bind_background_process_api(
+    globals(), _deferred_wakeups.start_server_side_turn
+)
+
 logger = logging.getLogger(__name__)
 
 _DRAIN_THREAD: Optional[threading.Thread] = None
@@ -95,18 +151,6 @@ _REAPER_INTERVAL_SECS = 60.0
 # forever, un-joinable. A dedicated lock (not the purpose-bound
 # ``SESSION_CHANNELS_LOCK`` / ``_EMIT_COALESCE_LOCK``) keeps this narrow.
 _THREAD_LIFECYCLE_LOCK = threading.Lock()
-
-# T3: per-session coalesce gate for the public bg_task_complete SSE emit.
-# The server-side wakeup path remains immediate; only the browser-observation
-# frame is throttled so a burst of background task completions does not flood an
-# open tab. The first emit for a session fires immediately, then any further
-# emits inside the 1s window are payload-replaced and flushed after 1s of quiet.
-_EMIT_COALESCE_WINDOW_SECS = 1.0
-_EMIT_COALESCE_LOCK = threading.Lock()
-_LAST_EMIT_TS: dict[str, float] = {}
-_PENDING_EMIT_PAYLOADS: dict[str, dict] = {}
-_PENDING_EMIT_TIMERS: dict[str, threading.Timer] = {}
-
 
 def _reaper_loop() -> None:
     logger.info("SessionChannel reaper thread started")
@@ -180,367 +224,6 @@ def stop_session_channel_reaper(timeout: float = 2.0) -> None:
     th = _REAPER_THREAD
     if th is not None and th.is_alive():
         th.join(timeout=timeout)
-
-
-def _truncate(text: str, limit: int) -> str:
-    if text is None:
-        return ""
-    s = str(text)
-    if len(s) <= limit:
-        return s
-    return s[:limit] + "\n…(truncated)"
-
-
-def format_wakeup_prompt(evt: object) -> str | None:
-    """Build the synthetic [IMPORTANT: …] message the agent will see.
-
-    Mirrors ``cli._format_process_notification`` so wakeup payloads look the
-    same in CLI and WebUI sessions.
-    """
-    if not isinstance(evt, dict) or not evt:
-        return None
-
-    evt_type = evt.get("type", "completion")
-    sid = str(evt.get("session_id") or "").strip()
-    cmd = str(evt.get("command") or "").strip()
-    # The current server-side wakeup drain drops global watch-overflow events
-    # before this formatter because they intentionally carry no session_key.
-    # Keep this branch defensive so any future routable overflow summary is not
-    # mis-rendered as a fake process completion.
-    if evt_type in {"watch_overflow_tripped", "watch_overflow_released"}:
-        msg = str(evt.get("message") or "").strip()
-        return f"[IMPORTANT: {msg}]" if msg else None
-    if evt_type == "watch_disabled":
-        msg = str(evt.get("message") or "").strip()
-        return f"[IMPORTANT: {msg}]" if msg else None
-    if evt_type == "watch_match":
-        pat = evt.get("pattern", "?")
-        out = _truncate(evt.get("output", ""), 4000)
-        sup = evt.get("suppressed", 0)
-        body = (
-            f"[IMPORTANT: Background process {sid} matched watch pattern \"{pat}\".\n"
-            f"Command: {cmd}\n"
-            f"Matched output:\n{out}"
-        )
-        if sup:
-            body += f"\n({sup} earlier matches were suppressed by rate limit)"
-        return body + "]"
-    if evt_type == "async_delegation":
-        # A background ``delegate_task`` completion. The agent-side formatter
-        # renders these; delegate to it so the subagent result re-enters the
-        # parent conversation instead of being silently dropped (#4912).
-        try:
-            from tools.process_registry import (
-                format_process_notification as _agent_fmt,
-            )
-            result = _agent_fmt(evt)
-            if result:
-                return result
-        except Exception:
-            logger.debug(
-                "agent-side format_process_notification fallback failed for "
-                "evt_type=%s",
-                evt_type,
-                exc_info=True,
-            )
-        return None
-    if evt_type != "completion":
-        return None
-
-    if not (sid or cmd or "exit_code" in evt or evt.get("output")):
-        return None
-
-    # Default: completion event
-    exit_code = evt.get("exit_code", "?")
-    out = _truncate(evt.get("output", ""), 4000)
-    return (
-        f"[IMPORTANT: Background process {sid} completed (exit_code={exit_code}).\n"
-        f"Command: {cmd}\n"
-        f"Output:\n{out}]"
-    )
-
-
-def _build_payload(evt: dict, session_id: str) -> dict:
-    """Build the SSE data payload.
-
-    Shape per maintainer decision on PR #2242 (R2 §Q1):
-        ``{session_id, task_id, completed_at, summary?, event_id}``
-    Minimal by design — consumers re-fetch task detail by ``task_id`` if
-    they need ``command`` / ``exit_code`` / ``stdout_preview`` etc.
-
-    - ``task_id``: the background process id (registry uuid). Stable across
-      the process's lifetime; was previously surfaced as ``process_id``.
-    - ``completed_at``: float wall-clock seconds; was ``emitted_at``.
-    - ``summary``: optional one-liner derived from the completion event when
-      available (e.g. ``[IMPORTANT: …]`` synthetic body's first line); omitted
-      otherwise to honour "keep the payload minimal".
-    - ``event_id``: server-generated uuid hex — per-emit, so a re-emit for the
-      same ``task_id`` (shouldn't happen today, but the spec is forward-looking)
-      still produces a distinct id. The cross-A/B dedupe stays keyed on
-      ``task_id`` (it prevents double-emit at the source, which is the right
-      layer); the WebUI consumer-side ring buffer (PR (b)) keys on
-      ``(session_id, event_id)`` to dedupe across reconnects.
-    """
-    # ProcessRegistry completion events use the field name ``session_id`` for
-    # the process id. Async delegation completions carry ``delegation_id``
-    # instead; expose either stable delivery id as payload ``task_id``.
-    process_id = completion_delivery_id(evt)
-    payload: dict[str, Any] = {
-        "session_id": str(session_id),
-        "task_id": process_id,
-        "completed_at": time.time(),
-        "event_id": uuid.uuid4().hex,
-    }
-    # Best-effort optional summary: the first non-empty line of the synthetic
-    # wakeup body, trimmed. Omitted entirely when nothing useful is available.
-    try:
-        wakeup_body = format_wakeup_prompt(evt)
-        if wakeup_body:
-            # Strip leading "[IMPORTANT: " marker noise — take the first
-            # informative line, cap length.
-            first_line = next(
-                (
-                    ln.strip().lstrip("[").rstrip("]").strip()
-                    for ln in wakeup_body.splitlines()
-                    if ln.strip()
-                ),
-                "",
-            )
-            if first_line:
-                payload["summary"] = _truncate(first_line, 200)
-    except Exception:
-        # Summary is optional; never let its derivation block the emit.
-        logger.debug("summary derivation failed", exc_info=True)
-    return payload
-
-
-def _emit_to_session_streams(session_id: str, event: str, data: dict) -> int:
-    """Push (event, data) to every active SSE channel for *session_id*.
-
-    Streams in WebUI are keyed by ``stream_id`` (not session_id) — a single
-    session can have at most one active stream at a time, but cancel/reconnect
-    flows can briefly hold two. We push to every channel whose tracked
-    ``session_id`` matches; the channel implementation broadcasts to all live
-    subscribers and buffers when offline.
-    """
-    from api import config as _cfg
-
-    emitted = 0
-    # Snapshot ACTIVE_RUNS under its lock before STREAMS_LOCK so owner_sid
-    # lookups are consistent without nesting the two independent locks.
-    if hasattr(_cfg, "ACTIVE_RUNS") and hasattr(_cfg, "ACTIVE_RUNS_LOCK"):
-        with _cfg.ACTIVE_RUNS_LOCK:
-            active_runs_snapshot: dict = dict(_cfg.ACTIVE_RUNS)
-    elif hasattr(_cfg, "ACTIVE_RUNS"):
-        active_runs_snapshot = dict(_cfg.ACTIVE_RUNS)
-    else:
-        active_runs_snapshot = {}
-    with _cfg.STREAMS_LOCK:
-        items = list(_cfg.STREAMS.items())
-    for stream_id, channel in items:
-        meta = active_runs_snapshot.get(stream_id)
-        owner_sid = (meta or {}).get("session_id") if isinstance(meta, dict) else None
-        # Copilot review #3: skip non-matching and owner-unknown STREAMS
-        # channels. Cross-turn delivery is handled by SESSION_CHANNELS below.
-        if owner_sid != session_id:
-            continue
-        try:
-            channel.put_nowait((event, data))
-            emitted += 1
-        except Exception:
-            logger.debug("process_complete emit failed for stream %s", stream_id, exc_info=True)
-    # Option X: also emit to the persistent per-session SSE channel. This is
-    # the path that survives between turns (when STREAMS is torn down). We
-    # keep the STREAMS emit above as defense-in-depth — if a turn IS active
-    # the frontend dedupes by process_id, so a double-delivery is harmless.
-    ch = get_session_channel(session_id)
-    if ch is not None:
-        try:
-            delivered = ch.emit(event, data)
-            emitted += delivered
-        except Exception:
-            logger.debug("SessionChannel emit failed for session %s", session_id, exc_info=True)
-    return emitted
-
-
-def _emit_bg_task_complete_events_now(session_id: str, payload: dict) -> int:
-    """Emit the canonical bg_task_complete event and temporary legacy alias."""
-    # T1 emit rename: the canonical event name is now ``bg_task_complete``
-    # (per maintainer decision on PR #2242). Until PR (b) lands the new
-    # consumer-side listener, we ALSO emit the legacy ``process_complete``
-    # name so any in-flight WebUI build (subscribed to the old listener)
-    # still receives the wakeup. PR (b) will:
-    #   1. Add `bg_task_complete` listeners on the WebUI side.
-    #   2. Remove this dual-emit shim (drop the legacy alias).
-    # Both emits carry the SAME trimmed payload + the SAME event_id, so a
-    # consumer that ever sees both can dedupe by ``event_id``.
-    #
-    # Greptile P2: hand each emit its OWN shallow copy of the payload. The
-    # same dict object would otherwise be referenced by every subscriber queue
-    # across STREAMS and SESSION_CHANNELS for BOTH event names; a downstream
-    # consumer that mutates it in place would silently corrupt all other
-    # concurrent consumers' views. Shallow copies are sufficient — the payload
-    # is a flat trimmed dict of scalars.
-    return (
-        _emit_to_session_streams(session_id, "bg_task_complete", dict(payload))
-        + _emit_to_session_streams(session_id, "process_complete", dict(payload))
-    )
-
-
-def _flush_coalesced_bg_task_complete(session_id: str) -> None:
-    """Timer callback: flush the latest pending payload for one session."""
-    payload: dict | None = None
-    with _EMIT_COALESCE_LOCK:
-        payload = _PENDING_EMIT_PAYLOADS.pop(session_id, None)
-        _PENDING_EMIT_TIMERS.pop(session_id, None)
-        if payload is not None:
-            _LAST_EMIT_TS[session_id] = time.time()
-    if payload is None:
-        return
-    try:
-        _emit_bg_task_complete_events_now(session_id, payload)
-    except Exception:
-        logger.debug(
-            "coalesced bg_task_complete flush failed for session %s",
-            session_id,
-            exc_info=True,
-        )
-
-
-def _emit_bg_task_complete_events_coalesced(session_id: str, payload: dict) -> int:
-    """Per-session 1s coalesce gate around the bg_task_complete dual emit.
-
-    The first payload for a session emits immediately. If another payload for
-    that session arrives within ``_EMIT_COALESCE_WINDOW_SECS`` of the last emit,
-    replace the pending payload and reset the quiet timer. The deferred flush
-    therefore uses the latest payload from a burst.
-    """
-    if not session_id:
-        return 0
-    should_emit_now = False
-    now = time.time()
-    with _EMIT_COALESCE_LOCK:
-        last = _LAST_EMIT_TS.get(session_id)
-        has_pending = session_id in _PENDING_EMIT_TIMERS
-        if last is None or (now - last) >= _EMIT_COALESCE_WINDOW_SECS:
-            _LAST_EMIT_TS[session_id] = now
-            should_emit_now = True
-            if has_pending:
-                _PENDING_EMIT_PAYLOADS.pop(session_id, None)
-                old_timer = _PENDING_EMIT_TIMERS.pop(session_id, None)
-                if old_timer is not None:
-                    try:
-                        old_timer.cancel()
-                    except Exception:
-                        logger.debug(
-                            "coalesced bg_task_complete timer cancel failed for session %s",
-                            session_id,
-                            exc_info=True,
-                        )
-        else:
-            _PENDING_EMIT_PAYLOADS[session_id] = payload
-
-        if not should_emit_now:
-            old_timer = _PENDING_EMIT_TIMERS.get(session_id)
-            if old_timer is not None:
-                try:
-                    old_timer.cancel()
-                except Exception:
-                    logger.debug(
-                        "coalesced bg_task_complete timer cancel failed for session %s",
-                        session_id,
-                        exc_info=True,
-                    )
-            timer = threading.Timer(
-                _EMIT_COALESCE_WINDOW_SECS,
-                _flush_coalesced_bg_task_complete,
-                args=(session_id,),
-            )
-            timer.daemon = True
-            _PENDING_EMIT_TIMERS[session_id] = timer
-            timer.start()
-
-    if should_emit_now:
-        return _emit_bg_task_complete_events_now(session_id, payload)
-    return 0
-
-
-# ── Coupling contract: agent ProcessRegistry cross-A/B dedupe key ──────────
-# This WebUI drain (B) and the merged upstream PR #2279 next-turn drain (A)
-# dedupe a process_id against a SINGLE shared key inside the agent's
-# ``tools.process_registry.ProcessRegistry``:
-#
-#   * READ  side: the PUBLIC ``is_completion_consumed(process_id)`` method
-#     (used in ``_process_one`` above) — stable public API.
-#   * WRITE side: there is NO public ``mark_completion_consumed`` upstream, so
-#     B must reach into the registry's private ``_completion_consumed`` set
-#     (guarded by its private ``_lock``) to set the shared marker A reads.
-#
-# That private WRITE coupling is what Copilot review #2242 comment #4 flagged.
-# The long-term fix is an upstream PUBLIC ``mark_completion_consumed`` — see
-# the test ``test_registry_completion_consumed_contract`` which fails CI LOUD
-# the moment ``_completion_consumed`` / ``_lock`` / ``is_completion_consumed``
-# is renamed or retyped upstream, instead of a future rename silently
-# reintroducing the double-wakeup bug. ``_mark_registry_completion_consumed``
-# narrows the exception handling so a rename is logged at ERROR (visible in
-# errors.log + monitoring) rather than swallowed by a broad ``except`` at
-# DEBUG. ImportError stays best-effort (the registry is legitimately absent in
-# non-agent unit-test contexts; this module's own locked
-# ``BG_TASK_COMPLETE_EVENTS_SEEN`` gate still dedupes B's own duplicates there).
-_REGISTRY_CONSUMED_CONTRACT = ("_lock", "_completion_consumed", "is_completion_consumed")
-
-
-def _mark_registry_completion_consumed(process_id: str) -> None:
-    """Set the shared cross-A/B dedupe marker on the agent ProcessRegistry.
-
-    Couples to ``ProcessRegistry`` privates (``_lock`` /
-    ``_completion_consumed``) because no public ``mark_completion_consumed``
-    exists upstream (the read side uses the public
-    ``is_completion_consumed``). A future upstream rename must FAIL LOUD, not
-    silently reintroduce the double-wakeup: an ``AttributeError`` / ``TypeError``
-    from the private access is logged at ERROR with a contract-violation
-    message (and ``test_registry_completion_consumed_contract`` breaks CI at
-    test time). Only ``ImportError`` is treated as best-effort/expected (the
-    registry is absent in pure unit-test contexts).
-    """
-    try:
-        from tools.process_registry import process_registry as _pr
-    except ImportError:
-        # Agent registry not importable (e.g. isolated unit test) — B's own
-        # locked BG_TASK_COMPLETE_EVENTS_SEEN gate still prevents this module's
-        # duplicates; cross-A/B dedupe is moot when A isn't running either.
-        logger.debug(
-            "tools.process_registry not importable; skipping shared "
-            "completion-consumed marker (best-effort, expected off-agent)",
-            exc_info=True,
-        )
-        return
-    try:
-        lock = _pr._lock
-        consumed = _pr._completion_consumed
-    except AttributeError:
-        logger.error(
-            "ProcessRegistry coupling contract VIOLATED: expected private "
-            "attrs %s for cross-A/B wakeup dedupe are missing — an upstream "
-            "rename has broken the shared marker; process_complete wakeups may "
-            "now double-fire. A public mark_completion_consumed() upstream is "
-            "the durable fix (Copilot #2242 review #4).",
-            _REGISTRY_CONSUMED_CONTRACT,
-            exc_info=True,
-        )
-        return
-    try:
-        with lock:
-            consumed.add(process_id)
-    except (AttributeError, TypeError):
-        logger.error(
-            "ProcessRegistry coupling contract VIOLATED: _lock/"
-            "_completion_consumed changed shape (not a Lock / not a set) — "
-            "cross-A/B wakeup dedupe is broken; wakeups may double-fire. "
-            "Upstream public mark_completion_consumed() is the durable fix "
-            "(Copilot #2242 review #4).",
-            exc_info=True,
-        )
 
 
 # ── xsession wakeup misroute defense-in-depth (Option 3) ───────────────────
@@ -1038,274 +721,6 @@ def _process_one(evt: dict) -> None:
         logger.warning(
             "server-side wakeup dispatch failed for session %s", session_id, exc_info=True
         )
-
-
-def record_deferred_wakeup(session_id: str, process_id: str, wakeup_prompt: str) -> bool:
-    """Persist a deferred process-completion wakeup for later redelivery.
-
-    Called from ``_process_one`` when a completion arrives while a turn is
-    active (the Option Z drain branch cannot start a turn — it would 409).
-    The turn-teardown idle-hook (``drain_deferred_wakeups_for_session``)
-    redelivers it once the session goes idle, OR the PR #2279 next-turn drain
-    claims it if a user turn comes first. Whoever claims first wins (atomic
-    pop in ``claim_deferred_wakeups``); the other finds nothing.
-
-    Idempotent per process_id: if the same process_id is already queued for
-    this session (kill_process racing the reader thread), it is not appended
-    twice. Returns whether the prompt is safely queued; never raises into the
-    drain loop.
-    """
-    if not session_id or not wakeup_prompt:
-        return False
-    from api import config as _cfg
-
-    try:
-        with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
-            entries = _cfg.DEFERRED_PROCESS_WAKEUPS.setdefault(session_id, [])
-            if process_id and any(
-                e.get("process_id") == process_id for e in entries
-            ):
-                return True
-            entries.append(
-                {"process_id": process_id, "wakeup_prompt": wakeup_prompt}
-            )
-        return True
-    except Exception:
-        logger.debug(
-            "record_deferred_wakeup failed for session %s", session_id, exc_info=True
-        )
-        return False
-
-
-def claim_deferred_wakeups(session_id: str) -> list[dict]:
-    """Atomically remove and return all deferred wakeups for *session_id*.
-
-    The single-delivery guarantee for the defer path: the dict ``pop`` under
-    ``DEFERRED_PROCESS_WAKEUPS_LOCK`` means whichever caller runs first
-    (turn-teardown idle-hook OR PR #2279 next-turn drain) gets the entries and
-    delivers them; every subsequent caller gets ``[]``. This is what makes the
-    teardown hook idempotent with the next-turn drain (no double-fire) AND
-    prevents a wakeup loop (the wakeup turn's own teardown re-runs the hook,
-    finds nothing already-claimed → no re-fire).
-    """
-    if not session_id:
-        return []
-    from api import config as _cfg
-
-    try:
-        with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
-            return _cfg.DEFERRED_PROCESS_WAKEUPS.pop(session_id, []) or []
-    except Exception:
-        logger.debug(
-            "claim_deferred_wakeups failed for session %s", session_id, exc_info=True
-        )
-        return []
-
-
-def drain_deferred_wakeups_for_session(session_id: str) -> int:
-    """Turn-teardown idle-hook: redeliver deferred wakeups once idle.
-
-    Called from ``api/streaming`` right AFTER ``unregister_active_run`` so
-    ``_session_has_active_turn`` no longer counts the just-ended stream. This
-    makes the active-at-completion case symmetric with the idle-at-completion
-    case: idle now → fire now (Option Z idle branch); busy now → fire here
-    when the turn ends and the session goes idle.
-
-    Multi-stream / cancel-reconnect guard: if ANY other ACTIVE_RUNS row still
-    exists for this session (a second stream from cancel/reconnect), the
-    session is NOT yet idle — leave the deferred entries untouched so a later
-    teardown (or the next-turn drain) delivers them. Only the teardown of the
-    LAST active stream for the session claims + fires.
-
-    Returns the number of wakeup turns started (0 when nothing pending or the
-    session is still busy). Best-effort — never raises into the streaming
-    teardown thread; the actual turn is started on the same throwaway daemon
-    thread the idle branch uses, so this never blocks teardown.
-    """
-    if not session_id:
-        return 0
-    from api import config as _cfg
-
-    try:
-        # Multi-stream guard: only fire when the session is TRULY idle.
-        if _session_has_active_turn(session_id):
-            return 0
-        # Peek without claiming: avoid taking the entries then discovering
-        # there is nothing to do under contention.
-        with _cfg.DEFERRED_PROCESS_WAKEUPS_LOCK:
-            if not _cfg.DEFERRED_PROCESS_WAKEUPS.get(session_id):
-                return 0
-        # Atomic claim — exactly one caller gets the entries.
-        entries = claim_deferred_wakeups(session_id)
-        if not entries:
-            return 0
-        # The session-level PENDING marker is server-internal telemetry; the
-        # real delivery is the prompt(s) we just claimed. Discard it now that
-        # the deferred wakeups are owned by this teardown.
-        try:
-            _cfg.PENDING_BG_TASK_COMPLETIONS.discard(session_id)
-        except Exception:
-            logger.debug(
-                "PENDING discard failed for session %s", session_id, exc_info=True
-            )
-        started = 0
-        # Greptile P1 fix: do NOT fire one daemon-threaded wakeup per entry in
-        # a tight loop. Each ``_start_server_side_wakeup_turn`` spawns a daemon
-        # thread that races for the per-session agent lock; only ONE can win,
-        # the rest 409. Since we already claimed + popped every entry (line
-        # ~938) and discarded the PENDING marker, the losers' prompts would be
-        # permanently lost. Instead: start exactly the FIRST prompt, and
-        # re-defer the remaining entries so each subsequent turn-teardown
-        # (or next-turn drain) delivers the next one — one wakeup per turn,
-        # which matches the single-prompt-per-turn design and the
-        # BG_TASK_COMPLETE_EVENTS_SEEN dedup (no double-fire).
-        leftover = [e for e in entries if str((e or {}).get("wakeup_prompt") or "").strip()]
-        if leftover:
-            first = leftover[0]
-            # Re-defer entries 2..N BEFORE starting the first turn, so they are
-            # already persisted if the first wakeup's own teardown re-runs this
-            # hook and tries to claim them.
-            for entry in leftover[1:]:
-                record_deferred_wakeup(
-                    session_id,
-                    str((entry or {}).get("process_id") or ""),
-                    str((entry or {}).get("wakeup_prompt") or "").strip(),
-                )
-            _start_server_side_wakeup_turn(
-                session_id,
-                str((first or {}).get("wakeup_prompt") or "").strip(),
-                process_id=str((first or {}).get("process_id") or ""),
-            )
-            started = 1
-        if started:
-            logger.info(
-                "turn-teardown idle-hook redelivered %d deferred wakeup(s) "
-                "for session %s",
-                started,
-                session_id,
-            )
-        return started
-    except Exception:
-        logger.warning(
-            "drain_deferred_wakeups_for_session failed for session %s",
-            session_id,
-            exc_info=True,
-        )
-        return 0
-
-
-def _session_has_active_turn(session_id: str) -> bool:
-    """True if a foreground/streaming agent turn is currently active for *session_id*.
-
-    The drain thread has no Session object, so we key on ACTIVE_RUNS — the
-    worker-lifecycle registry that this module already uses (see
-    ``_emit_to_session_streams``) to map a stream back to its owning session.
-    ACTIVE_RUNS is registered at agent-worker start and removed in the worker's
-    outer ``finally``, so it survives cancel/reconnect races better than
-    STREAMS. There is a brief window where ``_start_chat_stream_for_session``
-    has populated STREAMS but the worker thread has not yet called
-    ``register_active_run``; in that window this returns False and the
-    subsequent ``start_session_turn`` is rejected with a 409 by
-    ``_start_chat_stream_for_session``'s own active-stream guard — i.e. the
-    same lock /api/chat/start uses is the authoritative race backstop.
-    """
-    from api import config as _cfg
-
-    try:
-        with _cfg.ACTIVE_RUNS_LOCK:
-            for _stream_id, meta in (_cfg.ACTIVE_RUNS or {}).items():
-                if isinstance(meta, dict) and meta.get("session_id") == session_id:
-                    return True
-    except Exception:
-        logger.debug("ACTIVE_RUNS active-turn check failed", exc_info=True)
-    return False
-
-
-def _start_server_side_wakeup_turn(
-    session_id: str, wakeup_prompt: str, *, process_id: str = ""
-) -> None:
-    """Start an agent turn server-side for a process_complete wakeup (Option Z).
-
-    Runs on a short-lived daemon thread so the drain loop NEVER blocks:
-    ``start_session_turn`` itself spawns the agent worker thread, but does
-    synchronous session-load / workspace / model resolution first, which must
-    not stall the single drain thread shared by every WebUI session.
-
-    Concurrency + idempotency are enforced by the layers below, not here:
-      - ``start_session_turn`` → ``_start_chat_stream_for_session`` serializes
-        on the per-session agent lock and returns ``_status=409`` if a turn is
-        already active. A human ``/api/chat/start`` racing this wakeup wins
-        (one starts, the other 409s). On 409 we re-queue the prompt via
-        ``record_deferred_wakeup`` (see below) so the racing turn's own
-        teardown idle-hook — or PR #2279's next-turn drain — redelivers it.
-      - ``BG_TASK_COMPLETE_EVENTS_SEEN`` already deduped this process_id in
-        ``_process_one`` before we were called, so a process wakes at most once.
-
-    Why re-queue on 409 instead of trusting the PENDING marker: this helper is
-    called from two sites. The idle branch of ``_process_one`` leaves the
-    PENDING_BG_TASK_COMPLETIONS marker intact, but the teardown-hook caller
-    ``drain_deferred_wakeups_for_session`` has ALREADY atomically claimed the
-    deferred entry and discarded the marker before spawning this thread. So in
-    the teardown path a 409 would otherwise lose the wakeup permanently —
-    nothing is left to drain. Re-queuing here is uniformly correct: it is
-    idempotent per ``process_id`` (``record_deferred_wakeup`` dedupes) and the
-    claim in ``claim_deferred_wakeups`` is atomic, so re-queue can never cause
-    a double delivery.
-    """
-
-    def _runner() -> None:
-        try:
-            from api.routes import start_session_turn
-
-            resp = start_session_turn(
-                session_id, wakeup_prompt, source="process_wakeup"
-            )
-            status = int((resp or {}).get("_status", 200) or 200)
-            if status == 409 and (resp or {}).get("error") == "process_wakeup_paused":
-                logger.info(
-                    "server-side wakeup suppressed for session %s: provider credential state is paused",
-                    session_id,
-                )
-            elif status == 409:
-                # Raced an active turn (e.g. a human /api/chat/start, or a
-                # sibling deferred-wakeup thread). Re-defer this prompt so it
-                # is delivered by the winning turn's teardown / next-turn drain
-                # instead of being lost. The atomic claim in
-                # ``claim_deferred_wakeups`` still guarantees exactly-once
-                # delivery, and BG_TASK_COMPLETE_EVENTS_SEEN already deduped
-                # this process_id, so re-recording cannot double-fire.
-                if wakeup_prompt:
-                    record_deferred_wakeup(session_id, process_id, wakeup_prompt)
-                logger.debug(
-                    "server-side wakeup raced an active turn for session %s; "
-                    "re-deferred for redelivery on next teardown/turn",
-                    session_id,
-                )
-            elif status >= 400:
-                logger.warning(
-                    "server-side wakeup failed for session %s: status=%s err=%r",
-                    session_id,
-                    status,
-                    (resp or {}).get("error"),
-                )
-            else:
-                logger.info(
-                    "server-side wakeup turn started for session %s (stream_id=%s)",
-                    session_id,
-                    (resp or {}).get("stream_id"),
-                )
-        except Exception:
-            logger.warning(
-                "server-side wakeup turn raised for session %s",
-                session_id,
-                exc_info=True,
-            )
-
-    threading.Thread(
-        target=_runner,
-        name=f"hermes-webui-process-wakeup-{str(session_id)[:8]}",
-        daemon=True,
-    ).start()
 
 
 def _drain_loop() -> None:
