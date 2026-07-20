@@ -40,6 +40,7 @@ def test_routes_uses_webui_platform_for_all_agent_calls():
         (
             _load_source("api/routes.py"),
             _load_source("api/routes_parts/git.py"),
+            _load_source("api/routes_parts/manual_compression.py"),
         )
     )
     webui_count = _count_platform_kwargs(routes_source, "webui")
