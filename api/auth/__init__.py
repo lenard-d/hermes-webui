@@ -103,6 +103,27 @@ from .passkeys import (
     rp_context,
 )
 
+
+def login_rate_allowed(client_ip):
+    """Return whether the client may attempt login through the public auth API."""
+    return _check_login_rate(client_ip)
+
+
+def record_login_attempt(client_ip):
+    """Record a failed login attempt through the public auth API."""
+    return _record_login_attempt(client_ip)
+
+
+def clear_login_attempts(client_ip):
+    """Clear a client's failed-login history through the public auth API."""
+    return _clear_login_attempts(client_ip)
+
+
+def passkey_feature_enabled():
+    """Return whether passkey routes should be exposed."""
+    return _passkey_feature_flag_enabled()
+
+
 __all__ = [
     "COOKIE_NAME",
     "CSRF_HEADER_NAME",
@@ -122,6 +143,7 @@ __all__ = [
     "check_auth",
     "clear_auth_cookie",
     "clear_credentials",
+    "clear_login_attempts",
     "clear_profile_cookie",
     "complete_authorization_code_flow",
     "create_session",
@@ -142,12 +164,15 @@ __all__ = [
     "is_oidc_enabled",
     "is_password_auth_enabled",
     "is_trusted_auth_enabled",
+    "login_rate_allowed",
     "parse_cookie",
     "passkeys_available",
+    "passkey_feature_enabled",
     "poll_codex_token",
     "poll_onboarding_oauth_flow",
     "read_auth_json",
     "registered_credentials",
+    "record_login_attempt",
     "registration_options",
     "reset_trusted_auth_request_state",
     "resolve_runtime_provider_with_anthropic_env_lock",

@@ -117,6 +117,12 @@ from . import transaction as _transaction
 
 _policy._RUNNING_WEBUI_VERSION = WEBUI_VERSION
 
+
+def read_update_channel():
+    """Return the configured update channel through the package interface."""
+    return _read_update_channel()
+
+
 _update_cache = {
     'webui': None,
     'agent': None,

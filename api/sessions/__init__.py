@@ -5,6 +5,8 @@ the owning module (for example ``api.sessions.recovery``) instead of depending
 on a broad compatibility facade.
 """
 
+import importlib
+
 from .channels import (
     SESSION_CHANNELS,
     SESSION_CHANNELS_LOCK,
@@ -19,6 +21,16 @@ from .channels import (
 )
 from .events import publish_session_list_changed
 from .lifecycle import mark_turn_completed, register_agent
+from .operations import (
+    apply_session_title_rename,
+    retry_last,
+    session_status,
+    session_usage,
+    truncate_context_for_display_keep,
+    truncate_session_at_keep,
+    undo_last,
+)
+from .recovery import audit_session_recovery, repair_safe_session_recovery
 from .repository import (
     SessionActiveError,
     SessionBusyError,
@@ -37,6 +49,7 @@ from .store import (
     Session,
     _REPAIR_STALE_PENDING_GRACE_SECONDS,
     all_sessions,
+    clear_cli_sessions_cache,
     clear_process_wakeup_pause,
     get_session,
     get_session_for_file_ops,
@@ -48,6 +61,46 @@ from .store import (
 )
 
 REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
+
+
+def commit_session_memory(
+    session_id: str,
+    agent=None,
+    *,
+    wait: bool = False,
+    timeout: float | None = None,
+) -> bool:
+    """Commit session memory through the live lifecycle implementation."""
+    from . import lifecycle
+
+    if not wait and timeout is None:
+        return lifecycle.commit_session_memory(session_id, agent=agent)
+    return lifecycle.commit_session_memory(
+        session_id, agent=agent, wait=wait, timeout=timeout
+    )
+
+
+def register_background_commit_thread(thread) -> bool:
+    """Register a lifecycle worker through the public sessions interface."""
+    from . import lifecycle
+
+    return lifecycle._register_background_commit_thread(thread)
+
+
+def unregister_background_commit_thread(thread) -> None:
+    """Unregister a lifecycle worker through the public sessions interface."""
+    from . import lifecycle
+
+    lifecycle._unregister_background_commit_thread(thread)
+
+
+def reload_store_interface():
+    """Reload the session store and return its compatibility route exports."""
+    from . import store
+
+    owner = importlib.reload(store)
+    return owner.get_session, owner.Session
+
 
 __all__ = [
     "Session",
@@ -62,10 +115,14 @@ __all__ = [
     "active_stream_id_for_session",
     "admission_write_owner",
     "all_sessions",
+    "apply_session_title_rename",
+    "audit_session_recovery",
+    "clear_cli_sessions_cache",
     "clear_process_wakeup_pause",
     "cleanup_session_store",
     "collect_expired_session_channels",
     "commit_stream_writeback",
+    "commit_session_memory",
     "compensate_failed_admission",
     "delete_session_state",
     "edit_session",
@@ -82,8 +139,18 @@ __all__ = [
     "persisted_message_count_for_session",
     "publish_session_list_changed",
     "register_agent",
+    "register_background_commit_thread",
+    "reload_store_interface",
+    "repair_safe_session_recovery",
+    "retry_last",
+    "session_status",
+    "session_usage",
     "session_write_owner",
     "should_emit_session_updated",
     "subscribe_to_session_channel",
     "title_from",
+    "truncate_context_for_display_keep",
+    "truncate_session_at_keep",
+    "undo_last",
+    "unregister_background_commit_thread",
 ]

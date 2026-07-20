@@ -79,6 +79,7 @@ from .registry import (
     save_workspaces,
     set_last_workspace,
     validate_workspace_to_add,
+    is_remote_terminal_backend,
 )
 
 __all__ = [
@@ -107,6 +108,7 @@ __all__ = [
     "list_authorized_escape_dir",
     "list_dir",
     "list_workspace_suggestions",
+    "is_remote_terminal_backend",
     "load_workspaces",
     "make_anchored_dir",
     "open_anchored_create_fd",

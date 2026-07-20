@@ -10,15 +10,18 @@ from typing import Any
 
 
 _PUBLIC = {
+    "LegacyJournalRuntimeAdapter": (".adapter", "LegacyJournalRuntimeAdapter"),
     "LocalTurnRequest": (".admission", "LocalTurnRequest"),
     "TurnExecution": (".execution", "TurnExecution"),
     "checkpoint_user_message": (".admission", "checkpoint_user_message"),
     "delete_run_journal": (".journal", "delete_run_journal"),
+    "get_background_results": (".background", "get_results"),
     "latest_run_summary": (".journal", "latest_run_summary"),
     "prepare_session_for_turn": (".admission", "prepare_session_for_turn"),
     "read_run_events": (".journal", "read_run_events"),
     "run_agent_streaming": (".local", "run_agent_streaming"),
     "run_journal_path": (".journal", "run_journal_path"),
+    "runtime_adapter_enabled": (".adapter", "runtime_adapter_enabled"),
     "start_local_turn": (".admission", "start_local_turn"),
     "start_session_turn": (".server_turn", "start_session_turn"),
 }
