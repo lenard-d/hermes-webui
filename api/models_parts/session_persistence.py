@@ -341,4 +341,4 @@ class _SessionPersistenceMixin:
             # Corrupt prefix or decode error — fall back to full load
             return cls.load(sid)
 
-__all__ = ['_SessionPersistenceMixin']
+__all__ = []

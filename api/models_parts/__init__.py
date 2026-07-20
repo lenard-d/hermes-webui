@@ -1,8 +1,9 @@
-"""Cohesive implementation modules behind the :mod:`api.models` facade.
+"""Private implementation modules behind the :mod:`api.models` facade.
 
-Cold imports of an individual part initialize the facade first. This keeps the
-parts importable for inspection and tooling while retaining one shared namespace
-for historical ``api.models`` monkeypatch and reload compatibility.
+Callers must import :mod:`api.models`, which owns initialization, synchronization,
+and transactional reload of these modules. Individual parts remain importable for
+inspection and tooling as an implementation detail; direct part reload is not a
+supported API and can bypass the facade's compatibility guarantees.
 """
 
 import importlib

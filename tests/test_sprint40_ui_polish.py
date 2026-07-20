@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -122,20 +123,53 @@ class TestGatewaySessionNullModel(unittest.TestCase):
         )
 
     def test_gateway_session_model_uses_none_fallback(self):
-        """Both source files must use `row['model'] or None` (explicit None
-        fallback) for the model field assignment."""
-        models_src = (REPO_ROOT / "api" / "models.py").read_text(encoding="utf-8")
-        gw_src = (REPO_ROOT / "api" / "gateway_watcher.py").read_text(encoding="utf-8")
-        self.assertIn(
-            "'model': row['model'] or None,",
-            models_src,
-            "api/models.py should assign `row['model'] or None` for the model field",
-        )
-        self.assertIn(
-            "'model': row['model'] or None,",
-            gw_src,
-            "api/gateway_watcher.py should assign `row['model'] or None` for the model field",
-        )
+        """Both gateway projections preserve a NULL state-db model as None."""
+        from api import gateway_watcher, models
+
+        row = {
+            "id": "gateway-null-model",
+            "title": "Null model",
+            "model": None,
+            "message_count": 1,
+            "actual_message_count": 1,
+            "actual_user_message_count": 1,
+            "started_at": 1.0,
+            "last_activity": 2.0,
+            "source": "telegram",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            state_db = root / "state.db"
+            state_db.touch()
+            with (
+                mock.patch.object(
+                    models,
+                    "read_importable_agent_session_rows",
+                    return_value=[row],
+                ),
+                mock.patch.object(models, "get_last_workspace", return_value=root),
+                mock.patch.object(
+                    models, "_state_projection_sidecar_metadata", return_value={}
+                ),
+            ):
+                projected = models._load_cli_sessions_uncached(
+                    root,
+                    state_db,
+                    "default",
+                    source_filter="telegram",
+                )
+            self.assertEqual(len(projected), 1)
+            self.assertIsNone(projected[0]["model"])
+
+            with mock.patch.object(
+                gateway_watcher,
+                "read_importable_agent_session_rows",
+                return_value=[row],
+            ):
+                watched = gateway_watcher._get_agent_sessions_from_db(state_db)
+            self.assertEqual(len(watched), 1)
+            self.assertIsNone(watched[0]["model"])
 
 
 if __name__ == "__main__":

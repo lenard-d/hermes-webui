@@ -8,6 +8,7 @@ from pathlib import Path
 
 import api.config as config
 import api.models as models
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +68,33 @@ def test_facade_assignment_reaches_session_persistence(monkeypatch, tmp_path):
     assert isinstance(models.Session.load(session.session_id), models.Session)
 
 
+def test_facade_delete_then_monkeypatch_restore_reaches_consumers(
+    monkeypatch, tmp_path
+):
+    """A restored facade binding remains visible to existing function globals."""
+    monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "_index.json")
+    session = models.Session(session_id="split-facade-restore", workspace=tmp_path)
+    session.save(skip_index=True)
+
+    monkeypatch.delattr(models, "SESSION_DIR")
+    monkeypatch.undo()
+
+    assert models.get_session.__globals__["SESSION_DIR"] is config.SESSION_DIR
+    with pytest.raises(KeyError, match="split-facade-restore"):
+        models.get_session("split-facade-restore")
+
+
+def test_facade_hides_mixins_and_normalizes_session_method_metadata():
+    assert "_SessionPersistenceMixin" not in vars(models)
+    assert "_SessionProjectionMixin" not in vars(models)
+
+    for method_name in ("__init__", "save", "load", "load_metadata_only", "compact"):
+        method = getattr(models.Session, method_name)
+        assert method.__module__ == "api.models"
+        assert method.__qualname__ == f"Session.{method_name}"
+
+
 def test_import_reload_and_pickle_contract_in_fresh_process():
     code = """
 import importlib
@@ -87,6 +115,65 @@ assert models._CLI_SESSIONS_CACHE is not old_cache
 assert models.SESSIONS is old_sessions is config.SESSIONS
 assert models.LOCK is old_lock is config.LOCK
 assert models.Session.__module__ == "api.models"
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_failed_reload_restores_usable_facade_in_fresh_process():
+    code = """
+import importlib
+import tempfile
+from pathlib import Path
+
+import api.models as models
+
+old_facade_class = models.__class__
+old_session = models.Session
+old_get_session = models.get_session
+old_exports = tuple(models._MODELS_FACADE_EXPORTS)
+old_session_dir = Path(tempfile.gettempdir()) / "models-reload-rollback"
+models.SESSION_DIR = old_session_dir
+real_reload = importlib.reload
+
+def fail_on_session_part(module):
+    if module.__name__ == "api.models_parts.session":
+        raise RuntimeError("injected models part reload failure")
+    return real_reload(module)
+
+importlib.reload = fail_on_session_part
+try:
+    try:
+        real_reload(models)
+    except RuntimeError as exc:
+        assert str(exc) == "injected models part reload failure"
+    else:
+        raise AssertionError("models reload unexpectedly succeeded")
+finally:
+    importlib.reload = real_reload
+
+assert models.__class__ is old_facade_class
+assert models.Session is old_session
+assert models.get_session is old_get_session
+assert tuple(models._MODELS_FACADE_EXPORTS) == old_exports
+assert models.SESSION_DIR is old_session_dir
+assert models.get_session.__globals__["SESSION_DIR"] is old_session_dir
+assert models.Session(session_id="reload-rollback").session_id == "reload-rollback"
+with tempfile.TemporaryDirectory() as directory:
+    models.SESSION_DIR = Path(directory)
+    try:
+        models.get_session("missing-after-rollback")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("missing session unexpectedly resolved")
 """
     result = subprocess.run(
         [sys.executable, "-c", code],

@@ -7,6 +7,8 @@ Loaded behind :mod:`api.models`; use that compatibility facade in callers.
 # global lookups so api.models monkeypatch seams remain effective.
 # ruff: noqa: F401, F811, F821, F841, B007, B023, B904, B905
 from api.models_parts._compat import seed_module_globals
+from api.models_parts.session_persistence import _SessionPersistenceMixin
+from api.models_parts.session_projection import _SessionProjectionMixin
 
 seed_module_globals(globals())
 
