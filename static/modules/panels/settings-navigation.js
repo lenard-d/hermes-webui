@@ -1,6 +1,7 @@
 import { state } from "./state.js";
 import { _closeMobileSidebarAfterPanelSelection,_consumeSettingsTargetPanel,switchPanel } from "./core.js";
-import { loadExtensionsPanel,loadPluginsPanel } from "./settings-extensions.js";
+import { loadExtensionsPanel } from "./settings-extensions.js";
+import { loadPluginsPanel } from "./settings-plugins.js";
 import { _speechPreferencesPayloadFromUi } from "./settings-preferences.js";
 import { loadProvidersPanel } from "./settings-providers.js";
 import { saveSettings } from "./settings-save.js";

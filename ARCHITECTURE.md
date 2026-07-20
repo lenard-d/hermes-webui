@@ -785,7 +785,13 @@ The main directly loaded families are:
 6. Ordered `command_parts/`, then `commands.js`, preserving the command globals consumed by message sending.
 7. `messages.js`, then ordered `messages_parts/` for send, anchor modeling,
    stream rendering/lifecycle, approvals, clarification, and session events.
-8. `panels.js`, then `panels_parts/` for cron, kanban, settings, profiles, skills, memory, and workspaces.
+8. `static/modules/panels/index.js`, the native-module entrypoint for cron,
+   kanban, settings, profiles, skills, memory, and workspaces. Settings extensions
+   keep lifecycle coordination in `settings-extensions.js`; the
+   `panels/extensions/` package owns catalog projection, install/remove and
+   enable mutations, browser-local configuration, diagnostics rendering, and
+   loopback-sidecar monitoring. Hermes plugins are a separate settings owner in
+   `settings-plugins.js` rather than sharing the extension implementation.
 9. Ordered `boot_parts/`, then `boot.js`; standalone owners such as `terminal.js`
    and `onboarding.js` remain directly loaded.
 

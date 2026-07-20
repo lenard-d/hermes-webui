@@ -20,6 +20,7 @@ import * as settingsState from './settings-state.js';
 import * as settingsNavigation from './settings-navigation.js';
 import * as settingsPreferences from './settings-preferences.js';
 import * as extensions from './settings-extensions.js';
+import * as plugins from './settings-plugins.js';
 import * as providers from './settings-providers.js';
 import * as modelsAndAuth from './settings-models-auth.js';
 import * as settingsSave from './settings-save.js';
@@ -41,6 +42,7 @@ export const panelModules = Object.freeze({
   settingsNavigation,
   settingsPreferences,
   extensions,
+  plugins,
   providers,
   modelsAndAuth,
   settingsSave,

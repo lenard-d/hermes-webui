@@ -1,6 +1,7 @@
 import { state } from "./state.js";
 import { checkWebUIVersionSkew } from "./kanban-board.js";
-import { loadExtensionsPanel,loadPluginsPanel } from "./settings-extensions.js";
+import { loadExtensionsPanel } from "./settings-extensions.js";
+import { loadPluginsPanel } from "./settings-plugins.js";
 import { _bindMainAdvancedOptionsButton,_loadAuxiliaryModels,_renderSettingsAuthStatus,_setSettingsAuthButtonsVisible,_syncPasswordlessButton,_syncUpdateChannelBadge,_updateAuthDisabledWarning,_updateAuthWarningBadge,_updateCurrentPasswordVisibility,checkUpdatesNow,loadPasskeys } from "./settings-models-auth.js";
 import { _applyStructuredCodeViewSettings,_applyTtsEnabled,_captureSpeechPreferenceOwnership,_markSettingsDirty,_markSpeechPreferenceChanged,_pickChatActivityDisplayMode,_pickTransparentEventTimestamps,_preferencesPayloadFromUi,_scheduleAppearanceAutosave,_setOwnedSpeechPayload,_structuredCodeViewFromUi,_syncChatActivityDisplayModeControl,_syncHermesPanelSessionActions,_syncSpeechPreferenceCache,_syncStructuredCodeLinesEnabled,_syncTransparentEventTimestampsControl,switchSettingsSection } from "./settings-navigation.js";
 import { loadProvidersPanel } from "./settings-providers.js";

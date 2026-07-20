@@ -61,7 +61,6 @@ export const state = {
   _cronPollTimer: null, // owner: runtime-alerts.js
   _cronUnreadCount: 0, // owner: runtime-alerts.js
   _cronPollGeneration: 0, // owner: runtime-alerts.js
-  _currentPluginPage: null, // owner: settings-extensions.js
   _settingsPasswordEnvLocked: false, // owner: settings-models-auth.js
   _settingsPasswordAuthEnabled: false, // owner: settings-models-auth.js
   _auxProviders: [], // owner: settings-models-auth.js // cached provider list from /api/models
@@ -82,11 +81,6 @@ export const state = {
   _settingsIndex: null, // owner: settings-state.js
   _settingsIndexPromise: null, // owner: settings-state.js
   _settingsSearchSeq: 0, // owner: settings-state.js
-  _extensionsStatusData: null, // owner: settings-state.js
-  _extensionsSidecarMonitorSeq: 0, // owner: settings-state.js
-  _extensionsGalleryData: null, // owner: settings-state.js
-  _extensionsGalleryLoaded: false, // owner: settings-state.js
-  _extensionsActiveTab: 'gallery', // owner: settings-state.js
   _settingsSearchDismissListenerRegistered: false, // owner: settings-state.js
   _settingsAppearanceAutosaveTimer: null, // owner: settings-state.js
   _settingsAppearanceAutosaveRetryPayload: null, // owner: settings-state.js

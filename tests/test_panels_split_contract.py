@@ -24,7 +24,7 @@ def test_panels_use_one_native_module_entry_and_semantic_files():
     names = [path.name for path in modules]
 
     assert family_entry_paths("panels") == (MODULE_DIR / "index.js",)
-    assert set(MODULE_DIR.glob("*.js")) == set(modules)
+    assert set(MODULE_DIR.rglob("*.js")) == set(modules)
     assert not (STATIC / "panels.js").exists()
     assert not (STATIC / "panels_parts").exists()
     assert not any(re.match(r"\d", name) or "part" in name for name in names)

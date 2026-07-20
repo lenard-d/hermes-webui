@@ -575,7 +575,7 @@ class TestPluginCollisionDetection:
         assert "plugins_provider_no_hooks" in segment
         # Graceful fallback when the older payload shape (no `activation` field)
         # is returned — the card should still resolve a badge from `enabled`.
-        assert "plugin.enabled===false" in segment
+        assert "plugin.enabled === false" in segment
 
     def test_plugins_panel_i18n_strings_present(self):
         i18n = family_source("i18n")
@@ -593,7 +593,7 @@ class TestAutoHidePluginsTab:
 
         assert "data-settings-section=\"plugins\"" in segment
         assert ".empty" in segment
-        assert "style.display='none'" in segment
+        assert "style.display = data && data.empty ? 'none' : ''" in segment
 
     def test_switchSettingsSection_fallback_when_hidden(self):
         js = family_source("panels")

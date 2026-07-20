@@ -8,6 +8,14 @@ import re
 ROOT = Path(__file__).parent.parent
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
+PANELS_DIR = ROOT / "static" / "modules" / "panels"
+EXTENSIONS_LIFECYCLE_JS = (PANELS_DIR / "settings-extensions.js").read_text(encoding="utf-8")
+EXTENSIONS_CATALOG_JS = (PANELS_DIR / "extensions" / "catalog.js").read_text(encoding="utf-8")
+EXTENSIONS_CONFIGURATION_JS = (PANELS_DIR / "extensions" / "configuration.js").read_text(encoding="utf-8")
+EXTENSIONS_DIAGNOSTICS_JS = (PANELS_DIR / "extensions" / "diagnostics.js").read_text(encoding="utf-8")
+EXTENSIONS_INSTALLATIONS_JS = (PANELS_DIR / "extensions" / "installations.js").read_text(encoding="utf-8")
+EXTENSIONS_INSTALLED_JS = (PANELS_DIR / "extensions" / "installed.js").read_text(encoding="utf-8")
+EXTENSIONS_SIDECARS_JS = (PANELS_DIR / "extensions" / "sidecars.js").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")
 DOCS_EXTENSIONS = (ROOT / "docs" / "EXTENSIONS.md").read_text(encoding="utf-8")
@@ -29,18 +37,18 @@ def _locale_sources() -> dict[str, str]:
 I18N_LOCALE_SOURCES = _locale_sources()
 
 
-def _function_block(name: str, *, extra: int = 2200) -> str:
-    start = PANELS_JS.find(f"function {name}")
+def _function_block(name: str, *, source: str = PANELS_JS, extra: int = 2200) -> str:
+    start = source.find(f"function {name}")
     assert start >= 0, f"{name} not found"
-    return PANELS_JS[start:start + extra]
+    return source[start:start + extra]
 
 
-def _between(start_marker: str, end_marker: str) -> str:
-    start = PANELS_JS.find(start_marker)
+def _between(start_marker: str, end_marker: str, *, source: str = PANELS_JS) -> str:
+    start = source.find(start_marker)
     assert start >= 0, f"{start_marker} not found"
-    end = PANELS_JS.find(end_marker, start)
+    end = source.find(end_marker, start)
     assert end >= 0, f"{end_marker} not found after {start_marker}"
-    return PANELS_JS[start:end]
+    return source[start:end]
 
 
 def _locale_count() -> int:
@@ -110,7 +118,7 @@ def test_settings_search_knows_extensions_pane():
 
 
 def test_extensions_panel_fetches_status_endpoint_without_mutating_settings():
-    load_block = _function_block("loadExtensionsPanel", extra=900)
+    load_block = _function_block("loadExtensionsPanel", source=EXTENSIONS_LIFECYCLE_JS, extra=1800)
 
     assert "api('/api/extensions/status')" in load_block
     assert "api('/api/settings'" not in load_block
@@ -126,16 +134,16 @@ def test_extensions_do_not_add_generic_backend_settings_write_route():
 
 
 def test_extensions_diagnostics_tab_refreshes_runtime_status():
-    tab_block = _function_block("switchExtensionsTab", extra=900)
+    tab_block = _function_block("switchExtensionsTab", source=EXTENSIONS_LIFECYCLE_JS, extra=900)
 
-    assert "if(tab==='diagnostics') loadExtensionsPanel({preserveExisting:true});" in tab_block
-    assert "if(tab==='gallery'&&!_extensionsGalleryLoaded) loadExtensionsGallery();" in tab_block
+    assert "if (tab === 'diagnostics') loadExtensionsPanel({ preserveExisting: true });" in tab_block
+    assert "if (tab === 'gallery' && !galleryLoaded) loadExtensionsGallery();" in tab_block
 
 
 def test_extensions_panel_renders_sanitized_status_payload():
-    render_block = _between("function _renderExtensionsPanel", "async function loadExtensionsPanel")
-    warning_block = _function_block("_extensionWarningList", extra=900)
-    asset_block = _function_block("_extensionAssetList", extra=500)
+    render_block = _function_block("renderExtensionsDiagnostics", source=EXTENSIONS_DIAGNOSTICS_JS, extra=9000)
+    warning_block = _function_block("warningList", source=EXTENSIONS_DIAGNOSTICS_JS, extra=900)
+    asset_block = _function_block("assetList", source=EXTENSIONS_DIAGNOSTICS_JS, extra=500)
 
     assert "extension_dir_configured" in render_block
     assert "extension_dir_valid" in render_block
@@ -146,79 +154,81 @@ def test_extensions_panel_renders_sanitized_status_payload():
     assert "manifest.sidecar_count" in render_block
     assert "script_urls" in render_block
     assert "stylesheet_urls" in render_block
-    assert "data&&data.sidecars" in render_block
-    assert "data&&data.extensions" in render_block
-    assert "counts,'manifest_extensions'" in render_block
-    assert "counts,'user_disabled'" in render_block
-    assert "_extensionInstalledList(extensions,!!(data&&data.extension_dir_configured))" in render_block
-    assert "_extensionSidecarCard(sidecars)" in render_block
-    assert "data&&data.warnings" in render_block
+    assert "status && status.sidecars" in render_block
+    assert "status && status.extensions" in render_block
+    assert "countValue(counts, 'manifest_extensions'" in render_block
+    assert "countValue(counts, 'user_disabled'" in render_block
+    assert "installedExtensionsMarkup(extensions" in render_block
+    assert "extensionSidecarsMarkup(sidecars)" in render_block
+    assert "status && status.warnings" in render_block
     assert "esc(url)" in asset_block
-    assert "esc(manifest.status||'unknown')" in render_block
-    assert "const rawCode=(item&&item.code)||'unknown_warning'" in warning_block
-    assert "const code=esc(rawCode)" in warning_block
-    assert "esc((item&&item.source)||'unknown')" in warning_block
+    assert "esc(manifest.status || 'unknown')" in render_block
+    assert "item && item.code || 'unknown_warning'" in warning_block
+    assert "esc(rawCode)" in warning_block
+    assert "esc(source)" in warning_block
     assert "extension_state_unknown_ids" in warning_block
     assert "Some saved disabled-extension overrides no longer match the current manifest" in warning_block
     assert "Rejected" not in render_block  # rejected values must never be rendered directly
 
 
 def test_extensions_panel_renders_loopback_sidecar_monitor_safely():
-    runtime_block = _between("function _extensionRuntimeStatusValue", "function _extensionSidecarCard")
-    sidecar_block = _between("function _extensionSidecarCard", "function _setExtensionSidecarHealth")
-    runtime_setter_block = _between("function _setExtensionSidecarRuntime", "async function _checkExtensionSidecarHealth")
-    monitor_block = _between("async function _checkExtensionSidecarHealth", "function _renderExtensionsPanel")
-    render_block = _between("function _renderExtensionsPanel", "async function loadExtensionsPanel")
-    load_block = _between("async function loadExtensionsPanel", "async function copyExtensionsDiagnostics")
-    load_catch_block = load_block[load_block.index("}catch(e){"):]
+    runtime_block = _between("function runtimeLastSeen", "function runtimeOrigin", source=EXTENSIONS_SIDECARS_JS)
+    runtime_rows_block = _between("function runtimeRows", "function runtimeDetails", source=EXTENSIONS_SIDECARS_JS)
+    sidecar_block = _between("export function extensionSidecarsMarkup", "function setHealth", source=EXTENSIONS_SIDECARS_JS)
+    runtime_setter_block = _between("function setRuntime", "async function checkHealth", source=EXTENSIONS_SIDECARS_JS)
+    monitor_block = _between("async function checkHealth", "async function updateProxyConsent", source=EXTENSIONS_SIDECARS_JS)
+    render_block = _function_block("renderExtensionsDiagnostics", source=EXTENSIONS_DIAGNOSTICS_JS, extra=9000)
+    load_block = _between("export async function loadExtensionsPanel", "export function switchExtensionsTab", source=EXTENSIONS_LIFECYCLE_JS)
+    load_catch_block = load_block[load_block.index("} catch (error) {"):]
 
     assert "Loopback sidecars" in sidecar_block
     assert "No loopback sidecars declared." in sidecar_block
     assert "esc(title)" in sidecar_block
-    assert "esc(meta)" in sidecar_block
+    assert "esc(metadata)" in sidecar_block
     assert "esc(origin)" in sidecar_block
     assert "esc(healthPath)" in sidecar_block
     assert "esc(healthUrl)" in sidecar_block
-    assert "sidecar&&sidecar.proxy" in sidecar_block
-    assert "proxy.available===true" in sidecar_block
-    assert "proxy.consented===true" in sidecar_block
-    assert "proxy.consent_required===true" in sidecar_block
-    assert "proxy.origin_changed===true" in sidecar_block
+    assert "sidecar && sidecar.proxy" in sidecar_block
+    assert "proxy.available === true" in sidecar_block
+    assert "proxy.consented === true" in sidecar_block
+    assert "proxy.consent_required === true" in sidecar_block
+    assert "proxy.origin_changed === true" in sidecar_block
     assert "Proxy path" in sidecar_block
     assert "data-extension-sidecar-proxy-id" in sidecar_block
     assert "data-extension-sidecar-proxy-approved" in sidecar_block
     assert 'data-sidecar-runtime-index="${index}"' in sidecar_block
-    assert "fetch(healthUrl,{credentials:'omit',cache:'no-store'" in monitor_block
-    assert "function _monitorExtensionSidecars(sidecars,seq)" in monitor_block
-    assert "const seq=_extensionsSidecarMonitorSeq" not in monitor_block
-    assert "_monitorExtensionSidecars(sidecars,seq)" in render_block
-    assert "function _renderExtensionsPanel(data,seq)" in render_block
-    assert "_bindExtensionSidecarProxyButtons(target)" in render_block
-    assert "const seq=++_extensionsSidecarMonitorSeq" in load_block
-    assert "opts&&opts.preserveExisting&&target.innerHTML.trim()" in load_block
+    assert "fetch(healthUrl" in monitor_block
+    assert "credentials: 'omit'" in monitor_block
+    assert "cache: 'no-store'" in monitor_block
+    assert "function monitorExtensionSidecars(sidecars, sequence, isCurrentSequence)" in monitor_block
+    assert "const sequence = ++sidecarMonitorSequence" not in monitor_block
+    assert "monitorExtensionSidecars(sidecars, lifecycle.sequence" in render_block
+    assert "function renderExtensionsDiagnostics(status, lifecycle)" in render_block
+    assert "bindExtensionSidecarActions(target, lifecycle.onStatusUpdate)" in render_block
+    assert "const sequence = ++sidecarMonitorSequence" in load_block
+    assert "options && options.preserveExisting && target.innerHTML.trim()" in load_block
     # A failed refresh must NOT be preserved as "existing content": the Loading/
     # error placeholders are excluded so a fetch error always renders the error
     # instead of leaving the panel stuck on "Loading extension diagnostics…".
     assert "!target.querySelector('.extensions-loading,.extensions-error')" in load_block
-    assert "if(!preserveExisting) target.innerHTML" in load_block
-    assert "loadExtensionsPanel({preserveExisting:true})" in load_block
-    assert "if(seq!==_extensionsSidecarMonitorSeq) return;" in load_block
-    assert "if(seq!==_extensionsSidecarMonitorSeq) return;" in load_catch_block
-    assert "if(preserveExisting&&target.innerHTML.trim()) return;" in load_catch_block
-    assert "_renderExtensionsPanel(data,seq)" in load_block
-    assert "res.ok" in monitor_block
-    assert "res.text" not in monitor_block
-    assert "body=await res.json()" in monitor_block
-    assert "_setExtensionSidecarRuntime(index,body&&typeof body==='object'?body.runtime:null)" in monitor_block
-    assert "String(value??'').trim()" in runtime_block
+    assert "if (!preserveExisting)" in load_block
+    assert "if (sequence !== sidecarMonitorSequence) return;" in load_block
+    assert "if (sequence !== sidecarMonitorSequence) return;" in load_catch_block
+    assert "if (preserveExisting && target.innerHTML.trim()) return;" in load_catch_block
+    assert "renderStatus(status, sequence)" in load_block
+    assert "response.ok" in monitor_block
+    assert "response.text" not in monitor_block
+    assert "body = await response.json()" in monitor_block
+    assert "setRuntime(index, body && typeof body === 'object' ? body.runtime : null)" in monitor_block
+    assert "String(value ?? '').trim()" in runtime_block
     assert r"/^\d+(?:\.\d+)?$/.test(text)" in runtime_block
-    assert "seconds>now+300" in runtime_block
-    assert "runtime.sidecar" in runtime_block
-    assert "runtime.native_host" in runtime_block
-    assert "runtime.bridge" in runtime_block
-    assert "runtime.last_seen_at" in runtime_block
-    assert "runtime.webui_origin" in runtime_block
-    assert "el.innerHTML=details" in runtime_setter_block
+    assert "seconds > now + 300" in runtime_block
+    assert "runtime.sidecar" in runtime_rows_block
+    assert "runtime.native_host" in runtime_rows_block
+    assert "runtime.bridge" in runtime_rows_block
+    assert "runtime.last_seen_at" in runtime_rows_block
+    assert "runtime.webui_origin" in runtime_rows_block
+    assert "element.innerHTML = details" in runtime_setter_block
     assert "api('/api/settings'" not in monitor_block
     assert "api('/extensions/" not in monitor_block
     assert "sidecar/*" not in monitor_block
@@ -226,12 +236,14 @@ def test_extensions_panel_renders_loopback_sidecar_monitor_safely():
 
 
 def test_extensions_panel_sidecar_proxy_consent_uses_dedicated_endpoint():
-    bind_block = _between("function _bindExtensionSidecarProxyButtons", "async function handleExtensionToggle")
-    consent_block = _between("async function handleExtensionSidecarProxyConsent", "function _readExtensionSettingsForm")
+    bind_block = _function_block("bindExtensionSidecarActions", source=EXTENSIONS_SIDECARS_JS, extra=800)
+    consent_block = _between("async function updateProxyConsent", "export function bindExtensionSidecarActions", source=EXTENSIONS_SIDECARS_JS)
 
-    assert "handleExtensionSidecarProxyConsent" in bind_block
+    assert "updateProxyConsent" in bind_block
     assert "data-extension-sidecar-proxy-id" in bind_block
-    assert "api('/api/extensions/sidecar-proxy-consent',{method:'POST',body:JSON.stringify({id,approved})})" in consent_block
+    assert "api('/api/extensions/sidecar-proxy-consent'" in consent_block
+    assert "method: 'POST'" in consent_block
+    assert "body: JSON.stringify({ id, approved })" in consent_block
     assert "Extension sidecar proxy approved." in consent_block
     assert "Extension sidecar proxy consent revoked." in consent_block
     assert "Failed to update extension sidecar proxy consent" in consent_block
@@ -239,8 +251,12 @@ def test_extensions_panel_sidecar_proxy_consent_uses_dedicated_endpoint():
 
 
 def test_extensions_panel_toggle_uses_dedicated_endpoint_without_settings_or_install():
-    installed_block = _between("function _extensionInstalledList", "function _extensionSidecarHealthBadge")
-    toggle_block = _between("async function handleExtensionToggle", "async function loadExtensionsPanel")
+    installed_block = EXTENSIONS_INSTALLED_JS
+    toggle_block = _between(
+        "async function updateInstalledExtension",
+        "export function bindInstalledExtensionActions",
+        source=EXTENSIONS_INSTALLATIONS_JS,
+    )
 
     assert "data-extension-toggle-id" in installed_block
     assert "data-extension-next-enabled" in installed_block
@@ -248,70 +264,71 @@ def test_extensions_panel_toggle_uses_dedicated_endpoint_without_settings_or_ins
     assert "No manifest extensions are installed in the configured bundle." in installed_block
     assert "extensionDirConfigured" in installed_block
     assert "Manifest-disabled entries cannot be enabled from WebUI." in installed_block
-    assert "api('/api/extensions/toggle',{method:'POST',body:JSON.stringify({id,enabled})})" in toggle_block
+    assert "api('/api/extensions/toggle'" in toggle_block
+    assert "method: 'POST'" in toggle_block
+    assert "body: JSON.stringify({ id, enabled })" in toggle_block
     assert "Reload WebUI to apply changes" in toggle_block
-    combined = installed_block + toggle_block
-    assert "api('/api/settings'" not in combined
-    assert ">Install<" not in combined
-    assert "Install extension" not in combined
-    assert "Uninstall" not in combined
-    assert "marketplace" not in combined.lower()
+    assert "api('/api/settings'" not in installed_block + toggle_block
+    assert ">Install<" not in installed_block
+    assert "Install extension" not in installed_block
+    assert "Uninstall" not in installed_block
+    assert "marketplace" not in installed_block.lower()
 
 
 def test_extensions_installed_settings_route_through_shared_accessor():
-    installed_block = _between("function _extensionInstalledList", "function _extensionSidecarHealthBadge")
-    settings_block = _between("function _configureExtensionSettingsFromStatus", "function _extensionInstalledList")
-    bind_block = _between("function _bindExtensionSettingsButtons", "async function loadExtensionsPanel")
-    gallery_block = _between("function _renderExtensionsGallery", "function _bindExtensionGalleryButtons")
+    installed_block = EXTENSIONS_INSTALLED_JS
+    settings_block = EXTENSIONS_CONFIGURATION_JS
+    bind_block = EXTENSIONS_CONFIGURATION_JS
+    gallery_block = _function_block("renderGallery", source=EXTENSIONS_LIFECYCLE_JS, extra=2000)
 
-    assert "entry&&entry.storage_owned" in settings_block
+    assert "entry && entry.storage_owned" in settings_block
     assert "window.HermesExtensionSettings.settingsForExtension(id)" in settings_block
-    assert "settingsApi&&settingsApi.schema" in settings_block
-    assert "settingsApi||!settingsApi.trusted" in settings_block
+    assert "settings.schema" in settings_block
+    assert "!settings || !settings.trusted" in settings_block
     assert "data-extension-settings-save" in settings_block
     assert "data-extension-settings-reset" in settings_block
     assert "data-extension-storage-clear" in settings_block
     assert "Browser-local extension settings" in settings_block
     assert "Do not store secrets here" in settings_block
     assert "Reload WebUI after enabling or installing this extension to edit browser-local settings." in settings_block
-    assert "_extensionSettingsControls(entry)" in installed_block
+    assert "extensionSettingsMarkup(entry)" in installed_block
     assert "window.HermesExtensionSettings.settingsForExtension(id).reset()" in bind_block
     assert "window.HermesExtensionSettings.storageForExtension(id).clear()" in bind_block
     assert "api('/api/extensions/status')" not in bind_block
     assert "api('/api/settings'" not in bind_block
     assert "localStorage" not in bind_block
-    assert "_extensionInstalledList(statusData&&statusData.extensions" in gallery_block
-    assert "_bindExtensionSettingsButtons(installedEl)" in gallery_block
+    assert "installedExtensionsMarkup(" in gallery_block
+    assert "bindExtensionSettings(installed)" in gallery_block
 
 
 def test_extensions_gallery_renders_post_install_guidance():
-    url_block = _between("function _extensionSafeHttpUrl", "function _extensionPostInstallNote")
-    gallery_block = _between("function _extensionPostInstallNote", "async function loadExtensionsGallery")
-    render_block = _between("function _renderExtensionsGallery", "function _bindExtensionGalleryButtons")
-    install_block = _between("async function handleExtensionInstall", "async function handleExtensionUninstall")
+    url_block = _between("function safeHttpUrl", "function registrySourceUrl", source=EXTENSIONS_CATALOG_JS)
+    gallery_block = _between("function postInstallNote", "function installedIds", source=EXTENSIONS_CATALOG_JS)
+    render_block = _function_block("extensionCatalogMarkup", source=EXTENSIONS_CATALOG_JS, extra=5000)
+    install_block = _between("async function installExtension", "async function uninstallExtension", source=EXTENSIONS_INSTALLATIONS_JS)
 
     assert "/^https?:\\/\\//i.test(raw)" in url_block
-    assert "url.username||url.password" in url_block
+    assert "url.username || url.password" in url_block
     assert "entry.post_install" in gallery_block
-    assert "post&&post.docs_url" in gallery_block
+    assert "postInstall && postInstall.docs_url" in gallery_block
     assert "sidecar_start_required" in gallery_block
     assert "native_host_start_required" in gallery_block
     assert "requires_local_app" in gallery_block
     assert "local_app_label" in gallery_block
     assert "t('ext_gallery_local_component_required')" in gallery_block
     assert "t('ext_gallery_local_app_label')" in gallery_block
-    assert "t('ext_gallery_required_suffix',localAppLabel)" in gallery_block
+    assert "t('ext_gallery_required_suffix', localAppLabel)" in gallery_block
     assert "t('ext_gallery_sidecar_required')" in gallery_block
     assert "t('ext_gallery_native_host_required')" in gallery_block
     assert "t('ext_gallery_open_setup_guide')" in gallery_block
-    assert "t(isInstalled?'ext_gallery_next_step':'ext_gallery_after_install')" in gallery_block
+    assert "t(isInstalled ? 'ext_gallery_next_step' : 'ext_gallery_after_install')" in gallery_block
     assert "target=\"_blank\"" in gallery_block
     assert "rel=\"noopener noreferrer\"" in gallery_block
     assert "extension-gallery-next-step" in gallery_block
     assert "esc(summary)" in gallery_block
     assert "esc(docsUrl)" in gallery_block
     assert "esc(item)" in gallery_block
-    assert "_extensionPostInstallNote(entry,isInstalled)" in render_block
+    assert "postInstallNote(entry, isInstalled)" in render_block
     assert "t('ext_gallery_install_restart_required')" in install_block
     assert "t('ext_gallery_install_followup')" in install_block
     assert "t('ext_gallery_install_ok')" in install_block
@@ -319,12 +336,12 @@ def test_extensions_gallery_renders_post_install_guidance():
 
 
 def test_extensions_gallery_links_sources_and_humanizes_permissions():
-    helper_block = _between("function _extensionRegistrySourceUrl", "function _extensionPostInstallNote")
-    render_block = _between("function _renderExtensionsGallery", "function _bindExtensionGalleryButtons")
+    helper_block = _between("function registrySourceUrl", "function postInstallNote", source=EXTENSIONS_CATALOG_JS)
+    render_block = _function_block("extensionCatalogMarkup", source=EXTENSIONS_CATALOG_JS, extra=5000)
 
     assert "entry.homepage" in helper_block
     assert "entry.repository_url" in helper_block
-    assert "entry.entry_path||entry.runtime_manifest_path" in helper_block
+    assert "entry.entry_path || entry.runtime_manifest_path" in helper_block
     assert "hermes-webui/hermes-webui-extensions/tree/main" in helper_block
     assert "encodeURIComponent" in helper_block
     assert "extension-gallery-source-link" in helper_block
@@ -339,16 +356,16 @@ def test_extensions_gallery_links_sources_and_humanizes_permissions():
     assert "native_host" in helper_block
     assert "network_external" in helper_block
     assert "extension-gallery-permission-row" in helper_block
-    assert "_extensionSourceLink(entry)" in render_block
-    assert "_extensionPermissionSummary(perms)" in render_block
-    assert "JSON.stringify(perms" not in render_block
+    assert "sourceLink(entry)" in render_block
+    assert "permissionSummary(entry.permissions)" in render_block
+    assert "JSON.stringify(entry.permissions" not in render_block
     assert "<pre>" not in render_block
 
 
 def test_copy_extensions_diagnostics_copies_current_sanitized_payload():
-    copy_block = _between("function copyExtensionsDiagnostics", "// ── Plugins panel")
+    copy_block = _function_block("copyExtensionsDiagnostics", source=EXTENSIONS_LIFECYCLE_JS, extra=1200)
 
-    assert "JSON.stringify(_extensionsStatusData,null,2)" in copy_block
+    assert "JSON.stringify(currentStatus, null, 2)" in copy_block
     assert "navigator.clipboard.writeText(text)" in copy_block
     assert "api('/api/settings'" not in copy_block
     assert "api('/api/extensions'" not in copy_block
