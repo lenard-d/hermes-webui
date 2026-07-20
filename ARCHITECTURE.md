@@ -32,11 +32,13 @@ before the main stylesheet loads. Desktop CSS honors that preload marker immedia
 and `static/boot.js` keeps the dataset synchronized with the runtime panel state machine.
 
 The design philosophy is deliberately minimal. There is no build step, no bundler, no
-frontend framework. The Python server is split into a routing shell (server.py) and
-business logic modules (api/). The frontend is vanilla JavaScript loaded from
-`static/`; most feature files are still classic scripts, while bounded new
-ownership seams can use native ES modules without adding a build step. This
-makes the code easy to modify from a terminal or by an agent.
+frontend framework. The Python server is split into a routing shell (`server.py`) and
+business logic modules (`api/`). Large public backend modules remain compatibility
+facades while cohesive, importable implementations live in semantic `*_parts/`
+packages. The frontend is vanilla JavaScript and CSS loaded directly from
+`static/` in an explicit browser order; most feature files are still classic
+scripts, while bounded ownership seams can use native ES modules without adding
+a build step. This makes the code easy to modify from a terminal or by an agent.
 
 Hermes-level chrome is intentionally consolidated: the sidebar has no dedicated brand header.
 Instead, the footer exposes a single "Hermes WebUI" launch button that opens one tabbed
@@ -60,13 +62,13 @@ actions. The topbar remains focused on conversation context and the workspace/fi
     api/
       __init__.py          Package marker
       auth.py              Optional password authentication, signed cookies, passkeys/WebAuthn
-      config.py            Compatibility facade, globals, model discovery/cache, reloadable config
-      config_parts/        Importable config domains behind a late-bound facade
-        model_settings.py  Advanced/default/auxiliary model settings policy and persistence
+      config.py            Compatibility facade and owner of shared mutable config state
+      config_parts/        Importable config I/O, discovery, routing, settings, and reasoning domains
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
       insights.py          Usage aggregation across WebUI index and Hermes state.db
       model_catalog.py     Static provider names, aliases, and fallback models
-      models.py            Session model + CRUD, per-session profile tracking, CLI/state.db bridge
+      models.py            Compatibility facade for the session/model public API
+      models_parts/        Importable session, persistence, projection, CLI, and state.db domains
       profiles.py          Profile state management, hermes_cli wrapper
       run_event_sink.py    Journal, cursor, and live-frame publication ordering
       runtime_state.py     Process-local admission, cancellation, run ownership, and cleanup
@@ -76,27 +78,35 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       turn_admission.py    Atomic local-turn admission, pending persistence, journal, stream, worker
       turn_execution.py    Shared Local/Gateway worker resource startup and teardown
       onboarding.py        First-run onboarding status, real provider config writes, OAuth linking, readiness detection
-      routes.py            All GET + POST route handlers (if/elif dispatch, no decorators)
+      routes.py            GET + POST dispatch and compatibility facade for extracted route domains
+      routes_parts/        Importable workspace, git, cron, security, compression, and response routes
       startup.py           Startup helpers: auto_install_agent_deps()
       state_sync.py        /insights sync — message_count to the agent's state.db
-      streaming.py         SSE engine, run_agent, cancel, compression, HERMES_HOME save/restore
+      streaming.py         SSE orchestration and compatibility facade for extracted stream domains
+      streaming_parts/     Importable payload, replay, compression, attachment, and terminal domains
       updates.py           Self-update check and release notes
       upload.py            Multipart parser, file upload handler
       workspace.py         File ops: list_dir, read_file_content, git detection, workspace helpers
     static/
       index.html           HTML template
-      style.css            All CSS incl. mobile responsive, themes + skins, KaTeX
-      ui.js                DOM helpers, renderMd, tool cards, context indicator, file tree
+      style.css            Base CSS loaded before ordered domain styles
+      style_parts/         Direct-loaded theme, layout, transcript, settings, and panel CSS
+      ui.js                UI compatibility bootstrap loaded before ordered domain scripts
+      ui_parts/            Direct-loaded UI state, rendering, navigation, model, and composer domains
       session_render_cache.js Native ES module owning the bounded transcript-render LRU
       session_render_cache_adapter.js Temporary classic-frontend compatibility adapter
       workspace.js         File preview, file ops, git badge, central api() fetch wrapper
-      sessions.js          Session CRUD, list rendering, collapsible groups, search, SSE sync
-      messages.js          send(), SSE event handlers, approval/clarify, transcript, recovery
-      panels.js            Cron, skills, memory, profiles, todo, settings (Control Center)
+      sessions.js          Session compatibility facade loaded after its ordered domain scripts
+      sessions_parts/      Direct-loaded session state, lifecycle, list, sidebar, and management domains
+      messages.js          Messages compatibility bootstrap loaded before ordered domain scripts
+      messages_parts/      Direct-loaded send, stream, approval, clarify, and session-event domains
+      panels.js            Panels compatibility bootstrap loaded before ordered panel domain scripts
+      panels_parts/        Direct-loaded cron, kanban, settings, profile, skill, and workspace domains
       commands.js          Slash command registry, parser, autocomplete dropdown
       boot.js              Event wiring, mobile nav, voice input, theme/skin boot, bfcache handler
       onboarding.js        First-run wizard overlay, provider setup flow
-      i18n.js              Localization catalog (en, es, de, zh, zh-Hant, ru, …)
+      i18n.js              Localization compatibility bootstrap
+      i18n_parts/          Helpers, one coherent file per locale, and final runtime binding
       login.js             Login page + open-redirect guard
       icons.js             Lucide icon path registry
       sw.js                Service worker: offline shell cache, version-pinned assets
@@ -117,7 +127,10 @@ actions. The topbar remains focused on conversation context and the workspace/fi
 
 > Per-file line counts intentionally omitted — they drift every release. Use
 > `git ls-files | xargs wc -l` (or your editor) for current sizes; the role of
-> each file above is the durable part.
+> each file above is the durable part. A 500-line target is only a review
+> heuristic, not an architecture rule: a cohesive 800-1,200-line domain or a
+> larger owner closure is preferable to fragments that split a function, require
+> source concatenation, or cannot be parsed/imported independently.
 
 State directory (runtime data, separate from source):
 
@@ -280,6 +293,13 @@ larger migration remains incremental:
   Hermes `state.db`. Its Interface accepts query text and storage collaborators
   and returns a payload; the route wrapper only supplies those values and
   serializes the response.
+- `api.config`, `api.models`, `api.routes`, and `api.streaming` preserve their
+  established import and monkeypatch surfaces as compatibility facades. Cohesive
+  implementations live in `config_parts/`, `models_parts/`, `routes_parts/`, and
+  `streaming_parts/`: config and streaming helpers resolve facade collaborators
+  at call time, route exports are rebound into the facade namespace, and the
+  models facade republishes and synchronizes its semantic modules. These are
+  normal Python modules, not source strings or runtime-concatenated fragments.
 - `static/session_render_cache.js` is a native ES module that owns the bounded
   browser transcript-render cache, including LRU order and UTF-16 memory
   budgets. It exports one factory and does not publish browser globals.
@@ -524,24 +544,32 @@ read_file_content(workspace, rel):
 
 ### 5.1 Structure
 
-The frontend is served from static/ as separate files: one HTML template, one CSS file,
-and multiple JavaScript files. Most application files remain classic scripts rather
-than enforceable modules. External dependencies include Prism.js (syntax
-highlighting), Mermaid.js (diagrams), xterm.js, and KaTeX assets loaded with the
-current static template's integrity/CSP assumptions.
+The frontend is served from `static/` as one HTML template plus directly linked
+CSS and JavaScript assets. `static/index.html` is the authoritative browser-order
+list, and `static/sw.js` mirrors those concrete asset URLs for shell caching.
+There is no runtime manifest lookup, source fetch-and-concatenate step, generated
+bundle, or asset-composer loader. Split-family manifests, where present, document and
+test the order; the browser does not use them to discover code. External
+dependencies include Prism.js (syntax highlighting), Mermaid.js (diagrams),
+xterm.js, and KaTeX assets loaded with the current static template's integrity/CSP
+assumptions.
 
-Core JS modules loaded by the app include:
-  1. ui.js         (~7216 lines) DOM helpers, renderMd, tool card rendering, global state
-  2. workspace.js  (~369 lines) File tree, preview, file operations
-  3. sessions.js  (~3517 lines) Session CRUD, list rendering, search, SVG icons, dropdown actions, project picker
-  4. messages.js  (~2301 lines) send(), SSE event handlers, approval, transcript
-  5. panels.js    (~6480 lines) Cron, skills, memory, workspace, profiles, todo, settings
-  6. commands.js  (~1302 lines) Slash command registry, parser, autocomplete dropdown
-  7. boot.js      (~1607 lines) Event wiring + boot IIFE
+The main directly loaded families are:
 
-sessions.js defines an `ICONS` constant at module level with hardcoded SVG strings for all
-session action buttons (pin, unpin, folder, archive, unarchive, duplicate, trash). All icons
-inherit `currentColor` for consistent theming.
+1. `style.css`, then `style_parts/` for theme, layout, transcript, settings, and panel CSS.
+2. `i18n.js`, helpers, one complete locale file per language, then the i18n runtime.
+3. `ui.js`, then ordered `ui_parts/` for UI state, navigation, model/composer controls, and rendering.
+4. Ordered `sessions_parts/`, then `sessions.js`, whose compatibility facade is intentionally installed last.
+5. `messages.js`, then `messages_parts/` for send, stream lifecycle, approvals, clarification, and session events.
+6. `panels.js`, then `panels_parts/` for cron, kanban, settings, profiles, skills, memory, and workspaces.
+7. Standalone owners such as `workspace.js`, `commands.js`, `terminal.js`, `onboarding.js`, and `boot.js`.
+
+Most application assets remain classic scripts. Their browser order and selected
+compatibility globals are therefore part of the contract, while family namespaces
+such as `HermesUI`, `HermesSessions`, `HermesMessages`, and `HermesPanels` identify
+the semantic owners. A domain stays intact when splitting it would cross a function
+or owner-closure boundary; `messages_parts/stream.js`, for example, is deliberately
+larger than the line-count heuristic.
 
 Three-panel layout (in static/index.html):
 
@@ -860,12 +888,15 @@ Current backend structure (roles only; use `wc -l` for current sizes):
       server.py               Entry point + HTTP Handler dispatch
       api/
         __init__.py
-        routes.py             GET + POST route dispatch and legacy orchestration
-        config.py             Configuration, constants, runtime wiring, model discovery
+        routes.py             GET + POST dispatch and route compatibility facade
+        routes_parts/         Cohesive importable route domains
+        config.py             Config compatibility facade and shared mutable state owner
+        config_parts/         Cohesive importable config domains with late binding
         helpers.py            HTTP helpers: j(), bad(), require(), safe_resolve()
         insights.py           Transport-independent usage aggregation
         model_catalog.py      Static provider and fallback-model catalog
-        models.py             Session representation, projections, indexes, CLI bridge
+        models.py             Session/model compatibility facade
+        models_parts/         Session, persistence, projection, CLI, and state.db domains
         runtime_state.py      Process-local stream and worker lifecycle owner
         session_repository.py Full-load, lock, and persistence protocol for edits
         session_sources.py    Imported-session source identity policy
@@ -873,21 +904,29 @@ Current backend structure (roles only; use `wc -l` for current sizes):
         turn_admission.py     Atomic local-turn admission and worker launch
         workspace.py          File ops and workspace management
         upload.py             Multipart parser and file upload handler
-        streaming.py          SSE execution, cancellation, recovery, and compression
+        streaming.py          SSE orchestration and streaming compatibility facade
+        streaming_parts/      Payload, replay, compression, attachment, and terminal domains
       static/
         index.html            HTML document (served from disk)
-        style.css             Shared layout, theme, and responsive CSS
-        *.js                  Classic-script frontend modules (no bundler)
+        style.css             Base CSS
+        style_parts/          Direct-loaded ordered CSS domains
+        {ui,sessions,messages,panels}.js
+                              Compatibility bootstraps/facades
+        *_parts/              Direct-loaded ordered JavaScript domains
+        *.js                  Standalone classic-script owners (no bundler)
       tests/
         conftest.py           Isolated test server/state fixtures
         1,285 test files      13,535 tests in the July 19, 2026 snapshot
         test_regressions.py   Permanent regression gate
 
-Route extraction to api/routes.py completed in Sprint 11. server.py remains a
+Route extraction to `api/routes.py` completed in Sprint 11. `server.py` remains a
 thin shell relative to the rest of the app: Handler class with headers,
-structured logging, dispatch to routes, TLS wrapping, and main(). The extraction
-did not by itself create deep Modules: routes.py, config.py, models.py, streaming.py,
-style.css, and the shared classic-script namespace remain active deepening work.
+structured logging, dispatch to routes, TLS wrapping, and `main()`. The later
+semantic splits keep the established `api.config`, `api.models`, `api.routes`, and
+`api.streaming` import surfaces while moving bounded responsibilities into
+ordinary part modules. The facades still contain orchestration and shared-state
+ownership, so further extraction should follow domain boundaries rather than a
+line-count target.
 
 ### Phase B: Thread-Safe Request Context (Priority: Critical, Effort: Medium)
 
@@ -965,12 +1004,13 @@ Completed across Sprints 5, 6, and 9:
 1. HTML extracted to `static/index.html` (Sprint 6).
 2. CSS extracted to `static/style.css` (Sprint 4).
 3. `app.js` was deleted in Sprint 9 and replaced by focused files. The current
-   page loads 15 application scripts at the end of `static/index.html` in addition
-   to the early PWA startup script. Most are classic `<script>` files, so their
-   shared global namespace and load order remain a shallow Interface that needs
-   further deepening. The transcript render cache is the first incremental
-   native-module seam: a pure owner module plus one temporary compatibility
-   Adapter for `ui.js`.
+   page directly links the semantic style and script families described in
+   section 5.1. `index.html` fixes their browser order, and `sw.js` directly
+   pre-caches the same shell assets; production startup does not read a split
+   manifest, fetch source for concatenation, or execute a generated asset composer.
+   Most assets are classic scripts, so compatibility globals and order remain
+   explicit contracts. The transcript render cache is a bounded native-module
+   seam: a pure owner module plus one compatibility adapter for `ui.js`.
 4. Prism.js added for syntax highlighting (Sprint 8) via CDN, deferred load.
 
 Remaining: renderMd() is still a hand-rolled regex chain. Tables partially supported.
@@ -1076,7 +1116,7 @@ Endpoint that calls Hermes Python modules:
     jobs = list_jobs(include_disabled=True)
     return j(self, {'jobs': jobs})
 
-### Frontend (6 static JS modules: ui.js, workspace.js, sessions.js, messages.js, panels.js, boot.js)
+### Frontend (direct-loaded domain assets)
 
 Simple GET fetch:
 
@@ -1741,7 +1781,7 @@ are process-global). Full fix requires removing env var usage entirely (Phase B 
 #### New Endpoints
 
     GET  /static/*             Serves files from <repo>/static/ with
-                               correct Content-Type. Currently serves style.css.
+                               correct Content-Type. Initially served style.css.
     POST /api/session/rename   {session_id, title} -> {session: compact}. Truncates to 80 chars.
     GET  /api/sessions/search  ?q=X -> sessions whose title contains q (case-insensitive).
                                Empty q returns all sessions (same as /api/sessions).
@@ -1812,7 +1852,7 @@ The HTML = r triple-quoted string (197 lines, 12682 chars) was extracted to
 <repo>/static/index.html and served via disk read on each request.
 server.py is now pure Python: zero HTML/CSS/JS inline. All static content is in static/.
 
-Static file layout (final):
+Static file layout at Sprint 6 (later superseded by the direct-loaded domain split):
   static/index.html  (Sprint 6)  -- HTML template
   static/style.css   (Sprint 4)  -- all CSS
   static/app.js      (Sprint 5)  -- all JavaScript
