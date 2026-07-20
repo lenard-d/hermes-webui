@@ -54,8 +54,8 @@ def test_settings_model_select_is_hidden_but_remains_advanced_options_source():
     assert "mainAdvancedBtn" in bind_body
 
 
-def test_render_model_dropdown_accepts_settings_select_and_callbacks():
-    body = _function_body(UI_JS, "renderModelDropdown")
+def test_model_picker_renderer_accepts_settings_select_and_callbacks():
+    body = _function_body(UI_JS, "renderModelPicker")
 
     assert "opts.dropdownId||'composerModelDropdown'" in body
     assert "opts.selectId||'modelSelect'" in body
@@ -65,7 +65,7 @@ def test_render_model_dropdown_accepts_settings_select_and_callbacks():
     assert "row.onclick=()=>selectModelFromDropdown" not in body
     assert "closeDropdown();return;" in body
     assert "opts.forceOpenKey||'composer'" in body
-    assert "renderModelDropdown(opts)" in body
+    assert "renderModelPicker(opts)" in body
     assert "opts.scopeNoteText||" in body
 
 
@@ -94,7 +94,7 @@ def test_preferences_picker_routes_through_shared_renderer_without_panel_copy():
 def test_preferences_picker_refreshes_existing_save_and_dirty_contracts():
     autosave_body = _function_body(PANELS_JS, "_autosavePreferencesSettings")
     save_body = _function_body(PANELS_JS, "saveSettings")
-    refresh_body = _function_body(UI_JS, "_refreshOpenModelDropdown")
+    refresh_body = _function_body(UI_JS, "refreshOpenModelPickers")
 
     assert "_captureModelDropdownSelection(modelSel)" in autosave_body
     assert "_captureModelDropdownSelection($('settingsModel'))" in save_body
@@ -121,8 +121,8 @@ def test_preferences_picker_ux_fixes_label_touchfocus_shadow():
     guard_idx = open_body.index("matchMedia('(pointer: coarse)')")
     render_idx = open_body.index("renderModelDropdown(")
     assert guard_idx < render_idx, "coarse-pointer must be computed before the render call"
-    # renderModelDropdown honors the option and defaults it true (composer unchanged).
-    render_body = _function_body(UI_JS, "renderModelDropdown")
+    # The shared renderer honors the option and defaults it true (composer unchanged).
+    render_body = _function_body(UI_JS, "renderModelPicker")
     assert "opts.autoFocusSearch!==false" in render_body
     assert "if(_autoFocusSearch||_hadFocus) _si.focus();" in render_body
     # Focus is still restored during typing (touch user in the search) — the
@@ -130,7 +130,7 @@ def test_preferences_picker_ux_fixes_label_touchfocus_shadow():
     assert "document.activeElement===_si" in render_body
     # The OPEN-picker refresh path (late live-model fetch) must also suppress focus
     # on touch for the settings branch, or the keyboard pops after opening.
-    refresh_body = _function_body(UI_JS, "_refreshOpenModelDropdown")
+    refresh_body = _function_body(UI_JS, "refreshOpenModelPickers")
     settings_branch = refresh_body[refresh_body.index("settingsModelDropdown"):]
     assert "autoFocusSearch:!_coarsePointer" in settings_branch
     assert "matchMedia('(pointer: coarse)')" in settings_branch

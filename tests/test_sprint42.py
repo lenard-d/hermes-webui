@@ -650,8 +650,8 @@ class TestModelCustomInput(unittest.TestCase):
 
     def _renderModelDropdown_body(self):
         src = family_source("ui")
-        start = src.find('function renderModelDropdown()')
-        end = src.find('\nasync function selectModelFromDropdown', start)
+        start = src.find('function renderModelPicker(')
+        end = src.find('\nexport { renderModelPicker }', start)
         return src[start:end]
 
     def test_model_custom_input_in_dropdown(self):

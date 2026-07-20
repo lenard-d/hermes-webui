@@ -3,6 +3,8 @@ import * as activityPresentation from './activity-presentation.js';
 import * as anchorScenes from './anchor-scenes.js';
 import * as assistantTurnPresentation from './assistant-turn-presentation.js';
 import * as composer from './composer.js';
+import * as composerFooterFit from './composer-footer-fit.js';
+import * as composerMenuRegistry from './composer-menu-registry.js';
 import * as activityTiming from './activity-timing.js';
 import * as composerControls from './composer-controls.js';
 import * as messageScrollFollow from './message-scroll-follow.js';
@@ -32,10 +34,12 @@ import * as messageScrollSnapshot from './message-scroll-snapshot.js';
 import * as liveTurnPreservation from './live-turn-preservation.js';
 import * as mediaAndQuota from './media-and-quota.js';
 import * as modelCatalog from './model-catalog.js';
+import * as modelPickerRendering from './model-picker-rendering.js';
 import * as modelSelection from './model-selection.js';
 import * as modelState from './model-state.js';
 import * as navigation from './navigation.js';
 import * as presentation from './presentation.js';
+import * as reasoningEffort from './reasoning-effort.js';
 import * as renderer from './renderer.js';
 import * as renderSupport from './render-support.js';
 import * as settledActivityRenderer from './settled-activity-renderer.js';
@@ -61,7 +65,11 @@ const modules = Object.assign(Object.create(null), {
   mediaAndQuota,
   modelState,
   modelCatalog,
+  modelPickerRendering,
   modelSelection,
+  reasoningEffort,
+  composerFooterFit,
+  composerMenuRegistry,
   toolsetsControls,
   mobileComposerConfig,
   messageScrollFollow,

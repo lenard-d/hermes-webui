@@ -1,5 +1,5 @@
 import { showToast } from './composer.js';
-import { closeModelDropdown, closeReasoningDropdown } from './model-selection.js';
+import { closeOtherComposerMenus, registerComposerMenu } from './composer-menu-registry.js';
 import { $, S } from './state.js';
 
 
@@ -214,8 +214,7 @@ function toggleToolsetsDropdown() {
   if (open) { closeToolsetsDropdown(); return; }
   if (typeof closeProfileDropdown === 'function') closeProfileDropdown();
   if (typeof closeWsDropdown === 'function') closeWsDropdown();
-  closeModelDropdown();
-  if (typeof closeReasoningDropdown === 'function') closeReasoningDropdown();
+  closeOtherComposerMenus('toolsets');
   _syncToolsetsChip();
   _populateToolsetsDropdown();
   _loadToolsetsCatalog().then(function() {
@@ -239,6 +238,7 @@ function closeToolsetsDropdown() {
   if (dd) dd.classList.remove('open');
   if (chip) chip.classList.remove('active');
 }
+registerComposerMenu('toolsets',closeToolsetsDropdown);
 
 function _applySessionToolsets(toolsets) {
   if (typeof S === 'undefined' || !S) return;

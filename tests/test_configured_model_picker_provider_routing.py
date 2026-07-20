@@ -393,12 +393,12 @@ for (const name of [
   '_findModelInDropdown',
   '_applyModelToDropdown',
   '_ensureModelOptionInDropdown',
-  'renderModelDropdown',
+  'renderModelPicker',
 ]) {
   eval(extractFunc(name));
 }
 
-renderModelDropdown();
+renderModelPicker({selectModel:selectModelFromDropdown,closeDropdown:closeModelDropdown});
 const backupRow=findInTree(dropdown,node=>String(node._innerHTML||'').includes('@custom:backup:model-a'));
 if(!backupRow||typeof backupRow.onclick!=='function') throw new Error('backup row not rendered');
 backupRow.onclick();

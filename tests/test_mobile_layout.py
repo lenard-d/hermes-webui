@@ -1433,8 +1433,8 @@ def test_mobile_config_panel_escape_closes_panel_and_dropdowns():
     for expected in (
         "closeMobileComposerConfig()",
         "closeWsDropdown",
-        "closeModelDropdown()",
-        "closeReasoningDropdown()",
+        "closeComposerMenu('model')",
+        "closeComposerMenu('reasoning')",
     ):
         assert expected in keydown_body, \
             f"mobile config Escape handler must close related state ({expected})"

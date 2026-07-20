@@ -1,8 +1,8 @@
 import { getModelLabel } from './activity-and-scroll.js';
 import { MODEL_STATE_KEY, PENDING_SESSION_MODEL_MAX_AGE_MS, PENDING_SESSION_MODEL_PREFIX } from './media-and-quota.js';
-import { _positionModelDropdown, syncModelChip } from './model-catalog.js';
-import { closeSettingsModelDropdown, renderModelDropdown, selectSettingsModelFromDropdown, syncSettingsModelChip } from './model-selection.js';
 import { $, S } from './state.js';
+
+const MODEL_PICKER_REFRESH_EVENT='hermes:model-picker-refresh';
 
 // ── Smart model resolver ────────────────────────────────────────────────────
 // Finds the best matching option value in a <select> for a given model ID.
@@ -437,27 +437,7 @@ function _findModelInDropdown(modelId, sel, preferredProviderId){
 // Set the model picker to the best match for modelId.
 // Returns the resolved value that was actually set, or null if nothing matched.
 function _refreshOpenModelDropdown(){
-  const dd=$('composerModelDropdown');
-  if(dd&&dd.classList&&dd.classList.contains('open')&&typeof renderModelDropdown==='function'){
-    renderModelDropdown();
-    if(typeof _positionModelDropdown==='function') _positionModelDropdown();
-  }
-  const sdd=$('settingsModelDropdown');
-  if(sdd&&sdd.classList&&sdd.classList.contains('open')&&typeof renderModelDropdown==='function'){
-    // Re-rendering the OPEN settings picker (e.g. when a late live-model fetch
-    // resolves) must not re-grab search focus on touch — same coarse-pointer rule
-    // as openSettingsModelDropdown, or the mobile keyboard pops after opening.
-    const _coarsePointer=(typeof window.matchMedia==='function')&&window.matchMedia('(pointer: coarse)').matches;
-    renderModelDropdown({
-      dropdownId:'settingsModelDropdown',
-      selectId:'settingsModel',
-      forceOpenKey:'settingsModel',
-      closeDropdown:closeSettingsModelDropdown,
-      selectModel:selectSettingsModelFromDropdown,
-      scopeNoteText:t('settings_desc_model')||'Used for new conversations. Existing conversations keep their selected model.',
-      autoFocusSearch:!_coarsePointer,
-    });
-  }
+  document.dispatchEvent(new CustomEvent('hermes:model-picker-refresh'));
 }
 function _applyModelToDropdown(modelId, sel, preferredProviderId, opts){
   if(!modelId||!sel) return null;
@@ -485,8 +465,6 @@ function _applyModelToDropdown(modelId, sel, preferredProviderId, opts){
       const pickerChanged= !!(opts&&opts.forceRefresh) || !currentState
         || String(currentState.model||'')!==String(resolvedState.model||'')
         || String(currentState.model_provider||'')!==String(resolvedState.model_provider||'');
-      if(sel.id==='modelSelect'&&typeof syncModelChip==='function') syncModelChip();
-      if(sel.id==='settingsModel'&&typeof syncSettingsModelChip==='function') syncSettingsModelChip();
       if(pickerChanged) _refreshOpenModelDropdown();
     }
     return resolved;
@@ -524,11 +502,9 @@ function _ensureModelOptionInDropdown(modelId, sel, preferredProviderId){
   sel.appendChild(opt);
   sel.value=value;
   if(sel.id==='modelSelect'){
-    if(typeof syncModelChip==='function') syncModelChip();
     _refreshOpenModelDropdown();
   }
   if(sel.id==='settingsModel'){
-    if(typeof syncSettingsModelChip==='function') syncSettingsModelChip();
     _refreshOpenModelDropdown();
   }
   return value;
@@ -560,7 +536,6 @@ function _applySessionModelFallback(sel){
   if(first){
     sel.value=first.value;
     if(sel.id==='modelSelect'){
-      if(typeof syncModelChip==='function') syncModelChip();
       _refreshOpenModelDropdown();
     }
     return _modelStateFromAppliedDropdown(sel,first.value);
@@ -571,6 +546,7 @@ function _applySessionModelFallback(sel){
 
 
 export {
+  MODEL_PICKER_REFRESH_EVENT,
   _getOptionProviderId,
   _providerFromModelValue,
   _modelPickerOptionIdentity,

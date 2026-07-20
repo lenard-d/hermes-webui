@@ -861,6 +861,15 @@ Activity/Worklog history, and `settled-turn-finalization.js` applies metadata,
 transparent-mode wiring, and the never-blank settled-turn invariant. These are
 internal transcript seams; callers continue to use `renderMessages()`.
 
+The model-control graph follows the same ownership rule: `model-catalog.js`
+owns provider discovery and catalog hydration, `model-state.js` owns selection
+identity plus browser/session persistence, `model-picker-rendering.js` owns the
+searchable grouped picker DOM, and `model-selection.js` owns composer and
+Preferences selection transitions. `reasoning-effort.js` owns provider
+reasoning capability state, while `composer-footer-fit.js` owns responsive
+footer measurement. Model, reasoning, and toolset menus coordinate through the
+stateful `composer-menu-registry.js` instead of importing each other cyclically.
+
 The HTML LRU is bounded to eight entries, 2 MiB per entry, and 8 MiB total
 (estimated as UTF-16 browser heap). Cache hits refresh insertion/LRU order.
 

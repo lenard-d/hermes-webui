@@ -139,6 +139,9 @@ function _latestGatewayRoutingForSession() { return null; }
 function getModelLabel(v) { return v; }
 function _formatGatewayModelLabel(_v, text) { return text; }
 const _liveModelFetchPending = new Set();
+class CustomEvent {
+  constructor(type) { this.type = type; }
+}
 const document = {
   title: '',
   baseURI: 'http://127.0.0.1/hermes/',
@@ -149,6 +152,16 @@ const document = {
     return {tagName: upper, className: '', textContent: '', dataset: {}, appendChild(){}};
   },
   createTextNode(text) { return {textContent: text}; },
+  dispatchEvent(event) {
+    if (event && event.type === 'hermes:model-picker-refresh') {
+      syncModelChip();
+      if (dropdownOpen) {
+        renderModelDropdown();
+        _positionModelDropdown();
+      }
+    }
+    return true;
+  },
 };
 const window = { _botName: 'Hermes', _defaultModel: null, _activeProvider: null };
 function fetch(url, opts) { calls.fetches.push({url: String(url), body: opts && opts.body || ''}); return Promise.resolve({ok: true}); }

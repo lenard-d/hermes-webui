@@ -1,6 +1,5 @@
 import re
 import subprocess
-from pathlib import Path
 
 from tests.frontend_asset_contract import UI_ENTRYPOINT, UI_MODULE_DIR, ui_module_paths
 
@@ -10,7 +9,11 @@ REQUIRED_MODULES = {
     "navigation.js",
     "model-state.js",
     "model-catalog.js",
+    "model-picker-rendering.js",
     "model-selection.js",
+    "reasoning-effort.js",
+    "composer-footer-fit.js",
+    "composer-menu-registry.js",
     "composer.js",
     "composer-controls.js",
     "toolsets-controls.js",

@@ -32,4 +32,4 @@ def test_populate_model_dropdown_rerenders_if_picker_is_already_open():
 
     assert "composerModelDropdown" in body
     assert "classList.contains('open')" in body or 'classList.contains("open")' in body
-    assert "renderModelDropdown()" in body
+    assert "_refreshOpenModelDropdown()" in body

@@ -61,7 +61,7 @@ def _openrouter_group() -> dict:
 def test_populate_model_dropdown_persists_extra_models_for_picker_runtime():
     assert "dataset.extraModels=JSON.stringify(g.extra_models)" in UI_JS, (
         "populateModelDropdown() must persist extra_models onto the optgroup so "
-        "renderModelDropdown() can search hidden overflow models before expansion."
+        "renderModelPicker({selectModel:selectModelFromDropdown,closeDropdown:closeModelDropdown}) can search hidden overflow models before expansion."
     )
 
 
@@ -399,12 +399,12 @@ for (const name of [
   '_readModelOverflowData',
   '_appendOverflowOptionsToGroup',
   '_isEquivalentConfiguredModelEntry',
-  'renderModelDropdown',
+  'renderModelPicker',
 ]) {
   eval(extractFunc(name));
 }
 
-renderModelDropdown();
+renderModelPicker({selectModel:selectModelFromDropdown,closeDropdown:closeModelDropdown});
 const initial = snapshot(dropdown);
 // The show-all expander now lives inside a `.model-group-body` wrapper (#4279),
 // so search the whole subtree rather than only direct children.
@@ -749,14 +749,14 @@ for (const name of [
   '_readModelOverflowData',
   '_appendOverflowOptionsToGroup',
   '_isEquivalentConfiguredModelEntry',
-  'renderModelDropdown',
+  'renderModelPicker',
 ]) {
   eval(extractFunc(name));
 }
 
 eval(extractConst('_expandOverflowGroup'));
 
-renderModelDropdown();
+renderModelPicker({selectModel:selectModelFromDropdown,closeDropdown:closeModelDropdown});
 const initial = snapshot(dropdown);
 const initialShowAllRow = findInTree(dropdown, node => String(node._innerHTML || '').includes('Show all'));
 // Click show-all FIRST (before any search) so the in-place path runs on a
@@ -962,12 +962,12 @@ for (const name of [
   '_readModelOverflowData',
   '_appendOverflowOptionsToGroup',
   '_isEquivalentConfiguredModelEntry',
-  'renderModelDropdown',
+  'renderModelPicker',
 ]) {
   eval(extractFunc(name));
 }
 
-renderModelDropdown();
+renderModelPicker({selectModel:selectModelFromDropdown,closeDropdown:closeModelDropdown});
 
 // Target the errored group's wrapper specifically by data-group attribute.
 // A plain walk() that overwrites on every .model-group-body ends on the last
@@ -1321,14 +1321,14 @@ for (const name of [
   '_readModelOverflowData',
   '_appendOverflowOptionsToGroup',
   '_isEquivalentConfiguredModelEntry',
-  'renderModelDropdown',
+  'renderModelPicker',
 ]) {
   eval(extractFunc(name));
 }
 
 eval(extractConst('_expandOverflowGroup'));
 
-renderModelDropdown();
+renderModelPicker({selectModel:selectModelFromDropdown,closeDropdown:closeModelDropdown});
 const initialShowAllRow = findInTree(dropdown, node => String(node._innerHTML || '').includes('Show all'));
 initialShowAllRow.onclick({ stopPropagation() {} });
 

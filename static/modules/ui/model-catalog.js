@@ -1,7 +1,6 @@
 import { _formatGatewayModelLabel, _gatewayRoutingLabel, _latestGatewayRoutingForSession, getModelLabel } from './activity-and-scroll.js';
 import { _dynamicModelLabels } from './media-and-quota.js';
-import { renderModelDropdown } from './model-selection.js';
-import { _applyModelToDropdown, _captureModelDropdownSelection, _deduplicateModelPickerOptions, _getOptionProviderId, _modelPickerOptionIdentity, _modelStateForSelect, _providerSkipsModelMismatchWarning, _reconcileModelDropdownSelection } from './model-state.js';
+import { _applyModelToDropdown, _captureModelDropdownSelection, _deduplicateModelPickerOptions, _getOptionProviderId, _modelPickerOptionIdentity, _modelStateForSelect, _providerSkipsModelMismatchWarning, _reconcileModelDropdownSelection, _refreshOpenModelDropdown } from './model-state.js';
 import { $, S, _redirectIfUnauth, esc } from './state.js';
 
 let _modelDropdownRequestSeq=0;
@@ -127,10 +126,7 @@ async function populateModelDropdown(opts={}){
     _reconcileModelDropdownSelection(sel,data,previousSelection,opts);
     if(typeof syncModelChip==='function') syncModelChip();
     const dd=$('composerModelDropdown');
-    if(dd&&dd.classList.contains('open')&&typeof renderModelDropdown==='function'){
-      renderModelDropdown();
-      _positionModelDropdown();
-    }
+    if(dd&&dd.classList.contains('open')) _refreshOpenModelDropdown();
     // Kick off a background live-model fetch for the active provider.
     // This runs after the static list is already shown (no blocking flicker).
     if(data.active_provider && !willRetry) _fetchLiveModels(data.active_provider, sel, requestSeq);
