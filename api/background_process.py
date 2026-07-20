@@ -57,6 +57,24 @@ from api.process_event_utils import (
     requeue_async_delegation_event,
     schedule_async_delegation_claim_retry,
 )
+from api import session_channel as _session_channel
+
+
+# Compatibility facade: routes and existing integrations historically import
+# these names from ``api.background_process``.  Keep them bound to the focused
+# owner's exact objects so there is only one registry/lock generation.
+SESSION_CHANNELS = _session_channel.SESSION_CHANNELS
+SESSION_CHANNELS_LOCK = _session_channel.SESSION_CHANNELS_LOCK
+SessionChannel = _session_channel.SessionChannel
+active_stream_id_for_session = _session_channel.active_stream_id_for_session
+collect_expired_session_channels = _session_channel.collect_expired_session_channels
+get_or_create_session_channel = _session_channel.get_or_create_session_channel
+get_session_channel = _session_channel.get_session_channel
+persisted_message_count_for_session = (
+    _session_channel.persisted_message_count_for_session
+)
+should_emit_session_updated = _session_channel.should_emit_session_updated
+subscribe_to_session_channel = _session_channel.subscribe_to_session_channel
 
 logger = logging.getLogger(__name__)
 
@@ -90,301 +108,11 @@ _PENDING_EMIT_PAYLOADS: dict[str, dict] = {}
 _PENDING_EMIT_TIMERS: dict[str, threading.Timer] = {}
 
 
-# ── Persistent per-session SSE channel (Option X) ──────────────────────────
-# SESSION_CHANNELS maps WebUI session_id -> SessionChannel. Each channel owns
-# zero or more queue.Queue subscribers (one per active EventSource tab) and
-# is collected by ``_reaper_loop`` after the last subscriber drops + a grace
-# period, or after the session has been idle for SESSION_CHANNEL_IDLE_TTL_SECS.
-#
-# Why a sibling registry to STREAMS:
-#   STREAMS is keyed on stream_id (one per agent turn) and is torn down by
-#   /api/chat/stream's `finally` when the turn ends. process_complete events
-#   from background processes that exit BETWEEN turns therefore have no live
-#   STREAMS channel to ride. SESSION_CHANNELS is keyed on session_id, lives
-#   across turns, and gives the frontend a stable subscription that survives
-#   stream_end / cancel / reconnect.
-SESSION_CHANNELS: dict[str, "SessionChannel"] = {}
-SESSION_CHANNELS_LOCK = threading.Lock()
-
-
-class SessionChannel:
-    """A long-lived multi-subscriber SSE channel for one WebUI session.
-
-    Subscribers are ``queue.Queue`` instances owned by the SSE route
-    handler — one per active EventSource (tab). ``emit`` broadcasts to every
-    live subscriber; subscribers whose buffer is full silently drop the
-    event (the tab will reconnect on disconnect and the SSE-level disconnect
-    detection will tear it down).
-
-    Lifecycle:
-      - Created on demand by ``get_or_create_session_channel`` when the first
-        tab subscribes.
-      - ``subscribe`` / ``unsubscribe`` are refcount-style: zero subscribers
-        does NOT immediately collect the channel; the reaper waits a 60s
-        grace so a quick navigation away/back doesn't churn the registry.
-      - The reaper collects the channel when subscribers stay empty past the
-        grace period, OR when subscribers are empty AND ``created_at`` is
-        older than SESSION_CHANNEL_IDLE_TTL_SECS (zombie cap — applies only
-        when nobody is subscribed; a live subscriber keeps the channel even
-        past the idle TTL).
-    """
-
-    def __init__(self, session_id: str):
-        self.session_id = session_id
-        self._lock = threading.Lock()
-        self._subscribers: list[queue.Queue] = []
-        now = time.time()
-        self.created_at = now
-        self.last_event_at = now
-        self.last_subscriber_drop_at: float | None = None
-
-    def subscribe(self, maxsize: int = 16) -> queue.Queue:
-        q: queue.Queue = queue.Queue(maxsize=maxsize)
-        with self._lock:
-            self._subscribers.append(q)
-            # Cancel any pending subscribers-empty grace timer.
-            self.last_subscriber_drop_at = None
-        return q
-
-    def unsubscribe(self, q: queue.Queue) -> None:
-        with self._lock:
-            try:
-                self._subscribers.remove(q)
-            except ValueError:
-                pass
-            if not self._subscribers:
-                self.last_subscriber_drop_at = time.time()
-
-    def subscriber_count(self) -> int:
-        with self._lock:
-            return len(self._subscribers)
-
-    def emit(self, event: str, data: Any) -> int:
-        """Broadcast (event, data) to all live subscribers. Returns delivered count."""
-        delivered = 0
-        with self._lock:
-            subs = list(self._subscribers)
-            self.last_event_at = time.time()
-        for q in subs:
-            try:
-                q.put_nowait((event, data))
-                delivered += 1
-            except queue.Full:
-                # Slow tab: drop this event for that tab. SSE-level disconnect
-                # detection will eventually tear the connection down and the
-                # browser will reconnect, replaying the live stream from
-                # whatever fires next. process_complete is intrinsically
-                # idempotent (frontend dedupes by ``(session_id, event_id)``
-                # using a small ring-buffer in static/messages.js — see the
-                # bg_task_complete consumer-side dedupe introduced in PR #2971).
-                logger.debug("SessionChannel emit: subscriber buffer full, dropping")
-            except Exception:
-                logger.debug("SessionChannel emit failed", exc_info=True)
-        return delivered
-
-    def reaper_should_collect(self, now: float) -> bool:
-        """True when the reaper should remove this channel.
-
-        Two collection conditions (per Option X spec):
-          1. Subscribers empty AND last_subscriber_drop_at is older than
-             SESSION_CHANNEL_SUBSCRIBER_GRACE_SECS (normal teardown).
-          2. created_at older than SESSION_CHANNEL_IDLE_TTL_SECS AND
-             subscribers empty (zombie cap — survived too long).
-        """
-        from api import config as _cfg
-
-        with self._lock:
-            sub_count = len(self._subscribers)
-            drop_at = self.last_subscriber_drop_at
-            created_at = self.created_at
-
-        if sub_count > 0:
-            # Live subscriber — never collect, even past idle TTL (a tab is
-            # genuinely listening). The browser will close on its own.
-            return False
-        # No subscribers — check grace period.
-        grace = float(getattr(_cfg, "SESSION_CHANNEL_SUBSCRIBER_GRACE_SECS", 60))
-        if drop_at is not None and (now - drop_at) >= grace:
-            return True
-        # Hard cap on lifetime (even if subscribers oscillated): if created
-        # long ago AND nobody's subscribed right now, sweep.
-        ttl = float(getattr(_cfg, "SESSION_CHANNEL_IDLE_TTL_SECS", 14400))
-        if (now - created_at) >= ttl:
-            return True
-        return False
-
-
-def get_or_create_session_channel(session_id: str) -> SessionChannel:
-    """Return the channel for ``session_id``, creating it on first access."""
-    with SESSION_CHANNELS_LOCK:
-        ch = SESSION_CHANNELS.get(session_id)
-        if ch is None:
-            ch = SessionChannel(session_id)
-            SESSION_CHANNELS[session_id] = ch
-        return ch
-
-
-def get_session_channel(session_id: str) -> Optional[SessionChannel]:
-    """Return an existing channel or None — does NOT auto-create."""
-    with SESSION_CHANNELS_LOCK:
-        return SESSION_CHANNELS.get(session_id)
-
-
-def subscribe_to_session_channel(
-    session_id: str, maxsize: int = 16
-) -> tuple["SessionChannel", "queue.Queue"]:
-    """Atomically get-or-create the channel for ``session_id`` AND register a
-    subscriber on it, both under ``SESSION_CHANNELS_LOCK``.
-
-    Closes a TOCTOU race flagged on PR #2971: callers that did
-    ``ch = get_or_create_session_channel(sid); q = ch.subscribe()`` released
-    ``SESSION_CHANNELS_LOCK`` between the two steps. The reaper acquires that
-    same lock and evaluates+collects channels entirely within it
-    (``_reaper_loop``), so a previously-idle channel with 0 subscribers past
-    the grace/TTL window could be collected in the gap — leaving the SSE
-    handler subscribed to a channel no longer in ``SESSION_CHANNELS``. Future
-    ``bg_task_complete`` emits resolve the session via ``get_session_channel``
-    and reach a different (or absent) channel, so the orphaned subscriber's
-    queue never fills: keepalives keep flowing, ``onerror`` never fires, no
-    auto-reconnect, and only a manual refresh recovers.
-
-    Holding ``SESSION_CHANNELS_LOCK`` across both the get-or-create and the
-    ``subscribe`` makes the two steps indivisible w.r.t. the reaper: the reaper
-    cannot run its critical section concurrently, and the next time it does the
-    channel already has ``sub_count >= 1`` so ``reaper_should_collect`` refuses
-    to collect it.
-
-    Lock order is ``SESSION_CHANNELS_LOCK`` → ``SessionChannel._lock`` (taken
-    inside ``subscribe``), identical to the order the reaper uses
-    (``SESSION_CHANNELS_LOCK`` → ``reaper_should_collect`` → ``_lock``), so no
-    new lock-ordering hazard is introduced. ``emit`` only takes ``_lock``.
-
-    Returns ``(channel, queue)``. The caller still owns the subscriber slot and
-    MUST ``channel.unsubscribe(queue)`` on every exit path.
-    """
-    with SESSION_CHANNELS_LOCK:
-        ch = SESSION_CHANNELS.get(session_id)
-        if ch is None:
-            ch = SessionChannel(session_id)
-            SESSION_CHANNELS[session_id] = ch
-        q = ch.subscribe(maxsize=maxsize)
-        return ch, q
-
-
-def active_stream_id_for_session(session_id: str) -> Optional[str]:
-    """Return the stream_id of the live run for *session_id*, or None.
-
-    Used by the per-session SSE handler's on-subscribe recovery: the
-    ``server_turn_started`` fan-out in ``routes.start_session_turn`` is a
-    fire-and-forget broadcast with NO replay buffer (SessionChannel.emit
-    drops to whoever is subscribed *at that instant*). A tab whose
-    ``/api/session/stream`` EventSource is momentarily absent at the emit
-    instant — a transient SSE drop, a reverse-proxy idle-timeout, or browser
-    connection-pool starvation — misses the frame permanently and the
-    server-initiated wakeup turn never renders live (the user must hard-
-    refresh). The server-side wakeup itself still ran and persisted; only the
-    live-view was lost. The handler replays a synthetic ``server_turn_started``
-    to a freshly-subscribed tab using this lookup so the open tab self-heals.
-
-    Keys on ACTIVE_RUNS (worker-lifecycle registry) — the same source
-    ``_session_has_active_turn`` / ``_emit_to_session_streams`` already trust
-    to map a stream back to its owning session. Returns the first matching
-    stream_id (a session has at most one live run; cancel/reconnect can
-    briefly hold two — either is a valid attach target, the frontend dedupes
-    by stream_id).
-    """
-    from api import config as _cfg
-
-    try:
-        with _cfg.ACTIVE_RUNS_LOCK:
-            for _stream_id, meta in (_cfg.ACTIVE_RUNS or {}).items():
-                if isinstance(meta, dict) and meta.get("session_id") == session_id:
-                    return str(_stream_id)
-    except Exception:
-        logger.debug(
-            "active_stream_id_for_session lookup failed for %s",
-            session_id,
-            exc_info=True,
-        )
-    return None
-
-
-def persisted_message_count_for_session(session_id: str) -> Optional[int]:
-    """Cheap, metadata-only persisted ``message_count`` for *session_id*, or None.
-
-    Companion to ``active_stream_id_for_session`` for the per-session SSE
-    on-subscribe self-heal. ``active_stream_id_for_session`` recovers a turn
-    that is live RIGHT NOW (replay ``server_turn_started``). But a
-    SERVER-initiated turn (self-wake / cron / restart hook) can start AND
-    finish entirely inside an SSE gap: the fire-and-forget
-    ``server_turn_started`` reached no subscriber AND the run already cleared
-    from ``ACTIVE_RUNS`` by the time the tab reconnects, so the replay finds
-    nothing (returns None) and the tab's transcript stays stale until a hard
-    refresh — the reported visible-tab defect. To detect that case the handler
-    compares the freshly-(re)subscribed tab's last-known count against this
-    persisted count; a server that is AHEAD means a turn landed during the gap.
-
-    Reads via ``metadata_only=True`` so it never parses the full transcript
-    (this runs on every per-session SSE (re)connect). The persisted count is
-    written by ``Session.save`` as ``meta['message_count'] = len(messages)`` —
-    the SAME basis the frontend's ``S.session.message_count`` is built from —
-    so the comparison is apples-to-apples. Returns None when the count is
-    unknown (legacy sidecars without a persisted count); the caller treats
-    None as "cannot tell, do nothing", never as a trigger.
-    """
-    try:
-        from api.models import get_session
-
-        s = get_session(session_id, metadata_only=True)
-        count = getattr(s, "_metadata_message_count", None)
-        if count is None:
-            msgs = getattr(s, "messages", None)
-            count = len(msgs) if isinstance(msgs, list) and msgs else None
-        return int(count) if count is not None else None
-    except Exception:
-        logger.debug(
-            "persisted_message_count_for_session lookup failed for %s",
-            session_id,
-            exc_info=True,
-        )
-        return None
-
-
-def should_emit_session_updated(
-    subscriber_known_count: Optional[int],
-    persisted_count: Optional[int],
-) -> bool:
-    """Gate for the per-session SSE "finished during the gap" self-heal emit.
-
-    Single source of truth shared by the SSE handler and its tests so the two
-    cannot drift (the handler MUST call this, not inline the comparison).
-    Emit a ``session-updated`` frame ONLY when:
-      * the (re)subscribing tab reported a last-known count (``?known_count``),
-        AND
-      * the persisted server-side count is known, AND
-      * the server is STRICTLY ahead (a turn landed during the gap).
-    A missing known count (tab didn't report), an unknown persisted count
-    (legacy sidecar), or an equal/behind count all return False — never a
-    spurious reload.
-    """
-    if subscriber_known_count is None:
-        return False
-    if persisted_count is None:
-        return False
-    return persisted_count > subscriber_known_count
-
-
 def _reaper_loop() -> None:
     logger.info("SessionChannel reaper thread started")
     while not _REAPER_STOP.is_set():
         try:
-            now = time.time()
-            collected: list[str] = []
-            with SESSION_CHANNELS_LOCK:
-                for sid, ch in list(SESSION_CHANNELS.items()):
-                    if ch.reaper_should_collect(now):
-                        SESSION_CHANNELS.pop(sid, None)
-                        collected.append(sid)
+            collected = collect_expired_session_channels(time.time())
             if collected:
                 # Prune the per-session coalesce timestamp map for any collected
                 # session so _LAST_EMIT_TS does not grow one permanent entry per

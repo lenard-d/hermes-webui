@@ -72,6 +72,17 @@ def test_background_process_exports_session_channel_api():
         assert hasattr(bp, name), f"missing: {name}"
 
 
+def test_session_channel_owner_and_background_compatibility_surface_share_state():
+    """The focused owner and legacy facade must expose one registry generation."""
+    from api import background_process as bp
+    from api import session_channel as owner
+
+    assert bp.SessionChannel is owner.SessionChannel
+    assert bp.SESSION_CHANNELS is owner.SESSION_CHANNELS
+    assert bp.SESSION_CHANNELS_LOCK is owner.SESSION_CHANNELS_LOCK
+    assert bp.subscribe_to_session_channel is owner.subscribe_to_session_channel
+
+
 def test_config_exports_session_channel_ttl_constants():
     from api import config as cfg
 
