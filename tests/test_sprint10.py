@@ -94,7 +94,7 @@ def test_session_crud_still_works(cleanup_test_sessions):
     post("/api/session/delete", {"session_id": sid})
 
 def test_static_files_still_served(cleanup_test_sessions):
-    for f in ["ui.js", "workspace.js", "modules/sessions/index.js", "messages.js", "panels.js", "modules/boot/index.js"]:
+    for f in ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "panels.js", "modules/boot/index.js"]:
         src, status = get_text(f"/static/{f}")
         assert status == 200, f"/static/{f} returned {status}"
         assert len(src) > 100
@@ -273,10 +273,10 @@ def test_tool_card_smart_truncation_in_ui_js(cleanup_test_sessions):
     assert "lastBreak" in src
 
 def test_cancel_sse_event_handler_in_messages_js(cleanup_test_sessions):
-    src, _ = get_family_text("messages", "/static/messages.js")
+    src, _ = get_family_text("messages", "/static/modules/messages/index.js")
     assert "addEventListener('cancel'" in src
     assert "Task cancelled" in src
 
 def test_active_stream_id_tracked(cleanup_test_sessions):
-    src, _ = get_family_text("messages", "/static/messages.js")
+    src, _ = get_family_text("messages", "/static/modules/messages/index.js")
     assert "S.activeStreamId" in src

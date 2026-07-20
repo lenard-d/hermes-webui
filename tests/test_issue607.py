@@ -3,6 +3,8 @@ import re
 import pathlib
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 # ---------------------------------------------------------------------------
 # _strip_thinking_markup tests
@@ -124,19 +126,19 @@ class TestGemma4MessagesJsThinkPairs:
     """Verify static/messages.js contains the correct Gemma 4 pair."""
 
     def test_messages_js_has_correct_gemma4_open(self):
-        js = pathlib.Path("static/messages.js").read_text()
+        js = family_source("messages")
         # Must have double-pipe format: <|turn|>thinking
         assert "<|turn|>thinking" in js, (
             "messages.js is missing correct Gemma 4 open delimiter '<|turn|>thinking'"
         )
 
     def test_messages_js_no_wrong_gemma4_open(self):
-        js = pathlib.Path("static/messages.js").read_text()
+        js = family_source("messages")
         # Must NOT have single-pipe wrong format: <|turn>thinking
         assert "<|turn>thinking" not in js, (
             "messages.js still contains wrong Gemma 4 delimiter '<|turn>thinking' (missing |)"
         )
 
     def test_messages_js_has_gemma4_close(self):
-        js = pathlib.Path("static/messages.js").read_text()
+        js = family_source("messages")
         assert "<turn|>" in js, "messages.js missing Gemma 4 close delimiter '<turn|>'"

@@ -10,9 +10,9 @@ from tests.test_sessions_split_support import SESSIONS_SOURCE
 
 REPO_ROOT = Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
-LIVE_TOOLS_JS = REPO_ROOT / "static" / "messages_parts" / "stream_live_tools.js"
+LIVE_TOOLS_JS = REPO_ROOT / "static" / "modules" / "messages" / "live-tools.js"
 RUN_JOURNAL_JS = (
-    REPO_ROOT / "static" / "messages_parts" / "stream_run_journal.js"
+    REPO_ROOT / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
 SESSIONS_JS = SESSIONS_SOURCE
 UI_JS = family_source("ui")
@@ -62,9 +62,7 @@ def _live_tool_tracker_bootstrap(
 ) -> str:
     """Load the real live-tool owner and expose its one-operation Interface."""
     return f"""
-const fs=require('fs');
-const vm=require('vm');
-vm.runInThisContext(fs.readFileSync({json.dumps(str(LIVE_TOOLS_JS))},'utf8'),{{filename:'stream_live_tools.js'}});
+const {{createStreamLiveToolTracker}}=await import({json.dumps(LIVE_TOOLS_JS.as_uri())});
 const uploaded=[];
 const activeSid='sid';
 const INFLIGHT={inflight_js};
@@ -73,7 +71,7 @@ let assistantRow={{getAttribute:()=>'{row_seq}'}};
 let _assistantSegmentSeq={segment_seq};
 let _currentLiveSegmentSeq={segment_seq};
 let _currentActivityBurstId={burst_id};
-const tracker=HermesMessages.createStreamLiveToolTracker({{
+const tracker=createStreamLiveToolTracker({{
   sessionId:activeSid,
   state:S,
   inflightStore:INFLIGHT,
@@ -681,7 +679,7 @@ def test_upsert_live_tool_call_preserves_start_seq_for_complete():
     """
     assert NODE, "node not on PATH"
     script = (
-        "const assert = require('assert');\n"
+        "import assert from 'node:assert';\n"
         f"{_live_tool_tracker_bootstrap()}\n"
         "const start=upsertLiveToolCall({\"name\":\"read_file\",\"args\":{\"path\":\"/tmp/a\"},\"preview\":\"start\"}, 'start');\n"
         "assert(start);\n"
@@ -696,7 +694,7 @@ def test_upsert_live_tool_call_preserves_start_seq_for_complete():
         "assert.strictEqual(complete._toolCallStartSeq, 7);\n"
         "assert.strictEqual(complete===start, true);\n"
     )
-    result = subprocess.run([NODE, '-e', script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, '--input-type=module', '-e', script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -714,7 +712,7 @@ def test_upsert_live_tool_call_complete_matches_by_name_burst_without_tid():
         '"done":false}],"messages":[],"uploaded":[]}}'
     )
     script = (
-        "const assert = require('assert');\n"
+        "import assert from 'node:assert';\n"
         f"{_live_tool_tracker_bootstrap(inflight_js, row_seq=7, segment_seq=9, burst_id=3)}\n"
         "const complete=upsertLiveToolCall({\"name\":\"search\",\"args\":{\"query\":\"x\"}}, 'complete');\n"
         "assert(complete);\n"
@@ -722,7 +720,7 @@ def test_upsert_live_tool_call_complete_matches_by_name_burst_without_tid():
         "assert.strictEqual(complete._toolCallStartSeq, 4);\n"
         "assert.strictEqual(INFLIGHT[activeSid].toolCalls.length, 1);\n"
     )
-    result = subprocess.run([NODE, '-e', script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, '--input-type=module', '-e', script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 
@@ -735,7 +733,7 @@ def test_upsert_flags_orphan_complete_but_not_normal_start_complete():
     streaming text into spurious empty segments)."""
     assert NODE, "node not on PATH"
     script = (
-        "const assert = require('assert');\n"
+        "import assert from 'node:assert';\n"
         f"{_live_tool_tracker_bootstrap()}\n"
         # Case A: normal start -> complete. The start record must NOT be flagged,
         # and the matching complete must reuse it without setting the flag.
@@ -755,7 +753,7 @@ def test_upsert_flags_orphan_complete_but_not_normal_start_complete():
         "assert.strictEqual(orphan.done, true);\n"
         "assert.strictEqual(INFLIGHT[activeSid].toolCalls.length, 2);\n"
     )
-    result = subprocess.run([NODE, '-e', script], capture_output=True, text=True, check=False)
+    result = subprocess.run([NODE, '--input-type=module', '-e', script], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
 

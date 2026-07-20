@@ -11,7 +11,7 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 UI_JS     = family_source("ui")
 MSG_JS    = family_source("messages")
 STREAM_RENDERER_JS = (
-    REPO_ROOT / "static" / "messages_parts" / "stream_renderer.js"
+    REPO_ROOT / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
 
 

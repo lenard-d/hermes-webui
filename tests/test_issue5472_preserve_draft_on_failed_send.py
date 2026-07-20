@@ -43,7 +43,7 @@ MESSAGES_JS = family_source("messages")
 def _helper_body() -> str:
     start = MESSAGES_JS.find("function _restoreComposerDraftAfterFailedSend(")
     assert start != -1, "the _restoreComposerDraftAfterFailedSend helper must exist"
-    end = MESSAGES_JS.find("\nasync function send(", start)
+    end = MESSAGES_JS.find("\nexport async function send(", start)
     assert end != -1, "helper must be defined immediately before send()"
     return MESSAGES_JS[start:end]
 

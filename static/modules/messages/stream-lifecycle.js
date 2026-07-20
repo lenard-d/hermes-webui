@@ -1,9 +1,7 @@
+import { _resumeSessionStreamAfterLiveChat } from './session-events.js';
 
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
-
-const LIVE_STREAMS={};
-const _STREAM_NOTIFICATION_BACKGROUND={};
+export const LIVE_STREAMS={};
+export const _STREAM_NOTIFICATION_BACKGROUND={};
 
 // #4416: track whether the tab was hidden at ANY point during a live stream, so
 // the response-complete notification fires for a backgrounded tab even when
@@ -14,16 +12,16 @@ const _STREAM_NOTIFICATION_BACKGROUND={};
 // mis-attributed to a later stream for the same session id — a reconnect only
 // keeps the prior state when the streamId matches. One idempotent
 // visibilitychange listener (never leaks) flips wasHidden on all active entries.
-const _STREAM_WAS_HIDDEN={};
+export const _STREAM_WAS_HIDDEN={};
 let _streamHiddenTrackerBound=false;
-function _bindStreamHiddenTracker(){
+export function _bindStreamHiddenTracker(){
   if(_streamHiddenTrackerBound||typeof document==='undefined'||typeof document.addEventListener!=='function') return;
   _streamHiddenTrackerBound=true;
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){ for(const k in _STREAM_WAS_HIDDEN){ const e=_STREAM_WAS_HIDDEN[k]; if(e) e.wasHidden=true; } }
   });
 }
-function _clearStreamHidden(sid, streamId){
+export function _clearStreamHidden(sid, streamId){
   // Clear only when we own the current stream's entry (or unconditionally when
   // streamId is omitted). Prevents a terminal path for an old stream from wiping
   // a newer stream's tracker.
@@ -33,14 +31,14 @@ function _clearStreamHidden(sid, streamId){
   if(streamId&&e.streamId&&e.streamId!==streamId) return;
   delete _STREAM_WAS_HIDDEN[sid];
 }
-function _clearStreamNotificationBackground(sid, streamId){
+export function _clearStreamNotificationBackground(sid, streamId){
   if(!sid) return;
   const e=_STREAM_NOTIFICATION_BACKGROUND[sid];
   if(!e) return;
   if(streamId&&e.streamId&&e.streamId!==streamId) return;
   delete _STREAM_NOTIFICATION_BACKGROUND[sid];
 }
-function _shouldForceCompletionNotification(sid, streamId){
+export function _shouldForceCompletionNotification(sid, streamId){
   const hiddenEntry=_STREAM_WAS_HIDDEN[sid];
   const backgroundEntry=_STREAM_NOTIFICATION_BACKGROUND[sid];
   const wasHidden=!!(hiddenEntry&&hiddenEntry.wasHidden);
@@ -50,7 +48,7 @@ function _shouldForceCompletionNotification(sid, streamId){
   return wasHidden||wasBackgrounded;
 }
 
-function closeLiveStream(sessionId, streamId, source){
+export function closeLiveStream(sessionId, streamId, source){
   const live=LIVE_STREAMS[sessionId];
   if(!live) return;
   if(streamId&&live.streamId!==streamId) return;
@@ -105,7 +103,7 @@ function closeLiveStream(sessionId, streamId, source){
   }
 }
 
-function closeOtherLiveStreams(activeSid){
+export function closeOtherLiveStreams(activeSid){
   // Keep the live token SSE connection scoped to the conversation pane the user
   // is actually viewing. Background sessions still show running/finished state
   // through the session list and can reattach when selected, but they should not
@@ -114,8 +112,3 @@ function closeOtherLiveStreams(activeSid){
     if(sid!==activeSid) closeLiveStream(sid);
   }
 }
-
-Object.assign(HermesMessages, {
-  closeLiveStream,
-  closeOtherLiveStreams,
-});

@@ -10,9 +10,9 @@ CONFIG_PY = (REPO / "api" / "config" / "settings.py").read_text(
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 STREAM_RENDERER_JS = (
-    REPO / "static" / "messages_parts" / "stream_renderer.js"
+    REPO / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
-STREAM_JS = (REPO / "static" / "messages_parts" / "stream.js").read_text(
+STREAM_JS = (REPO / "static" / "modules" / "messages" / "stream.js").read_text(
     encoding="utf-8"
 )
 BOOT_JS = family_source("boot")
@@ -338,7 +338,8 @@ if(!_shouldUseLiveProseFade()) throw new Error('regular fade preference should w
 
 
 def test_transparent_stream_hidden_body_appends_plain_text_only():
-    script = STREAM_RENDERER_JS + r"""
+    renderer_url = (REPO / "static" / "modules" / "messages" / "rendering.js").as_uri()
+    script = r"""(async()=>{
 let now=0;
 const timers=[];
 global.performance={now(){ now+=100; return now; }};
@@ -356,7 +357,7 @@ global._extractInlineThinkingFromContent=(content, thinkingText)=>({
 });
 global.renderMd=null;
 global.esc=(text)=>String(text||'');
-global.window={_fadeTextEffect:false,_showThinking:false,smd:null};
+global.window={_fadeTextEffect:false,_showThinking:false,smd:null,addEventListener(){}};
 const assistantBody={
   textContent:'',
   innerHTML:'',
@@ -369,8 +370,11 @@ const assistantBody={
   },
 };
 global.document={
+  addEventListener(){},
+  getElementById(){ return null; },
   createTextNode(text){ return {type:'text',textContent:String(text)}; },
 };
+const {createStreamRenderer}=await import(__RENDERER_URL__);
 const state={
   assistantText:'alpha beta',
   liveReasoningText:'',
@@ -381,7 +385,7 @@ const state={
   streamFinalized:false,
 };
 let projected='';
-const renderer=HermesMessages.createStreamRenderer({
+const renderer=createStreamRenderer({
   readState:()=>state,
   upsertAnchorProse:(text)=>{ projected=text; },
 });
@@ -394,7 +398,8 @@ if(assistantBody.children.some(node=>node.className==='stream-fade-word is-new')
   throw new Error('hidden body received fade span');
 }
 if(!assistantBody.classList.added.includes('stream-fade-active')) throw new Error('missing stream fade active marker');
-"""
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""".replace("__RENDERER_URL__", repr(renderer_url))
     run_node(script)
 
 

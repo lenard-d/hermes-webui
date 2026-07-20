@@ -15,7 +15,7 @@ import urllib.request
 import urllib.parse
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 STREAM_RENDERER_SRC = (
-    REPO_ROOT / "static" / "messages_parts" / "stream_renderer.js"
+    REPO_ROOT / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
 SESSION_LIFECYCLE_SRC = next(
     path for path in family_asset_paths("sessions")

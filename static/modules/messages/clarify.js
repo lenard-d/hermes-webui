@@ -1,17 +1,22 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import {
+  _promptActiveSessionId,
+  _renderPendingApprovalForActiveSession,
+  _setPromptFlyoutHidden,
+  activeSessionHasPendingPromptAttention,
+  autoResize,
+} from './approvals.js';
 
 // ── Clarify polling ──
 let _clarifyPollTimer = null;
 let _clarifyHideTimer = null;
 let _clarifyVisibleSince = 0;
 let _clarifySignature = '';
-let _clarifySessionId = null;
+export let _clarifySessionId = null;
 let _clarifyId = null;
 let _clarifyMissingEndpointWarned = false;
 let _clarifyCountdownTimer = null;
 let _clarifyExpiresAt = 0;
-let _clarifyPendingBySession = new Map();
+export const _clarifyPendingBySession = new Map();
 const CLARIFY_MIN_VISIBLE_MS = 30000;
 
 function _clarifyPromptBelongsToActiveSession(sid) {
@@ -27,7 +32,7 @@ function _rememberClarifyPending(pending) {
   return sid;
 }
 
-function _clearClarifyPendingForSession(sid) {
+export function _clearClarifyPendingForSession(sid) {
   if (sid) {
     _clarifyPendingBySession.delete(sid);
     if (typeof syncTopbar === 'function') syncTopbar();
@@ -46,13 +51,13 @@ function _renderPendingClarifyForActiveSession() {
   if (entry) showClarifyCard(entry.pending);
 }
 
-function showClarifyForSession(sid, pending) {
+export function showClarifyForSession(sid, pending) {
   if (!pending) return;
   pending._session_id = sid;
   showClarifyCard(pending);
 }
 
-function _renderPendingPromptsForActiveSession() {
+export function _renderPendingPromptsForActiveSession() {
   const sid = _promptActiveSessionId();
   _renderPendingApprovalForActiveSession();
   _renderPendingClarifyForActiveSession();
@@ -165,7 +170,7 @@ function _ensureClarifyResizeListener() {
   }, {passive: true});
 }
 
-function toggleClarifyCardCollapsed(forceCollapsed) {
+export function toggleClarifyCardCollapsed(forceCollapsed) {
   const card = $("clarifyCard");
   if (!card) return;
   const collapsed = typeof forceCollapsed === "boolean" ? forceCollapsed : !card.classList.contains("collapsed");
@@ -223,7 +228,7 @@ function _startClarifyCountdown(pending) {
   _clarifyCountdownTimer = setInterval(_updateClarifyCountdown, 1000);
 }
 
-function _stashClarifyDraft(reason) {
+export function _stashClarifyDraft(reason) {
   if (reason !== "expired" && reason !== "terminal") return false;
   const submit = $("clarifySubmit");
   if (submit && submit.classList.contains("loading")) return false;
@@ -263,7 +268,7 @@ function _resetClarifyCardState() {
   _clarifyId = null;
 }
 
-function hideClarifyCard(force=false, reason="dismissed") {
+export function hideClarifyCard(force=false, reason="dismissed") {
   const card = $("clarifyCard");
   if (!card) {
     _clarifySessionId = null;
@@ -424,7 +429,7 @@ function showClarifyCard(pending) {
   if (typeof syncTopbar === 'function') syncTopbar();
 }
 
-async function respondClarify(response) {
+export async function respondClarify(response) {
   const sid = _clarifySessionId || (S.session && S.session.session_id);
   if (!sid) return;
   const input = $("clarifyInput");
@@ -536,7 +541,7 @@ var _clarifyHealthTimer = null;
 let _clarifyFallbackPollInFlight = false;
 let _clarifyPollingSessionId = null;
 
-function startClarifyPolling(sid) {
+export function startClarifyPolling(sid) {
   stopClarifyPolling();
   _clarifyPollingSessionId = sid || null;
   _clarifyMissingEndpointWarned = false;
@@ -640,21 +645,15 @@ function _startClarifyFallbackPoll(sid) {
   _tick();
 }
 
-function stopClarifyPollingForSession(sid) {
+export function stopClarifyPollingForSession(sid) {
   if(sid && _clarifyPollingSessionId && _clarifyPollingSessionId!==sid) return;
   stopClarifyPolling();
 }
 
-function stopClarifyPolling() {
+export function stopClarifyPolling() {
   if (_clarifyEventSource) { try { if(_clarifyEventSource.readyState!==2)_clarifyEventSource.close(); } catch(_){} _clarifyEventSource = null; }
   if (_clarifyFallbackTimer) { clearInterval(_clarifyFallbackTimer); _clarifyFallbackTimer = null; }
   if (_clarifyHealthTimer) { clearInterval(_clarifyHealthTimer); _clarifyHealthTimer = null; }
   _clarifyFallbackPollInFlight = false;
   _clarifyPollingSessionId = null;
 }
-
-Object.assign(HermesMessages, {
-  startClarifyPolling,
-  stopClarifyPolling,
-  respondClarify,
-});

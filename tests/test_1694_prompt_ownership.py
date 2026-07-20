@@ -75,7 +75,7 @@ def test_clarify_card_render_is_gated_to_active_session_and_cached():
     assert "_clarifyPromptBelongsToActiveSession(sid)" in body
     assert "syncTopbar()" in body
     assert "return;" in body
-    assert "let _clarifyPendingBySession" in MESSAGES_JS
+    assert "export const _clarifyPendingBySession = new Map();" in MESSAGES_JS
     assert "function _renderPendingPromptsForActiveSession()" in MESSAGES_JS
 
 

@@ -1,5 +1,14 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import {
+  _apiUrl,
+  _bgTaskCompleteRingBufferAdd,
+  _isSessionActivelyViewed,
+  _isSessionCurrentPane,
+  _markSessionViewed,
+} from './core.js';
+import { startApprovalPolling, transcript } from './approvals.js';
+import { startClarifyPolling } from './clarify.js';
+import { LIVE_STREAMS } from './stream-lifecycle.js';
+import { attachLiveStream } from './stream.js';
 
 // ── Session-scoped SSE stream (Option X) ──────────────────────────────────
 // Long-lived EventSource bound to /api/session/stream?session_id=<sid>.
@@ -204,14 +213,14 @@ function _chatStreamActiveForSession(sid) {
   );
 }
 
-function _suspendSessionStreamForLiveChat(sid) {
+export function _suspendSessionStreamForLiveChat(sid) {
   if (!sid) return;
   if (_sessionStreamSessionId !== sid) return;
   _sessionStreamHiddenSid = sid;
   stopSessionStream();
 }
 
-function _resumeSessionStreamAfterLiveChat(sid) {
+export function _resumeSessionStreamAfterLiveChat(sid) {
   if (!sid) return;
   setTimeout(() => {
     if (!S || !S.session || S.session.session_id !== sid) return;
@@ -221,7 +230,7 @@ function _resumeSessionStreamAfterLiveChat(sid) {
   }, 0);
 }
 
-function startSessionStream(sid) {
+export function startSessionStream(sid) {
   if (!sid) return;
   // Already on this session? No-op (loadSession is a no-op when re-selecting
   // the same session; this defends against external re-callers).
@@ -428,7 +437,7 @@ function startSessionStream(sid) {
   }
 }
 
-function stopSessionStream() {
+export function stopSessionStream() {
   if (_sessionStreamReconnectTimer) { clearTimeout(_sessionStreamReconnectTimer); _sessionStreamReconnectTimer = null; }
   _stopHiddenActiveStreamPoll();
   if (_sessionEventSource) {
@@ -451,7 +460,7 @@ function stopSessionStream() {
 // a toast. The diagnostic ack POST still fires for both focused and
 // unfocused viewers so the server receives the delivery/cleanup signal;
 // the focus gate suppresses UI noise only.
-function _handleBgTaskCompleteEvent(e, expectedSid, opts) {
+export function _handleBgTaskCompleteEvent(e, expectedSid, opts) {
   try {
     const d = JSON.parse(e.data || '{}');
     const sid = d.session_id || expectedSid;
@@ -497,8 +506,3 @@ function _handleBgTaskCompleteEvent(e, expectedSid, opts) {
     // The user-facing toast + drop-when-focused gate land in PR (c).
   } catch(_) {}
 }
-
-Object.assign(HermesMessages, {
-  startSessionStream,
-  stopSessionStream,
-});

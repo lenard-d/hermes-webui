@@ -1,9 +1,11 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import {
+  _extractInlineThinkingFromContent,
+  _isBackgroundedForBrowserNotification,
+} from './core.js';
 
 // ── Notifications and Sound ──────────────────────────────────────────────────
 
-function _completionNotificationPreviewText(lastAssistantMessage, options){
+export function _completionNotificationPreviewText(lastAssistantMessage, options){
   const opts=(options&&typeof options==='object')?options:{};
   const sessionId=String(opts.sessionId||'').trim();
   let text='';
@@ -33,7 +35,7 @@ function _completionNotificationPreviewText(lastAssistantMessage, options){
   return normalized.length>100?`${normalized.slice(0,100)}…`:normalized;
 }
 
-function playNotificationSound(){
+export function playNotificationSound(){
   if(!window._soundEnabled) return;
   try{
     const ctx=new (window.AudioContext||window.webkitAudioContext)();
@@ -50,14 +52,14 @@ function playNotificationSound(){
 }
 
 
-function _attentionSoundKey(sid,kind,count){
+export function _attentionSoundKey(sid,kind,count){
   const safeSid=String(sid||'');
   const safeKind=String(kind||'attention');
   const safeCount=Math.max(1,Number(count)||1);
   return `${safeSid}:${safeKind}:${safeCount}`;
 }
 
-function playAttentionSound(key){
+export function playAttentionSound(key){
   if(!window._soundEnabled) return;
   const nowMs=Date.now();
   if(window._lastAttentionSoundAt&&nowMs-window._lastAttentionSoundAt<900) return;
@@ -112,7 +114,7 @@ function _showPwaNotification(title,body,options={}){
   }
   return Promise.resolve(direct());
 }
-function requestNotificationPermission(){
+export function requestNotificationPermission(){
   if(!('Notification' in window)){
     if(typeof showToast==='function') showToast(t('notifications_unsupported'),3000,'error');
     if(typeof updateNotificationPermissionStatus==='function') updateNotificationPermissionStatus();
@@ -134,7 +136,7 @@ function requestNotificationPermission(){
     return p;
   });
 }
-function sendBrowserNotification(title,body,options={}){
+export function sendBrowserNotification(title,body,options={}){
   const force=!!(options&&options.force);
   // #4416: `forceHidden` means the caller already determined the tab was hidden
   // during the relevant window (e.g. a stream that ran while backgrounded), so
@@ -160,7 +162,7 @@ function sendBrowserNotification(title,body,options={}){
 // Connects to the ephemeral SSE stream from /api/btw and renders the answer
 // in a visually distinct bubble that is NOT persisted to session history.
 
-function attachBtwStream(parentSid, streamId, question){
+export function attachBtwStream(parentSid, streamId, question){
   if(!parentSid||!streamId) return;
   const src=new EventSource(new URL('api/chat/stream?stream_id='+encodeURIComponent(streamId), document.baseURI||location.href).href);
   let answer='';
@@ -227,7 +229,7 @@ function attachBtwStream(parentSid, streamId, question){
 let _bgPollTimers={};
 let _bgActiveTasks=new Set();
 
-function showBackgroundBadge(taskId){
+export function showBackgroundBadge(taskId){
   _bgActiveTasks.add(taskId);
   const badge=$('bgBadge');
   if(badge){
@@ -235,7 +237,7 @@ function showBackgroundBadge(taskId){
     badge.style.display=_bgActiveTasks.size?'':'none';
   }
 }
-function hideBackgroundBadge(taskId){
+export function hideBackgroundBadge(taskId){
   _bgActiveTasks.delete(taskId);
   const badge=$('bgBadge');
   if(badge){
@@ -243,7 +245,7 @@ function hideBackgroundBadge(taskId){
     badge.style.display=_bgActiveTasks.size?'':'none';
   }
 }
-function startBackgroundPolling(parentSid, taskId, prompt){
+export function startBackgroundPolling(parentSid, taskId, prompt){
   if(_bgPollTimers[taskId]) return;
   async function _poll(){
     try{
@@ -268,10 +270,3 @@ function startBackgroundPolling(parentSid, taskId, prompt){
 }
 
 // ── Panel navigation (Chat / Tasks / Skills / Memory) ──
-
-Object.assign(HermesMessages, {
-  attachBtwStream,
-  requestNotificationPermission,
-  sendBrowserNotification,
-  playNotificationSound,
-});

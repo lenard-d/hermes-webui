@@ -1,7 +1,6 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import { _clarifyPendingBySession } from './clarify.js';
 
-function transcript(){
+export function transcript(){
   const lines=[`# Hermes session ${S.session?.session_id||''}`,``,
     `Workspace: ${S.session?.workspace||''}`,`Model: ${S.session?.model||''}`,``];
   for(const m of S.messages){
@@ -17,7 +16,7 @@ function transcript(){
 }
 
 let _composerAutoResizeRaf=0;
-function autoResize(){
+export function autoResize(){
   if(_composerAutoResizeRaf && typeof cancelAnimationFrame==='function'){
     cancelAnimationFrame(_composerAutoResizeRaf);
     _composerAutoResizeRaf=0;
@@ -56,7 +55,7 @@ function autoResize(){
   // ResizeObserver is the safety net for growth paths that don't route here.
   if(el.offsetHeight>_prevComposerH && typeof _repinMessagesAfterComposerResize==='function') _repinMessagesAfterComposerResize();
 }
-function scheduleComposerAutoResize(){
+export function scheduleComposerAutoResize(){
   if(typeof requestAnimationFrame!=='function'){autoResize();return;}
   if(_composerAutoResizeRaf) return;
   _composerAutoResizeRaf=requestAnimationFrame(()=>{
@@ -77,7 +76,7 @@ function scheduleComposerAutoResize(){
 //     fetches the new session's state.
 let _yoloEnabled = false;
 
-async function _fetchYoloState(sid) {
+export async function _fetchYoloState(sid) {
   try {
     const data = await api('/api/session/yolo?session_id=' + encodeURIComponent(sid));
     _yoloEnabled = !!data.yolo_enabled;
@@ -85,7 +84,7 @@ async function _fetchYoloState(sid) {
   } catch (_) { /* ignore */ }
 }
 
-function _updateYoloPill() {
+export function _updateYoloPill() {
   const pill = $('yoloPill');
   if (!pill) return;
   pill.style.display = _yoloEnabled ? '' : 'none';
@@ -96,7 +95,7 @@ function _updateYoloPill() {
   if (typeof applyLocaleToDOM === 'function') applyLocaleToDOM();
 }
 
-async function toggleYoloFromApproval() {
+export async function toggleYoloFromApproval() {
   const sid = S.session && S.session.session_id;
   if (!sid) return;
   try {
@@ -121,7 +120,7 @@ const APPROVAL_MIN_VISIBLE_MS = 30000;
 
 // showApprovalCard moved above respondApproval
 
-function _setPromptFlyoutHidden(card, hidden) {
+export function _setPromptFlyoutHidden(card, hidden) {
   if (!card) return;
   if (hidden) {
     card.setAttribute("aria-hidden", "true");
@@ -154,7 +153,7 @@ function _resetApprovalCardState() {
   _approvalSignature = '';
 }
 
-function hideApprovalCard(force=false) {
+export function hideApprovalCard(force=false) {
   const card = $("approvalCard");
   if (!card) return;
   if (!force && _approvalVisibleSince) {
@@ -181,7 +180,7 @@ function hideApprovalCard(force=false) {
 }
 
 // Track session_id of the active approval so respond goes to the right session
-let _approvalSessionId = null;
+export let _approvalSessionId = null;
 let _approvalCurrentId = null;  // approval_id of the card currently shown
 let _approvalPendingBySession = new Map();
 let _approvalResponding = null;
@@ -225,7 +224,7 @@ function _unmarkApprovalDismissed(sid, approvalId) {
   catch (_) {}
 }
 
-function _promptActiveSessionId() {
+export function _promptActiveSessionId() {
   return (S.session && S.session.session_id) || null;
 }
 
@@ -233,7 +232,7 @@ function _approvalPromptBelongsToActiveSession(sid) {
   return !!(sid && _promptActiveSessionId() === sid);
 }
 
-function activeSessionHasPendingPromptAttention() {
+export function activeSessionHasPendingPromptAttention() {
   const sid = _promptActiveSessionId();
   return !!(sid && (
     _approvalPendingBySession.has(sid) ||
@@ -250,7 +249,7 @@ function _rememberApprovalPending(pending, pendingCount) {
   return sid;
 }
 
-function _clearApprovalPendingForSession(sid) {
+export function _clearApprovalPendingForSession(sid) {
   if (sid) {
     _approvalPendingBySession.delete(sid);
     if (typeof syncTopbar === 'function') syncTopbar();
@@ -265,7 +264,7 @@ function _approvalPollingSessionMissingOrMismatched(sid) {
   return !sid || !S.session || S.session.session_id !== sid;
 }
 
-function _renderPendingApprovalForActiveSession() {
+export function _renderPendingApprovalForActiveSession() {
   const sid = _promptActiveSessionId();
   if (!sid) return;
   if (_approvalSessionId && _approvalSessionId !== sid) hideApprovalCard(true);
@@ -294,7 +293,7 @@ function _setApprovalControlsDisabled(choice, disabled) {
   });
 }
 
-function showApprovalForSession(sid, pending, pendingCount) {
+export function showApprovalForSession(sid, pending, pendingCount) {
   if (!pending) return;
   pending._session_id = sid;
   showApprovalCard(pending, pendingCount);
@@ -349,7 +348,7 @@ function showApprovalCard(pending, pendingCount) {
   if (typeof syncTopbar === 'function') syncTopbar();
 }
 
-function dismissApprovalCard() {
+export function dismissApprovalCard() {
   const sid = _approvalSessionId;
   if (_approvalCurrentId) _markApprovalDismissed(sid, _approvalCurrentId);
   hideApprovalCard(true);
@@ -414,7 +413,7 @@ function _restoreFailedApprovalResponse(sid, errMsg) {
   if (typeof setStatus === "function") setStatus(errMsg);
 }
 
-function toggleApprovalCardCollapsed(forceCollapsed) {
+export function toggleApprovalCardCollapsed(forceCollapsed) {
   const card = $("approvalCard");
   if (!card) return;
   const collapsed = typeof forceCollapsed === "boolean" ? forceCollapsed : !card.classList.contains("collapsed");
@@ -423,7 +422,7 @@ function toggleApprovalCardCollapsed(forceCollapsed) {
   _syncApprovalTranscriptSpace(card, {immediate: true});
 }
 
-async function respondApproval(choice) {
+export async function respondApproval(choice) {
   const sid = _approvalSessionId || (S.session && S.session.session_id);
   if (!sid) return;
   const approvalId = _approvalCurrentId;
@@ -479,7 +478,7 @@ async function respondApproval(choice) {
   }
 }
 
-function startApprovalPolling(sid) {
+export function startApprovalPolling(sid) {
   stopApprovalPolling();
   _approvalPollingSessionId = sid || null;
 
@@ -531,24 +530,15 @@ function _startApprovalFallbackPoll(sid) {
   _tick();
 }
 
-function stopApprovalPollingForSession(sid) {
+export function stopApprovalPollingForSession(sid) {
   if(sid && _approvalPollingSessionId && _approvalPollingSessionId!==sid) return;
   stopApprovalPolling();
 }
 
-function stopApprovalPolling() {
+export function stopApprovalPolling() {
   if (_approvalPollTimer) { clearInterval(_approvalPollTimer); _approvalPollTimer = null; }
   if (_approvalEventSource) { try { if(_approvalEventSource.readyState!==2)_approvalEventSource.close(); } catch(_){} _approvalEventSource = null; }
   if (_approvalSSEHealthTimer) { clearInterval(_approvalSSEHealthTimer); _approvalSSEHealthTimer = null; }
   _approvalFallbackPollInFlight = false;
   _approvalPollingSessionId = null;
 }
-
-Object.assign(HermesMessages, {
-  transcript,
-  autoResize,
-  scheduleComposerAutoResize,
-  startApprovalPolling,
-  stopApprovalPolling,
-  respondApproval,
-});

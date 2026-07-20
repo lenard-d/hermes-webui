@@ -1,15 +1,12 @@
-// Shared namespace for the split classic-script runtime. Historical globals
-// remain available for index handlers, extensions, and Node harnesses.
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import { _STREAM_NOTIFICATION_BACKGROUND } from './stream-lifecycle.js';
 
-function _markSessionViewed(sid, messageCount) {
+export function _markSessionViewed(sid, messageCount) {
   if(typeof _setSessionViewedCount!=='function' || !sid) return;
   const next = Number.isFinite(messageCount) ? Number(messageCount) : 0;
   _setSessionViewedCount(sid, next);
 }
 
-function _apiUrl(path) {
+export function _apiUrl(path) {
   return new URL(path, document.baseURI || location.href).href;
 }
 
@@ -27,7 +24,7 @@ const _BG_TASK_COMPLETE_TTL_MS = 60000;
 const _BG_TASK_COMPLETE_CAP = 256;
 const _bgTaskCompleteSeenIds = new Map();
 
-function _bgTaskCompleteRingBufferAdd(sid, evt_id) {
+export function _bgTaskCompleteRingBufferAdd(sid, evt_id) {
   // Missing key → treat as "seen/skip" (return true). The sole caller already
   // guards with `if (!evt_id) return;` before invoking this, so this branch is
   // defensive: returning true (skip) rather than false (proceed) means a
@@ -61,7 +58,7 @@ function _isDocumentVisibleAndFocused() {
   return true;
 }
 
-let _desktopBackgroundedForNotifications=false;
+export let _desktopBackgroundedForNotifications=false;
 // Desktop shells can background a visible document; keep that signal notification-only.
 if(typeof window!=='undefined'){
   window.__hermesSetBackgrounded=(value)=>{
@@ -74,11 +71,11 @@ if(typeof window!=='undefined'){
     }
   };
 }
-function _isBackgroundedForBrowserNotification(){
+export function _isBackgroundedForBrowserNotification(){
   return !!(typeof document!=='undefined'&&document.hidden)||_desktopBackgroundedForNotifications;
 }
 
-function _isSessionCurrentPane(sid) {
+export function _isSessionCurrentPane(sid) {
   if(!sid || !S.session || S.session.session_id!==sid) return false;
   // During session switching, S.session still points at the previous row until
   // the next metadata request resolves. Do not let a just-finished old stream
@@ -87,7 +84,7 @@ function _isSessionCurrentPane(sid) {
   return true;
 }
 
-function _isSessionActivelyViewed(sid) {
+export function _isSessionActivelyViewed(sid) {
   if(!_isSessionCurrentPane(sid)) return false;
   if(!_isDocumentVisibleAndFocused()) return false;
   return true;
@@ -100,7 +97,7 @@ function _markActiveSessionViewedOnReturn() {
   if(typeof renderSessionListFromCache==='function') renderSessionListFromCache();
 }
 
-function _chatPayloadModel(){
+export function _chatPayloadModel(){
   return S.session&&S.session.model||($('modelSelect')&&$('modelSelect').value)||'';
 }
 
@@ -110,7 +107,7 @@ function _chatPayloadModelProvider(model){
   return null;
 }
 
-function _chatPayloadModelState(){
+export function _chatPayloadModelState(){
   // Source-compat invariant: the starting precedence is still
   // model:S.session.model||$('modelSelect').value and
   // model_provider:S.session.model_provider||null. The helper only fills a
@@ -119,7 +116,7 @@ function _chatPayloadModelState(){
   return {model,model_provider:_chatPayloadModelProvider(model)};
 }
 
-function _deferStreamErrorIfOffline(){
+export function _deferStreamErrorIfOffline(){
   if(typeof isOfflineBannerVisible==='function' && isOfflineBannerVisible()){
     setComposerStatus(t('offline_stream_waiting'));
     return true;
@@ -170,18 +167,6 @@ const _msgEl=document.getElementById('msg');
 if(_msgEl) _msgEl.addEventListener('focus', ()=>{ if('speechSynthesis' in window && speechSynthesis.speaking) speechSynthesis.pause(); });
 if(_msgEl) _msgEl.addEventListener('blur', ()=>{ if('speechSynthesis' in window && speechSynthesis.paused) speechSynthesis.resume(); });
 
-let _selectedTextReplyBtn=null;
-let _selectedTextReplyText='';
-let _pendingSelections=[];  // [{id, name, text}] — named context blocks
-let _selectionIdCounter=0;
-// #4380: expose a pending-selection predicate so the composer's primary-action
-// content check (_composerHasContent in ui.js) treats selection-only replies as
-// sendable content even though they no longer live in the textarea.
-if(typeof window!=='undefined'){
-  window._hasPendingSelections=function(){return _pendingSelections.length>0;};
-}
-let _selectedTextReplyRaf=0;
-const _persistentStateToastSeen=new Set();
 const _thinkPairs=[
   {open:'<think>',close:'</think>'},
   {open:'<|channel>thought\n',close:'<channel|>'},
@@ -252,7 +237,7 @@ function _mergeInlineThinkingReasoning(existingReasoning, extractedParts){
   return out;
 }
 
-function _extractInlineThinkingFromContent(rawContent, existingReasoning, options){
+export function _extractInlineThinkingFromContent(rawContent, existingReasoning, options){
   // Code-aware extraction (must mirror api/streaming.py
   // _extract_inline_thinking_from_content): thinking tags inside a triple-fence,
   // an inline single-backtick code span, or an indented code block are LEFT
@@ -393,7 +378,3 @@ if(typeof window!=='undefined'){
     return _extractInlineThinkingFromContent(rawContent, existingReasoning, {streaming:false});
   };
 }
-
-Object.assign(HermesMessages, {
-  extractInlineThinkingFromContent: _extractInlineThinkingFromContent,
-});

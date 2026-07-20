@@ -1,7 +1,5 @@
 """Regression tests for the WebUI /pet handoff."""
 
-from tests.frontend_asset_contract import family_source
-
 import json
 from pathlib import Path
 import subprocess
@@ -10,9 +8,8 @@ import textwrap
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-COMMANDS_JS = family_source("commands")
 COMMANDS_ENTRY = REPO_ROOT / "static" / "modules" / "commands" / "index.js"
-MESSAGES_JS = family_source("messages")
+SEND_MODULE_URL = (REPO_ROOT / "static" / "modules" / "messages" / "send.js").as_uri()
 
 
 def _run_pet_js(
@@ -90,7 +87,8 @@ def _run_pet_js(
         handle.write(script)
         script_path = Path(handle.name)
     try:
-        proc = subprocess.run(["node", str(script_path)], check=True, capture_output=True, text=True)
+        proc = subprocess.run(["node", str(script_path)], check=False, capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
     finally:
         script_path.unlink(missing_ok=True)
     return json.loads(proc.stdout)
@@ -223,12 +221,17 @@ def _run_send_js(*, command, status, adapter_status=None, hook_result=None, hook
         ctx.window.window = ctx.window;
         (async () => {{
           Object.assign(globalThis, ctx);
+          Object.assign(globalThis, ctx.window);
+          globalThis.window = globalThis;
+          globalThis.addEventListener = () => {{}};
+          globalThis.requestAnimationFrame = () => 1;
+          globalThis.location = {{href:'http://test.local/',origin:'http://test.local'}};
+          globalThis.document.baseURI = 'http://test.local/';
           const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
-          Object.assign(ctx, commands.commandInterface, commands);
-          vm.createContext(ctx);
+          Object.assign(globalThis, commands.commandInterface, commands);
           {hook_setup}
-          vm.runInContext({json.dumps(MESSAGES_JS)}, ctx);
-          await vm.runInContext('send()', ctx);
+          const {{send}} = await import({SEND_MODULE_URL!r});
+          await send();
           process.stdout.write(JSON.stringify({{
             messages: ctx.S.messages,
             commandExecCalls,
@@ -244,7 +247,8 @@ def _run_send_js(*, command, status, adapter_status=None, hook_result=None, hook
         handle.write(script)
         script_path = Path(handle.name)
     try:
-        proc = subprocess.run(["node", str(script_path)], check=True, capture_output=True, text=True)
+        proc = subprocess.run(["node", str(script_path)], check=False, capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
     finally:
         script_path.unlink(missing_ok=True)
     return json.loads(proc.stdout)

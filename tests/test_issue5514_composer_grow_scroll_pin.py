@@ -68,7 +68,7 @@ def test_helper_exists_and_is_pin_guarded():
 def _autoresize_body() -> str:
     start = MESSAGES_JS.find("function autoResize(")
     assert start != -1
-    end = MESSAGES_JS.find("function scheduleComposerAutoResize(", start)
+    end = MESSAGES_JS.find("export function scheduleComposerAutoResize(", start)
     assert end > start
     return MESSAGES_JS[start:end]
 

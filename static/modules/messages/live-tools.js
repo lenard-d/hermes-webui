@@ -1,9 +1,7 @@
-// Loaded before stream.js. Owns live tool-call identity, matching and INFLIGHT
-// projection for one attached stream.
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+// Owns live tool-call identity, matching and INFLIGHT projection for one
+// attached stream.
 
-function createStreamLiveToolTracker(options={}){
+export function createStreamLiveToolTracker(options={}){
   const activeSid=String(options.sessionId||'');
   const S=options.state&&typeof options.state==='object'?options.state:{};
   const INFLIGHT=options.inflightStore&&typeof options.inflightStore==='object'?options.inflightStore:{};
@@ -262,7 +260,3 @@ function createStreamLiveToolTracker(options={}){
     upsert: upsertLiveToolCall,
   });
 }
-
-Object.assign(HermesMessages, {
-  createStreamLiveToolTracker,
-});

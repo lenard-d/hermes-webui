@@ -16,9 +16,9 @@ BOOT_JS = family_source("boot")
 CSS = family_source("style")
 MESSAGES_JS = family_source("messages")
 STREAM_RENDERER_JS = (
-    REPO / "static" / "messages_parts" / "stream_renderer.js"
+    REPO / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
-STREAM_JS = (REPO / "static" / "messages_parts" / "stream.js").read_text(
+STREAM_JS = (REPO / "static" / "modules" / "messages" / "stream.js").read_text(
     encoding="utf-8"
 )
 

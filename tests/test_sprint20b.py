@@ -345,7 +345,7 @@ def test_boot_js_input_calls_update_send_btn():
 
 def test_auto_resize_calls_update_send_btn():
     """autoResize() must call updateSendBtn() so button hides after send clears textarea."""
-    js, status = get_family_text("messages", "/static/messages.js")
+    js, status = get_family_text("messages", "/static/modules/messages/index.js")
     assert status == 200
     assert 'updateSendBtn' in js
 
@@ -379,5 +379,5 @@ def test_index_html_attach_button_unchanged():
 
 def test_send_function_still_exists():
     """send() function must still be defined in messages.js."""
-    js, _ = get_family_text("messages", "/static/messages.js")
-    assert 'async function send()' in js
+    js, _ = get_family_text("messages", "/static/modules/messages/index.js")
+    assert 'export async function send()' in js

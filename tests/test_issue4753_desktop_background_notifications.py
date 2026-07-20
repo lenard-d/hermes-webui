@@ -1,58 +1,20 @@
 """Behavioral coverage for desktop-backgrounded notification delivery (#4753)."""
 
-from tests.frontend_asset_contract import family_source
-
 import json
-import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_SRC = family_source("messages")
 NODE = shutil.which("node")
+NOTIFICATIONS_URL = (ROOT / "static" / "modules" / "messages" / "notifications.js").as_uri()
+CORE_URL = (ROOT / "static" / "modules" / "messages" / "core.js").as_uri()
+LIFECYCLE_URL = (ROOT / "static" / "modules" / "messages" / "stream-lifecycle.js").as_uri()
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
-
-
-def _extract_function(source: str, name: str) -> str:
-    start = source.index(f"function {name}(")
-    body_start = source.index("){", start) + 1
-    depth = 0
-    for idx in range(body_start, len(source)):
-        char = source[idx]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return source[start : idx + 1]
-    raise AssertionError(f"{name} function body did not close")
-
-
-def _notification_contract_source() -> str:
-    start = MESSAGES_SRC.index("let _desktopBackgroundedForNotifications=false;")
-    end = MESSAGES_SRC.index("function _isSessionCurrentPane", start)
-    tracker_start = MESSAGES_SRC.index("const _STREAM_NOTIFICATION_BACKGROUND={};")
-    tracker_end = MESSAGES_SRC.index("\n", tracker_start)
-    send = _extract_function(MESSAGES_SRC, "sendBrowserNotification")
-    return MESSAGES_SRC[start:end] + "\n" + MESSAGES_SRC[tracker_start:tracker_end] + "\n" + send
-
-
-def _background_history_contract_source() -> str:
-    notification_start = MESSAGES_SRC.index("let _desktopBackgroundedForNotifications=false;")
-    notification_end = MESSAGES_SRC.index("function _isSessionCurrentPane", notification_start)
-    tracker_start = MESSAGES_SRC.index("const LIVE_STREAMS={};")
-    tracker_end = MESSAGES_SRC.index("function closeLiveStream", tracker_start)
-    return (
-        MESSAGES_SRC[notification_start:notification_end]
-        + "\n"
-        + MESSAGES_SRC[tracker_start:tracker_end]
-    )
 
 
 def _run_notification_case(*, document_hidden: bool, desktop_backgrounded: bool = False, options=None):
@@ -61,58 +23,52 @@ def _run_notification_case(*, document_hidden: bool, desktop_backgrounded: bool 
         "desktopBackgrounded": desktop_backgrounded,
         "options": options or {},
     }
-    script = (
-        "const source = " + json.dumps(_notification_contract_source()) + ";\n"
-        + "const params = " + json.dumps(payload) + ";\n"
-        + r"""
-const vm = require('vm');
+    script = "const params = " + json.dumps(payload) + ";\n" + f"""
+(async()=>{{
 const shown = [];
 const direct = [];
 
-function Notification(title, options) {
-  direct.push({ title, options });
-}
+function Notification(title, options) {{
+  direct.push({{ title, options }});
+  shown.push({{ title, body: options && options.body, options }});
+}}
 Notification.permission = 'granted';
 
-const context = {
-  document: { hidden: params.documentHidden },
-  window: { _notificationsEnabled: true },
-  Notification,
-  assistantDisplayName: () => 'Hermes',
-  _notificationOptions: (body, options) => ({ body, tag: options && options.sid ? options.sid : '' }),
-  _showPwaNotification: (title, body, options) => {
-    shown.push({ title, body, options });
+globalThis.document = {{
+  hidden: params.documentHidden,
+  baseURI: 'http://test.local/',
+  addEventListener(){{}},
+  getElementById(){{ return null; }},
+}};
+globalThis.window = globalThis;
+globalThis.addEventListener = () => {{}};
+globalThis.location = {{href:'http://test.local/',origin:'http://test.local'}};
+globalThis._notificationsEnabled = true;
+globalThis.S = {{session:null}};
+globalThis.navigator = {{serviceWorker:null}};
+globalThis.Notification = Notification;
+globalThis.assistantDisplayName = () => 'Hermes';
+globalThis._notificationOptions = (body, options) => ({{ body, tag: options && options.sid ? options.sid : '' }});
+globalThis._showPwaNotification = (title, body, options) => {{
+    shown.push({{ title, body, options }});
     return Promise.resolve();
-  },
-};
-context.window.Notification = Notification;
+}};
+const {{sendBrowserNotification}} = await import({NOTIFICATIONS_URL!r});
+globalThis.__hermesSetBackgrounded(params.desktopBackgrounded);
+await sendBrowserNotification('Response complete','Task finished',params.options);
 
-vm.createContext(context);
-vm.runInContext(source, context);
-context.window.__hermesSetBackgrounded(params.desktopBackgrounded);
-vm.runInContext(
-  "sendBrowserNotification('Response complete','Task finished'," + JSON.stringify(params.options) + ");",
-  context
-);
-
-console.log(JSON.stringify({
+console.log(JSON.stringify({{
   shown,
   direct,
-  documentHidden: context.document.hidden,
-  setterType: typeof context.window.__hermesSetBackgrounded,
-}));
+  documentHidden: document.hidden,
+  setterType: typeof globalThis.__hermesSetBackgrounded,
+}}));
+}})().catch(error=>{{console.error(error);process.exitCode=1;}});
 """
-    )
-    temp = tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False, encoding="utf-8")
-    temp.write(script)
-    temp.close()
-    try:
-        result = subprocess.run([NODE, temp.name], capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            raise RuntimeError(f"node failed: {result.stderr}")
-        return json.loads(result.stdout.strip().splitlines()[-1])
-    finally:
-        os.unlink(temp.name)
+    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        raise RuntimeError(f"node failed: {result.stderr}")
+    return json.loads(result.stdout.strip().splitlines()[-1])
 
 
 def test_visible_desktop_backgrounded_tab_notifies_without_page_visibility_hidden():
@@ -149,41 +105,32 @@ def test_force_hidden_still_notifies_visible_documents():
 
 
 def test_late_done_still_notifies_after_desktop_backgrounded_tab_returns_foreground():
-    script = (
-        "const source = " + json.dumps(_background_history_contract_source()) + ";\n"
-        + r"""
-const vm = require('vm');
-const context = {
-  document: {
+    script = f"""
+(async()=>{{
+globalThis.document = {{
     hidden: false,
-    addEventListener: () => {},
-  },
-  window: {},
-};
-vm.createContext(context);
-vm.runInContext(source, context);
-vm.runInContext(
-  "_STREAM_WAS_HIDDEN['session-1']={streamId:'stream-1',wasHidden:false};" +
-  "_STREAM_NOTIFICATION_BACKGROUND['session-1']={streamId:'stream-1',wasBackgrounded:false};",
-  context
-);
-context.window.__hermesSetBackgrounded(true);
-context.window.__hermesSetBackgrounded(false);
-const first = vm.runInContext("_shouldForceCompletionNotification('session-1','stream-1')", context);
-const second = vm.runInContext("_shouldForceCompletionNotification('session-1','stream-1')", context);
-console.log(JSON.stringify({ first, second }));
+    baseURI: 'http://test.local/',
+    addEventListener(){{}},
+    getElementById(){{ return null; }},
+}};
+globalThis.window = globalThis;
+globalThis.addEventListener = () => {{}};
+globalThis.location = {{href:'http://test.local/'}};
+const core = await import({CORE_URL!r});
+const lifecycle = await import({LIFECYCLE_URL!r});
+lifecycle._STREAM_WAS_HIDDEN['session-1']={{streamId:'stream-1',wasHidden:false}};
+lifecycle._STREAM_NOTIFICATION_BACKGROUND['session-1']={{streamId:'stream-1',wasBackgrounded:false}};
+globalThis.__hermesSetBackgrounded(true);
+globalThis.__hermesSetBackgrounded(false);
+const first = lifecycle._shouldForceCompletionNotification('session-1','stream-1');
+const second = lifecycle._shouldForceCompletionNotification('session-1','stream-1');
+console.log(JSON.stringify({{ first, second }}));
+}})().catch(error=>{{console.error(error);process.exitCode=1;}});
 """
-    )
-    temp = tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False, encoding="utf-8")
-    temp.write(script)
-    temp.close()
-    try:
-        result = subprocess.run([NODE, temp.name], capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            raise RuntimeError(f"node failed: {result.stderr}")
-        payload = json.loads(result.stdout.strip().splitlines()[-1])
-    finally:
-        os.unlink(temp.name)
+    result = subprocess.run([NODE, "-e", script], capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        raise RuntimeError(f"node failed: {result.stderr}")
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
 
     assert payload["first"] is True
     assert payload["second"] is False

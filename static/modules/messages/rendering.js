@@ -1,9 +1,9 @@
-// Loaded before stream.js. Owns the per-stream incremental markdown parser,
+// Owns the per-stream incremental markdown parser,
 // MEDIA tail buffering, safe link projection, text fade and render scheduler.
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import { _extractInlineThinkingFromContent } from './core.js';
+import { enhanceMarkdownTables } from './markdown-tables.js';
 
-function createStreamRenderer(options={}){
+export function createStreamRenderer(options={}){
   const readState=typeof options.readState==='function'?options.readState:()=>({});
   const _updateLiveThinkingCard=typeof options.updateLiveThinking==='function'?options.updateLiveThinking:()=>{};
   const _upsertAnchorProcessProse=typeof options.upsertAnchorProse==='function'?options.upsertAnchorProse:()=>null;
@@ -1069,7 +1069,3 @@ function createStreamRenderer(options={}){
     clearAnchorProseIncrementalNode: _clearAnchorProseIncrementalNode,
   });
 }
-
-Object.assign(HermesMessages, {
-  createStreamRenderer,
-});

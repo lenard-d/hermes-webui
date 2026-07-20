@@ -11,7 +11,7 @@ from api.streaming import (
 REPO = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
 STREAM_RENDERER_JS = (
-    REPO / "static" / "messages_parts" / "stream_renderer.js"
+    REPO / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")

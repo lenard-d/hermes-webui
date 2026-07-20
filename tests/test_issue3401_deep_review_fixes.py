@@ -35,7 +35,7 @@ REPO = Path(__file__).resolve().parent.parent
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
 RUN_JOURNAL_JS = (
-    REPO / "static" / "messages_parts" / "stream_run_journal.js"
+    REPO / "static" / "modules" / "messages" / "run-journal.js"
 ).read_text(encoding="utf-8")
 CSS = family_source("style")
 BOOT_JS = family_source("boot")

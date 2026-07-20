@@ -1,10 +1,7 @@
-// Loaded before stream.js. This module owns settled assistant-turn scene
+// This module owns settled assistant-turn scene
 // projection and persistence; stream.js supplies one turn's identities and
 // observations through createStreamAnchorSceneSettlement().
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
-
-function createStreamAnchorSceneSettlement(options={}){
+export function createStreamAnchorSceneSettlement(options={}){
   const activeSid=String(options.sessionId||'');
   const streamId=String(options.streamId||'');
   const S=options.state&&typeof options.state==='object'?options.state:{};
@@ -925,7 +922,3 @@ function createStreamAnchorSceneSettlement(options={}){
     attachProjectedSceneToLastAssistant: _attachProjectedSceneToLastAssistant,
   });
 }
-
-Object.assign(HermesMessages, {
-  createStreamAnchorSceneSettlement,
-});

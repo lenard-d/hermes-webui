@@ -38,10 +38,10 @@ def _run_reasoning_scene(
         "ISSUE5720_STREAM_MODULE_JS_PATHS",
         json.dumps(
             [
-                str(ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"),
-                str(ROOT / "static" / "messages_parts" / "stream_run_journal.js"),
-                str(ROOT / "static" / "messages_parts" / "stream_live_tools.js"),
-                str(ROOT / "static" / "messages_parts" / "stream_renderer.js"),
+                str(ROOT / "static" / "modules" / "messages" / "anchor-scene.js"),
+                str(ROOT / "static" / "modules" / "messages" / "run-journal.js"),
+                str(ROOT / "static" / "modules" / "messages" / "live-tools.js"),
+                str(ROOT / "static" / "modules" / "messages" / "rendering.js"),
             ]
         ),
     )
@@ -224,8 +224,7 @@ const fs = require('fs');
 const {pathToFileURL} = require('url');
 const uiSrc = fs.readFileSync(process.env.ISSUE5720_UI_JS, 'utf8');
 const messagesSrc = fs.readFileSync(process.env.ISSUE5720_MESSAGES_JS, 'utf8');
-const streamModuleSources = JSON.parse(process.env.ISSUE5720_STREAM_MODULE_JS_PATHS)
-  .map(path => fs.readFileSync(path, 'utf8'));
+const streamModulePaths = JSON.parse(process.env.ISSUE5720_STREAM_MODULE_JS_PATHS);
 
 function extractFunc(src, name){
   const start = src.indexOf('function ' + name);
@@ -395,10 +394,13 @@ global.window={
   _chatActivityDisplayMode:process.env.ISSUE5720_ACTIVITY_MODE||'transparent_stream',
   _showThinking:process.env.ISSUE5720_SHOW_THINKING!=='0',
   _simplifiedToolCalling:true,
+  addEventListener:()=>{},
 };
 global.document={
   baseURI:'http://test.local/',
   hidden:false,
+  addEventListener:()=>{},
+  getElementById:id=>byId[id]||null,
   createElement:tag=>new FakeElement(tag),
   createTextNode:text=>{const node=new FakeElement('#text');node.textContent=text;return node;},
   createDocumentFragment:()=>new FakeElement('#fragment'),
@@ -488,7 +490,10 @@ global._firstValidTimestampSeconds=()=>null;
 window.HermesAssistantTurnAnchors=(await import(
   pathToFileURL(process.env.ISSUE5720_ANCHOR_JS_PATHS).href
 )).HermesAssistantTurnAnchors;
-for(const source of streamModuleSources) eval(source);
+const streamModules=await Promise.all(
+  streamModulePaths.map(path=>import(pathToFileURL(path).href))
+);
+Object.assign(global,...streamModules);
 for(const name of [
   'chatActivityMode','isTransparentStream','isFinalAnswerOnlyMode','isCompactWorklogMode','isSimplifiedToolCalling',
   '_anchorSceneIsSettledSuccessfulCompression','_anchorSceneRowsForRendering',
@@ -692,5 +697,5 @@ process.stdout.write(JSON.stringify({
   inflight_reasoning_text:String(INFLIGHT['sid-1']&&INFLIGHT['sid-1'].lastReasoningText||''),
   multi_segment_exact_fallback:multiSegmentExactFallback,
 }));
-})();
+})().catch(error=>{console.error(error);process.exitCode=1;});
 """

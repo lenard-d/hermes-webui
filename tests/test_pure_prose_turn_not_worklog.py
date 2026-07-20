@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parent.parent
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
 STREAM_ANCHOR_SCENE_JS = (
-    ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"
+    ROOT / "static" / "modules" / "messages" / "anchor-scene.js"
 ).read_text(encoding="utf-8")
 
 

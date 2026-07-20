@@ -1,5 +1,26 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import { _chatPayloadModelState } from './core.js';
+import {
+  _clearComposerAfterQueuedSelectionSend,
+  _composerTextWithPendingSelections,
+  _flushSelectionBlocksToComposer,
+  _pendingSelections,
+} from './composer-context.js';
+import {
+  _approvalSessionId,
+  _fetchYoloState,
+  autoResize,
+  hideApprovalCard,
+  startApprovalPolling,
+  stopApprovalPolling,
+} from './approvals.js';
+import {
+  _clarifySessionId,
+  _stashClarifyDraft,
+  hideClarifyCard,
+  startClarifyPolling,
+  stopClarifyPolling,
+} from './clarify.js';
+import { attachLiveStream } from './stream.js';
 
 // Guard against concurrent send() calls.  Without this, two rapid sends
 // (e.g. queue drain + user click) can both pass the S.busy check because
@@ -71,7 +92,7 @@ function _firstUserMessageTitleCandidate(){
   return first?String(first.content||'').trim().slice(0,64):'';
 }
 
-function applySessionTitleUpdate(sid, titleText, options={}){
+export function applySessionTitleUpdate(sid, titleText, options={}){
   const newTitle=String(titleText||'').trim();
   if(!sid||!newTitle)return false;
   const row=(typeof _allSessions!=='undefined'&&Array.isArray(_allSessions))
@@ -174,7 +195,7 @@ function _restoreComposerDraftAfterFailedSend(draftText, filesSnapshot, sid, cle
   return restoredVisible;
 }
 
-async function send(){
+export async function send(){
   // Static guards expect _defaultMessageMode to stay near send() while the actual
   // read remains in the S.busy branch below.
   // _defaultMessageMode
@@ -779,8 +800,3 @@ async function send(){
 
   }finally{ _sendInProgress=false; _sendInProgressSid=null; }
 }
-
-Object.assign(HermesMessages, {
-  send,
-  applySessionTitleUpdate,
-});

@@ -45,20 +45,23 @@ _I18N_PART_NAMES = (
     "runtime.js",
 )
 
-_MESSAGE_PART_NAMES = (
-    "markdown_tables.js",
-    "composer_context.js",
+_MESSAGE_MODULE_NAMES = (
+    "core.js",
+    "markdown-tables.js",
+    "composer-context.js",
     "send.js",
-    "stream_lifecycle.js",
-    "stream_anchor_scene.js",
-    "stream_run_journal.js",
-    "stream_live_tools.js",
-    "stream_renderer.js",
+    "stream-lifecycle.js",
+    "anchor-scene.js",
+    "run-journal.js",
+    "live-tools.js",
+    "rendering.js",
     "stream.js",
-    "composer_approvals.js",
-    "session_events.js",
+    "approvals.js",
+    "session-events.js",
     "clarify.js",
-    "notifications_background.js",
+    "notifications.js",
+    "compatibility.js",
+    "index.js",
 )
 
 _COMMAND_MODULE_NAMES = (
@@ -120,6 +123,9 @@ def module_family_paths(family: str) -> tuple[Path, ...]:
     if family == "commands":
         directory = STATIC_DIR / "modules" / "commands"
         return tuple(directory / name for name in _COMMAND_MODULE_NAMES)
+    if family == "messages":
+        directory = STATIC_DIR / "modules" / "messages"
+        return tuple(directory / name for name in _MESSAGE_MODULE_NAMES)
     raise ValueError(f"unknown frontend module family: {family}")
 
 def _numbered_parts(directory: str, suffix: str) -> tuple[Path, ...]:
@@ -152,9 +158,9 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
             for name in _COMMAND_MODULE_NAMES
         )
     if family == "messages":
-        return (
-            STATIC_DIR / "messages.js",
-            *(STATIC_DIR / "messages_parts" / name for name in _MESSAGE_PART_NAMES),
+        return tuple(
+            STATIC_DIR / "modules" / "messages" / name
+            for name in _MESSAGE_MODULE_NAMES
         )
     if family == "panels":
         return (STATIC_DIR / "panels.js", *_numbered_parts("panels_parts", ".js"))
@@ -171,7 +177,7 @@ def family_source(family: str) -> str:
 
     paths = (
         module_family_paths(family)
-        if family in {"boot", "commands", "sessions"}
+        if family in {"boot", "commands", "messages", "sessions"}
         else family_asset_paths(family)
     )
     source = "".join(
@@ -194,5 +200,19 @@ def family_entrypoint_path(family: str) -> Path | None:
         return None  # imported by boot/index.js through the compatibility seam
     if family == "sessions":
         return STATIC_DIR / "modules" / "sessions" / "index.js"
+    if family == "messages":
+        return STATIC_DIR / "modules" / "messages" / "index.js"
     paths = family_asset_paths(family)
     return paths[0] if paths else None
+
+
+def family_direct_asset_paths(family: str) -> tuple[Path, ...]:
+    """Return browser entrypoints; native-module dependencies load by import."""
+
+    entrypoint = family_entrypoint_path(family)
+    if family in {"boot", "messages", "sessions"}:
+        assert entrypoint is not None
+        return (entrypoint,)
+    if family == "commands":
+        return ()
+    return family_asset_paths(family)

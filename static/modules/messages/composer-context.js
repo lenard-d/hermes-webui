@@ -1,5 +1,16 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import { autoResize } from './approvals.js';
+
+let _selectedTextReplyBtn=null;
+let _selectedTextReplyText='';
+export const _pendingSelections=[];  // [{id, name, text}] — named context blocks
+let _selectionIdCounter=0;
+let _selectedTextReplyRaf=0;
+const _persistentStateToastSeen=new Set();
+
+// Read-only compatibility hook for the still-classic composer UI.
+if(typeof window!=='undefined'){
+  window._hasPendingSelections=()=>_pendingSelections.length>0;
+}
 
 function _persistentToastText(value){
   if(value===null||value===undefined)return '';
@@ -42,7 +53,7 @@ function _persistentToastSkillName(tool){
   return match?match[1]:'';
 }
 
-function _maybeNotifyPersistentStateSaved(tool){
+export function _maybeNotifyPersistentStateSaved(tool){
   if(!tool||tool.is_error||typeof showToast!=='function')return;
   const name=_persistentToastToolName(tool);
   if(!name)return;
@@ -63,7 +74,7 @@ function _maybeNotifyPersistentStateSaved(tool){
   });
 }
 
-function _showPersistentStateToast(kind, name, options){
+export function _showPersistentStateToast(kind, name, options){
   if(typeof showToast!=='function')return;
   const normalizedKind=String(kind||'').toLowerCase();
   if(normalizedKind!=='skill'&&normalizedKind!=='memory')return;
@@ -129,7 +140,7 @@ function _formatSelectedTextReplyQuote(text){
   return `<!-- hermes-selected-context -->\n${normalized.split('\n').map(line=>`> ${line}`).join('\n')}`;
 }
 
-function insertSavedPromptIntoComposer(text){
+export function insertSavedPromptIntoComposer(text){
   const composer=(typeof $==='function'&&$('msg'))||document.getElementById('msg');
   if(!composer||!text)return;
   const current=String(composer.value||'');
@@ -150,7 +161,7 @@ async function _loadSavedPrompts(){
   return _savedPromptsCache;
 }
 
-async function toggleSavedPromptsPopup(){
+export async function toggleSavedPromptsPopup(){
   const popup=(typeof $==='function'&&$('savedPromptsPopup'))||document.getElementById('savedPromptsPopup');
   const btn=(typeof $==='function'&&$('btnSavedPrompts'))||document.getElementById('btnSavedPrompts');
   if(!popup)return;
@@ -249,7 +260,7 @@ function _removeNamedContextBlock(id){
   _renderSelectionChips();
 }
 
-function _clearPendingSelections(){
+export function _clearPendingSelections(){
   _selectionIdCounter=0;
   if(!_pendingSelections.length)return false;
   _pendingSelections=[];
@@ -355,7 +366,7 @@ function _editSelectionChipName(id,chip){
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();commit();} if(e.key==='Escape'){cancel();} });
 }
 
-function _composerTextWithPendingSelections(){
+export function _composerTextWithPendingSelections(){
   const composer=(typeof $==='function'&&$('msg'))||document.getElementById('msg');
   const current=String(composer&&composer.value||'');
   if(!_pendingSelections.length)return current;
@@ -363,7 +374,7 @@ function _composerTextWithPendingSelections(){
   return current.trim()?`${current.replace(/\s+$/,'')}\n\n${blocks}\n\n`:`${blocks}\n\n`;
 }
 
-function _clearComposerAfterQueuedSelectionSend(){
+export function _clearComposerAfterQueuedSelectionSend(){
   const sid=arguments.length?arguments[0]:(S.session&&S.session.session_id);
   const composer=(typeof $==='function'&&$('msg'))||document.getElementById('msg');
   const draftText=composer?String(composer.value||''):'';
@@ -374,7 +385,7 @@ function _clearComposerAfterQueuedSelectionSend(){
   if(typeof autoResize==='function') autoResize();
 }
 
-function _flushSelectionBlocksToComposer(){
+export function _flushSelectionBlocksToComposer(){
   if(!_pendingSelections.length)return;
   const composer=(typeof $==='function'&&$('msg'))||document.getElementById('msg');
   if(!composer)return;
@@ -457,8 +468,3 @@ if(typeof document!=='undefined'){
   });
   window.addEventListener('resize', _hideSelectedTextReplyButton);
 }
-
-Object.assign(HermesMessages, {
-  insertSavedPromptIntoComposer,
-  toggleSavedPromptsPopup,
-});

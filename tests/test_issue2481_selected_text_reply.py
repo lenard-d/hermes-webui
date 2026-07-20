@@ -192,7 +192,7 @@ def test_selection_only_reply_enables_primary_send_button():
     ui = family_source("ui")
 
     # messages.js exposes the predicate...
-    assert "window._hasPendingSelections=function(){return _pendingSelections.length>0;};" in msgs, (
+    assert "window._hasPendingSelections=()=>_pendingSelections.length>0;" in msgs, (
         "messages.js must expose window._hasPendingSelections for the composer content check"
     )
     # ...and refreshes the Send button whenever the selection set changes.

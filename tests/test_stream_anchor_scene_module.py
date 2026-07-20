@@ -9,7 +9,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE = ROOT / "static" / "messages_parts" / "stream_anchor_scene.js"
+MODULE = ROOT / "static" / "modules" / "messages" / "anchor-scene.js"
 INDEX = ROOT / "static" / "index.html"
 SERVICE_WORKER = ROOT / "static" / "sw.js"
 NODE = shutil.which("node")
@@ -18,15 +18,17 @@ NODE = shutil.which("node")
 def _run_module_case(case_script: str) -> dict:
     assert NODE is not None
     script = f"""
-const fs = require('fs');
-const vm = require('vm');
 global.window = {{
   chatActivityMode() {{ return global.__activityMode; }},
   isFinalAnswerOnlyMode() {{ return global.__activityMode === 'hide_all_activity'; }},
 }};
 global.__activityMode = 'compact_worklog';
-vm.runInThisContext(fs.readFileSync({json.dumps(str(MODULE))}, 'utf8'), {{filename: 'stream_anchor_scene.js'}});
-{case_script}
+import({json.dumps(MODULE.as_uri())}).then((module) => {{
+  global.HermesMessages = {{
+    createStreamAnchorSceneSettlement: module.createStreamAnchorSceneSettlement,
+  }};
+  {case_script}
+}}).catch((error) => {{ console.error(error); process.exit(1); }});
 """
     result = subprocess.run(
         [NODE, "-e", script],
@@ -40,12 +42,12 @@ vm.runInThisContext(fs.readFileSync({json.dumps(str(MODULE))}, 'utf8'), {{filena
 
 def test_anchor_scene_module_has_explicit_browser_load_order():
     index = INDEX.read_text(encoding="utf-8")
+    entry = (MODULE.parent / "index.js").read_text(encoding="utf-8")
     service_worker = SERVICE_WORKER.read_text(encoding="utf-8")
-    assert index.index("messages_parts/stream_anchor_scene.js") < index.index(
-        "messages_parts/stream.js"
-    )
-    assert service_worker.index("messages_parts/stream_anchor_scene.js") < service_worker.index(
-        "messages_parts/stream.js"
+    assert 'type="module" src="static/modules/messages/index.js' in index
+    assert entry.index("from './anchor-scene.js'") < entry.index("from './stream.js'")
+    assert service_worker.index("modules/messages/anchor-scene.js") < service_worker.index(
+        "modules/messages/stream.js"
     )
 
 

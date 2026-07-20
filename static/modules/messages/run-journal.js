@@ -1,8 +1,6 @@
-// Loaded before stream.js. Owns the replay cursor for one live run journal.
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+// Owns the replay cursor for one live run journal.
 
-function createStreamRunJournalCursor(options={}){
+export function createStreamRunJournalCursor(options={}){
   let _lastRunJournalSeq=Math.max(0,Number(options.initialSeq)||0);
   let _lastRunJournalEventId=String(options.initialEventId||'');
   const getInflight=typeof options.getInflight==='function'?options.getInflight:()=>null;
@@ -43,7 +41,3 @@ function createStreamRunJournalCursor(options={}){
     replayParams: _runJournalReplayParams,
   });
 }
-
-Object.assign(HermesMessages, {
-  createStreamRunJournalCursor,
-});

@@ -28,7 +28,7 @@ import subprocess
 REPO = pathlib.Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
 STREAM_RENDERER_JS = (
-    REPO / "static" / "messages_parts" / "stream_renderer.js"
+    REPO / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")

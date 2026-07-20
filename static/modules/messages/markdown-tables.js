@@ -1,7 +1,4 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
-
-function enhanceMarkdownTables(root){
+export function enhanceMarkdownTables(root){
   if(!root||!root.querySelectorAll) return;
   const scope=root;
   const tables=scope.querySelectorAll('.msg-body table:not([data-markdown-table-enhanced])');
@@ -277,7 +274,3 @@ window.enhanceMarkdownTables=enhanceMarkdownTables;
   };
   window.renderMessages._markdownTablesEnhanced=true;
 })();
-
-Object.assign(HermesMessages, {
-  enhanceMarkdownTables,
-});

@@ -10,7 +10,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 ANCHORS_JS = REPO / "static" / "modules" / "assistant-turn-anchors" / "index.js"
 MESSAGES_JS = REPO / "static" / "messages.js"
-STREAM_ANCHOR_SCENE_JS = REPO / "static" / "messages_parts" / "stream_anchor_scene.js"
+STREAM_ANCHOR_SCENE_JS = REPO / "static" / "modules" / "messages" / "anchor-scene.js"
 UI_JS = REPO / "static" / "ui.js"
 SESSIONS_JS = REPO / "static" / "sessions.js"
 NODE = shutil.which("node")

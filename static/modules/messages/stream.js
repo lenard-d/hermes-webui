@@ -1,7 +1,62 @@
-var HermesMessages = globalThis.HermesMessages || Object.create(null);
-globalThis.HermesMessages = HermesMessages;
+import {
+  _bgTaskCompleteRingBufferAdd,
+  _chatPayloadModelState,
+  _deferStreamErrorIfOffline,
+  _desktopBackgroundedForNotifications,
+  _extractInlineThinkingFromContent,
+  _isSessionActivelyViewed,
+  _isSessionCurrentPane,
+  _markSessionViewed,
+} from './core.js';
+import {
+  LIVE_STREAMS,
+  _STREAM_NOTIFICATION_BACKGROUND,
+  _STREAM_WAS_HIDDEN,
+  _bindStreamHiddenTracker,
+  _clearStreamHidden,
+  _clearStreamNotificationBackground,
+  _shouldForceCompletionNotification,
+  closeLiveStream,
+  closeOtherLiveStreams,
+} from './stream-lifecycle.js';
+import {
+  _approvalSessionId,
+  _clearApprovalPendingForSession,
+  hideApprovalCard,
+  showApprovalForSession,
+  stopApprovalPolling,
+  transcript,
+} from './approvals.js';
+import {
+  _clarifySessionId,
+  _clearClarifyPendingForSession,
+  hideClarifyCard,
+  showClarifyForSession,
+  stopClarifyPolling,
+} from './clarify.js';
+import {
+  _attentionSoundKey,
+  _completionNotificationPreviewText,
+  playAttentionSound,
+  playNotificationSound,
+  sendBrowserNotification,
+} from './notifications.js';
+import {
+  _maybeNotifyPersistentStateSaved,
+  _showPersistentStateToast,
+} from './composer-context.js';
+import {
+  _handleBgTaskCompleteEvent,
+  _resumeSessionStreamAfterLiveChat,
+  _suspendSessionStreamForLiveChat,
+} from './session-events.js';
+import { applySessionTitleUpdate, send } from './send.js';
+import { createStreamAnchorSceneSettlement } from './anchor-scene.js';
+import { createStreamLiveToolTracker } from './live-tools.js';
+import { createStreamRenderer } from './rendering.js';
+import { createStreamRunJournalCursor } from './run-journal.js';
 
-function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
+export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   if(!activeSid||!streamId) return;
   // Resolve the complete runtime module seam before touching hidden-state,
   // INFLIGHT, live transports, session suspension, or visible run status. A
@@ -9,10 +64,10 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   // already started the backend run while this client silently remains busy
   // without an SSE owner.
   const _requiredStreamFactories={
-    runJournal:HermesMessages.createStreamRunJournalCursor,
-    anchorScene:HermesMessages.createStreamAnchorSceneSettlement,
-    liveTools:HermesMessages.createStreamLiveToolTracker,
-    renderer:HermesMessages.createStreamRenderer,
+    runJournal:createStreamRunJournalCursor,
+    anchorScene:createStreamAnchorSceneSettlement,
+    liveTools:createStreamLiveToolTracker,
+    renderer:createStreamRenderer,
   };
   const _missingStreamFactories=Object.entries(_requiredStreamFactories)
     .filter(([,factory])=>typeof factory!=='function')
@@ -2592,7 +2647,3 @@ function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
   })();
 
 }
-
-Object.assign(HermesMessages, {
-  attachLiveStream,
-});

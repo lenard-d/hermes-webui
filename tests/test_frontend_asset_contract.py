@@ -9,6 +9,7 @@ from tests.frontend_asset_contract import (
     FRONTEND_FAMILIES,
     REPO_ROOT,
     family_asset_paths,
+    family_direct_asset_paths,
     family_entrypoint_path,
     module_family_paths,
 )
@@ -45,7 +46,7 @@ def _direct_asset_urls() -> list[str]:
 
 
 def _relative_family_assets(family: str) -> list[str]:
-    return [path.relative_to(REPO_ROOT).as_posix() for path in family_asset_paths(family)]
+    return [path.relative_to(REPO_ROOT).as_posix() for path in family_direct_asset_paths(family)]
 
 
 def _direct_urls_for_family(family: str) -> list[str]:
@@ -56,7 +57,7 @@ def _direct_urls_for_family(family: str) -> list[str]:
 def _expected_direct_urls(family: str) -> list[str]:
     if family == "commands":
         return []
-    if family in {"boot", "sessions"}:
+    if family in {"boot", "messages", "sessions"}:
         entrypoint = family_entrypoint_path(family)
         assert entrypoint is not None
         path = entrypoint.relative_to(REPO_ROOT).as_posix()
@@ -78,8 +79,11 @@ def test_facades_have_the_required_side_of_each_direct_load_order():
         REPO_ROOT / "static" / "modules" / "sessions" / "index.js",
     )
 
-    for family in ("i18n", "ui", "messages", "panels"):
+    for family in ("i18n", "ui", "panels"):
         assert family_asset_paths(family)[0].name == f"{family}.js"
+    assert family_direct_asset_paths("messages")[0].as_posix().endswith(
+        "static/modules/messages/index.js"
+    )
 
 
 def test_every_frontend_asset_is_precached_at_its_browser_request_url():
@@ -103,7 +107,7 @@ def test_every_frontend_asset_is_precached_at_its_browser_request_url():
 
     native_dependencies = {
         path.relative_to(REPO_ROOT).as_posix()
-        for family in ("boot", "commands", "sessions", "assistant-turn-anchors")
+        for family in ("boot", "commands", "messages", "sessions", "assistant-turn-anchors")
         for path in module_family_paths(family)
         if path != family_entrypoint_path(family)
     }
@@ -111,7 +115,7 @@ def test_every_frontend_asset_is_precached_at_its_browser_request_url():
     assert native_dependencies <= unversioned_shell_paths
 
 
-@pytest.mark.parametrize("family", ("sessions", "assistant-turn-anchors"))
+@pytest.mark.parametrize("family", ("messages", "sessions", "assistant-turn-anchors"))
 def test_native_module_family_imports_are_explicit_and_precached(family: str):
     paths = module_family_paths(family)
     entrypoint = paths[-1]
