@@ -2,7 +2,7 @@ import { _normalizeThinkingEchoCompare } from './activity-and-scroll.js';
 import { _renderSettledAnchorSceneForMessage, ensureActivityGroup } from './anchor-scenes.js';
 import { _decorateTransparentEventRow, _restoreWorklogDetailDisclosureState, _syncTransparentEventControls, _thinkingActivityNode, _transparentToolStatus, isTransparentStream } from './activity-presentation.js';
 import { _assistantTurnBlocks } from './assistant-turn-presentation.js';
-import { _assistantToolAnchorIdxForMessage, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './live-activity.js';
+import { _assistantToolAnchorIdxForMessage, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
 import { _legacySettledFallbackHasToolMetadata } from './render-support.js';
 import { S } from './state.js';
 import { _syncToolCallGroupSummary, _toolWorklogListEl, buildToolCard } from './tool-worklog.js';

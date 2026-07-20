@@ -1,7 +1,7 @@
 import { _clearActivityElapsedTimer, _startActivityElapsedTimer, scrollIfPinned } from './activity-and-scroll.js';
 import { _clearLiveActivityUserIntent, _renderLiveAnchorActivitySceneForStream, ensureActivityGroup } from './anchor-scenes.js';
 import { _activityElapsedLabel, _activityLastObservedAge, _activityProcessedElapsedLabel, _activitySettledProcessedLabel, _formatActiveElapsedTimer, _formatTurnDuration, _transparentEventTimestampSeconds } from './composer-controls.js';
-import { appendThinking, removeThinking } from './content-postprocessing.js';
+import { appendThinking, removeThinking } from './thinking-lifecycle.js';
 import { _moveLiveRunStatusToTurnEnd } from './live-run-status.js';
 import { _decorateTransparentEventRow, _setTransparentCardOpen, _setTransparentDetailMode, _syncTransparentEventControls, _transparentToolStatus, _worklogDetailsExpandedDefault, isCompactWorklogMode, isFinalAnswerOnlyMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
 import { _assistantTurnBlocks, _createAssistantTurn } from './assistant-turn-presentation.js';

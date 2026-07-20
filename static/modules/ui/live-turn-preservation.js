@@ -1,4 +1,4 @@
-import { _liveAssistantSegmentTextLength } from './dialogs-and-reconnect.js';
+import { _liveAssistantSegmentTextLength } from './live-turn-recovery.js';
 import { INFLIGHT, S } from './state.js';
 
   // Mid-stream flicker fix (#3877): when a renderMessages() rebuild is reached

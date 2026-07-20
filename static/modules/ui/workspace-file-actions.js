@@ -1,5 +1,5 @@
 import { setStatus, showToast } from './composer.js';
-import { showConfirmDialog, showPromptDialog } from './dialogs-and-reconnect.js';
+import { showConfirmDialog, showPromptDialog } from './app-dialogs.js';
 import { $, S } from './state.js';
 import { _workspaceParentDir } from './workspace-drag-drop.js';
 

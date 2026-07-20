@@ -870,6 +870,17 @@ reasoning capability state, while `composer-footer-fit.js` owns responsive
 footer measurement. Model, reasoning, and toolset menus coordinate through the
 stateful `composer-menu-registry.js` instead of importing each other cyclically.
 
+Rendered-message enrichment is also owner-based. `content-postprocessing.js`
+owns only the ordered post-render transaction and its overflow-anchor suppression
+window. `code-postprocessing.js` owns Prism, copy controls, and JSON/YAML tree
+views; `artifact-postprocessing.js` owns media URLs plus diff, CSV, Excalidraw,
+PDF, and sandboxed HTML hydration; `markdown-postprocessing.js` owns Mermaid and
+KaTeX loading/rendering. Message edit/regenerate behavior and live thinking state
+are separate lifecycle modules (`message-editing.js` and
+`thinking-lifecycle.js`) rather than incidental post-processing concerns. Every
+owner is an independently parseable native module and is explicitly included in
+the UI asset inventory and service-worker cache.
+
 The HTML LRU is bounded to eight entries, 2 MiB per entry, and 8 MiB total
 (estimated as UTF-16 browser heap). Cache hits refresh insertion/LRU order.
 

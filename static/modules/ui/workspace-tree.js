@@ -1,4 +1,4 @@
-import { showConfirmDialog } from './dialogs-and-reconnect.js';
+import { showConfirmDialog } from './app-dialogs.js';
 import { showToast } from './composer.js';
 import { $, S } from './state.js';
 import {

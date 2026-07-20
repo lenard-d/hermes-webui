@@ -2,6 +2,7 @@ import * as activityAndScroll from './activity-and-scroll.js';
 import * as activityPresentation from './activity-presentation.js';
 import * as anchorScenes from './anchor-scenes.js';
 import * as assistantTurnPresentation from './assistant-turn-presentation.js';
+import * as clipboard from './clipboard.js';
 import * as composer from './composer.js';
 import * as composerFooterFit from './composer-footer-fit.js';
 import * as composerMenuRegistry from './composer-menu-registry.js';
@@ -9,6 +10,8 @@ import * as activityTiming from './activity-timing.js';
 import * as composerControls from './composer-controls.js';
 import * as messageScrollFollow from './message-scroll-follow.js';
 import * as mobileComposerConfig from './mobile-composer-config.js';
+import * as artifactPostprocessing from './artifact-postprocessing.js';
+import * as codePostprocessing from './code-postprocessing.js';
 import * as contentPostprocessing from './content-postprocessing.js';
 import * as appDialogs from './app-dialogs.js';
 import * as clipboard from './clipboard.js';
@@ -32,6 +35,8 @@ import * as liveRunStatus from './live-run-status.js';
 import * as messageRenderCache from './message-render-cache.js';
 import * as messageScrollSnapshot from './message-scroll-snapshot.js';
 import * as liveTurnPreservation from './live-turn-preservation.js';
+import * as markdownPostprocessing from './markdown-postprocessing.js';
+import * as messageEditing from './message-editing.js';
 import * as mediaAndQuota from './media-and-quota.js';
 import * as modelCatalog from './model-catalog.js';
 import * as modelPickerRendering from './model-picker-rendering.js';
@@ -46,6 +51,7 @@ import * as settledActivityRenderer from './settled-activity-renderer.js';
 import * as settledTurnFinalization from './settled-turn-finalization.js';
 import * as state from './state.js';
 import * as toolWorklog from './tool-worklog.js';
+import * as thinkingLifecycle from './thinking-lifecycle.js';
 import * as transparentWorklog from './transparent-worklog.js';
 import * as topbarPresentation from './topbar-presentation.js';
 import * as toolsetsControls from './toolsets-controls.js';
@@ -74,9 +80,13 @@ const modules = Object.assign(Object.create(null), {
   mobileComposerConfig,
   messageScrollFollow,
   activityTiming,
+  codePostprocessing,
+  artifactPostprocessing,
+  markdownPostprocessing,
   composerControls,
   activityAndScroll,
   assistantTurnPresentation,
+  clipboard,
   activityPresentation,
   composer,
   appDialogs,
@@ -118,6 +128,8 @@ const modules = Object.assign(Object.create(null), {
   uploadTray,
   uploadStatus,
   uploadTransport,
+  messageEditing,
+  thinkingLifecycle,
   workspaceAndUploads,
 });
 
