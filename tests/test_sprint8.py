@@ -107,7 +107,7 @@ def test_app_js_contains_regenerate(cleanup_test_sessions):
     assert "regenerateResponse" in src
 
 def test_app_js_contains_clear_conversation(cleanup_test_sessions):
-    src = _served_family_source("/static/panels.js", "panels")
+    src = _served_family_source("/static/modules/panels/index.js", "panels")
     assert "clearConversation" in src
     assert "api/session/clear" in src
 

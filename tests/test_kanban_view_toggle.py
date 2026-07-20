@@ -53,7 +53,7 @@ def test_kanban_view_toggle_persists_to_server_config_and_rerenders():
 
 def test_kanban_config_updates_lane_mode_even_after_defaults_applied():
     apply_start = PANELS_JS.index("function _kanbanApplyConfigDefaults")
-    apply_end = PANELS_JS.index("let _kanbanConfigApplied", apply_start)
+    apply_end = PANELS_JS.index("function syncKanbanViewToggle", apply_start)
     body = PANELS_JS[apply_start:apply_end]
     lane_idx = body.index("_kanbanLanesByProfile = config.lane_by_profile === true")
     applied_guard_idx = body.index("if (_kanbanConfigApplied) return")

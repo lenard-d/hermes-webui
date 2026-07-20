@@ -1,5 +1,8 @@
+import { state } from "./state.js";
+import { switchPanel } from "./core.js";
+import { _scheduleAppearanceAutosave } from "./settings-navigation.js";
+
 // Panels domain: composer drop handling and settings state
-window.HermesPanels = window.HermesPanels || {};
 
 // Drag and drop
 const wrap=$('composerWrap');let dragCounter=0;
@@ -40,38 +43,14 @@ document.addEventListener('drop',e=>{
 });
 
 // ── Settings panel ───────────────────────────────────────────────────────────
-let _settingsDirty = false;
-let _settingsThemeOnOpen = null; // track theme at open time for discard revert
-let _settingsSkinOnOpen = null; // track skin at open time for discard revert
-let _settingsFontSizeOnOpen = null; // track font size at open time for discard revert
-let _settingsHermesDefaultModelOnOpen = '';
-let _settingsHermesDefaultModelProviderOnOpen = null;
-let _settingsSection = 'conversation';
-let _currentSettingsSection = 'conversation';
-let _settingsIndex = null;
-let _settingsIndexPromise = null;
-let _settingsSearchSeq = 0;
-let _extensionsStatusData = null;
-let _extensionsSidecarMonitorSeq = 0;
-let _extensionsGalleryData = null;
-let _extensionsGalleryLoaded = false;
-let _extensionsActiveTab = 'gallery';
-let _settingsSearchDismissListenerRegistered = false;
-let _settingsAppearanceAutosaveTimer = null;
-let _settingsAppearanceAutosaveRetryPayload = null;
-let _settingsPreferencesAutosaveTimer = null;
-let _settingsPreferencesAutosaveRetryPayload = null;
 
 // ── Sidebar tab visibility/order ────────────────────────────────────────────
 const _ALWAYS_VISIBLE_TABS = new Set(['chat','settings']);
 const _HIDDEN_TABS_LS_KEY = 'hermes-webui-hidden-tabs';
 const _TAB_ORDER_LS_KEY = 'hermes-webui-tab-order';
 const _COMPOSER_CONTROL_ORDER_LS_KEY = 'hermes-webui-composer-control-order';
-let _tabVisibilityDragSuppressUntil = 0;
-let _composerControlDragSuppressUntil = 0;
-let _composerControlDraggingKey = '';
 
-function _sanitizeTabPanelList(panels){
+export function _sanitizeTabPanelList(panels){
   if(!Array.isArray(panels)) return [];
   var out=[];
   panels.forEach(function(panel){
@@ -83,25 +62,25 @@ function _sanitizeTabPanelList(panels){
   return out;
 }
 
-function _getHiddenTabs(){
+export function _getHiddenTabs(){
   try{var h=localStorage.getItem(_HIDDEN_TABS_LS_KEY);if(h)return _sanitizeTabPanelList(JSON.parse(h));}catch(e){}
   return[];
 }
 
-function _setHiddenTabs(panels){
+export function _setHiddenTabs(panels){
   try{localStorage.setItem(_HIDDEN_TABS_LS_KEY,JSON.stringify(_sanitizeTabPanelList(panels)));}catch(e){}
 }
 
-function _getTabOrder(){
+export function _getTabOrder(){
   try{var h=localStorage.getItem(_TAB_ORDER_LS_KEY);if(h)return _sanitizeTabPanelList(JSON.parse(h));}catch(e){}
   return[];
 }
 
-function _setTabOrder(panels){
+export function _setTabOrder(panels){
   try{localStorage.setItem(_TAB_ORDER_LS_KEY,JSON.stringify(_sanitizeTabPanelList(panels)));}catch(e){}
 }
 
-function _availableSidebarPanels(){
+export function _availableSidebarPanels(){
   var out=[];
   var tabs=document.querySelectorAll('.rail .rail-btn.nav-tab[data-panel], .sidebar-nav .nav-tab[data-panel]');
   tabs.forEach(function(tab){
@@ -113,7 +92,7 @@ function _availableSidebarPanels(){
   return out;
 }
 
-function _orderedSidebarPanels(order){
+export function _orderedSidebarPanels(order){
   var available=_availableSidebarPanels();
   var requested=_sanitizeTabPanelList(Array.isArray(order)?order:_getTabOrder());
   var out=[];
@@ -122,17 +101,17 @@ function _orderedSidebarPanels(order){
   return out;
 }
 
-function _dashboardPanelMode(){
+export function _dashboardPanelMode(){
   var modeEl=$('settingsDashboardMode');
   var mode=modeEl&&modeEl.value;
   return mode==='never'||mode==='always'||mode==='auto'?mode:'auto';
 }
 
-function _isDashboardChipOn(){
+export function _isDashboardChipOn(){
   return _dashboardPanelMode()!=='never';
 }
 
-function _renderDashboardVisibilityChip(container){
+export function _renderDashboardVisibilityChip(container){
   if(!container)return null;
   var chip=document.createElement('button');
   chip.type='button';
@@ -144,13 +123,13 @@ function _renderDashboardVisibilityChip(container){
   if(!isOn) chip.classList.add('chip-off');
   chip.textContent=typeof t==='function'?t('tab_dashboard'):'Dashboard';
   chip.onclick=function(){
-    if(Date.now()<_tabVisibilityDragSuppressUntil)return;
+    if(Date.now()<state._tabVisibilityDragSuppressUntil)return;
     _toggleDashboardVisibilityChip();
   };
   return chip;
 }
 
-function _applyTabOrder(order){
+export function _applyTabOrder(order){
   var ordered=_orderedSidebarPanels(order);
   ['.rail','.sidebar-nav'].forEach(function(selector){
     var container=document.querySelector(selector);
@@ -168,7 +147,7 @@ function _applyTabOrder(order){
   });
 }
 
-function _applyTabVisibility(hidden){
+export function _applyTabVisibility(hidden){
   hidden=_sanitizeTabPanelList(hidden);
   _applyTabOrder(_getTabOrder());
   // Hide/unhide all [data-panel] elements (sidebar-nav buttons + rail buttons)
@@ -189,7 +168,7 @@ function _applyTabVisibility(hidden){
   }
 }
 
-function _renderTabVisibilityChips(){
+export function _renderTabVisibilityChips(){
   var container=$('tabVisibilityChips');
   if(!container)return;
   var hidden=_getHiddenTabs();
@@ -216,7 +195,7 @@ function _renderTabVisibilityChips(){
     chip.setAttribute('role','switch');
     chip.setAttribute('aria-checked',isOff?'false':'true');
     chip.onclick=function(){
-      if(Date.now()<_tabVisibilityDragSuppressUntil)return;
+      if(Date.now()<state._tabVisibilityDragSuppressUntil)return;
       _toggleTabVisibilityChip(panel);
     };
     _wireTabChipDrag(chip,panel);
@@ -226,7 +205,7 @@ function _renderTabVisibilityChips(){
   if(dashboardChip) container.appendChild(dashboardChip);
 }
 
-function _wireTabChipDrag(chip,panel){
+export function _wireTabChipDrag(chip,panel){
   if(!chip)return;
   chip.addEventListener('dragstart',function(e){
     chip.classList.add('dragging');
@@ -241,7 +220,7 @@ function _wireTabChipDrag(chip,panel){
   chip.addEventListener('drop',function(e){_handleTabVisibilityChipDrop(e,panel);});
 }
 
-function _moveTabOrderPanel(sourcePanel,targetPanel){
+export function _moveTabOrderPanel(sourcePanel,targetPanel){
   if(!sourcePanel||!targetPanel||sourcePanel===targetPanel) return false;
   var order=_orderedSidebarPanels();
   var from=order.indexOf(sourcePanel);
@@ -256,14 +235,14 @@ function _moveTabOrderPanel(sourcePanel,targetPanel){
   return true;
 }
 
-function _handleTabVisibilityChipDrop(e,targetPanel){
+export function _handleTabVisibilityChipDrop(e,targetPanel){
   if(e){e.preventDefault();e.stopPropagation();}
   document.querySelectorAll('.tab-visibility-chip.drag-over').forEach(function(el){el.classList.remove('drag-over');});
   var sourcePanel=e&&e.dataTransfer?e.dataTransfer.getData('text/plain'):'';
-  if(_moveTabOrderPanel(sourcePanel,targetPanel)) _tabVisibilityDragSuppressUntil=Date.now()+250;
+  if(_moveTabOrderPanel(sourcePanel,targetPanel)) state._tabVisibilityDragSuppressUntil=Date.now()+250;
 }
 
-function _toggleTabVisibilityChip(panel){
+export function _toggleTabVisibilityChip(panel){
   if(_ALWAYS_VISIBLE_TABS.has(panel))return;
   var hidden=_getHiddenTabs();
   var idx=hidden.indexOf(panel);
@@ -278,7 +257,7 @@ function _toggleTabVisibilityChip(panel){
   _scheduleAppearanceAutosave();
 }
 
-function _toggleDashboardVisibilityChip(){
+export function _toggleDashboardVisibilityChip(){
   var modeEl=$('settingsDashboardMode');
   if(!modeEl||typeof saveDashboardSettings!=='function') return;
   var currentMode=_dashboardPanelMode();
@@ -293,7 +272,7 @@ function _toggleDashboardVisibilityChip(){
   });
 }
 
-function _ensureComposerControlVisibilityState(settings){
+export function _ensureComposerControlVisibilityState(settings){
   const fromSettings=(typeof _composerControlVisibilityFromSettings==='function')
     ? _composerControlVisibilityFromSettings(settings||{})
     : {};
@@ -301,13 +280,13 @@ function _ensureComposerControlVisibilityState(settings){
   Object.assign(window._composerControlVisibility, fromSettings);
 }
 
-function _composerControlDefsForSettings(){
+export function _composerControlDefsForSettings(){
   const baseDefs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
   const situationalDefs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
   return baseDefs.concat(situationalDefs);
 }
 
-function _getComposerControlOrder(){
+export function _getComposerControlOrder(){
   if(Array.isArray(window._composerControlOrder)){
     return typeof window._sanitizeComposerControlOrder==='function'
       ? window._sanitizeComposerControlOrder(window._composerControlOrder)
@@ -324,7 +303,7 @@ function _getComposerControlOrder(){
   return [];
 }
 
-function _setComposerControlOrder(order){
+export function _setComposerControlOrder(order){
   const sanitized=typeof window._sanitizeComposerControlOrder==='function'
     ? window._sanitizeComposerControlOrder(order)
     : (Array.isArray(order)?order.filter(key=>typeof key==='string') : []);
@@ -333,7 +312,7 @@ function _setComposerControlOrder(order){
   return sanitized;
 }
 
-function _orderedComposerControlDefsForSettings(defs){
+export function _orderedComposerControlDefsForSettings(defs){
   defs=Array.isArray(defs)?defs:[];
   const byKey=new Map(defs.map(def=>[def.key,def]));
   const out=[];
@@ -344,23 +323,23 @@ function _orderedComposerControlDefsForSettings(defs){
   return out;
 }
 
-function _composerControlOrderGroupKey(key){
+export function _composerControlOrderGroupKey(key){
   const def=_composerControlDefsForSettings().find(item=>item&&item.key===key);
   return def&&def.orderGroup?def.orderGroup:'';
 }
 
-function _composerControlDropAllowed(sourceKey,targetKey){
+export function _composerControlDropAllowed(sourceKey,targetKey){
   if(!sourceKey||!targetKey||sourceKey===targetKey) return false;
   const sourceGroup=_composerControlOrderGroupKey(sourceKey);
   const targetGroup=_composerControlOrderGroupKey(targetKey);
   return !!sourceGroup&&sourceGroup===targetGroup;
 }
 
-function _clearComposerControlDragOver(){
+export function _clearComposerControlDragOver(){
   document.querySelectorAll('[data-composer-control-key].drag-over').forEach(function(el){el.classList.remove('drag-over');});
 }
 
-function _moveComposerControlOrderKey(sourceKey,targetKey){
+export function _moveComposerControlOrderKey(sourceKey,targetKey){
   if(!_composerControlDropAllowed(sourceKey,targetKey)) return false;
   const order=_orderedComposerControlDefsForSettings(_composerControlDefsForSettings()).map(def=>def.key);
   const from=order.indexOf(sourceKey);
@@ -376,20 +355,20 @@ function _moveComposerControlOrderKey(sourceKey,targetKey){
   return true;
 }
 
-function _handleComposerControlChipDrop(e,targetKey){
+export function _handleComposerControlChipDrop(e,targetKey){
   if(e){e.preventDefault();e.stopPropagation();}
   _clearComposerControlDragOver();
-  const sourceKey=e&&e.dataTransfer?e.dataTransfer.getData('text/plain'):_composerControlDraggingKey;
-  if(_moveComposerControlOrderKey(sourceKey,targetKey)) _composerControlDragSuppressUntil=Date.now()+250;
-  _composerControlDraggingKey='';
+  const sourceKey=e&&e.dataTransfer?e.dataTransfer.getData('text/plain'):state._composerControlDraggingKey;
+  if(_moveComposerControlOrderKey(sourceKey,targetKey)) state._composerControlDragSuppressUntil=Date.now()+250;
+  state._composerControlDraggingKey='';
 }
 
-function _wireComposerControlChipDrag(chip,key){
+export function _wireComposerControlChipDrag(chip,key){
   if(!chip)return;
   chip.setAttribute('data-composer-control-key',key);
   chip.setAttribute('draggable','true');
   chip.addEventListener('dragstart',function(e){
-    _composerControlDraggingKey=key;
+    state._composerControlDraggingKey=key;
     chip.classList.add('dragging');
     if(e.dataTransfer){
       e.dataTransfer.effectAllowed='move';
@@ -399,10 +378,10 @@ function _wireComposerControlChipDrag(chip,key){
   chip.addEventListener('dragend',function(){
     chip.classList.remove('dragging');
     _clearComposerControlDragOver();
-    _composerControlDraggingKey='';
+    state._composerControlDraggingKey='';
   });
   chip.addEventListener('dragover',function(e){
-    const sourceKey=_composerControlDraggingKey;
+    const sourceKey=state._composerControlDraggingKey;
     if(!_composerControlDropAllowed(sourceKey,key)){
       if(e.dataTransfer)e.dataTransfer.dropEffect='none';
       return;
@@ -415,7 +394,7 @@ function _wireComposerControlChipDrag(chip,key){
   chip.addEventListener('drop',function(e){_handleComposerControlChipDrop(e,key);});
 }
 
-function _composerControlVisibilityPayload(){
+export function _composerControlVisibilityPayload(){
   const payload={};
   const defs=_composerControlDefsForSettings();
   const state=window._composerControlVisibility||{};
@@ -423,7 +402,7 @@ function _composerControlVisibilityPayload(){
   return payload;
 }
 
-function _toggleComposerControlChip(key){
+export function _toggleComposerControlChip(key){
   if(!window._composerControlVisibility) window._composerControlVisibility={};
   window._composerControlVisibility[key]=!window._composerControlVisibility[key];
   if(typeof _renderComposerControlChips==='function') _renderComposerControlChips();
@@ -432,7 +411,7 @@ function _toggleComposerControlChip(key){
   _scheduleAppearanceAutosave();
 }
 
-function _composerControlChipLabel(def){
+export function _composerControlChipLabel(def){
   if(!def) return '';
   if(def.labelKey&&typeof t==='function'){
     const localized=t(def.labelKey);
@@ -441,7 +420,7 @@ function _composerControlChipLabel(def){
   return def.label||'';
 }
 
-function _renderComposerControlChips(){
+export function _renderComposerControlChips(){
   const container=$('composerControlsChips');
   if(!container) return;
   const defs=Array.isArray(window._COMPOSER_CONTROL_TOGGLE_DEFS)?window._COMPOSER_CONTROL_TOGGLE_DEFS:[];
@@ -456,13 +435,13 @@ function _renderComposerControlChips(){
     chip.textContent=_composerControlChipLabel(def);
     chip.setAttribute('role','switch');
     chip.setAttribute('aria-checked',hidden?'false':'true');
-    chip.onclick=function(){if(Date.now()<_composerControlDragSuppressUntil)return;_toggleComposerControlChip(def.key);};
+    chip.onclick=function(){if(Date.now()<state._composerControlDragSuppressUntil)return;_toggleComposerControlChip(def.key);};
     _wireComposerControlChipDrag(chip,def.key);
     container.appendChild(chip);
   });
 }
 
-function _renderComposerSituationalControlChips(){
+export function _renderComposerSituationalControlChips(){
   const container=$('composerSituationalControlsChips');
   if(!container) return;
   const defs=Array.isArray(window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS)?window._COMPOSER_SITUATIONAL_CONTROL_TOGGLE_DEFS:[];
@@ -477,45 +456,8 @@ function _renderComposerSituationalControlChips(){
     chip.textContent=_composerControlChipLabel(def);
     chip.setAttribute('role','switch');
     chip.setAttribute('aria-checked',hidden?'false':'true');
-    chip.onclick=function(){if(Date.now()<_composerControlDragSuppressUntil)return;_toggleComposerControlChip(def.key);};
+    chip.onclick=function(){if(Date.now()<state._composerControlDragSuppressUntil)return;_toggleComposerControlChip(def.key);};
     _wireComposerControlChipDrag(chip,def.key);
     container.appendChild(chip);
   });
 }
-
-window.HermesPanels.settingsState = {
-  _sanitizeTabPanelList,
-  _getHiddenTabs,
-  _setHiddenTabs,
-  _getTabOrder,
-  _setTabOrder,
-  _availableSidebarPanels,
-  _orderedSidebarPanels,
-  _dashboardPanelMode,
-  _isDashboardChipOn,
-  _renderDashboardVisibilityChip,
-  _applyTabOrder,
-  _applyTabVisibility,
-  _renderTabVisibilityChips,
-  _wireTabChipDrag,
-  _moveTabOrderPanel,
-  _handleTabVisibilityChipDrop,
-  _toggleTabVisibilityChip,
-  _toggleDashboardVisibilityChip,
-  _ensureComposerControlVisibilityState,
-  _composerControlDefsForSettings,
-  _getComposerControlOrder,
-  _setComposerControlOrder,
-  _orderedComposerControlDefsForSettings,
-  _composerControlOrderGroupKey,
-  _composerControlDropAllowed,
-  _clearComposerControlDragOver,
-  _moveComposerControlOrderKey,
-  _handleComposerControlChipDrop,
-  _wireComposerControlChipDrag,
-  _composerControlVisibilityPayload,
-  _toggleComposerControlChip,
-  _composerControlChipLabel,
-  _renderComposerControlChips,
-  _renderComposerSituationalControlChips,
-};

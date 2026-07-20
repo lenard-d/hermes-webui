@@ -1,5 +1,7 @@
+import { state } from "./state.js";
+
+
 // Panels domain: provider cards and actions
-window.HermesPanels = window.HermesPanels || {};
 
 const _providerCardEls = new Map(); // providerId → entry used by save/remove/test handlers
 const _SELF_HOSTED_DEFAULT_BASE_URLS = Object.freeze({
@@ -7,14 +9,14 @@ const _SELF_HOSTED_DEFAULT_BASE_URLS = Object.freeze({
   lmstudio: 'http://localhost:1234/v1',
 });
 
-async function _fetchProviderQuotaStatus(force=false){
+export async function _fetchProviderQuotaStatus(force=false){
   const endpoint=force?`/api/provider/quota?refresh=1&ts=${Date.now()}`:'/api/provider/quota';
   const status=await api(endpoint,{cache:'no-store'});
   if(status&&typeof status==='object') status.client_fetched_at=new Date().toISOString();
   return status;
 }
 
-async function loadProvidersPanel(){
+export async function loadProvidersPanel(){
   const list=$('providersList');
   const empty=$('providersEmpty');
   if(!list) return;
@@ -44,7 +46,7 @@ async function loadProvidersPanel(){
   }
 }
 
-async function _refreshProviderQuota(card,button){
+export async function _refreshProviderQuota(card,button){
   if(!card) return;
   if(button){
     button.disabled=true;
@@ -82,28 +84,28 @@ async function _refreshProviderQuota(card,button){
   if(typeof showToast==='function') showToast(t('provider_quota_refresh_failed'));
 }
 
-function _formatProviderQuotaMoney(value){
+export function _formatProviderQuotaMoney(value){
   if(value===null||value===undefined||value==='') return '—';
   const n=Number(value);
   if(!Number.isFinite(n)) return '—';
   return '$'+n.toFixed(2);
 }
 
-function _formatProviderQuotaPercent(value){
+export function _formatProviderQuotaPercent(value){
   if(value===null||value===undefined||value==='') return '—';
   const n=Number(value);
   if(!Number.isFinite(n)) return '—';
   return Math.max(0,Math.min(100,Math.round(n)))+'%';
 }
 
-function _formatProviderQuotaReset(value){
+export function _formatProviderQuotaReset(value){
   if(!value) return '';
   const d=new Date(value);
   if(Number.isNaN(d.getTime())) return '';
   try{return d.toLocaleString();}catch(e){return value;}
 }
 
-function _formatProviderQuotaWindowLabel(accountLimits,w){
+export function _formatProviderQuotaWindowLabel(accountLimits,w){
   const raw=((w&&w.label)||t('provider_quota_window_fallback')).trim();
   const provider=((accountLimits&&accountLimits.provider)||'').toLowerCase();
   if(provider==='openai-codex'){
@@ -113,7 +115,7 @@ function _formatProviderQuotaWindowLabel(accountLimits,w){
   return raw||t('provider_quota_window_fallback');
 }
 
-function _formatProviderQuotaLastChecked(status){
+export function _formatProviderQuotaLastChecked(status){
   const accountLimits=status&&status.account_limits;
   const value=(accountLimits&&accountLimits.fetched_at)||status&&status.client_fetched_at;
   if(!value) return t('provider_quota_last_checked_after_refresh');
@@ -122,11 +124,11 @@ function _formatProviderQuotaLastChecked(status){
   try{return t('provider_quota_last_checked',d.toLocaleString());}catch(e){return t('provider_quota_last_checked',value);}
 }
 
-function _providerQuotaStateClass(value){
+export function _providerQuotaStateClass(value){
   return String(value||'unavailable').replace(/[^a-z0-9_-]/gi,'').toLowerCase()||'unavailable';
 }
 
-function _providerQuotaStatusLabel(value){
+export function _providerQuotaStatusLabel(value){
   const state=_providerQuotaStateClass(value);
   const key={
     available:'provider_quota_status_available',
@@ -141,19 +143,19 @@ function _providerQuotaStatusLabel(value){
   return key?t(key):state.replace(/_/g,' ');
 }
 
-function _providerQuotaWindowMeta(used,reset){
+export function _providerQuotaWindowMeta(used,reset){
   const meta=[];
   if(used!=='—') meta.push(t('provider_quota_used_meta',used));
   if(reset) meta.push(t('provider_quota_resets_meta',reset));
   return meta;
 }
 
-function _providerQuotaRetryAfterText(value){
+export function _providerQuotaRetryAfterText(value){
   const retry=_formatProviderQuotaReset(value);
   return retry?t('provider_quota_retry_after',retry):'';
 }
 
-function _providerQuotaUnavailableReason(credential){
+export function _providerQuotaUnavailableReason(credential){
   const structured=_providerQuotaRetryAfterText(credential&&credential.retry_after);
   if(structured) return structured;
   const raw=String((credential&&credential.unavailable_reason)||'').trim();
@@ -165,7 +167,7 @@ function _providerQuotaUnavailableReason(credential){
   return raw;
 }
 
-function _providerQuotaPoolShouldDefaultOpen(pool){
+export function _providerQuotaPoolShouldDefaultOpen(pool){
   try{
     const saved=localStorage.getItem('hermes-provider-quota-pool-open');
     if(saved==='1') return true;
@@ -175,7 +177,7 @@ function _providerQuotaPoolShouldDefaultOpen(pool){
   return count>0&&count<=3;
 }
 
-function _buildProviderQuotaPoolBreakdown(accountLimits){
+export function _buildProviderQuotaPoolBreakdown(accountLimits){
   const pool=accountLimits&&accountLimits.pool;
   if(!pool||!Array.isArray(pool.credentials)||pool.credentials.length===0) return '';
   const defaultOpen=_providerQuotaPoolShouldDefaultOpen(pool);
@@ -227,7 +229,7 @@ function _buildProviderQuotaPoolBreakdown(accountLimits){
   `;
 }
 
-function _buildProviderQuotaCard(status){
+export function _buildProviderQuotaCard(status){
   if(!status) return null;
   const card=document.createElement('div');
   const state=(status.status||'unavailable').replace(/[^a-z0-9_-]/gi,'').toLowerCase()||'unavailable';
@@ -294,7 +296,7 @@ function _buildProviderQuotaCard(status){
   return card;
 }
 
-async function renderProviderCostChart(card){
+export async function renderProviderCostChart(card){
   let history;
   try{
     history=await api('/api/provider/cost-history?provider=openrouter');
@@ -351,7 +353,7 @@ async function renderProviderCostChart(card){
   _attachBudgetControls(wrap,history,card,paceNum);
 }
 
-function _attachBudgetControls(wrap,history,card,paceNum){
+export function _attachBudgetControls(wrap,history,card,paceNum){
   const budget=history&&history.monthly_budget!=null?Number(history.monthly_budget):null;
   const row=document.createElement('div');
   row.className='provider-cost-budget-row';
@@ -434,7 +436,7 @@ function _attachBudgetControls(wrap,history,card,paceNum){
     _saveBudget(null);
   });
 }
-function _buildProviderCard(p){
+export function _buildProviderCard(p){
   const card=document.createElement('div');
   card.className='provider-card';
   card.dataset.provider=p.id;
@@ -748,7 +750,7 @@ function _buildProviderCard(p){
   });
   return card;
 }
-async function _saveProviderKey(providerId){
+export async function _saveProviderKey(providerId){
   const els=_providerCardEls.get(providerId);
   if(!els) return;
   const key=els.input.value.trim();
@@ -781,7 +783,7 @@ async function _saveProviderKey(providerId){
   }
 }
 
-async function _removeProviderKey(providerId){
+export async function _removeProviderKey(providerId){
   const els=_providerCardEls.get(providerId);
   if(!els) return;
   if(els.saveBtn){els.saveBtn.disabled=true;els.saveBtn.textContent=t('providers_removing');}
@@ -818,7 +820,7 @@ async function _removeProviderKey(providerId){
   }
 }
 
-async function _testSelfHostedConnection(providerId){
+export async function _testSelfHostedConnection(providerId){
   const els=_providerCardEls.get(providerId);
   if(!els||!els.isSelfHosted) return;
   const baseUrl=(els.baseUrlInput.value||'').trim();
@@ -880,7 +882,7 @@ async function _testSelfHostedConnection(providerId){
   }
 }
 
-async function _saveSelfHostedProvider(providerId){
+export async function _saveSelfHostedProvider(providerId){
   const els=_providerCardEls.get(providerId);
   if(!els||!els.isSelfHosted) return;
   const baseUrl=(els.baseUrlInput.value||'').trim();
@@ -926,7 +928,7 @@ async function _saveSelfHostedProvider(providerId){
 // flushes the JS-side caches so the next render rebuilds from a fresh
 // /api/models response. Wrapped in a try/catch so a UI module that hasn't
 // loaded yet (e.g. during early Settings open) cannot break the save flow.
-function _refreshModelDropdownsAfterProviderChange(){
+export function _refreshModelDropdownsAfterProviderChange(){
   try{
     if(typeof window._invalidateSlashModelCache==='function'){
       window._invalidateSlashModelCache();
@@ -945,7 +947,7 @@ function _refreshModelDropdownsAfterProviderChange(){
   }
 }
 
-async function _refreshProviderModels(providerId, btn){
+export async function _refreshProviderModels(providerId, btn){
   btn.disabled=true;
   const orig=btn.innerHTML;
   btn.innerHTML=`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg> ${t('providers_refreshing')||'Refreshing...'}`;
@@ -964,31 +966,3 @@ async function _refreshProviderModels(providerId, btn){
     btn.innerHTML=orig;
   }
 }
-
-window.HermesPanels.providers = {
-  _fetchProviderQuotaStatus,
-  loadProvidersPanel,
-  _refreshProviderQuota,
-  _formatProviderQuotaMoney,
-  _formatProviderQuotaPercent,
-  _formatProviderQuotaReset,
-  _formatProviderQuotaWindowLabel,
-  _formatProviderQuotaLastChecked,
-  _providerQuotaStateClass,
-  _providerQuotaStatusLabel,
-  _providerQuotaWindowMeta,
-  _providerQuotaRetryAfterText,
-  _providerQuotaUnavailableReason,
-  _providerQuotaPoolShouldDefaultOpen,
-  _buildProviderQuotaPoolBreakdown,
-  _buildProviderQuotaCard,
-  renderProviderCostChart,
-  _attachBudgetControls,
-  _buildProviderCard,
-  _saveProviderKey,
-  _removeProviderKey,
-  _testSelfHostedConnection,
-  _saveSelfHostedProvider,
-  _refreshModelDropdownsAfterProviderChange,
-  _refreshProviderModels,
-};

@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 UI_JS = family_source("ui")
-PANELS_PATH = ROOT / "static" / "panels.js"
 UI_PATH = ROOT / "static" / "ui.js"
 BOOT_JS = family_source("boot")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")

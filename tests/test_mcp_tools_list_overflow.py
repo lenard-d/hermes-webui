@@ -7,6 +7,7 @@ from tests.frontend_asset_contract import family_source
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
+PANEL_STATE_JS = (ROOT / "static" / "modules" / "panels" / "state.js").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
@@ -22,7 +23,7 @@ def test_mcp_tool_list_has_summary_list_and_pager_mounts():
 
 
 def test_mcp_tool_rendering_is_paginated_not_full_list_rendered():
-    assert "let _mcpToolsPageSize=5" in PANELS_JS
+    assert "_mcpToolsPageSize: 5" in PANEL_STATE_JS
     assert "const MCP_TOOLS_PAGE_SIZE_OPTIONS=[5,10,20,40]" in PANELS_JS
     assert "filtered.slice((_mcpToolsPage-1)*_mcpToolsPageSize,_mcpToolsPage*_mcpToolsPageSize)" in PANELS_JS
     assert "list.innerHTML=visible.map(tool=>" in PANELS_JS
@@ -52,7 +53,7 @@ def test_mcp_tool_search_resets_to_first_page_and_page_changes_scroll_top():
 
 
 def test_mcp_tool_empty_state_mentions_inactive_configured_servers():
-    assert "let _mcpToolsMeta={}" in PANELS_JS
+    assert "_mcpToolsMeta: {}" in PANEL_STATE_JS
     assert "mcp_tools_inactive_configured_servers" in PANELS_JS
     assert "_mcpToolsMeta=r||{};" in PANELS_JS
 

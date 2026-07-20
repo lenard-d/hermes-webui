@@ -7,7 +7,6 @@ from tests.frontend_asset_contract import family_source
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX_HTML = ROOT / "static" / "index.html"
-PANELS_JS = ROOT / "static" / "panels.js"
 DOCKER_DOC = ROOT / "docs" / "docker.md"
 
 

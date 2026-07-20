@@ -94,7 +94,7 @@ def test_session_crud_still_works(cleanup_test_sessions):
     post("/api/session/delete", {"session_id": sid})
 
 def test_static_files_still_served(cleanup_test_sessions):
-    for f in ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "panels.js", "modules/boot/index.js"]:
+    for f in ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "modules/panels/index.js", "modules/boot/index.js"]:
         src, status = get_text(f"/static/{f}")
         assert status == 200, f"/static/{f} returned {status}"
         assert len(src) > 100
@@ -178,14 +178,14 @@ def test_crons_output_still_returns_valid_job_outputs(monkeypatch, tmp_path):
     assert body["outputs"] == [{"filename": "run.md", "content": "# Cron Job\n\n## Response\nexpected output\n"}]
 
 def test_cron_history_button_in_panels_js(cleanup_test_sessions):
-    src, _ = get_family_text("panels", "/static/panels.js")
+    src, _ = get_family_text("panels", "/static/modules/panels/index.js")
     # After the main-view refactor, cron runs load inline into the detail card
     # via _loadCronDetailRuns() instead of a separate "All runs" button.
     assert "_loadCronDetailRuns" in src
     assert "cron_last_output" in src  # i18n key used by the runs card
 
 def test_cron_output_snippet_helper(cleanup_test_sessions):
-    src, _ = get_family_text("panels", "/static/panels.js")
+    src, _ = get_family_text("panels", "/static/modules/panels/index.js")
     assert "_cronOutputSnippet" in src
 
 
@@ -214,7 +214,7 @@ def test_cron_output_usage_metadata_parses_optional_fields(cleanup_test_sessions
 
 
 def test_cron_output_usage_strip_render_hook(cleanup_test_sessions):
-    src, _ = get_family_text("panels", "/static/panels.js")
+    src, _ = get_family_text("panels", "/static/modules/panels/index.js")
     css, _ = get_family_text("style", "/static/style.css")
 
     assert "_formatCronRunUsageStrip(run.usage)" in src

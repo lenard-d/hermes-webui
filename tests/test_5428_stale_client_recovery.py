@@ -51,9 +51,10 @@ def test_boot_js_calls_check_webui_version_skew():
 def test_panels_js_load_settings_calls_check_webui_version_skew():
     """loadSettingsPanel reaches the skew check through its appearance loader."""
     src = family_source("panels")
+    load_settings_start = src.index("async function loadSettingsPanel()")
     load_settings = src[
-        src.index("async function loadSettingsPanel()") :
-        src.index("window.HermesPanels.settingsPreferences", src.index("async function loadSettingsPanel()"))
+        load_settings_start :
+        src.index("function _extensionStatusLabel", load_settings_start)
     ]
     appearance_loader = src[
         src.index("function _loadSettingsAppearance(settings)") :

@@ -1,20 +1,23 @@
+import { state } from "./state.js";
+
+
+
 // Panels domain: logs and insights
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Logs panel ──
-function _selectedLogsFile() {
+export function _selectedLogsFile() {
   const el = $('logsFile');
   const value = (el && el.value) || 'agent';
   return ['agent','errors','gateway'].includes(value) ? value : 'agent';
 }
 
-function _selectedLogsTail() {
+export function _selectedLogsTail() {
   const el = $('logsTail');
   const value = Number((el && el.value) || 200);
   return [100,200,500,1000].includes(value) ? value : 200;
 }
 
-function _severityForLine(line) {
+export function _severityForLine(line) {
   const text = String(line || '').toUpperCase();
   if (/\b(ERROR|CRITICAL|TRACEBACK)\b/.test(text)) return 'error';
   if (/\b(WARNING|WARN)\b/.test(text)) return 'warning';
@@ -23,24 +26,24 @@ function _severityForLine(line) {
   return 'other';
 }
 
-function _filteredLogsLines() {
-  if (_logsSeverityFilter === 'all') return _lastLogsLines;
-  return _lastLogsLines.filter(line => {
+export function _filteredLogsLines() {
+  if (state._logsSeverityFilter === 'all') return state._lastLogsLines;
+  return state._lastLogsLines.filter(line => {
     const sev = _severityForLine(line);
-    if (_logsSeverityFilter === 'errors') return sev === 'error';
-    if (_logsSeverityFilter === 'warnings') return sev === 'warning' || sev === 'error';
+    if (state._logsSeverityFilter === 'errors') return sev === 'error';
+    if (state._logsSeverityFilter === 'warnings') return sev === 'warning' || sev === 'error';
     return true;
   });
 }
 
-function _applyLogsSeverityFilter() {
+export function _applyLogsSeverityFilter() {
   const el = $('logsSeverityFilter');
-  _logsSeverityFilter = (el && el.value) || 'all';
+  state._logsSeverityFilter = (el && el.value) || 'all';
   // Re-render from cached lines without re-fetching
-  _renderLogs({ lines: _lastLogsLines, hint: '', truncated: false, _fromFilter: true });
+  _renderLogs({ lines: state._lastLogsLines, hint: '', truncated: false, _fromFilter: true });
 }
 
-function _logLineSeverityClass(line) {
+export function _logLineSeverityClass(line) {
   const text = String(line || '').toUpperCase();
   if (/\b(WARNING|WARN)\b/.test(text)) return 'log-line-warning';
   if (/\b(DEBUG)\b/.test(text)) return 'log-line-debug';
@@ -49,13 +52,13 @@ function _logLineSeverityClass(line) {
   return '';
 }
 
-function _syncLogsWrap() {
+export function _syncLogsWrap() {
   const out = $('logsOutput');
   const wrap = $('logsWrap');
   if (out && wrap) out.classList.toggle('wrap', !!wrap.checked);
 }
 
-async function loadLogs(animate) {
+export async function loadLogs(animate) {
   const box = $('logsOutput');
   const status = $('logsStatus');
   const refreshBtn = $('logsRefreshBtn');
@@ -71,7 +74,7 @@ async function loadLogs(animate) {
     const data = await api('/api/logs?file=' + encodeURIComponent(file) + '&tail=' + encodeURIComponent(tail));
     _renderLogs(data);
   } catch(e) {
-    _lastLogsLines = [];
+    state._lastLogsLines = [];
     box.innerHTML = `<div class="logs-empty">${esc(t('error_prefix') + e.message)}</div>`;
     if (status) status.textContent = t('logs_load_failed');
   } finally {
@@ -83,18 +86,18 @@ async function loadLogs(animate) {
   }
 }
 
-function _renderLogs(data) {
+export function _renderLogs(data) {
   const box = $('logsOutput');
   const status = $('logsStatus');
   if (!box) return;
   const rawLines = Array.isArray(data && data.lines) ? data.lines : [];
   // Only update cache when loading fresh data (not when re-rendering from filter)
-  if (data && !data._fromFilter) _lastLogsLines = rawLines.slice();
+  if (data && !data._fromFilter) state._lastLogsLines = rawLines.slice();
   const displayLines = _filteredLogsLines();
   const hint = data && data.hint ? `<div class="logs-hint">${esc(data.hint)}</div>` : '';
   const truncated = data && data.truncated ? `<div class="logs-hint warn">${esc(t('logs_truncated_hint'))}</div>` : '';
-  const filterNote = _logsSeverityFilter !== 'all'
-    ? `<div class="logs-hint">${esc(displayLines.length + ' / ' + _lastLogsLines.length + ' ' + t('logs_filter_active'))}</div>`
+  const filterNote = state._logsSeverityFilter !== 'all'
+    ? `<div class="logs-hint">${esc(displayLines.length + ' / ' + state._lastLogsLines.length + ' ' + t('logs_filter_active'))}</div>`
     : '';
   if (!displayLines.length) {
     box.innerHTML = `${hint}${truncated}${filterNote}<div class="logs-empty">${esc(t('logs_empty'))}</div>`;
@@ -112,30 +115,30 @@ function _renderLogs(data) {
   }
 }
 
-function _startLogsAutoRefresh() {
-  if (_logsAutoRefreshTimer) return;
-  _logsAutoRefreshTimer = setInterval(() => {
-    if (_currentPanel !== 'logs') { _stopLogsAutoRefresh(); return; }
+export function _startLogsAutoRefresh() {
+  if (state._logsAutoRefreshTimer) return;
+  state._logsAutoRefreshTimer = setInterval(() => {
+    if (state._currentPanel !== 'logs') { _stopLogsAutoRefresh(); return; }
     const toggle = $('logsAutoRefresh');
     if (toggle && !toggle.checked) return;
     loadLogs(false);
   }, 5000);
 }
 
-function _stopLogsAutoRefresh() {
-  if (_logsAutoRefreshTimer) {
-    clearInterval(_logsAutoRefreshTimer);
-    _logsAutoRefreshTimer = null;
+export function _stopLogsAutoRefresh() {
+  if (state._logsAutoRefreshTimer) {
+    clearInterval(state._logsAutoRefreshTimer);
+    state._logsAutoRefreshTimer = null;
   }
 }
 
-function _syncLogsAutoRefresh() {
+export function _syncLogsAutoRefresh() {
   const toggle = $('logsAutoRefresh');
-  if (_currentPanel === 'logs' && (!toggle || toggle.checked)) _startLogsAutoRefresh();
+  if (state._currentPanel === 'logs' && (!toggle || toggle.checked)) _startLogsAutoRefresh();
   else _stopLogsAutoRefresh();
 }
 
-async function copyLogsAll() {
+export async function copyLogsAll() {
   const lines = _filteredLogsLines();
   const text = lines.join('\n');
   try {
@@ -154,13 +157,13 @@ const STATIC_MODEL_HEALTH_ROWS = [
   {id:'google/gemini-2.5-flash', provider:'Google', inputCostPerM:0.30, outputCostPerM:2.50, replacement:'Low-latency replacement for lighter multimodal or research turns'},
 ];
 
-function _renderModelHealthCost(row) {
+export function _renderModelHealthCost(row) {
   const input = Number(row.inputCostPerM || 0);
   const output = Number(row.outputCostPerM || 0);
   return `$${input.toFixed(2)} / $${output.toFixed(2)}`;
 }
 
-function _renderStaticModelHealthTable() {
+export function _renderStaticModelHealthTable() {
   const rows = STATIC_MODEL_HEALTH_ROWS.map(row => `<div class="insights-table-row">
     <span class="insights-model-name" title="${esc(row.id)}">${esc(row.id)}</span>
     <span>${esc(row.provider)}</span>
@@ -170,7 +173,7 @@ function _renderStaticModelHealthTable() {
   return `<details class="insights-card insights-model-health-card"><summary><span class="insights-card-title">${esc(t('insights_model_health_title'))}</span></summary><div class="insights-table insights-model-health-table"><div class="insights-table-head"><span>${esc(t('insights_model_name'))}</span><span>${esc(t('insights_model_health_provider'))}</span><span>${esc(t('insights_model_health_cost_per_m'))}</span><span>${esc(t('insights_model_health_replacement'))}</span></div>${rows}</div></details>`;
 }
 
-async function loadInsights(animate) {
+export async function loadInsights(animate) {
   const box = $('insightsContent');
   const refreshBtn = $('insightsRefreshBtn');
   if (!box) return;
@@ -198,13 +201,13 @@ async function loadInsights(animate) {
   }
 }
 
-function _formatLlmWikiTimestamp(value) {
+export function _formatLlmWikiTimestamp(value) {
   if (!value) return 'Never';
   try { return new Date(value).toLocaleString(); }
   catch (_) { return String(value); }
 }
 
-function _renderSystemHealthPanel() {
+export function _renderSystemHealthPanel() {
   return `
     <section class="insights-card system-health-panel loading" id="systemHealthPanel" aria-label="Host resource health" aria-live="polite">
       <div class="system-health-head">
@@ -232,7 +235,7 @@ function _renderSystemHealthPanel() {
     </section>`;
 }
 
-function _renderLlmWikiStatus(d) {
+export function _renderLlmWikiStatus(d) {
   const status = d || {status:'error'};
   const isReady = status.available && status.status === 'ready';
   const isEmpty = status.available && status.status === 'empty';
@@ -281,7 +284,7 @@ function _renderLlmWikiStatus(d) {
     </div>`;
 }
 
-async function _openWikiBrowser() {
+export async function _openWikiBrowser() {
   const existing = document.getElementById('wikiBrowserOverlay');
   if (existing) { existing.style.display = 'flex'; return; }
 
@@ -379,7 +382,7 @@ async function _openWikiBrowser() {
  *   - date: first date in bucket (used for date label slicing)
  *   - input_tokens, output_tokens, sessions, cost: summed across bucket
  */
-function _bucketDailyTokensForChart(rows) {
+export function _bucketDailyTokensForChart(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return [];
   const len = rows.length;
   if (len <= 30) return rows;  // per-day resolution for 7/30-day ranges
@@ -427,7 +430,7 @@ function _bucketDailyTokensForChart(rows) {
   return result;
 }
 
-function _renderSkillUsage(d) {
+export function _renderSkillUsage(d) {
   const usage = d.usage || {};
   const skillNames = d.skill_names || [];
   const totalInvocations = d.total_invocations || 0;
@@ -446,7 +449,7 @@ function _renderSkillUsage(d) {
   return `<div class="insights-card" id="skillUsageCard"><div class="insights-card-title">${esc(t('insights_skill_usage_title'))}</div><div class="skill-usage-grid" style="margin-bottom:8px"><div><span>${esc(t('insights_skill_usage_total'))}</span><strong>${totalInvocations.toLocaleString()}</strong></div><div><span>${esc(t('insights_skill_usage_skills_used'))}</span><strong>${uniqueUsed}/${skillNames.length}</strong></div></div><div class="insights-table skill-usage-table"><div class="insights-table-head"><span>${esc(t('insights_skill_usage_col_skill'))}</span><span>${esc(t('insights_skill_usage_col_uses'))}</span><span>${esc(t('insights_skill_usage_col_views'))}</span><span>${esc(t('insights_skill_usage_col_patches'))}</span><span>${esc(t('insights_skill_usage_col_share'))}</span></div>${rows}</div><div class="wiki-status-footer" style="margin-top:8px">${esc(t('insights_skill_usage_footer'))}</div></div>`;
 }
 
-function _renderInsights(d, box, wikiStatus, skillUsage) {
+export function _renderInsights(d, box, wikiStatus, skillUsage) {
   const fmtNum = n => Number(n || 0).toLocaleString();
   const fmtCost = c => {
     const value = Number(c || 0);
@@ -577,7 +580,7 @@ function _renderInsights(d, box, wikiStatus, skillUsage) {
   `;
 }
 
-async function clearConversation() {
+export async function clearConversation() {
   if(!S.session) return;
   const _clrMsg=await showConfirmDialog({title:t('clear_conversation_title'),message:t('clear_conversation_message'),confirmLabel:t('clear'),danger:true,focusCancel:true});
   if(!_clrMsg) return;
@@ -592,30 +595,3 @@ async function clearConversation() {
     showToast(t('conversation_cleared'));
   } catch(e) { setStatus(t('clear_failed') + e.message); }
 }
-
-window.HermesPanels.diagnostics = {
-  _selectedLogsFile,
-  _selectedLogsTail,
-  _severityForLine,
-  _filteredLogsLines,
-  _applyLogsSeverityFilter,
-  _logLineSeverityClass,
-  _syncLogsWrap,
-  loadLogs,
-  _renderLogs,
-  _startLogsAutoRefresh,
-  _stopLogsAutoRefresh,
-  _syncLogsAutoRefresh,
-  copyLogsAll,
-  _renderModelHealthCost,
-  _renderStaticModelHealthTable,
-  loadInsights,
-  _formatLlmWikiTimestamp,
-  _renderSystemHealthPanel,
-  _renderLlmWikiStatus,
-  _openWikiBrowser,
-  _bucketDailyTokensForChart,
-  _renderSkillUsage,
-  _renderInsights,
-  clearConversation,
-};

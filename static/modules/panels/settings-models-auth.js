@@ -1,9 +1,12 @@
-// Panels domain: authentication, updates, and auxiliary models
-window.HermesPanels = window.HermesPanels || {};
+import { state } from "./state.js";
 
-let _settingsPasswordEnvLocked=false;
-let _settingsPasswordAuthEnabled=false;
-function _setSettingsAuthButtonsVisible(active){
+import { _applyStructuredCodeViewSettings,_markSettingsDirty,_syncChatActivityDisplayModeControl,_syncTransparentEventTimestampsControl } from "./settings-navigation.js";
+import { _applyWorkspaceTodosTabVisibility,_syncSettingsMaxTokensPlaceholder } from "./settings-preferences.js";
+import { _ensureComposerControlVisibilityState,_renderComposerControlChips,_renderComposerSituationalControlChips,_setComposerControlOrder } from "./settings-state.js";
+
+// Panels domain: authentication, updates, and auxiliary models
+
+export function _setSettingsAuthButtonsVisible(active){
   const signOutBtn=$('btnSignOut');
   if(signOutBtn) signOutBtn.style.display=active?'':'none';
   const disableBtn=$('btnDisableAuth');
@@ -11,15 +14,15 @@ function _setSettingsAuthButtonsVisible(active){
   const passkeyBtn=$('btnRegisterPasskey');
   if(passkeyBtn) passkeyBtn.disabled=!active||!window.PublicKeyCredential||!navigator.credentials;
 }
-function _syncPasswordlessButton(authStatus){
+export function _syncPasswordlessButton(authStatus){
   const btn=$('btnGoPasswordless');
   if(!btn) return;
-  const can=!!(authStatus&&authStatus.auth_enabled&&authStatus.password_auth_enabled&&authStatus.passkeys_count>0&&!_settingsPasswordEnvLocked);
+  const can=!!(authStatus&&authStatus.auth_enabled&&authStatus.password_auth_enabled&&authStatus.passkeys_count>0&&!state._settingsPasswordEnvLocked);
   btn.style.display=can?'':'none';
   btn.disabled=!can;
 }
 
-function _renderSettingsAuthStatus(authStatus){
+export function _renderSettingsAuthStatus(authStatus){
   const el=$('settingsAuthStatus');
   if(!el) return;
   if(!authStatus) { el.style.display='none'; return; }
@@ -35,13 +38,13 @@ function _renderSettingsAuthStatus(authStatus){
   el.innerHTML='<span class="'+cls+'" style="font-size:11px">'+label+'</span>';
 }
 
-function _updateCurrentPasswordVisibility(){
+export function _updateCurrentPasswordVisibility(){
   const block=$('settingsCurrentPasswordBlock');
   if(!block) return;
-  block.style.display=_settingsPasswordAuthEnabled?'block':'none';
+  block.style.display=state._settingsPasswordAuthEnabled?'block':'none';
 }
 
-function _updateAuthWarningBadge(authStatus){
+export function _updateAuthWarningBadge(authStatus){
   const badges=['authWarningBadgeDesktop','authWarningBadgeMobile'];
   const authDisabled=!authStatus||!authStatus.auth_enabled;
   const acknowledged=!!(authStatus&&authStatus.auth_disabled_acknowledged);
@@ -54,7 +57,7 @@ function _updateAuthWarningBadge(authStatus){
   });
 }
 
-function _updateAuthDisabledWarning(authStatus){
+export function _updateAuthDisabledWarning(authStatus){
   const el=$('settingsAuthDisabledWarning');
   if(!el) return;
   const authDisabled=!authStatus||!authStatus.auth_enabled;
@@ -64,7 +67,7 @@ function _updateAuthDisabledWarning(authStatus){
   if(cb) cb.checked=!!(authStatus&&authStatus.auth_disabled_acknowledged);
 }
 
-async function _setAuthDisabledAck(checked){
+export async function _setAuthDisabledAck(checked){
   try{
     await api('/api/settings',{method:'POST',body:JSON.stringify({_auth_disabled_acknowledged:!!checked})});
     try{
@@ -76,20 +79,20 @@ async function _setAuthDisabledAck(checked){
   }
 }
 
-function _b64uToBytes(s){
+export function _b64uToBytes(s){
   s=String(s||'').replace(/-/g,'+').replace(/_/g,'/');
   while(s.length%4) s+='=';
   const bin=atob(s), out=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i);
   return out;
 }
-function _bytesToB64u(buf){
+export function _bytesToB64u(buf){
   const bytes=new Uint8Array(buf);let bin='';
   for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
   return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
 }
 
-async function loadPasskeys(){
+export async function loadPasskeys(){
   const list=$('passkeyList');
   const block=$('passkeysSettingsBlock');
   if(!list) return;
@@ -126,7 +129,7 @@ async function loadPasskeys(){
   }catch(e){list.textContent='Failed to load passkeys: '+e.message;}
 }
 
-async function registerPasskey(){
+export async function registerPasskey(){
   if(!window.PublicKeyCredential||!navigator.credentials){showToast('Passkeys require a supported browser and secure context.');return;}
   const label='This device';
   try{
@@ -147,14 +150,14 @@ async function registerPasskey(){
   }catch(e){showToast('Passkey registration failed: '+e.message);}
 }
 
-async function deletePasskey(id){
+export async function deletePasskey(id){
   const ok=await showConfirmDialog({title:'Remove passkey?',message:'This browser/device will no longer be able to sign in with that passkey.',confirmLabel:'Remove',danger:true,focusCancel:true});
   if(!ok) return;
   try{await api('/api/auth/passkey/delete',{method:'POST',body:JSON.stringify({id})});showToast('Passkey removed');loadPasskeys();try{_syncPasswordlessButton(await api('/api/auth/status'));}catch(_e){}}
   catch(e){showToast('Failed to remove passkey: '+e.message);}
 }
 
-function _applySavedSettingsUi(saved, body, opts){
+export function _applySavedSettingsUi(saved, body, opts){
   const {sendKey,showTokenUsage,showQuotaChip,showConversationOutline,showBusyPlaceholderHint,showTps,fadeTextEffect,showCliSessions,theme,skin,language,sidebarDensity,fontSize}=opts;
   window._sendKey=sendKey||'enter';
   window._showTokenUsage=showTokenUsage;
@@ -223,14 +226,14 @@ function _applySavedSettingsUi(saved, body, opts){
     else if(typeof stopGatewaySSE==='function') stopGatewaySSE();
   }
   _setSettingsAuthButtonsVisible(!!saved.auth_enabled);
-  _settingsDirty=false;
-  _settingsThemeOnOpen=theme;
-  _settingsSkinOnOpen=skin||'default';
-  _settingsFontSizeOnOpen=fontSize||localStorage.getItem('hermes-font-size')||'default';
+  state._settingsDirty=false;
+  state._settingsThemeOnOpen=theme;
+  state._settingsSkinOnOpen=skin||'default';
+  state._settingsFontSizeOnOpen=fontSize||localStorage.getItem('hermes-font-size')||'default';
   const bar=$('settingsUnsavedBar');
   if(bar) bar.style.display='none';
-  _settingsHermesDefaultModelOnOpen=body.default_model||_settingsHermesDefaultModelOnOpen||'';
-  if(Object.prototype.hasOwnProperty.call(body,'default_model_provider')) _settingsHermesDefaultModelProviderOnOpen=body.default_model_provider||null;
+  state._settingsHermesDefaultModelOnOpen=body.default_model||state._settingsHermesDefaultModelOnOpen||'';
+  if(Object.prototype.hasOwnProperty.call(body,'default_model_provider')) state._settingsHermesDefaultModelProviderOnOpen=body.default_model_provider||null;
   // Sync window._defaultModel so newSession() uses the just-saved default without a reload (#908).
   if(body.default_model) window._defaultModel=body.default_model;
   if(Object.prototype.hasOwnProperty.call(body,'default_model_provider')) window._activeProvider=body.default_model_provider||null;
@@ -243,7 +246,7 @@ function _applySavedSettingsUi(saved, body, opts){
 // Instant client-side badge feedback when the update channel is toggled, before
 // the server round-trip that authoritatively re-renders the badge from
 // update_channel_version. Keeps the "· Experimental" suffix in sync immediately.
-function _syncUpdateChannelBadge(channel){
+export function _syncUpdateChannelBadge(channel){
   try{
     const badge=$('settings-webui-version-badge');
     if(!badge) return;
@@ -254,7 +257,7 @@ function _syncUpdateChannelBadge(channel){
   }catch(e){}
 }
 
-async function checkUpdatesNow(channelOverride){
+export async function checkUpdatesNow(channelOverride){
   const btn=$('btnCheckUpdatesNow');
   const label=$('checkUpdatesLabel');
   const spinner=$('checkUpdatesSpinner');
@@ -338,16 +341,12 @@ async function checkUpdatesNow(channelOverride){
 }
 // ── Auxiliary Models ──────────────────────────────────────────────────────────
 
-let _auxProviders=[];       // cached provider list from /api/models
-let _auxTasks=[];           // sanitized auxiliary task configs from /api/model/auxiliary
-let _auxOriginalConfig=null; // snapshot of initial config for dirty detection
-let _mainAdvancedConfig=null; // current advanced config for the default chat model
 
-function _auxSelectStyle(){
+export function _auxSelectStyle(){
  return 'width:100%;padding:6px 8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:12px;box-sizing:border-box';
 }
 
-function _auxTaskLabelFromMeta(taskKey, taskCfg){
+export function _auxTaskLabelFromMeta(taskKey, taskCfg){
   const nameKey='settings_aux_task_'+taskKey;
   const descKey=nameKey+'_desc';
   const tName=t(nameKey);
@@ -363,7 +362,7 @@ function _auxTaskLabelFromMeta(taskKey, taskCfg){
   };
 }
 
-function _normalizeAuxiliaryTasks(rawTasks){
+export function _normalizeAuxiliaryTasks(rawTasks){
   const tasks=Array.isArray(rawTasks)?rawTasks:[];
   const out=[];
   const seen=new Set();
@@ -391,7 +390,7 @@ function _normalizeAuxiliaryTasks(rawTasks){
   return out;
 }
 
-function _buildAuxProviderOptions(sel,providers,currentProvider){
+export function _buildAuxProviderOptions(sel,providers,currentProvider){
  sel.innerHTML='';
  // "auto" = use main model
  const autoOpt=document.createElement('option');
@@ -406,7 +405,7 @@ function _buildAuxProviderOptions(sel,providers,currentProvider){
  }
 }
 
-function _buildAuxModelOptions(sel,provider,providers,currentModel){
+export function _buildAuxModelOptions(sel,provider,providers,currentModel){
  sel.innerHTML='';
  const emptyOpt=document.createElement('option');
  emptyOpt.value='';emptyOpt.textContent=t('settings_aux_model_auto')||'auto (use provider default)';
@@ -438,7 +437,7 @@ function _buildAuxModelOptions(sel,provider,providers,currentModel){
  }
 }
 
-function _onAuxProviderChange(taskKey,providers){
+export function _onAuxProviderChange(taskKey,providers){
  const provSel=$('aux-prov-'+taskKey);
  const modelSel=$('aux-model-'+taskKey);
  if(!provSel||!modelSel) return;
@@ -447,7 +446,7 @@ function _onAuxProviderChange(taskKey,providers){
  _markAuxDirty();
 }
 
-async function _onAuxModelChange(taskKey){
+export async function _onAuxModelChange(taskKey){
  const modelSel=$('aux-model-'+taskKey);
  if(!modelSel) return;
  if(modelSel.value==='__custom__'){
@@ -467,18 +466,18 @@ async function _onAuxModelChange(taskKey){
  _markAuxDirty();
 }
 
-function _markAuxDirty(){
+export function _markAuxDirty(){
  const applyBtn=$('btnApplyAuxModels');
  if(applyBtn) applyBtn.style.display='';
  _markSettingsDirty();
 }
 
-function _auxAdvancedValue(cfg,key){
+export function _auxAdvancedValue(cfg,key){
  const v=cfg&&Object.prototype.hasOwnProperty.call(cfg,key)?cfg[key]:'';
  return v===null||v===undefined?'':String(v);
 }
 
-function _ensureAuxAdvancedModal(){
+export function _ensureAuxAdvancedModal(){
  let overlay=$('auxAdvancedOverlay');
  if(overlay) return overlay;
  overlay=document.createElement('div');
@@ -506,14 +505,14 @@ function _ensureAuxAdvancedModal(){
  return overlay;
 }
 
-function _auxAdvancedInputHtml(id,label,value,desc,type='text',extraAttrs='',extraStyle=''){
+export function _auxAdvancedInputHtml(id,label,value,desc,type='text',extraAttrs='',extraStyle=''){
  const fieldName=id==='auxAdvancedApiKey'?'aux-manual-override-value':('aux-field-'+id.replace(/^auxAdvanced/,'').toLowerCase());
  const autocompleteAttr=/\bautocomplete=/.test(extraAttrs)?'':'autocomplete="off"';
  const inputAttrs=`id="${id}" name="${fieldName}" type="${type}" value="${esc(value)}" ${autocompleteAttr} autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" ${extraAttrs}`;
  return `<label style="display:grid;gap:4px;font-size:12px;color:var(--text)"><span style="font-weight:600">${esc(label)}</span><input ${inputAttrs} style="width:100%;box-sizing:border-box;padding:7px 8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-size:12px${extraStyle}"><span style="font-size:10px;color:var(--muted);line-height:1.35">${esc(desc)}</span></label>`;
 }
 
-function _mainModelSupportsServiceTier(cfg){
+export function _mainModelSupportsServiceTier(cfg){
  const selected=$('settingsModel');
  const selectedOpt=selected&&selected.selectedIndex>=0?selected.options[selected.selectedIndex]:null;
  const optgroup=selectedOpt&&selectedOpt.parentElement&&selectedOpt.parentElement.tagName==='OPTGROUP'?selectedOpt.parentElement:null;
@@ -524,7 +523,7 @@ function _mainModelSupportsServiceTier(cfg){
  return cfg&&cfg.supports_fast_tier===true;
 }
 
-function _openAuxAdvancedOptions(taskCfg,cfg){
+export function _openAuxAdvancedOptions(taskCfg,cfg){
  const isMain=taskCfg==='__main__';
  const taskKey=isMain?'__main__':(taskCfg&&typeof taskCfg==='object'&&typeof taskCfg.task==='string'?taskCfg.task:typeof taskCfg==='string'?taskCfg:'');
  const slot=isMain?{task:taskKey,label:(t('settings_label_model')||'Default model')}:_auxTaskLabelFromMeta(taskKey,taskCfg);
@@ -601,7 +600,7 @@ function _openAuxAdvancedOptions(taskCfg,cfg){
  setTimeout(()=>$('auxAdvancedBaseUrl')?.focus(),0);
 }
 
-function _bindMainAdvancedOptionsButton(){
+export function _bindMainAdvancedOptionsButton(){
  const modelSel=$('settingsModel');
  let btn=$('mainAdvancedBtn');
  if(modelSel){
@@ -641,15 +640,15 @@ function _bindMainAdvancedOptionsButton(){
  const title=t('settings_aux_advanced_button_title')||'Advanced options';
  btn.title=title;
  btn.setAttribute('aria-label',t('settings_main_advanced_button_aria')||'Advanced options for main model');
- btn.disabled=_mainAdvancedConfig===null;
+ btn.disabled=state._mainAdvancedConfig===null;
  btn.style.opacity='';
  btn.style.cursor='';
  if(btn._bound) return;
  btn._bound=true;
- btn.addEventListener('click',()=>{if(_mainAdvancedConfig!==null)_openAuxAdvancedOptions('__main__',_mainAdvancedConfig||{});});
+ btn.addEventListener('click',()=>{if(state._mainAdvancedConfig!==null)_openAuxAdvancedOptions('__main__',state._mainAdvancedConfig||{});});
 }
 
-async function _loadAuxiliaryModels(){
+export async function _loadAuxiliaryModels(){
  const container=$('auxModelsContainer');
  if(!container) return;
  container.innerHTML='<div style="color:var(--muted);font-size:12px">'+(t('settings_aux_loading')||'Loading…')+'</div>';
@@ -663,25 +662,25 @@ async function _loadAuxiliaryModels(){
   // Build provider list from /api/models groups
   // /api/models returns: { groups: [{ provider: str, provider_id: str, models: [{id,label}] }] }
   const groups=(modelsData&&modelsData.groups)||[];
-  _auxProviders=groups.filter(g=>g.provider&&((g.models&&g.models.length>0)||(g.extra_models&&g.extra_models.length>0))).map(g=>({
+  state._auxProviders=groups.filter(g=>g.provider&&((g.models&&g.models.length>0)||(g.extra_models&&g.extra_models.length>0))).map(g=>({
    slug:g.provider_id||g.provider,
    name:g.provider,
    models:[...(g.models||[]),...(g.extra_models||[])].map(m=>m.id),
   }));
   if(auxData&&Object.prototype.hasOwnProperty.call(auxData,'main')){
-   _mainAdvancedConfig=auxData.main||{};
+   state._mainAdvancedConfig=auxData.main||{};
   }else{
-   _mainAdvancedConfig=null;
+   state._mainAdvancedConfig=null;
   }
   _bindMainAdvancedOptionsButton();
-  _auxTasks=_normalizeAuxiliaryTasks((auxData&&auxData.tasks)||[]);
+  state._auxTasks=_normalizeAuxiliaryTasks((auxData&&auxData.tasks)||[]);
   // Build a quick lookup: taskKey → config
   const taskMap={};
-  for(const task of _auxTasks) taskMap[task.task]=task;
-  _auxOriginalConfig=JSON.parse(JSON.stringify(taskMap));
+  for(const task of state._auxTasks) taskMap[task.task]=task;
+  state._auxOriginalConfig=JSON.parse(JSON.stringify(taskMap));
 
   container.innerHTML='';
-  for(const task of _auxTasks){
+  for(const task of state._auxTasks){
    const cfg=taskMap[task.task]||{provider:'auto',model:''};
    const row=document.createElement('div');
    row.style.cssText='display:grid;grid-template-columns:120px 1fr 1fr 34px;gap:8px;align-items:center;margin-bottom:8px';
@@ -696,15 +695,15 @@ async function _loadAuxiliaryModels(){
    const provSel=document.createElement('select');
    provSel.id='aux-prov-'+task.task;
    provSel.style.cssText=_auxSelectStyle();
-   _buildAuxProviderOptions(provSel,_auxProviders,cfg.provider);
-   provSel.addEventListener('change',()=>_onAuxProviderChange(task.task,_auxProviders));
+   _buildAuxProviderOptions(provSel,state._auxProviders,cfg.provider);
+   provSel.addEventListener('change',()=>_onAuxProviderChange(task.task,state._auxProviders));
    row.appendChild(provSel);
 
    // Model select
    const modelSel=document.createElement('select');
    modelSel.id='aux-model-'+task.task;
    modelSel.style.cssText=_auxSelectStyle();
-   _buildAuxModelOptions(modelSel,cfg.provider,_auxProviders,cfg.model);
+   _buildAuxModelOptions(modelSel,cfg.provider,state._auxProviders,cfg.model);
    modelSel.addEventListener('change',()=>_onAuxModelChange(task.task));
    row.appendChild(modelSel);
 
@@ -752,15 +751,15 @@ async function _loadAuxiliaryModels(){
  }
 }
 
-async function _applyAuxModels(){
+export async function _applyAuxModels(){
  let saved=0;
- for(const task of _auxTasks){
+ for(const task of state._auxTasks){
   const provSel=$('aux-prov-'+task.task);
   const modelSel=$('aux-model-'+task.task);
   if(!provSel) continue;
   const provider=provSel.value;
   const model=(modelSel&&modelSel.value!=='__custom__')?(modelSel.value||''):'';
-  const orig=_auxOriginalConfig?.[task.task]||{provider:'auto',model:''};
+  const orig=state._auxOriginalConfig?.[task.task]||{provider:'auto',model:''};
   // Only save if changed
   if(provider!==orig.provider||model!==orig.model){
    try{
@@ -777,37 +776,3 @@ async function _applyAuxModels(){
  // Reload to refresh state
  _loadAuxiliaryModels();
 }
-
-window.HermesPanels.modelsAndAuth = {
-  _setSettingsAuthButtonsVisible,
-  _syncPasswordlessButton,
-  _renderSettingsAuthStatus,
-  _updateCurrentPasswordVisibility,
-  _updateAuthWarningBadge,
-  _updateAuthDisabledWarning,
-  _setAuthDisabledAck,
-  _b64uToBytes,
-  _bytesToB64u,
-  loadPasskeys,
-  registerPasskey,
-  deletePasskey,
-  _applySavedSettingsUi,
-  _syncUpdateChannelBadge,
-  checkUpdatesNow,
-  _auxSelectStyle,
-  _auxTaskLabelFromMeta,
-  _normalizeAuxiliaryTasks,
-  _buildAuxProviderOptions,
-  _buildAuxModelOptions,
-  _onAuxProviderChange,
-  _onAuxModelChange,
-  _markAuxDirty,
-  _auxAdvancedValue,
-  _ensureAuxAdvancedModal,
-  _auxAdvancedInputHtml,
-  _mainModelSupportsServiceTier,
-  _openAuxAdvancedOptions,
-  _bindMainAdvancedOptionsButton,
-  _loadAuxiliaryModels,
-  _applyAuxModels,
-};

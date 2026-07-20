@@ -1,9 +1,10 @@
 """Static regressions for mobile titlebar session title priority (#4520)."""
 import pathlib
+from tests.frontend_asset_contract import family_source
 
 ROOT = pathlib.Path(__file__).parent.parent
 HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 
 
 def test_titlebar_title_element_exists():

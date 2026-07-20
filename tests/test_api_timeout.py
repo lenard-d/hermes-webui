@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_JS = ROOT / "static" / "workspace.js"
 SESSIONS_JS = ROOT / "static" / "sessions.js"
 UI_JS = ROOT / "static" / "ui.js"
-PANELS_JS = ROOT / "static" / "panels.js"
+PANELS_JS = ROOT / "static" / "modules" / "panels" / "index.js"
 
 
 def _source(path: Path) -> str:

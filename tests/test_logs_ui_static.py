@@ -134,7 +134,7 @@ def test_logs_source_fixtures_do_not_bake_private_log_content():
             "tests/test_logs_endpoint.py",
             "tests/test_logs_ui_static.py",
             "static/index.html",
-            "static/panels.js",
+            "static/modules/panels/diagnostics.js",
         )
     )
     assert "/home/" + "michael/.hermes/logs" not in combined

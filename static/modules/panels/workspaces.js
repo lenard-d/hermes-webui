@@ -1,22 +1,24 @@
+import { state } from "./state.js";
+import { _closeMobileSidebarAfterPanelSelection,switchPanel } from "./core.js";
+import { closeProfileDropdown } from "./profiles.js";
+
+import { _loadCheckpoints } from "./settings-system.js";
+import { loadMemory } from "./skills-memory.js";
+
 // Panels domain: workspace selection and management
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Workspace management ──
-let _workspaceList = [];  // cached from /api/workspaces
-let _wsSuggestTimer = null;
-let _wsSuggestReq = 0;
-let _wsSuggestIndex = -1;
 
-function closeWorkspacePathSuggestions(){
+export function closeWorkspacePathSuggestions(){
   const box=$('workspaceFormPathSuggestions');
   if(box){
     box.innerHTML='';
     box.style.display='none';
   }
-  _wsSuggestIndex=-1;
+  state._wsSuggestIndex=-1;
 }
 
-function _applyWorkspaceSuggestion(path){
+export function _applyWorkspaceSuggestion(path){
   const input=$('workspaceFormPath');
   const next=(path||'').endsWith('/')?(path||''):`${path||''}/`;
   if(input){
@@ -27,7 +29,7 @@ function _applyWorkspaceSuggestion(path){
   scheduleWorkspacePathSuggestions();
 }
 
-function _highlightWorkspaceSuggestion(idx){
+export function _highlightWorkspaceSuggestion(idx){
   const box=$('workspaceFormPathSuggestions');
   if(!box)return;
   const items=[...box.querySelectorAll('.ws-suggest-item')];
@@ -38,13 +40,13 @@ function _highlightWorkspaceSuggestion(idx){
   });
 }
 
-function _renderWorkspacePathSuggestions(paths){
+export function _renderWorkspacePathSuggestions(paths){
   const box=$('workspaceFormPathSuggestions');
   if(!box)return;
   box.innerHTML='';
   if(!paths || !paths.length){
     box.style.display='none';
-    _wsSuggestIndex=-1;
+    state._wsSuggestIndex=-1;
     return;
   }
   paths.forEach((path, idx)=>{
@@ -56,29 +58,29 @@ function _renderWorkspacePathSuggestions(paths){
     item.className='ws-suggest-item';
     item.innerHTML=`<span class="ws-suggest-leaf">${esc(leaf)}</span><span class="ws-suggest-parent">${esc(parent)}</span>`;
     item.dataset.path=path;
-    item.onmouseenter=()=>{_wsSuggestIndex=idx;_highlightWorkspaceSuggestion(idx);};
+    item.onmouseenter=()=>{state._wsSuggestIndex=idx;_highlightWorkspaceSuggestion(idx);};
     item.onmousedown=(e)=>{e.preventDefault();_applyWorkspaceSuggestion(path);};
     box.appendChild(item);
   });
   box.style.display='block';
-  _wsSuggestIndex=0;
-  _highlightWorkspaceSuggestion(_wsSuggestIndex);
+  state._wsSuggestIndex=0;
+  _highlightWorkspaceSuggestion(state._wsSuggestIndex);
 }
 
-async function _loadWorkspacePathSuggestions(prefix){
-  const reqId=++_wsSuggestReq;
+export async function _loadWorkspacePathSuggestions(prefix){
+  const reqId=++state._wsSuggestReq;
   try{
     const qs=new URLSearchParams({prefix:prefix||''}).toString();
     const data=await api(`/api/workspaces/suggest?${qs}`);
-    if(reqId!==_wsSuggestReq)return;
+    if(reqId!==state._wsSuggestReq)return;
     _renderWorkspacePathSuggestions(data.suggestions||[]);
   }catch(_){
-    if(reqId!==_wsSuggestReq)return;
+    if(reqId!==state._wsSuggestReq)return;
     closeWorkspacePathSuggestions();
   }
 }
 
-function scheduleWorkspacePathSuggestions(){
+export function scheduleWorkspacePathSuggestions(){
   const input=$('workspaceFormPath');
   if(!input)return;
   const prefix=input.value.trim();
@@ -86,22 +88,22 @@ function scheduleWorkspacePathSuggestions(){
     closeWorkspacePathSuggestions();
     return;
   }
-  if(_wsSuggestTimer) clearTimeout(_wsSuggestTimer);
-  _wsSuggestTimer=setTimeout(()=>{
+  if(state._wsSuggestTimer) clearTimeout(state._wsSuggestTimer);
+  state._wsSuggestTimer=setTimeout(()=>{
     _loadWorkspacePathSuggestions(prefix);
   }, 120);
 }
 
-function getWorkspaceFriendlyName(path){
+export function getWorkspaceFriendlyName(path){
   // Look up the friendly name from the workspace list cache, fallback to last path segment
-  if(_workspaceList && _workspaceList.length){
-    const match=_workspaceList.find(w=>w.path===path);
+  if(state._workspaceList && state._workspaceList.length){
+    const match=state._workspaceList.find(w=>w.path===path);
     if(match && match.name) return match.name;
   }
   return path.split('/').filter(Boolean).pop()||path;
 }
 
-function syncWorkspaceDisplays(){
+export function syncWorkspaceDisplays(){
   const hasSession=!!(S.session&&S.session.workspace);
   // Fall back to the profile default workspace when no session is active yet.
   // S._profileDefaultWorkspace is set during boot and profile switches from /api/settings.
@@ -141,18 +143,18 @@ function syncWorkspaceDisplays(){
   }
 }
 
-async function loadWorkspaceList(){
+export async function loadWorkspaceList(){
   try{
     const data = await api('/api/workspaces');
     if(typeof syncTerminalBackendState==='function') syncTerminalBackendState(data);
-    _workspaceList = data.workspaces || [];
+    state._workspaceList = data.workspaces || [];
     syncWorkspaceDisplays();
     if(typeof syncTerminalButton==='function') syncTerminalButton();
     return data;
   }catch(e){ return {workspaces:[], last:''}; }
 }
 
-function _setWorkspaceDropdownOpenState(dd,open){
+export function _setWorkspaceDropdownOpenState(dd,open){
   if(!dd)return;
   dd.classList.toggle('open',!!open);
   dd.hidden=!open;
@@ -166,28 +168,28 @@ function _setWorkspaceDropdownOpenState(dd,open){
   }
 }
 
-function _getComposerWorkspaceFocusTarget(){
+export function _getComposerWorkspaceFocusTarget(){
   const panel=(typeof $==='function')?$('composerMobileConfigPanel'):null;
   const mobileAction=(typeof $==='function')?$('composerMobileWorkspaceAction'):null;
   if(panel&&panel.classList.contains('open')&&mobileAction&&!mobileAction.disabled) return mobileAction;
   return (typeof $==='function')?$('composerWorkspaceChip'):null;
 }
 
-function _focusComposerWorkspaceTarget(target){
+export function _focusComposerWorkspaceTarget(target){
   if(target&&!target.disabled&&typeof target.focus==='function'){
     try{target.focus({preventScroll:true});}
     catch(_){target.focus();}
   }
 }
 
-function _shouldRestoreComposerWorkspaceFocus(dd){
+export function _shouldRestoreComposerWorkspaceFocus(dd){
   if(typeof document==='undefined') return true;
   const active=document.activeElement;
   if(!active||active===document.body) return true;
   return !!(dd&&dd.contains(active));
 }
 
-function _renderWorkspaceAction(label, meta, iconSvg, onClick){
+export function _renderWorkspaceAction(label, meta, iconSvg, onClick){
   const opt=document.createElement('div');
   opt.className='ws-opt ws-opt-action';
   opt.innerHTML=`<span class="ws-opt-icon">${iconSvg}</span><span><span class="ws-opt-name">${esc(label)}</span>${meta?`<span class="ws-opt-meta">${esc(meta)}</span>`:''}</span>`;
@@ -195,7 +197,7 @@ function _renderWorkspaceAction(label, meta, iconSvg, onClick){
   return opt;
 }
 
-function _positionComposerWsDropdown(){
+export function _positionComposerWsDropdown(){
   const dd=$('composerWsDropdown');
   const chip=$('composerWorkspaceGroup')||$('composerWorkspaceChip');
   const mobileAction=$('composerMobileWorkspaceAction');
@@ -212,9 +214,9 @@ function _positionComposerWsDropdown(){
   dd.style.left=`${left}px`;
 }
 
-function _positionProfileDropdown(){
+export function _positionProfileDropdown(){
   const dd=$('profileDropdown');
-  const trigger=_profileDropdownTrigger||$('profileChip');
+  const trigger=state._profileDropdownTrigger||$('profileChip');
   if(!dd||!trigger)return;
   const rect=trigger.getBoundingClientRect();
   const gap=4;
@@ -237,7 +239,7 @@ function _positionProfileDropdown(){
   }
 }
 
-function renderWorkspaceDropdownInto(dd, workspaces, currentWs){
+export function renderWorkspaceDropdownInto(dd, workspaces, currentWs){
   if(!dd)return;
   dd.innerHTML='';
 
@@ -331,7 +333,7 @@ function renderWorkspaceDropdownInto(dd, workspaces, currentWs){
   ));
 }
 
-function toggleWsDropdown(){
+export function toggleWsDropdown(){
   const dd=$('wsDropdown');
   if(!dd)return;
   const open=dd.classList.contains('open');
@@ -345,7 +347,7 @@ function toggleWsDropdown(){
   }
 }
 
-function toggleComposerWsDropdown(){
+export function toggleComposerWsDropdown(){
   const dd=$('composerWsDropdown');
   const chip=$('composerWorkspaceChip');
   const mobileAction=$('composerMobileWorkspaceAction');
@@ -374,7 +376,7 @@ function toggleComposerWsDropdown(){
   }
 }
 
-function closeWsDropdown(){
+export function closeWsDropdown(){
   const dd=$('wsDropdown');
   const composerDd=$('composerWsDropdown');
   const composerChip=$('composerWorkspaceChip');
@@ -402,14 +404,14 @@ window.addEventListener('resize',()=>{
   if(dd&&dd.classList.contains('open')) _positionComposerWsDropdown();
 });
 
-async function loadWorkspacesPanel(){
+export async function loadWorkspacesPanel(){
   const panel=$('workspacesPanel');
   if(!panel)return;
   const data=await loadWorkspaceList();
   renderWorkspacesPanel(data.workspaces);
 }
 
-function renderWorkspacesPanel(workspaces){
+export function renderWorkspacesPanel(workspaces){
   const panel=$('workspacesPanel');
   panel.innerHTML='';
   const activePath = S.session ? S.session.workspace : '';
@@ -430,7 +432,7 @@ function renderWorkspacesPanel(workspaces){
     // Click on info area only — not on drag handle
     const info=row.querySelector('.ws-row-info');
     if(info) info.onclick = (e) => { e.stopPropagation(); openWorkspaceDetail(w.path, row); };
-    if (_currentWorkspaceDetail && _currentWorkspaceDetail.path === w.path) row.classList.add('active');
+    if (state._currentWorkspaceDetail && state._currentWorkspaceDetail.path === w.path) row.classList.add('active');
 
     // ── Drag-and-drop reorder ──
     row.addEventListener('dragstart', (e) => {
@@ -490,15 +492,15 @@ function renderWorkspacesPanel(workspaces){
   hint.textContent=t('workspace_paths_validated_hint');
   panel.appendChild(hint);
   // Re-render detail if we have one cached and we're not in a form
-  if (_currentWorkspaceDetail && _workspaceMode !== 'create' && _workspaceMode !== 'edit') {
-    const refreshed = workspaces.find(w => w.path === _currentWorkspaceDetail.path);
+  if (state._currentWorkspaceDetail && state._workspaceMode !== 'create' && state._workspaceMode !== 'edit') {
+    const refreshed = workspaces.find(w => w.path === state._currentWorkspaceDetail.path);
     if (refreshed) _renderWorkspaceDetail(refreshed);
     else _clearWorkspaceDetail();
   }
 }
 
-function _renderWorkspaceDetail(ws){
-  _currentWorkspaceDetail = ws;
+export function _renderWorkspaceDetail(ws){
+  state._currentWorkspaceDetail = ws;
   const title = $('workspaceDetailTitle');
   const body = $('workspaceDetailBody');
   const empty = $('workspaceDetailEmpty');
@@ -528,12 +530,12 @@ function _renderWorkspaceDetail(ws){
     </div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _workspaceMode = 'read';
+  state._workspaceMode = 'read';
   _setWorkspaceHeaderButtons('read', ws);
   _loadCheckpoints(ws.path);
 }
 
-function _setWorkspaceHeaderButtons(mode, ws){
+export function _setWorkspaceHeaderButtons(mode, ws){
   const header = $('mainWorkspaces') && $('mainWorkspaces').querySelector('.main-view-header');
   const actBtn = $('btnActivateWorkspaceDetail');
   const editBtn = $('btnEditWorkspaceDetail');
@@ -559,21 +561,21 @@ function _setWorkspaceHeaderButtons(mode, ws){
   }
 }
 
-function openWorkspaceDetail(path, el){
-  if (!_workspaceList) return;
-  const ws = _workspaceList.find(w => w.path === path);
+export function openWorkspaceDetail(path, el){
+  if (!state._workspaceList) return;
+  const ws = state._workspaceList.find(w => w.path === path);
   if (!ws) return;
   document.querySelectorAll('.ws-row').forEach(e => e.classList.remove('active'));
   const target = el || document.querySelector(`.ws-row[data-path="${CSS.escape(path)}"]`);
   if (target) target.classList.add('active');
-  _workspacePreFormDetail = null;
+  state._workspacePreFormDetail = null;
   _renderWorkspaceDetail(ws);
   _closeMobileSidebarAfterPanelSelection();
 }
 
-function _clearWorkspaceDetail(){
-  _currentWorkspaceDetail = null;
-  _workspaceMode = 'empty';
+export function _clearWorkspaceDetail(){
+  state._currentWorkspaceDetail = null;
+  state._workspaceMode = 'empty';
   const title = $('workspaceDetailTitle');
   const body = $('workspaceDetailBody');
   const empty = $('workspaceDetailEmpty');
@@ -583,42 +585,42 @@ function _clearWorkspaceDetail(){
   _setWorkspaceHeaderButtons('empty');
 }
 
-async function activateCurrentWorkspace(){
-  if (!_currentWorkspaceDetail) return;
-  await switchToWorkspace(_currentWorkspaceDetail.path, _currentWorkspaceDetail.name);
+export async function activateCurrentWorkspace(){
+  if (!state._currentWorkspaceDetail) return;
+  await switchToWorkspace(state._currentWorkspaceDetail.path, state._currentWorkspaceDetail.name);
   // Re-render detail after activation so the active badge updates
-  _renderWorkspaceDetail(_currentWorkspaceDetail);
+  _renderWorkspaceDetail(state._currentWorkspaceDetail);
 }
 
-async function deleteCurrentWorkspace(){
-  if (!_currentWorkspaceDetail) return;
-  const path = _currentWorkspaceDetail.path;
+export async function deleteCurrentWorkspace(){
+  if (!state._currentWorkspaceDetail) return;
+  const path = state._currentWorkspaceDetail.path;
   const _ok = await showConfirmDialog({title:t('workspace_remove_confirm_title'),message:t('workspace_remove_confirm_message',path),confirmLabel:t('remove'),danger:true,focusCancel:true});
   if(!_ok) return;
   try{
     const data=await api('/api/workspaces/remove',{method:'POST',body:JSON.stringify({path})});
-    _workspaceList=data.workspaces;
+    state._workspaceList=data.workspaces;
     _clearWorkspaceDetail();
     renderWorkspacesPanel(data.workspaces);
     showToast(t('workspace_removed'));
   }catch(e){setStatus(t('remove_failed')+e.message);}
 }
 
-function openWorkspaceCreate(){
-  if (typeof switchPanel === 'function' && _currentPanel !== 'workspaces') switchPanel('workspaces');
-  _workspacePreFormDetail = _currentWorkspaceDetail ? { ..._currentWorkspaceDetail } : null;
-  _workspaceMode = 'create';
+export function openWorkspaceCreate(){
+  if (typeof switchPanel === 'function' && state._currentPanel !== 'workspaces') switchPanel('workspaces');
+  state._workspacePreFormDetail = state._currentWorkspaceDetail ? { ..._currentWorkspaceDetail } : null;
+  state._workspaceMode = 'create';
   _renderWorkspaceForm({ name:'', path:'', isEdit:false });
 }
 
-function editCurrentWorkspace(){
-  if (!_currentWorkspaceDetail) return;
-  _workspacePreFormDetail = { ..._currentWorkspaceDetail };
-  _workspaceMode = 'edit';
-  _renderWorkspaceForm({ name: _currentWorkspaceDetail.name || '', path: _currentWorkspaceDetail.path || '', isEdit: true });
+export function editCurrentWorkspace(){
+  if (!state._currentWorkspaceDetail) return;
+  state._workspacePreFormDetail = { ..._currentWorkspaceDetail };
+  state._workspaceMode = 'edit';
+  _renderWorkspaceForm({ name: state._currentWorkspaceDetail.name || '', path: state._currentWorkspaceDetail.path || '', isEdit: true });
 }
 
-function _renderWorkspaceForm({ name, path, isEdit }){
+export function _renderWorkspaceForm({ name, path, isEdit }){
   const title = $('workspaceDetailTitle');
   const body = $('workspaceDetailBody');
   const empty = $('workspaceDetailEmpty');
@@ -654,18 +656,18 @@ function _renderWorkspaceForm({ name, path, isEdit }){
   if (focus) focus.focus();
 }
 
-function cancelWorkspaceForm(){
+export function cancelWorkspaceForm(){
   closeWorkspacePathSuggestions();
-  if (_workspacePreFormDetail) {
-    const snap = _workspacePreFormDetail;
-    _workspacePreFormDetail = null;
+  if (state._workspacePreFormDetail) {
+    const snap = state._workspacePreFormDetail;
+    state._workspacePreFormDetail = null;
     _renderWorkspaceDetail(snap);
     return;
   }
   _clearWorkspaceDetail();
 }
 
-async function saveWorkspaceForm(){
+export async function saveWorkspaceForm(){
   const nameEl = $('workspaceFormName');
   const pathEl = $('workspaceFormPath');
   const errEl = $('workspaceFormError');
@@ -675,31 +677,31 @@ async function saveWorkspaceForm(){
   errEl.style.display = 'none';
   if (!path) { errEl.textContent = t('workspace_path_required') || 'Path is required'; errEl.style.display = ''; return; }
   try {
-    if (_workspaceMode === 'edit' && _currentWorkspaceDetail) {
-      const targetPath = _currentWorkspaceDetail.path;
-      const newName = name || _currentWorkspaceDetail.name || '';
+    if (state._workspaceMode === 'edit' && state._currentWorkspaceDetail) {
+      const targetPath = state._currentWorkspaceDetail.path;
+      const newName = name || state._currentWorkspaceDetail.name || '';
       await api('/api/workspaces/rename', { method:'POST', body: JSON.stringify({ path: targetPath, name: newName }) });
       // Refresh list and re-render detail
       const data = await api('/api/workspaces');
-      _workspaceList = data.workspaces || [];
-      _workspacePreFormDetail = null;
+      state._workspaceList = data.workspaces || [];
+      state._workspacePreFormDetail = null;
       showToast(t('workspace_renamed') || t('workspace_added'));
-      renderWorkspacesPanel(_workspaceList);
+      renderWorkspacesPanel(state._workspaceList);
       openWorkspaceDetail(targetPath);
       return;
     }
     const data = await api('/api/workspaces/add', { method:'POST', body: JSON.stringify({ path }) });
-    _workspaceList = data.workspaces || [];
-    _workspacePreFormDetail = null;
+    state._workspaceList = data.workspaces || [];
+    state._workspacePreFormDetail = null;
     // Apply rename if a friendly name was supplied
     if (name) {
       try { await api('/api/workspaces/rename', { method:'POST', body: JSON.stringify({ path, name }) }); } catch(_) {}
       const refreshed = await api('/api/workspaces');
-      _workspaceList = refreshed.workspaces || _workspaceList;
+      state._workspaceList = refreshed.workspaces || state._workspaceList;
     }
-    renderWorkspacesPanel(_workspaceList);
+    renderWorkspacesPanel(state._workspaceList);
     showToast(t('workspace_added'));
-    const added = _workspaceList.find(w => w.path === path) || _workspaceList[_workspaceList.length - 1];
+    const added = state._workspaceList.find(w => w.path === path) || state._workspaceList[state._workspaceList.length - 1];
     if (added) openWorkspaceDetail(added.path);
   } catch (e) {
     errEl.textContent = t('error_prefix') + e.message;
@@ -708,8 +710,8 @@ async function saveWorkspaceForm(){
 }
 
 // Back-compat: any legacy caller of addWorkspace() opens the new form instead.
-function addWorkspace(){ openWorkspaceCreate(); }
-function _wireWorkspaceFormPathSuggestions(){
+export function addWorkspace(){ openWorkspaceCreate(); }
+export function _wireWorkspaceFormPathSuggestions(){
   const input=$('workspaceFormPath');
   if(!input) return;
   input.oninput=()=>scheduleWorkspacePathSuggestions();
@@ -725,14 +727,14 @@ function _wireWorkspaceFormPathSuggestions(){
     }
     if(e.key==='ArrowDown'){
       e.preventDefault();
-      _wsSuggestIndex=Math.min(items.length-1,Math.max(-1,_wsSuggestIndex)+1);
-      _highlightWorkspaceSuggestion(_wsSuggestIndex);
+      state._wsSuggestIndex=Math.min(items.length-1,Math.max(-1,state._wsSuggestIndex)+1);
+      _highlightWorkspaceSuggestion(state._wsSuggestIndex);
       return;
     }
     if(e.key==='ArrowUp'){
       e.preventDefault();
-      _wsSuggestIndex=_wsSuggestIndex<=0?0:_wsSuggestIndex-1;
-      _highlightWorkspaceSuggestion(_wsSuggestIndex);
+      state._wsSuggestIndex=state._wsSuggestIndex<=0?0:state._wsSuggestIndex-1;
+      _highlightWorkspaceSuggestion(state._wsSuggestIndex);
       return;
     }
     if(e.key==='Escape'){
@@ -740,14 +742,14 @@ function _wireWorkspaceFormPathSuggestions(){
       closeWorkspacePathSuggestions();
       return;
     }
-    if(e.key==='Enter' && _wsSuggestIndex>=0 && items[_wsSuggestIndex]){
+    if(e.key==='Enter' && state._wsSuggestIndex>=0 && items[state._wsSuggestIndex]){
       e.preventDefault();
-      _applyWorkspaceSuggestion(items[_wsSuggestIndex].dataset.path||'');
+      _applyWorkspaceSuggestion(items[state._wsSuggestIndex].dataset.path||'');
       return;
     }
-    if(e.key==='Tab' && _wsSuggestIndex>=0 && items[_wsSuggestIndex]){
+    if(e.key==='Tab' && state._wsSuggestIndex>=0 && items[state._wsSuggestIndex]){
       e.preventDefault();
-      _applyWorkspaceSuggestion(items[_wsSuggestIndex].dataset.path||'');
+      _applyWorkspaceSuggestion(items[state._wsSuggestIndex].dataset.path||'');
       return;
     }
   };
@@ -757,18 +759,18 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.workspace-form-path-wrap')) closeWorkspacePathSuggestions();
 });
 
-async function removeWorkspace(path){
+export async function removeWorkspace(path){
   const _rmWs=await showConfirmDialog({title:t('workspace_remove_confirm_title'),message:t('workspace_remove_confirm_message',path),confirmLabel:t('remove'),danger:true,focusCancel:true});
   if(!_rmWs) return;
   try{
     const data=await api('/api/workspaces/remove',{method:'POST',body:JSON.stringify({path})});
-    _workspaceList=data.workspaces;
+    state._workspaceList=data.workspaces;
     renderWorkspacesPanel(data.workspaces);
     showToast(t('workspace_removed'));
   }catch(e){setStatus(t('remove_failed')+e.message);}
 }
 
-async function promptWorkspacePath(){
+export async function promptWorkspacePath(){
   // Opus review Q6: if called from blank page (no session), auto-create one first.
   if(!S.session){
     const ws=(typeof S._profileDefaultWorkspace==='string'&&S._profileDefaultWorkspace)||'';
@@ -792,8 +794,8 @@ async function promptWorkspacePath(){
   if(!path)return;
   try{
     const data=await api('/api/workspaces/add',{method:'POST',body:JSON.stringify({path})});
-    _workspaceList=data.workspaces||[];
-    const target=_workspaceList[_workspaceList.length-1];
+    state._workspaceList=data.workspaces||[];
+    const target=state._workspaceList[state._workspaceList.length-1];
     if(!target) throw new Error(t('workspace_not_added'));
     await switchToWorkspace(target.path,target.name);
   }catch(e){
@@ -805,7 +807,7 @@ async function promptWorkspacePath(){
   }
 }
 
-async function switchToWorkspace(path,name){
+export async function switchToWorkspace(path,name){
   // Opus review Q6: if called from blank page, auto-create a session bound to
   // the requested workspace so the switch doesn't silently no-op.
   if(!S.session){
@@ -887,48 +889,7 @@ async function switchToWorkspace(path,name){
       typeof _focusComposerWorkspaceTarget==='function'
     ) _focusComposerWorkspaceTarget(restoreComposerFocusTarget);
     await loadDir('.');
-    if (_currentPanel === 'memory') await loadMemory(true);
+    if (state._currentPanel === 'memory') await loadMemory(true);
     showToast(t('workspace_switched_to',name||getWorkspaceFriendlyName(path)));
   }catch(e){setStatus(t('switch_failed')+e.message);}
 }
-
-window.HermesPanels.workspaces = {
-  closeWorkspacePathSuggestions,
-  _applyWorkspaceSuggestion,
-  _highlightWorkspaceSuggestion,
-  _renderWorkspacePathSuggestions,
-  _loadWorkspacePathSuggestions,
-  scheduleWorkspacePathSuggestions,
-  getWorkspaceFriendlyName,
-  syncWorkspaceDisplays,
-  loadWorkspaceList,
-  _setWorkspaceDropdownOpenState,
-  _getComposerWorkspaceFocusTarget,
-  _focusComposerWorkspaceTarget,
-  _shouldRestoreComposerWorkspaceFocus,
-  _renderWorkspaceAction,
-  _positionComposerWsDropdown,
-  _positionProfileDropdown,
-  renderWorkspaceDropdownInto,
-  toggleWsDropdown,
-  toggleComposerWsDropdown,
-  closeWsDropdown,
-  loadWorkspacesPanel,
-  renderWorkspacesPanel,
-  _renderWorkspaceDetail,
-  _setWorkspaceHeaderButtons,
-  openWorkspaceDetail,
-  _clearWorkspaceDetail,
-  activateCurrentWorkspace,
-  deleteCurrentWorkspace,
-  openWorkspaceCreate,
-  editCurrentWorkspace,
-  _renderWorkspaceForm,
-  cancelWorkspaceForm,
-  saveWorkspaceForm,
-  addWorkspace,
-  _wireWorkspaceFormPathSuggestions,
-  removeWorkspace,
-  promptWorkspacePath,
-  switchToWorkspace,
-};

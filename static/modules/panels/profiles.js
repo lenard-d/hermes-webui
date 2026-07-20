@@ -1,21 +1,25 @@
+import { state } from "./state.js";
+import { _closeMobileSidebarAfterPanelSelection,_syncMobileSidebarPanelFromMainView,switchPanel } from "./core.js";
+import { _clearCronDetail } from "./cron-editor.js";
+import { loadCrons } from "./cron-list.js";
+import { loadKanban } from "./kanban-board.js";
+import { _invalidateKanbanProfileCache } from "./kanban-tasks.js";
+import { _resetCronUnreadForProfileSwitch } from "./runtime-alerts.js";
+import { _applyTabOrder,_applyTabVisibility,_ensureComposerControlVisibilityState,_renderComposerControlChips,_renderComposerSituationalControlChips,_setComposerControlOrder,_setHiddenTabs,_setTabOrder } from "./settings-state.js";
+import { loadMemory,loadSkills } from "./skills-memory.js";
+import { _positionProfileDropdown,closeWsDropdown,loadWorkspaceList,loadWorkspacesPanel } from "./workspaces.js";
+
 // Panels domain: profile rendering, switching, and editing
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Profile panel + dropdown ──
-let _profilesCache = null;
-let _profileDropdownFetchPromise = null;
-let _profileDropdownCacheLoadedFromStorage = false;
 const PROFILE_DROPDOWN_CACHE_KEY = 'hermes-webui-profile-dropdown-cache-v1';
 const PROFILE_DROPDOWN_CACHE_TTL_MS = 5 * 60 * 1000;
-let _profileSwitchGeneration = 0;
-let _profileDropdownTrigger = null;  // tracks which element triggered the dropdown
-let _profileDropdownOpenGeneration = 0;
 
-function _profileDropdownClearStoredCache(){
+export function _profileDropdownClearStoredCache(){
   try{localStorage.removeItem(PROFILE_DROPDOWN_CACHE_KEY);}catch(_){}
 }
 
-function _profileDropdownDataCacheUsable(data){
+export function _profileDropdownDataCacheUsable(data){
   return !!(
     data &&
     Array.isArray(data.profiles) &&
@@ -33,13 +37,13 @@ function _profileDropdownDataCacheUsable(data){
   );
 }
 
-function _profileDropdownCacheUsable(data){
+export function _profileDropdownCacheUsable(data){
   return !!(_profileDropdownDataCacheUsable(data) && data.single_profile_mode !== true);
 }
 
-function _profileDropdownReadStoredCache(){
-  if(_profileDropdownCacheLoadedFromStorage) return _profileDropdownCacheUsable(_profilesCache) ? _profilesCache : null;
-  _profileDropdownCacheLoadedFromStorage = true;
+export function _profileDropdownReadStoredCache(){
+  if(state._profileDropdownCacheLoadedFromStorage) return _profileDropdownCacheUsable(state._profilesCache) ? state._profilesCache : null;
+  state._profileDropdownCacheLoadedFromStorage = true;
   try{
     const raw=localStorage.getItem(PROFILE_DROPDOWN_CACHE_KEY);
     if(!raw) return null;
@@ -47,34 +51,34 @@ function _profileDropdownReadStoredCache(){
     if(!parsed || typeof parsed.ts!=='number' || !parsed.data) { _profileDropdownClearStoredCache(); return null; }
     if(Date.now()-parsed.ts>PROFILE_DROPDOWN_CACHE_TTL_MS) { _profileDropdownClearStoredCache(); return null; }
     if(!_profileDropdownCacheUsable(parsed.data)) { _profileDropdownClearStoredCache(); return null; }
-    _profilesCache = parsed.data;
-    return _profilesCache;
+    state._profilesCache = parsed.data;
+    return state._profilesCache;
   }catch(_){_profileDropdownClearStoredCache();return null;}
 }
 
-function _profileDropdownWriteStoredCache(data){
+export function _profileDropdownWriteStoredCache(data){
   if(!_profileDropdownCacheUsable(data)) { _profileDropdownClearStoredCache(); return; }
   try{localStorage.setItem(PROFILE_DROPDOWN_CACHE_KEY, JSON.stringify({ts:Date.now(), data}));}catch(_){}
 }
 
-function _profileDropdownBestCachedData(){
-  if(_profileDropdownCacheUsable(_profilesCache)) return _profilesCache;
-  if(_profileDropdownDataCacheUsable(_profilesCache)) return null;
-  _profilesCache = null;
+export function _profileDropdownBestCachedData(){
+  if(_profileDropdownCacheUsable(state._profilesCache)) return state._profilesCache;
+  if(_profileDropdownDataCacheUsable(state._profilesCache)) return null;
+  state._profilesCache = null;
   return _profileDropdownReadStoredCache();
 }
 
-function _profileDropdownFetchFresh(){
-  if(_profileDropdownFetchPromise) return _profileDropdownFetchPromise;
-  _profileDropdownFetchPromise = api('/api/profiles', {timeoutToast:false}).then(data=>{
-    if(_profileDropdownDataCacheUsable(data)) _profilesCache = data;
+export function _profileDropdownFetchFresh(){
+  if(state._profileDropdownFetchPromise) return state._profileDropdownFetchPromise;
+  state._profileDropdownFetchPromise = api('/api/profiles', {timeoutToast:false}).then(data=>{
+    if(_profileDropdownDataCacheUsable(data)) state._profilesCache = data;
     _profileDropdownWriteStoredCache(data);
     return data;
-  }).finally(()=>{ _profileDropdownFetchPromise = null; });
-  return _profileDropdownFetchPromise;
+  }).finally(()=>{ state._profileDropdownFetchPromise = null; });
+  return state._profileDropdownFetchPromise;
 }
 
-function _warmProfileDropdownCache(){
+export function _warmProfileDropdownCache(){
   _profileDropdownBestCachedData();
   _profileDropdownFetchFresh().catch(()=>{});
 }
@@ -87,41 +91,41 @@ if(typeof window!=='undefined'){
   },{once:true});
 }
 
-function _renderProfileDropdownLoading(){
+export function _renderProfileDropdownLoading(){
   const dd=$('profileDropdown');
   if(!dd)return;
   dd.innerHTML=`<div class="profile-opt profile-opt-loading"><div class="profile-opt-name">${esc(t('loading')||'Loading...')}</div></div>`;
 }
 
-function _openProfileDropdownShell(){
+export function _openProfileDropdownShell(){
   const dd=$('profileDropdown');
   if(!dd)return;
   dd.classList.add('open');
   _positionProfileDropdown();
   const chip=$('profileChip');
-  if(chip && _profileDropdownTrigger===chip) chip.classList.add('active');
+  if(chip && state._profileDropdownTrigger===chip) chip.classList.add('active');
   const tbtn=$('titlebarProfileBtn');
-  if(tbtn && _profileDropdownTrigger===tbtn) tbtn.classList.add('active');
+  if(tbtn && state._profileDropdownTrigger===tbtn) tbtn.classList.add('active');
 }
 
-async function _profileSwitchPanelLoad(){
+export async function _profileSwitchPanelLoad(){
   // Cross-profile cron visibility is an active-profile opt-in; never carry it
   // into the next profile when the Tasks panel wasn't the visible panel.
-  _showAllCronProfiles = false;
-  _cronOtherProfileCount = 0;
-  _cronPreFormDetail = null;
-  _editingCronId = null;
-  _cronIsDuplicate = false;
+  state._showAllCronProfiles = false;
+  state._cronOtherProfileCount = 0;
+  state._cronPreFormDetail = null;
+  state._editingCronId = null;
+  state._cronIsDuplicate = false;
   _clearCronDetail();
-  if (_currentPanel === 'skills') await loadSkills();
-  if (_currentPanel === 'memory') await loadMemory();
-  if (_currentPanel === 'tasks') await loadCrons();
-  if (_currentPanel === 'kanban') await loadKanban();
-  if (_currentPanel === 'profiles') await loadProfilesPanel();
-  if (_currentPanel === 'workspaces') await loadWorkspacesPanel();
+  if (state._currentPanel === 'skills') await loadSkills();
+  if (state._currentPanel === 'memory') await loadMemory();
+  if (state._currentPanel === 'tasks') await loadCrons();
+  if (state._currentPanel === 'kanban') await loadKanban();
+  if (state._currentPanel === 'profiles') await loadProfilesPanel();
+  if (state._currentPanel === 'workspaces') await loadWorkspacesPanel();
 }
 
-function _refreshProfileSwitchBackground(gen){
+export function _refreshProfileSwitchBackground(gen){
   window._modelDropdownReady=null;
   // A cross-profile sidebar click immediately calls loadSession(), whose
   // post-paint session_visit refresh is the authoritative model-catalog load.
@@ -135,7 +139,7 @@ function _refreshProfileSwitchBackground(gen){
     Promise.resolve(window._ensureModelDropdownReady()).catch(()=>{});
   }
   Promise.resolve(loadWorkspaceList()).then(()=>{
-    if (gen !== _profileSwitchGeneration) return;
+    if (gen !== state._profileSwitchGeneration) return;
     if (S.session && typeof syncTopbar === 'function') syncTopbar();
   }).catch(()=>{});
   // Reconcile per-profile sidebar tab visibility. hidden_tabs is a per-profile
@@ -143,7 +147,7 @@ function _refreshProfileSwitchBackground(gen){
   // would remain in effect under Profile B until the user opens Settings.
   // Stage-394 follow-up to #2636 deep review.
   Promise.resolve(api('/api/settings')).then(function(s){
-    if (gen !== _profileSwitchGeneration) return;
+    if (gen !== state._profileSwitchGeneration) return;
     var hidden = (s && Array.isArray(s.hidden_tabs)) ? s.hidden_tabs : [];
     hidden = hidden.filter(function(x){ return typeof x === 'string' && x.trim(); });
     var order = (s && Array.isArray(s.tab_order)) ? s.tab_order : [];
@@ -165,12 +169,12 @@ function _refreshProfileSwitchBackground(gen){
   }).catch(function(){});
 }
 
-async function loadProfilesPanel() {
+export async function loadProfilesPanel() {
   const panel = $('profilesPanel');
   if (!panel) return;
   try {
     const data = await api('/api/profiles');
-    _profilesCache = data;
+    state._profilesCache = data;
     _profileDropdownWriteStoredCache(data);
     panel.innerHTML = '';
 
@@ -200,7 +204,7 @@ async function loadProfilesPanel() {
       emptyMsg.style.cssText = 'padding:16px;color:var(--muted);font-size:12px';
       emptyMsg.textContent = t('profiles_no_profiles');
       panel.appendChild(emptyMsg);
-      if (_profileMode !== 'create') _clearProfileDetail();
+      if (state._profileMode !== 'create') _clearProfileDetail();
       return;
     }
     const activeName = (S.activeProfile && data.profiles.some(p => p.name === S.activeProfile))
@@ -229,12 +233,12 @@ async function loadProfilesPanel() {
           </div>
         </div>`;
       card.onclick = () => openProfileDetail(p.name, card);
-      if (_currentProfileDetail && _currentProfileDetail.name === p.name) card.classList.add('active');
+      if (state._currentProfileDetail && state._currentProfileDetail.name === p.name) card.classList.add('active');
       panel.appendChild(card);
     }
     // Re-render detail with fresh data if we have one and we're not in a form
-    if (_currentProfileDetail && _profileMode !== 'create') {
-      const refreshed = data.profiles.find(p => p.name === _currentProfileDetail.name);
+    if (state._currentProfileDetail && state._profileMode !== 'create') {
+      const refreshed = data.profiles.find(p => p.name === state._currentProfileDetail.name);
       if (refreshed) _renderProfileDetail(refreshed, data.active);
       else _clearProfileDetail();
     }
@@ -243,7 +247,7 @@ async function loadProfilesPanel() {
   }
 }
 
-function _renderProfileConceptHelp(activeName){
+export function _renderProfileConceptHelp(activeName){
   const title = $('profileDetailTitle');
   const body = $('profileDetailBody');
   const empty = $('profileDetailEmpty');
@@ -261,13 +265,13 @@ function _renderProfileConceptHelp(activeName){
     </div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _profileMode = 'read';
-  _currentProfileDetail = null;
+  state._profileMode = 'read';
+  state._currentProfileDetail = null;
   _setProfileHeaderButtons('help');
 }
 
-function _renderProfileDetail(p, activeName){
-  _currentProfileDetail = p;
+export function _renderProfileDetail(p, activeName){
+  state._currentProfileDetail = p;
   const title = $('profileDetailTitle');
   const body = $('profileDetailBody');
   const empty = $('profileDetailEmpty');
@@ -300,11 +304,11 @@ function _renderProfileDetail(p, activeName){
     </div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _profileMode = 'read';
+  state._profileMode = 'read';
   _setProfileHeaderButtons('read', p, activeName);
 }
 
-function _setProfileHeaderButtons(mode, p, activeName){
+export function _setProfileHeaderButtons(mode, p, activeName){
   const header = $('mainProfiles') && $('mainProfiles').querySelector('.main-view-header');
   const actBtn = $('btnActivateProfileDetail');
   const delBtn = $('btnDeleteProfileDetail');
@@ -316,7 +320,7 @@ function _setProfileHeaderButtons(mode, p, activeName){
     if (header) header.style.display = 'flex';
     const isActive = p && p.name === activeName;
     const isDefault = !!(p && p.is_default);
-    const singleProfileMode = !!(_profilesCache && _profilesCache.single_profile_mode);
+    const singleProfileMode = !!(state._profilesCache && state._profilesCache.single_profile_mode);
     if (isActive || singleProfileMode) hide(actBtn); else show(actBtn);
     if (isDefault || singleProfileMode) hide(delBtn); else show(delBtn);
     hide(cancelBtn); hide(saveBtn);
@@ -334,21 +338,21 @@ function _setProfileHeaderButtons(mode, p, activeName){
   }
 }
 
-function openProfileDetail(name, el){
-  if (!_profilesCache || !_profilesCache.profiles) return;
-  const p = _profilesCache.profiles.find(x => x.name === name);
+export function openProfileDetail(name, el){
+  if (!state._profilesCache || !state._profilesCache.profiles) return;
+  const p = state._profilesCache.profiles.find(x => x.name === name);
   if (!p) return;
   document.querySelectorAll('.profile-card').forEach(e => e.classList.remove('active'));
   const target = el || document.querySelector(`.profile-card[data-name="${CSS.escape(name)}"]`);
   if (target) target.classList.add('active');
-  _profilePreFormDetail = null;
-  _renderProfileDetail(p, _profilesCache.active);
+  state._profilePreFormDetail = null;
+  _renderProfileDetail(p, state._profilesCache.active);
   _closeMobileSidebarAfterPanelSelection();
 }
 
-function _clearProfileDetail(){
-  _currentProfileDetail = null;
-  _profileMode = 'empty';
+export function _clearProfileDetail(){
+  state._currentProfileDetail = null;
+  state._profileMode = 'empty';
   const title = $('profileDetailTitle');
   const body = $('profileDetailBody');
   const empty = $('profileDetailEmpty');
@@ -358,14 +362,14 @@ function _clearProfileDetail(){
   _setProfileHeaderButtons('empty');
 }
 
-async function activateCurrentProfile(){
-  if (!_currentProfileDetail) return;
-  await switchToProfile(_currentProfileDetail.name);
+export async function activateCurrentProfile(){
+  if (!state._currentProfileDetail) return;
+  await switchToProfile(state._currentProfileDetail.name);
 }
 
-async function deleteCurrentProfile(){
-  if (!_currentProfileDetail) return;
-  const name = _currentProfileDetail.name;
+export async function deleteCurrentProfile(){
+  if (!state._currentProfileDetail) return;
+  const name = state._currentProfileDetail.name;
   const _ok = await showConfirmDialog({title:t('profile_delete_confirm_title',name),message:t('profile_delete_confirm_message'),confirmLabel:t('delete_title'),danger:true,focusCancel:true});
   if(!_ok) return;
   try {
@@ -376,7 +380,7 @@ async function deleteCurrentProfile(){
     showToast(t('profile_deleted', name));
   } catch (e) { showToast(t('delete_failed') + e.message); }
 }
-function renderProfileDropdown(data) {
+export function renderProfileDropdown(data) {
   data = data || {};
   const dd = $('profileDropdown');
   if (!dd) return;
@@ -417,15 +421,15 @@ function renderProfileDropdown(data) {
   if (tbl) tbl.textContent = active;
 }
 
-function toggleProfileDropdown(e) {
+export function toggleProfileDropdown(e) {
   const dd = $('profileDropdown');
   if (!dd) return;
   if (dd.classList.contains('open')) { closeProfileDropdown(); return; }
   closeWsDropdown(); // close workspace dropdown if open
   if(typeof closeModelDropdown==='function') closeModelDropdown();
   // Track which element triggered the dropdown for positioning
-  _profileDropdownTrigger = (e && e.currentTarget) || $('profileChip');
-  const openGen = ++_profileDropdownOpenGeneration;
+  state._profileDropdownTrigger = (e && e.currentTarget) || $('profileChip');
+  const openGen = ++state._profileDropdownOpenGeneration;
   const cached = _profileDropdownBestCachedData();
 
   if(cached && !cached.single_profile_mode){
@@ -437,7 +441,7 @@ function toggleProfileDropdown(e) {
   }
 
   _profileDropdownFetchFresh().then(data => {
-    if(openGen !== _profileDropdownOpenGeneration) return;
+    if(openGen !== state._profileDropdownOpenGeneration) return;
     // In single profile mode, don't show profile dropdown at all
     if (data.single_profile_mode) {
       closeProfileDropdown();
@@ -446,7 +450,7 @@ function toggleProfileDropdown(e) {
     renderProfileDropdown(data);
     _openProfileDropdownShell();
   }).catch(e => {
-    if(openGen !== _profileDropdownOpenGeneration) return;
+    if(openGen !== state._profileDropdownOpenGeneration) return;
     if(cached && !cached.single_profile_mode){
       // Keep the cached menu open; the next click/background refresh will retry.
       return;
@@ -456,8 +460,8 @@ function toggleProfileDropdown(e) {
   });
 }
 
-function closeProfileDropdown() {
-  _profileDropdownOpenGeneration++;
+export function closeProfileDropdown() {
+  state._profileDropdownOpenGeneration++;
   const dd = $('profileDropdown');
   if (dd) dd.classList.remove('open');
   const chip=$('profileChip');
@@ -473,7 +477,7 @@ window.addEventListener('resize',()=>{
   if(dd&&dd.classList.contains('open')) _positionProfileDropdown();
 });
 
-function _openProfileSwitchSessionBrowser(){
+export function _openProfileSwitchSessionBrowser(){
   try{
     const isDesktop = (typeof _isDesktopWidth === 'function') ? _isDesktopWidth() : true;
     if(isDesktop){
@@ -488,7 +492,7 @@ function _openProfileSwitchSessionBrowser(){
   }catch(_){}
 }
 
-async function switchToProfile(name) {
+export async function switchToProfile(name) {
   // ── #4671 profile-switch loading-skeleton — FOUR-GUARD CONTRACT ───────────────
   // The skeleton must never be clobbered by the OLD profile's content and must never
   // strand. Four interacting pieces of state cooperate; an edit touching one without
@@ -505,7 +509,7 @@ async function switchToProfile(name) {
   //      and failure-restore — so a bail can't strand the skeleton.
   //   4. _wsTreeGen (workspace.js) — bumped UNCONDITIONALLY here (incl. panel-closed, since
   //      loadDir('.') still runs); loadDir rejects stale /api/list whose gen is superseded.
-  //   Plus _profileSwitchGeneration / _switchGen — guards superseded switches so a slower
+  //   Plus state._profileSwitchGeneration / _switchGen — guards superseded switches so a slower
   //   earlier switch can't clobber a newer one's skeleton/embargo.
   // ──────────────────────────────────────────────────────────────────────────────
   // No-op self-switch guard: bail before showing any loading skeleton if we're
@@ -526,7 +530,7 @@ async function switchToProfile(name) {
   const _titlebarBtn = $('titlebarProfileBtn');
   const _titlebarLabel = $('titlebarProfileLabel');
   const _prevProfileName = S.activeProfile || 'default';
-  const _switchGen = ++_profileSwitchGeneration;
+  const _switchGen = ++state._profileSwitchGeneration;
   const _openingExistingSidebarSession = !!(typeof _profileSwitchOpeningExistingSession !== 'undefined' && _profileSwitchOpeningExistingSession);
   // In all-profiles mode the sidebar cache already contains the clicked target
   // profile. Keep those valid rows visible while only the per-client profile
@@ -602,7 +606,7 @@ async function switchToProfile(name) {
     // the single source of truth for switch failure and is gated on _switchGen, so the
     // error surfaces ONLY when the CURRENT switch genuinely fails (@rodboev review, #4662).
     const data = await api('/api/profile/switch', { method: 'POST', body: JSON.stringify({ name }), timeoutToast: false });
-    if (_switchGen !== _profileSwitchGeneration) return false;
+    if (_switchGen !== state._profileSwitchGeneration) return false;
     S.activeProfile = data.active || name;
     S.activeProfileIsDefault = !!data.is_default;
     if (typeof _resetCronUnreadForProfileSwitch === 'function') {
@@ -639,8 +643,8 @@ async function switchToProfile(name) {
     // hold the visible switch animation open.
     if(typeof _clearPersistedModelState==='function') _clearPersistedModelState();
     else localStorage.removeItem('hermes-webui-model');
-    _skillsData = null;
-    _workspaceList = null;
+    state._skillsData = null;
+    state._workspaceList = null;
     if (data.default_model) window._defaultModel = data.default_model;
     if (data.default_model_provider) window._activeProvider = data.default_model_provider;
 
@@ -728,7 +732,7 @@ async function switchToProfile(name) {
       if (!_preserveAllProfilesSidebar) {
         if (typeof _setProfileSwitchListEmbargo === 'function') _setProfileSwitchListEmbargo(false);
         await renderSessionList();
-        if (_switchGen !== _profileSwitchGeneration) return false;
+        if (_switchGen !== state._profileSwitchGeneration) return false;
       }
       if (workspaceVisible && typeof clearWorkspaceTreeSkeleton === 'function') clearWorkspaceTreeSkeleton();
       showToast(t('profile_switched', name));
@@ -737,7 +741,7 @@ async function switchToProfile(name) {
       // Start a new session for the new profile so nothing gets cross-tagged.
       const workspaceVisible = typeof _workspacePanelMode !== 'undefined' && _workspacePanelMode !== 'closed';
       await newSession(false, {awaitWorkspaceLoad: workspaceVisible, worktree: false});
-      if (_switchGen !== _profileSwitchGeneration) return false;
+      if (_switchGen !== state._profileSwitchGeneration) return false;
       // Keep topbar chips (workspace/profile) in sync after creating the
       // new profile-scoped session.
       syncTopbar();
@@ -751,7 +755,7 @@ async function switchToProfile(name) {
       // the superseded switch would clear the newer switch's workspace skeleton
       // and pop a stale toast. Mirrors the no-messages branch guard below.
       // (@rodboev/greptile review, #4662)
-      if (_switchGen !== _profileSwitchGeneration) return false;
+      if (_switchGen !== state._profileSwitchGeneration) return false;
       if (typeof _openProfileSwitchSessionBrowser === 'function') _openProfileSwitchSessionBrowser();
       // Safety net: if the new session has no workspace, newSession() won't have
       // painted the file tree — clear the up-front skeleton so it can't strand
@@ -774,7 +778,7 @@ async function switchToProfile(name) {
       // #4671: lift the embargo immediately before the switch-owned render (see above).
       if (typeof _setProfileSwitchListEmbargo === 'function') _setProfileSwitchListEmbargo(false);
       await renderSessionList();
-      if (_switchGen !== _profileSwitchGeneration) return;
+      if (_switchGen !== state._profileSwitchGeneration) return;
       if (typeof _openProfileSwitchSessionBrowser === 'function') _openProfileSwitchSessionBrowser();
       syncTopbar();
       // Refresh workspace file tree so the right panel shows the new
@@ -796,13 +800,13 @@ async function switchToProfile(name) {
 
   } catch (e) {
     // Revert the optimistic name update on error
-    if (_switchGen === _profileSwitchGeneration && _chipLabel) _chipLabel.textContent = _prevProfileName;
-    if (_switchGen === _profileSwitchGeneration && _titlebarLabel) _titlebarLabel.textContent = _prevProfileName;
-    if (_switchGen === _profileSwitchGeneration) showToast(t('switch_failed') + e.message);
+    if (_switchGen === state._profileSwitchGeneration && _chipLabel) _chipLabel.textContent = _prevProfileName;
+    if (_switchGen === state._profileSwitchGeneration && _titlebarLabel) _titlebarLabel.textContent = _prevProfileName;
+    if (_switchGen === state._profileSwitchGeneration) showToast(t('switch_failed') + e.message);
     // The switch failed, so we're still on the previous profile and its caches
     // are intact — restore the real list/tree so the loading skeletons we showed
     // up front don't strand. (#4662)
-    if (_switchGen === _profileSwitchGeneration) {
+    if (_switchGen === state._profileSwitchGeneration) {
       // The switch failed; _allSessions still holds the (still-current) previous
       // profile, so clear the skeleton flag and re-render to restore the real list
       // rather than strand the up-front skeleton (#4671). Lift the embargo too so the
@@ -822,25 +826,25 @@ async function switchToProfile(name) {
     return false;
   } finally {
     // Always remove loading indicator regardless of success or failure
-    if (_switchGen === _profileSwitchGeneration && _chip) { _chip.classList.remove('switching'); _chip.disabled = false; }
-    if (_switchGen === _profileSwitchGeneration && _titlebarBtn) { _titlebarBtn.classList.remove('switching'); _titlebarBtn.disabled = false; }
+    if (_switchGen === state._profileSwitchGeneration && _chip) { _chip.classList.remove('switching'); _chip.disabled = false; }
+    if (_switchGen === state._profileSwitchGeneration && _titlebarBtn) { _titlebarBtn.classList.remove('switching'); _titlebarBtn.disabled = false; }
     // #4671 safety net: guarantee the session-list embargo is lifted on EVERY exit of the
     // current switch (success paths clear it before their authoritative render; this covers
     // early-returns/throws between skeleton-show and those clears so it can't freeze the
     // sidebar). Guarded by _switchGen so a superseded switch can't lift a newer switch's embargo.
-    if (_switchGen === _profileSwitchGeneration && typeof _setProfileSwitchListEmbargo === 'function') {
+    if (_switchGen === state._profileSwitchGeneration && typeof _setProfileSwitchListEmbargo === 'function') {
       _setProfileSwitchListEmbargo(false);
     }
   }
 }
-function openProfileCreate(){
-  if (typeof switchPanel === 'function' && _currentPanel !== 'profiles') switchPanel('profiles');
-  _profilePreFormDetail = _currentProfileDetail ? { ..._currentProfileDetail } : null;
-  _profileMode = 'create';
+export function openProfileCreate(){
+  if (typeof switchPanel === 'function' && state._currentPanel !== 'profiles') switchPanel('profiles');
+  state._profilePreFormDetail = state._currentProfileDetail ? { ..._currentProfileDetail } : null;
+  state._profileMode = 'create';
   _renderProfileForm();
 }
 
-function _renderProfileForm(){
+export function _renderProfileForm(){
   const title = $('profileDetailTitle');
   const body = $('profileDetailBody');
   const empty = $('profileDetailEmpty');
@@ -883,7 +887,7 @@ function _renderProfileForm(){
   _populateProfileFormModelSelect();
 }
 
-async function _populateProfileFormModelSelect(){
+export async function _populateProfileFormModelSelect(){
   const sel = $('profileFormModel');
   if (!sel) return;
   sel.innerHTML = `<option value="">${esc(t('profile_model_use_default') || 'Use active profile default')}</option>`;
@@ -911,18 +915,18 @@ async function _populateProfileFormModelSelect(){
   }
 }
 
-function cancelProfileForm(){
-  if (_profilePreFormDetail) {
-    const snap = _profilePreFormDetail;
-    _profilePreFormDetail = null;
-    const activeName = _profilesCache ? _profilesCache.active : null;
+export function cancelProfileForm(){
+  if (state._profilePreFormDetail) {
+    const snap = state._profilePreFormDetail;
+    state._profilePreFormDetail = null;
+    const activeName = state._profilesCache ? state._profilesCache.active : null;
     _renderProfileDetail(snap, activeName);
     return;
   }
   _clearProfileDetail();
 }
 
-async function saveProfileForm(){
+export async function saveProfileForm(){
   const nameEl = $('profileFormName');
   const cloneEl = $('profileFormClone');
   const modelEl = $('profileFormModel');
@@ -952,7 +956,7 @@ async function saveProfileForm(){
     if (apiKey) payload.api_key = apiKey;
     await api('/api/profile/create', { method: 'POST', body: JSON.stringify(payload) });
     _invalidateKanbanProfileCache();
-    _profilePreFormDetail = null;
+    state._profilePreFormDetail = null;
     await loadProfilesPanel();
     showToast(t('profile_created', name));
     openProfileDetail(name);
@@ -964,10 +968,10 @@ async function saveProfileForm(){
 
 // Back-compat
 const submitProfileCreate = saveProfileForm;
-function toggleProfileForm(){ openProfileCreate();
+export function toggleProfileForm(){ openProfileCreate();
 }
 
-async function deleteProfile(name) {
+export async function deleteProfile(name) {
   const _delProf=await showConfirmDialog({title:t('profile_delete_confirm_title',name),message:t('profile_delete_confirm_message'),confirmLabel:t('delete_title'),danger:true,focusCancel:true});
   if(!_delProf) return;
   try {
@@ -977,38 +981,3 @@ async function deleteProfile(name) {
     showToast(t('profile_deleted', name));
   } catch (e) { showToast(t('delete_failed') + e.message); }
 }
-
-window.HermesPanels.profiles = {
-  _profileDropdownClearStoredCache,
-  _profileDropdownDataCacheUsable,
-  _profileDropdownCacheUsable,
-  _profileDropdownReadStoredCache,
-  _profileDropdownWriteStoredCache,
-  _profileDropdownBestCachedData,
-  _profileDropdownFetchFresh,
-  _warmProfileDropdownCache,
-  _renderProfileDropdownLoading,
-  _openProfileDropdownShell,
-  _profileSwitchPanelLoad,
-  _refreshProfileSwitchBackground,
-  loadProfilesPanel,
-  _renderProfileConceptHelp,
-  _renderProfileDetail,
-  _setProfileHeaderButtons,
-  openProfileDetail,
-  _clearProfileDetail,
-  activateCurrentProfile,
-  deleteCurrentProfile,
-  renderProfileDropdown,
-  toggleProfileDropdown,
-  closeProfileDropdown,
-  _openProfileSwitchSessionBrowser,
-  switchToProfile,
-  openProfileCreate,
-  _renderProfileForm,
-  _populateProfileFormModelSelect,
-  cancelProfileForm,
-  saveProfileForm,
-  toggleProfileForm,
-  deleteProfile,
-};

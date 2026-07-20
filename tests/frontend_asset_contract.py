@@ -107,26 +107,46 @@ _ASSISTANT_TURN_ANCHOR_MODULE_NAMES = (
     "index.js",
 )
 
+_PANEL_MODULE_NAMES = (
+    "state.js",
+    "core.js",
+    "cron-list.js",
+    "cron-editor.js",
+    "kanban-board.js",
+    "kanban-tasks.js",
+    "kanban-boards.js",
+    "diagnostics.js",
+    "skills-memory.js",
+    "workspaces.js",
+    "profiles.js",
+    "settings-state.js",
+    "settings-navigation.js",
+    "settings-preferences.js",
+    "settings-extensions.js",
+    "settings-providers.js",
+    "settings-models-auth.js",
+    "settings-save.js",
+    "runtime-alerts.js",
+    "settings-system.js",
+    "compatibility.js",
+    "index.js",
+)
+
 
 def module_family_paths(family: str) -> tuple[Path, ...]:
     """Return a native module family's complete source inventory."""
 
-    if family == "sessions":
-        directory = STATIC_DIR / "modules" / "sessions"
-        return tuple(directory / name for name in _SESSION_MODULE_NAMES)
-    if family == "assistant-turn-anchors":
-        directory = STATIC_DIR / "modules" / "assistant-turn-anchors"
-        return tuple(directory / name for name in _ASSISTANT_TURN_ANCHOR_MODULE_NAMES)
-    if family == "boot":
-        directory = STATIC_DIR / "modules" / "boot"
-        return tuple(directory / name for name in _BOOT_MODULE_NAMES)
-    if family == "commands":
-        directory = STATIC_DIR / "modules" / "commands"
-        return tuple(directory / name for name in _COMMAND_MODULE_NAMES)
-    if family == "messages":
-        directory = STATIC_DIR / "modules" / "messages"
-        return tuple(directory / name for name in _MESSAGE_MODULE_NAMES)
-    raise ValueError(f"unknown frontend module family: {family}")
+    names = {
+        "assistant-turn-anchors": _ASSISTANT_TURN_ANCHOR_MODULE_NAMES,
+        "boot": _BOOT_MODULE_NAMES,
+        "commands": _COMMAND_MODULE_NAMES,
+        "messages": _MESSAGE_MODULE_NAMES,
+        "panels": _PANEL_MODULE_NAMES,
+        "sessions": _SESSION_MODULE_NAMES,
+    }.get(family)
+    if names is None:
+        raise ValueError(f"unknown frontend module family: {family}")
+    return tuple(STATIC_DIR / "modules" / family / name for name in names)
 
 def _numbered_parts(directory: str, suffix: str) -> tuple[Path, ...]:
     pattern = f"[0-9][0-9][0-9]-*{suffix}"
@@ -163,7 +183,7 @@ def family_asset_paths(family: str) -> tuple[Path, ...]:
             for name in _MESSAGE_MODULE_NAMES
         )
     if family == "panels":
-        return (STATIC_DIR / "panels.js", *_numbered_parts("panels_parts", ".js"))
+        return tuple(STATIC_DIR / "modules" / "panels" / name for name in _PANEL_MODULE_NAMES)
     if family == "boot":
         return tuple(
             STATIC_DIR / "modules" / "boot" / name
@@ -177,9 +197,29 @@ def family_source(family: str) -> str:
 
     paths = (
         module_family_paths(family)
-        if family in {"boot", "commands", "messages", "sessions"}
+        if family in {"boot", "commands", "messages", "panels", "sessions"}
         else family_asset_paths(family)
     )
+    if family == "panels":
+        # Source-extraction harnesses predate ESM. Reconstruct the logical owner
+        # without import/export syntax while production imports the real graph.
+        state_source = (STATIC_DIR / "modules" / "panels" / "state.js").read_text(encoding="utf-8")
+        declarations = []
+        for match in re.finditer(
+            r"^  ([A-Za-z_$][A-Za-z0-9_$]*): (.*?), // owner:.*$",
+            state_source,
+            re.MULTILINE,
+        ):
+            declarations.append(f"let {match.group(1)} = {match.group(2)};\n")
+        implementation = "".join(
+            path.read_text(encoding="utf-8")
+            for path in paths
+            if path.name not in {"state.js", "compatibility.js", "index.js"}
+        )
+        implementation = re.sub(r"^import .*?;\n", "", implementation, flags=re.MULTILINE)
+        implementation = re.sub(r"^export ", "", implementation, flags=re.MULTILINE)
+        implementation = re.sub(r"\bstate\.(?=_[$A-Za-z])", "", implementation)
+        return "".join(declarations) + implementation
     source = "".join(
         path.read_text(encoding="utf-8") for path in paths
     )
@@ -202,6 +242,8 @@ def family_entrypoint_path(family: str) -> Path | None:
         return STATIC_DIR / "modules" / "sessions" / "index.js"
     if family == "messages":
         return STATIC_DIR / "modules" / "messages" / "index.js"
+    if family == "panels":
+        return STATIC_DIR / "modules" / "panels" / "index.js"
     paths = family_asset_paths(family)
     return paths[0] if paths else None
 
@@ -210,9 +252,15 @@ def family_direct_asset_paths(family: str) -> tuple[Path, ...]:
     """Return browser entrypoints; native-module dependencies load by import."""
 
     entrypoint = family_entrypoint_path(family)
-    if family in {"boot", "messages", "sessions"}:
+    if family in {"boot", "messages", "panels", "sessions"}:
         assert entrypoint is not None
         return (entrypoint,)
     if family == "commands":
         return ()
     return family_asset_paths(family)
+
+
+def family_entry_paths(family: str) -> tuple[Path, ...]:
+    """Backward-compatible name for the direct browser entrypoint inventory."""
+
+    return family_direct_asset_paths(family)

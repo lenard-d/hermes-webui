@@ -86,7 +86,7 @@ def test_extensions_panel_warns_about_trust_model_and_stays_install_free():
     assert "type=\"checkbox\"" not in pane
     assert "marketplace" not in pane.lower()
     assert "static/extension_settings.js" in INDEX_HTML
-    assert INDEX_HTML.index("static/extension_settings.js") < INDEX_HTML.index("static/panels.js")
+    assert INDEX_HTML.index("static/extension_settings.js") < INDEX_HTML.index("static/modules/panels/index.js")
 
 
 def test_switch_settings_section_supports_extensions_lazy_load():

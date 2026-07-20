@@ -1,31 +1,33 @@
+import { state } from "./state.js";
+import { _closeMobileSidebarAfterPanelSelection,switchPanel } from "./core.js";
+
+
 // Panels domain: skills and memory
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Skills panel ──
-async function loadSkills() {
-  if (_skillsData) { renderSkills(_skillsData); return; }
+export async function loadSkills() {
+  if (state._skillsData) { renderSkills(state._skillsData); return; }
   const box = $('skillsList');
   try {
     const data = await api('/api/skills');
-    _skillsData = data.skills || [];
+    state._skillsData = data.skills || [];
     // Prune collapsed state to only keep categories present in fresh data,
     // avoiding stale keys when categories are renamed or removed server-side.
-    const liveCats = new Set(_skillsData.map(s => s.category || '(general)'));
-    for (const c of _collapsedCats) { if (!liveCats.has(c)) _collapsedCats.delete(c); }
-    renderSkills(_skillsData);
+    const liveCats = new Set(state._skillsData.map(s => s.category || '(general)'));
+    for (const c of state._collapsedCats) { if (!liveCats.has(c)) state._collapsedCats.delete(c); }
+    renderSkills(state._skillsData);
   } catch(e) { box.innerHTML = `<div style="padding:12px;color:var(--accent);font-size:12px">Error: ${esc(e.message)}</div>`; }
 }
 
-let _collapsedCats = new Set(); // persisted collapsed state across re-renders
 
-function _toggleCatCollapse(cat) {
-  if (_collapsedCats.has(cat)) _collapsedCats.delete(cat);
-  else _collapsedCats.add(cat);
+export function _toggleCatCollapse(cat) {
+  if (state._collapsedCats.has(cat)) state._collapsedCats.delete(cat);
+  else state._collapsedCats.add(cat);
   // Toggle DOM without full re-render
   document.querySelectorAll('.skills-category').forEach(sec => {
     const header = sec.querySelector('.skills-cat-header');
     if (header && header.dataset.cat === cat) {
-      const collapsed = _collapsedCats.has(cat);
+      const collapsed = state._collapsedCats.has(cat);
       sec.classList.toggle('collapsed', collapsed);
       header.querySelector('.cat-chevron').style.transform = collapsed ? '' : 'rotate(90deg)';
       sec.querySelectorAll('.skill-item').forEach(el => el.style.display = collapsed ? 'none' : '');
@@ -33,7 +35,7 @@ function _toggleCatCollapse(cat) {
   });
 }
 
-function renderSkills(skills) {
+export function renderSkills(skills) {
   const query = ($('skillsSearch').value || '').toLowerCase();
   const filtered = query ? skills.filter(s =>
     (s.name||'').toLowerCase().includes(query) ||
@@ -51,7 +53,7 @@ function renderSkills(skills) {
   box.innerHTML = '';
   if (!filtered.length) { box.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">${esc(t('skills_no_match'))}</div>`; return; }
   for (const [cat, items] of Object.entries(cats).sort()) {
-    const collapsed = _collapsedCats.has(cat);
+    const collapsed = state._collapsedCats.has(cat);
     const sec = document.createElement('div');
     sec.className = 'skills-category' + (collapsed ? ' collapsed' : '');
     const hdr = document.createElement('div');
@@ -86,12 +88,12 @@ function renderSkills(skills) {
   }
 }
 
-function filterSkills() {
-  if (_skillsData) renderSkills(_skillsData);
+export function filterSkills() {
+  if (state._skillsData) renderSkills(state._skillsData);
 }
 
 
-async function toggleSkill(name, currentlyEnabled) {
+export async function toggleSkill(name, currentlyEnabled) {
   const newEnabled = !currentlyEnabled;
   try {
     const result = await api('/api/skills/toggle', {
@@ -99,12 +101,12 @@ async function toggleSkill(name, currentlyEnabled) {
       body: JSON.stringify({ name, enabled: newEnabled })
     });
     if (result && result.ok) {
-      if (_skillsData) {
-        const skill = _skillsData.find(s => s.name === name);
+      if (state._skillsData) {
+        const skill = state._skillsData.find(s => s.name === name);
         if (skill) skill.disabled = !newEnabled;
       }
       if(typeof window!=='undefined'&&typeof window.invalidateSlashSkillCaches==='function') window.invalidateSlashSkillCaches();
-      renderSkills(_skillsData || []);
+      renderSkills(state._skillsData || []);
     } else {
       setStatus((result && result.error) || t('skill_toggle_failed'));
     }
@@ -115,23 +117,19 @@ async function toggleSkill(name, currentlyEnabled) {
 
 // Currently selected skill detail — kept across panel switches so re-entering
 // the Skills view shows the last-viewed skill.
-let _currentSkillDetail = null; // { name, category, content }
-let _skillMode = 'empty'; // 'empty' | 'read' | 'create' | 'edit'
-let _skillPreFormDetail = null; // snapshot of previously-viewed skill when entering a form
-let _editingSkillName = null;
 
-function _stripYamlFrontmatter(content) {
+export function _stripYamlFrontmatter(content) {
   if (!content) return { frontmatter: null, body: '' };
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(content);
   if (!m) return { frontmatter: null, body: content };
   return { frontmatter: m[1], body: content.slice(m[0].length) };
 }
 
-function _skillMarkdownHtml(markdown) {
+export function _skillMarkdownHtml(markdown) {
   return `<div class="preview-md">${renderMd(markdown || '')}</div>`;
 }
 
-function _enhanceSkillMarkdown(root) {
+export function _enhanceSkillMarkdown(root) {
   if (!root) return;
   requestAnimationFrame(() => {
     const mdRoot = root.querySelector('.preview-md') || root;
@@ -140,7 +138,7 @@ function _enhanceSkillMarkdown(root) {
   });
 }
 
-function _renderSkillDetail(name, content, linkedFiles) {
+export function _renderSkillDetail(name, content, linkedFiles) {
   const title = $('skillDetailTitle');
   const body = $('skillDetailBody');
   const empty = $('skillDetailEmpty');
@@ -173,11 +171,11 @@ function _renderSkillDetail(name, content, linkedFiles) {
   });
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _skillMode = 'read';
+  state._skillMode = 'read';
   _setSkillHeaderButtons('read');
 }
 
-function _renderSkillError(name, message) {
+export function _renderSkillError(name, message) {
   const title = $('skillDetailTitle');
   const body = $('skillDetailBody');
   const empty = $('skillDetailEmpty');
@@ -187,12 +185,12 @@ function _renderSkillError(name, message) {
     body.style.display = '';
   }
   if (empty) empty.style.display = 'none';
-  _currentSkillDetail = null;
-  _skillMode = 'empty';
+  state._currentSkillDetail = null;
+  state._skillMode = 'empty';
   _setSkillHeaderButtons('empty');
 }
 
-function _setSkillHeaderButtons(mode) {
+export function _setSkillHeaderButtons(mode) {
 
   const header = $('mainSkills') && $('mainSkills').querySelector('.main-view-header');  const editBtn = $('btnEditSkillDetail');
   const delBtn = $('btnDeleteSkillDetail');
@@ -205,12 +203,12 @@ function _setSkillHeaderButtons(mode) {
   else { if (header) header.style.display = 'none';  hide(editBtn); hide(delBtn); hide(cancelBtn); hide(saveBtn); }
 }
 
-async function openSkill(name, el) {
+export async function openSkill(name, el) {
   // Highlight active skill in the sidebar list
   document.querySelectorAll('.skill-item').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
-  _skillPreFormDetail = null;
-  _editingSkillName = null;
+  state._skillPreFormDetail = null;
+  state._editingSkillName = null;
   try {
     const data = await api(`/api/skills/content?name=${encodeURIComponent(name)}`);
     if (data && (data.success === false || data.error)) {
@@ -219,13 +217,13 @@ async function openSkill(name, el) {
       setStatus(t('skill_load_failed') + message);
       return;
     }
-    _currentSkillDetail = { name, content: data.content || '', linked_files: data.linked_files || {} };
+    state._currentSkillDetail = { name, content: data.content || '', linked_files: data.linked_files || {} };
     _renderSkillDetail(name, data.content || '', data.linked_files || {});
     _closeMobileSidebarAfterPanelSelection();
   } catch(e) { setStatus(t('skill_load_failed') + e.message); }
 }
 
-async function openSkillFile(skillName, filePath) {
+export async function openSkillFile(skillName, filePath) {
   try {
     const data = await api(`/api/skills/content?name=${encodeURIComponent(skillName)}&file=${encodeURIComponent(filePath)}`);
     if (data && data.error) {
@@ -253,8 +251,8 @@ async function openSkillFile(skillName, filePath) {
     body.querySelectorAll('.skill-file-back').forEach(a => {
       a.addEventListener('click', e => {
         e.preventDefault();
-        if (_currentSkillDetail && _currentSkillDetail.name === a.dataset.skillName) {
-          _renderSkillDetail(_currentSkillDetail.name, _currentSkillDetail.content, _currentSkillDetail.linked_files);
+        if (state._currentSkillDetail && state._currentSkillDetail.name === a.dataset.skillName) {
+          _renderSkillDetail(state._currentSkillDetail.name, state._currentSkillDetail.content, state._currentSkillDetail.linked_files);
         } else {
           openSkill(a.dataset.skillName, null);
         }
@@ -265,29 +263,29 @@ async function openSkillFile(skillName, filePath) {
   } catch(e) { setStatus(t('skill_file_load_failed') + e.message); }
 }
 
-function editCurrentSkill() {
-  if (!_currentSkillDetail) return;
-  const s = _currentSkillDetail;
+export function editCurrentSkill() {
+  if (!state._currentSkillDetail) return;
+  const s = state._currentSkillDetail;
   let category = '';
-  if (_skillsData) {
-    const match = _skillsData.find(x => x.name === s.name);
+  if (state._skillsData) {
+    const match = state._skillsData.find(x => x.name === s.name);
     if (match) category = match.category || '';
   }
-  _skillPreFormDetail = { name: s.name, content: s.content, linked_files: s.linked_files };
-  _editingSkillName = s.name;
-  _skillMode = 'edit';
+  state._skillPreFormDetail = { name: s.name, content: s.content, linked_files: s.linked_files };
+  state._editingSkillName = s.name;
+  state._skillMode = 'edit';
   _renderSkillForm({ name: s.name, category, content: s.content || '', isEdit: true });
 }
 
-function openSkillCreate() {
-  if (typeof switchPanel === 'function' && _currentPanel !== 'skills') switchPanel('skills');
-  _skillPreFormDetail = _currentSkillDetail ? { ..._currentSkillDetail } : null;
-  _editingSkillName = null;
-  _skillMode = 'create';
+export function openSkillCreate() {
+  if (typeof switchPanel === 'function' && state._currentPanel !== 'skills') switchPanel('skills');
+  state._skillPreFormDetail = state._currentSkillDetail ? { ..._currentSkillDetail } : null;
+  state._editingSkillName = null;
+  state._skillMode = 'create';
   _renderSkillForm({ name: '', category: '', content: '', isEdit: false });
 }
 
-function _renderSkillForm({ name, category, content, isEdit }) {
+export function _renderSkillForm({ name, category, content, isEdit }) {
   const title = $('skillDetailTitle');
   const body = $('skillDetailBody');
   const empty = $('skillDetailEmpty');
@@ -321,19 +319,19 @@ function _renderSkillForm({ name, category, content, isEdit }) {
   if (focusEl) focusEl.focus();
 }
 
-function cancelSkillForm() {
-  _editingSkillName = null;
-  if (_skillPreFormDetail) {
-    const snap = _skillPreFormDetail;
-    _skillPreFormDetail = null;
-    _currentSkillDetail = snap;
+export function cancelSkillForm() {
+  state._editingSkillName = null;
+  if (state._skillPreFormDetail) {
+    const snap = state._skillPreFormDetail;
+    state._skillPreFormDetail = null;
+    state._currentSkillDetail = snap;
     _renderSkillDetail(snap.name, snap.content || '', snap.linked_files || {});
     return;
   }
   // Revert to empty state
-  _skillPreFormDetail = null;
-  _currentSkillDetail = null;
-  _skillMode = 'empty';
+  state._skillPreFormDetail = null;
+  state._currentSkillDetail = null;
+  state._skillMode = 'empty';
   const body = $('skillDetailBody');
   const empty = $('skillDetailEmpty');
   const title = $('skillDetailTitle');
@@ -343,7 +341,7 @@ function cancelSkillForm() {
   _setSkillHeaderButtons('empty');
 }
 
-async function saveSkillForm() {
+export async function saveSkillForm() {
   const nameInput = $('skillFormName');
   const catInput = $('skillFormCategory');
   const contentInput = $('skillFormContent');
@@ -357,12 +355,12 @@ async function saveSkillForm() {
   if (!content.trim()) { errEl.textContent = t('content_required'); errEl.style.display = ''; return; }
   try {
     await api('/api/skills/save', {method:'POST', body: JSON.stringify({name, category: category||undefined, content})});
-    showToast(_editingSkillName ? t('skill_updated') : t('skill_created'));
-    _skillsData = null;
-    _cronSkillsCache = null;
+    showToast(state._editingSkillName ? t('skill_updated') : t('skill_created'));
+    state._skillsData = null;
+    state._cronSkillsCache = null;
     if(typeof window!=='undefined'&&typeof window.invalidateSlashSkillCaches==='function') window.invalidateSlashSkillCaches();
-    _editingSkillName = null;
-    _skillPreFormDetail = null;
+    state._editingSkillName = null;
+    state._skillPreFormDetail = null;
     await loadSkills();
     // Reload the saved skill in read mode with fresh content
     const row = document.querySelector(`.skill-item .skill-name`);
@@ -378,11 +376,11 @@ async function saveSkillForm() {
 
 // Back-compat aliases (delete flow + any old callers)
 const submitSkillSave = saveSkillForm;
-function toggleSkillForm(){ openSkillCreate(); }
+export function toggleSkillForm(){ openSkillCreate(); }
 
-async function deleteCurrentSkill() {
-  if (!_currentSkillDetail) return;
-  const name = _currentSkillDetail.name;
+export async function deleteCurrentSkill() {
+  if (!state._currentSkillDetail) return;
+  const name = state._currentSkillDetail.name;
   const message = t('skill_delete_confirm')
     ? t('skill_delete_confirm').replace('{0}', name)
     : `Delete skill "${name}"?`;
@@ -396,12 +394,12 @@ async function deleteCurrentSkill() {
   if (!ok) return;
   try {
     await api('/api/skills/delete', { method:'POST', body: JSON.stringify({ name }) });
-    _currentSkillDetail = null;
-    _skillPreFormDetail = null;
-    _skillsData = null;
-    _cronSkillsCache = null;
+    state._currentSkillDetail = null;
+    state._skillPreFormDetail = null;
+    state._skillsData = null;
+    state._cronSkillsCache = null;
     if(typeof window!=='undefined'&&typeof window.invalidateSlashSkillCaches==='function') window.invalidateSlashSkillCaches();
-    _skillMode = 'empty';
+    state._skillMode = 'empty';
     const body = $('skillDetailBody');
     const empty = $('skillDetailEmpty');
     const title = $('skillDetailTitle');
@@ -414,15 +412,6 @@ async function deleteCurrentSkill() {
   } catch(e) { setStatus(t('error_prefix') + e.message); }
 }
 // ── Memory (main view) ──
-let _memoryData = null;
-let _notesSourcesData = null;
-let _notesSearchResults = [];
-let _notesSelectedSource = 'joplin';
-let _notesPreviewNote = null;
-let _notesSearchError = '';
-let _notesSearchLoading = false;
-let _currentMemorySection = null; // 'memory' | 'user' | 'soul' | 'project_context' | 'external_notes'
-let _memoryMode = 'empty'; // 'empty' | 'read' | 'edit'
 
 const MEMORY_SECTIONS = [
   { key: 'memory', labelKey: 'my_notes', emptyKey: 'no_notes_yet', iconKey: 'brain' },
@@ -432,72 +421,72 @@ const MEMORY_SECTIONS = [
   { key: 'external_notes', labelKey: 'external_notes_sources', emptyKey: 'external_notes_empty', iconKey: 'book-open' },
 ];
 
-function _memorySectionMeta(key) {
+export function _memorySectionMeta(key) {
   return MEMORY_SECTIONS.find(s => s.key === key) || MEMORY_SECTIONS[0];
 }
 
-function _memorySectionLabel(meta) {
+export function _memorySectionLabel(meta) {
   if (meta.label) return meta.label;
   return t(meta.labelKey);
 }
 
-function _memorySectionEmpty(meta) {
+export function _memorySectionEmpty(meta) {
   if (meta.empty) return meta.empty;
   return t(meta.emptyKey);
 }
 
-function _memorySectionContent(key) {
-  if (!_memoryData) return '';
-  if (key === 'user') return _memoryData.user || '';
-  if (key === 'soul') return _memoryData.soul || '';
-  if (key === 'project_context') return _memoryData.project_context || '';
-  return _memoryData.memory || '';
+export function _memorySectionContent(key) {
+  if (!state._memoryData) return '';
+  if (key === 'user') return state._memoryData.user || '';
+  if (key === 'soul') return state._memoryData.soul || '';
+  if (key === 'project_context') return state._memoryData.project_context || '';
+  return state._memoryData.memory || '';
 }
 
-function _memorySectionMtime(key) {
-  if (!_memoryData) return 0;
-  if (key === 'user') return _memoryData.user_mtime || 0;
-  if (key === 'soul') return _memoryData.soul_mtime || 0;
-  if (key === 'project_context') return _memoryData.project_context_mtime || 0;
-  return _memoryData.memory_mtime || 0;
+export function _memorySectionMtime(key) {
+  if (!state._memoryData) return 0;
+  if (key === 'user') return state._memoryData.user_mtime || 0;
+  if (key === 'soul') return state._memoryData.soul_mtime || 0;
+  if (key === 'project_context') return state._memoryData.project_context_mtime || 0;
+  return state._memoryData.memory_mtime || 0;
 }
 
-function _memorySectionPath(key) {
-  if (!_memoryData) return '';
-  if (key === 'user') return _memoryData.user_path || '';
-  if (key === 'soul') return _memoryData.soul_path || '';
-  if (key === 'project_context') return _memoryData.project_context_path || '';
-  if (key === 'memory') return _memoryData.memory_path || '';
+export function _memorySectionPath(key) {
+  if (!state._memoryData) return '';
+  if (key === 'user') return state._memoryData.user_path || '';
+  if (key === 'soul') return state._memoryData.soul_path || '';
+  if (key === 'project_context') return state._memoryData.project_context_path || '';
+  if (key === 'memory') return state._memoryData.memory_path || '';
   return '';
 }
 
-function _setMemoryHeaderButtons(mode) {
+export function _setMemoryHeaderButtons(mode) {
   const header = $('mainMemory') && $('mainMemory').querySelector('.main-view-header');
   const show = b => b && (b.style.display = '');
   const hide = b => b && (b.style.display = 'none');
   const editBtn = $('btnEditMemoryDetail');
   const cancelBtn = $('btnCancelMemoryDetail');
   const saveBtn = $('btnSaveMemoryDetail');
-  const meta = _memorySectionMeta(_currentMemorySection);
+  const meta = _memorySectionMeta(state._currentMemorySection);
   if (mode === 'read') {
     // Any read view has a populated title → header must be visible. Only the
     // Edit affordance is gated on the section being editable (read-only
     // sections like Project Context / External Notes still show the header).
     if (header) header.style.display = 'flex';
-    if (_currentMemorySection !== 'external_notes' && !meta.readOnly) show(editBtn); else hide(editBtn);
+    if (state._currentMemorySection !== 'external_notes' && !meta.readOnly) show(editBtn); else hide(editBtn);
     hide(cancelBtn); hide(saveBtn);
   }
   else if (mode === 'edit') { if (header) header.style.display = 'flex'; hide(editBtn); show(cancelBtn); show(saveBtn); }
   else { if (header) header.style.display = 'none'; hide(editBtn); hide(cancelBtn); hide(saveBtn); }
 }
 
-function _renderExternalNotesSources() {
+export function _renderExternalNotesSources() {
   const title = $('memoryDetailTitle');
   const body = $('memoryDetailBody');
   const empty = $('memoryDetailEmpty');
   if (!title || !body) return;
   title.textContent = t('external_notes_sources');
-  const data = _notesSourcesData || {};
+  const data = state._notesSourcesData || {};
   const sources = Array.isArray(data.sources) ? data.sources : [];
   const recall = data.automatic_recall_unchanged !== false
     ? `<div class="memory-detail-mtime">${esc(t('external_notes_auto_recall_hint'))}</div>`
@@ -505,9 +494,9 @@ function _renderExternalNotesSources() {
   if (!sources.length) {
     body.innerHTML = `<div class="main-view-content">${recall}<div class="memory-empty">${esc(t('external_notes_empty'))}</div></div>`;
   } else {
-    const selected = sources.find(src => (src.name || '').toLowerCase() === (_notesSelectedSource || '').toLowerCase()) || sources[0];
-    _notesSelectedSource = (selected && selected.name) || 'joplin';
-    const sourceOptions = sources.map(src => `<option value="${esc(src.name||'')}" ${src.name===_notesSelectedSource?'selected':''}>${esc(src.label||src.name||'')}</option>`).join('');
+    const selected = sources.find(src => (src.name || '').toLowerCase() === (state._notesSelectedSource || '').toLowerCase()) || sources[0];
+    state._notesSelectedSource = (selected && selected.name) || 'joplin';
+    const sourceOptions = sources.map(src => `<option value="${esc(src.name||'')}" ${src.name===state._notesSelectedSource?'selected':''}>${esc(src.label||src.name||'')}</option>`).join('');
     const recentAiNotes = Array.isArray(data.recent_ai_notes) ? data.recent_ai_notes : [];
     const recentAiHtml = recentAiNotes.length
       ? `<section class="notes-source-card notes-ai-recent-card">
@@ -518,12 +507,12 @@ function _renderExternalNotesSources() {
           }).join('')}</div>
         </section>`
       : '';
-    const searchError = _notesSearchError ? `<div class="detail-form-error">${esc(_notesSearchError)}</div>` : '';
-    const resultHtml = _notesSearchResults.length
-      ? `<div class="notes-search-results">${_notesSearchResults.map(note => `<button type="button" class="notes-result-card" onclick="previewExternalNote('${esc(note.source||_notesSelectedSource)}','${esc(note.id||'')}')"><strong>${esc(note.title||'Untitled')}</strong>${note.snippet?`<span>${esc(note.snippet)}</span>`:''}</button>`).join('')}</div>`
+    const searchError = state._notesSearchError ? `<div class="detail-form-error">${esc(state._notesSearchError)}</div>` : '';
+    const resultHtml = state._notesSearchResults.length
+      ? `<div class="notes-search-results">${state._notesSearchResults.map(note => `<button type="button" class="notes-result-card" onclick="previewExternalNote('${esc(note.source||state._notesSelectedSource)}','${esc(note.id||'')}')"><strong>${esc(note.title||'Untitled')}</strong>${note.snippet?`<span>${esc(note.snippet)}</span>`:''}</button>`).join('')}</div>`
       : `<div class="memory-empty">${esc(t('external_notes_search_empty'))}</div>`;
-    const previewHtml = _notesPreviewNote
-      ? `<section class="notes-source-card notes-preview-card"><div class="notes-source-card-head"><strong>${esc(_notesPreviewNote.title||'Untitled')}</strong><span class="detail-badge">${esc(_notesPreviewNote.source||_notesSelectedSource)}</span></div><div class="memory-content preview-md">${renderMd(_notesPreviewNote.body||'')}</div></section>`
+    const previewHtml = state._notesPreviewNote
+      ? `<section class="notes-source-card notes-preview-card"><div class="notes-source-card-head"><strong>${esc(state._notesPreviewNote.title||'Untitled')}</strong><span class="detail-badge">${esc(state._notesPreviewNote.source||state._notesSelectedSource)}</span></div><div class="memory-content preview-md">${renderMd(state._notesPreviewNote.body||'')}</div></section>`
       : '';
     const cards = sources.map(src => {
       const status = src.active ? t('source_active') : (src.status || t('source_configured'));
@@ -545,7 +534,7 @@ function _renderExternalNotesSources() {
       <form class="notes-search-form" onsubmit="event.preventDefault(); searchExternalNotes();">
         <select id="externalNotesSource" onchange="selectExternalNotesSource(this.value)">${sourceOptions}</select>
         <input id="externalNotesQuery" type="search" placeholder="${esc(t('external_notes_search_placeholder'))}" />
-        <button type="submit" class="btn-secondary">${esc(_notesSearchLoading ? t('loading') : t('search'))}</button>
+        <button type="submit" class="btn-secondary">${esc(state._notesSearchLoading ? t('loading') : t('search'))}</button>
       </form>
       ${searchError}
       ${resultHtml}
@@ -554,11 +543,11 @@ function _renderExternalNotesSources() {
   }
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _memoryMode = 'read';
+  state._memoryMode = 'read';
   _setMemoryHeaderButtons('read');
 }
 
-function _renderMemoryDetail(section) {
+export function _renderMemoryDetail(section) {
   if (section === 'external_notes') {
     _renderExternalNotesSources();
     return;
@@ -575,12 +564,12 @@ function _renderMemoryDetail(section) {
   const mtimeStr = mtime ? new Date(mtime * 1000).toLocaleString() : '';
   const mtimeHtml = mtimeStr ? `<div class="memory-detail-mtime">${esc(mtimeStr)}</div>` : '';
   const path = _memorySectionPath(section);
-  const fileName = section === 'project_context' && _memoryData
-    ? (_memoryData.project_context_name || (path.split(/[\\/]/).pop() || ''))
+  const fileName = section === 'project_context' && state._memoryData
+    ? (state._memoryData.project_context_name || (path.split(/[\\/]/).pop() || ''))
     : (path.split(/[\\/]/).pop() || '');
   const pathHtml = path ? `<div class="memory-detail-mtime">${esc(fileName)} · ${esc(path)}</div>` : '';
-  const shadowed = section === 'project_context' && _memoryData && Array.isArray(_memoryData.project_context_shadowed)
-    ? _memoryData.project_context_shadowed
+  const shadowed = section === 'project_context' && state._memoryData && Array.isArray(state._memoryData.project_context_shadowed)
+    ? state._memoryData.project_context_shadowed
     : [];
   const shadowedHtml = shadowed.length
     ? `<div class="memory-detail-mtime">${esc(shadowed.map(item => `${item.name || 'Context file'} present, shadowed by ${item.shadowed_by || fileName || 'active context'}`).join('; '))}</div>`
@@ -591,11 +580,11 @@ function _renderMemoryDetail(section) {
   body.innerHTML = `<div class="main-view-content">${pathHtml}${mtimeHtml}${shadowedHtml}${inner}</div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _memoryMode = 'read';
+  state._memoryMode = 'read';
   _setMemoryHeaderButtons('read');
 }
 
-function _renderMemoryEdit(section) {
+export function _renderMemoryEdit(section) {
   const meta = _memorySectionMeta(section);
   const title = $('memoryDetailTitle');
   const body = $('memoryDetailBody');
@@ -615,74 +604,74 @@ function _renderMemoryEdit(section) {
     </div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _memoryMode = 'edit';
+  state._memoryMode = 'edit';
   _setMemoryHeaderButtons('edit');
   const ta = $('memEditContent');
   if (ta) ta.focus();
 }
 
-async function loadNotesSources(force) {
-  if (_notesSourcesData && !force) return _notesSourcesData;
+export async function loadNotesSources(force) {
+  if (state._notesSourcesData && !force) return state._notesSourcesData;
   try {
-    _notesSourcesData = await api('/api/notes/sources');
+    state._notesSourcesData = await api('/api/notes/sources');
   } catch (e) {
-    _notesSourcesData = {sources: [], automatic_recall_unchanged: true, error: e && e.message ? e.message : String(e)};
+    state._notesSourcesData = {sources: [], automatic_recall_unchanged: true, error: e && e.message ? e.message : String(e)};
   }
-  return _notesSourcesData;
+  return state._notesSourcesData;
 }
 
-function selectExternalNotesSource(source) {
-  _notesSelectedSource = source || 'joplin';
-  _notesSearchResults = [];
-  _notesPreviewNote = null;
-  _notesSearchError = '';
+export function selectExternalNotesSource(source) {
+  state._notesSelectedSource = source || 'joplin';
+  state._notesSearchResults = [];
+  state._notesPreviewNote = null;
+  state._notesSearchError = '';
   _renderExternalNotesSources();
 }
 
-async function searchExternalNotes() {
+export async function searchExternalNotes() {
   const input = $('externalNotesQuery');
   const sourceEl = $('externalNotesSource');
   const q = input ? input.value.trim() : '';
-  _notesSelectedSource = sourceEl ? sourceEl.value : (_notesSelectedSource || 'joplin');
-  _notesPreviewNote = null;
-  _notesSearchError = '';
+  state._notesSelectedSource = sourceEl ? sourceEl.value : (state._notesSelectedSource || 'joplin');
+  state._notesPreviewNote = null;
+  state._notesSearchError = '';
   if (!q) {
-    _notesSearchResults = [];
+    state._notesSearchResults = [];
     _renderExternalNotesSources();
     return;
   }
-  _notesSearchLoading = true;
+  state._notesSearchLoading = true;
   _renderExternalNotesSources();
   try {
-    const data = await api(`/api/notes/search?source=${encodeURIComponent(_notesSelectedSource)}&q=${encodeURIComponent(q)}&limit=20`);
-    _notesSearchResults = Array.isArray(data.results) ? data.results : [];
-    _notesSearchError = data.error || '';
+    const data = await api(`/api/notes/search?source=${encodeURIComponent(state._notesSelectedSource)}&q=${encodeURIComponent(q)}&limit=20`);
+    state._notesSearchResults = Array.isArray(data.results) ? data.results : [];
+    state._notesSearchError = data.error || '';
   } catch (e) {
-    _notesSearchResults = [];
-    _notesSearchError = e && e.message ? e.message : String(e);
+    state._notesSearchResults = [];
+    state._notesSearchError = e && e.message ? e.message : String(e);
   } finally {
-    _notesSearchLoading = false;
+    state._notesSearchLoading = false;
     _renderExternalNotesSources();
     const nextInput = $('externalNotesQuery');
     if (nextInput) nextInput.value = q;
   }
 }
 
-async function previewExternalNote(source, id) {
-  _notesSearchError = '';
+export async function previewExternalNote(source, id) {
+  state._notesSearchError = '';
   try {
-    const data = await api(`/api/notes/item?source=${encodeURIComponent(source||_notesSelectedSource)}&id=${encodeURIComponent(id||'')}`);
-    _notesPreviewNote = data && data.note ? data.note : null;
+    const data = await api(`/api/notes/item?source=${encodeURIComponent(source||state._notesSelectedSource)}&id=${encodeURIComponent(id||'')}`);
+    state._notesPreviewNote = data && data.note ? data.note : null;
   } catch (e) {
-    _notesPreviewNote = null;
-    _notesSearchError = e && e.message ? e.message : String(e);
+    state._notesPreviewNote = null;
+    state._notesSearchError = e && e.message ? e.message : String(e);
   }
   _renderExternalNotesSources();
 }
 
-async function openMemorySection(section, el) {
-  if (section === 'external_notes' && _memoryData && !_memoryData.external_notes_enabled) return;
-  _currentMemorySection = section;
+export async function openMemorySection(section, el) {
+  if (section === 'external_notes' && state._memoryData && !state._memoryData.external_notes_enabled) return;
+  state._currentMemorySection = section;
   document.querySelectorAll('#memoryPanel .side-menu-item').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
   if (section === 'external_notes') {
@@ -692,60 +681,60 @@ async function openMemorySection(section, el) {
   _closeMobileSidebarAfterPanelSelection();
 }
 
-function editCurrentMemory() {
-  const meta = _memorySectionMeta(_currentMemorySection);
-  if (!_currentMemorySection || _currentMemorySection === 'external_notes' || meta.readOnly) return;
-  _renderMemoryEdit(_currentMemorySection);
+export function editCurrentMemory() {
+  const meta = _memorySectionMeta(state._currentMemorySection);
+  if (!state._currentMemorySection || state._currentMemorySection === 'external_notes' || meta.readOnly) return;
+  _renderMemoryEdit(state._currentMemorySection);
 }
 
-function cancelMemoryEdit() {
-  if (!_currentMemorySection) return;
-  _renderMemoryDetail(_currentMemorySection);
+export function cancelMemoryEdit() {
+  if (!state._currentMemorySection) return;
+  _renderMemoryDetail(state._currentMemorySection);
 }
 
 // Legacy alias (kept for any stale references)
-function toggleMemoryEdit() { editCurrentMemory(); }
-function closeMemoryEdit() { cancelMemoryEdit(); }
+export function toggleMemoryEdit() { editCurrentMemory(); }
+export function closeMemoryEdit() { cancelMemoryEdit(); }
 
-async function submitMemorySave() {
-  if (!_currentMemorySection) return;
-  if (_memorySectionMeta(_currentMemorySection).readOnly) return;
+export async function submitMemorySave() {
+  if (!state._currentMemorySection) return;
+  if (_memorySectionMeta(state._currentMemorySection).readOnly) return;
   const ta = $('memEditContent');
   const errEl = $('memEditError');
   if (!ta) return;
   if (errEl) errEl.style.display = 'none';
   try {
-    await api('/api/memory/write', {method:'POST', body: JSON.stringify({section: _currentMemorySection, content: ta.value})});
+    await api('/api/memory/write', {method:'POST', body: JSON.stringify({section: state._currentMemorySection, content: ta.value})});
     showToast(t('memory_saved'));
     await loadMemory(true);
-    _renderMemoryDetail(_currentMemorySection);
+    _renderMemoryDetail(state._currentMemorySection);
   } catch(e) {
     if (errEl) { errEl.textContent = t('error_prefix') + e.message; errEl.style.display = ''; }
   }
 }
 
-async function loadMemory(force) {
+export async function loadMemory(force) {
   const panel = $('memoryPanel');
   try {
     const memoryUrl = S.session && S.session.session_id
       ? `/api/memory?session_id=${encodeURIComponent(S.session.session_id)}`
       : '/api/memory';
     const data = await api(memoryUrl);
-    _memoryData = data;
-    if (_currentMemorySection === 'external_notes' && !data.external_notes_enabled) {
-      _currentMemorySection = null;
+    state._memoryData = data;
+    if (state._currentMemorySection === 'external_notes' && !data.external_notes_enabled) {
+      state._currentMemorySection = null;
     }
-    if (_currentMemorySection === 'external_notes') {
+    if (state._currentMemorySection === 'external_notes') {
       await loadNotesSources(!!force);
     }
     if (panel) {
       panel.innerHTML = '';
       for (const s of MEMORY_SECTIONS) {
-        if (s.key === 'external_notes' && !_memoryData.external_notes_enabled) continue;
+        if (s.key === 'external_notes' && !state._memoryData.external_notes_enabled) continue;
         const el = document.createElement('button');
         el.type = 'button';
         el.className = 'side-menu-item';
-        if (_currentMemorySection === s.key) el.classList.add('active');
+        if (state._currentMemorySection === s.key) el.classList.add('active');
         el.innerHTML = `${li(s.iconKey,16)}<span>${esc(_memorySectionLabel(s))}</span>`;
         const sectionPath = _memorySectionPath(s.key);
         if (sectionPath) el.title = sectionPath;
@@ -753,54 +742,10 @@ async function loadMemory(force) {
         panel.appendChild(el);
       }
     }
-    if (_currentMemorySection && _memoryMode !== 'edit') {
-      _renderMemoryDetail(_currentMemorySection);
+    if (state._currentMemorySection && state._memoryMode !== 'edit') {
+      _renderMemoryDetail(state._currentMemorySection);
     }
   } catch(e) {
     if (panel) panel.innerHTML = `<div style="padding:12px;color:var(--accent);font-size:12px">${esc(t('error_prefix'))}${esc(e.message)}</div>`;
   }
 }
-
-window.HermesPanels.knowledge = {
-  loadSkills,
-  _toggleCatCollapse,
-  renderSkills,
-  filterSkills,
-  toggleSkill,
-  _stripYamlFrontmatter,
-  _skillMarkdownHtml,
-  _enhanceSkillMarkdown,
-  _renderSkillDetail,
-  _renderSkillError,
-  _setSkillHeaderButtons,
-  openSkill,
-  openSkillFile,
-  editCurrentSkill,
-  openSkillCreate,
-  _renderSkillForm,
-  cancelSkillForm,
-  saveSkillForm,
-  toggleSkillForm,
-  deleteCurrentSkill,
-  _memorySectionMeta,
-  _memorySectionLabel,
-  _memorySectionEmpty,
-  _memorySectionContent,
-  _memorySectionMtime,
-  _memorySectionPath,
-  _setMemoryHeaderButtons,
-  _renderExternalNotesSources,
-  _renderMemoryDetail,
-  _renderMemoryEdit,
-  loadNotesSources,
-  selectExternalNotesSource,
-  searchExternalNotes,
-  previewExternalNote,
-  openMemorySection,
-  editCurrentMemory,
-  cancelMemoryEdit,
-  toggleMemoryEdit,
-  closeMemoryEdit,
-  submitMemorySave,
-  loadMemory,
-};

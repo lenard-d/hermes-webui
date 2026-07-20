@@ -1,11 +1,14 @@
+import { state } from "./state.js";
+import { loadKanbanBoards,loadKanbanTask,updateKanbanTask } from "./kanban-boards.js";
+import { _kanbanBoardQuery,_scheduleKanbanRefresh } from "./kanban-tasks.js";
+
 // Panels domain: kanban state and board rendering
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Kanban panel (read-only) ──
-function _kanbanColumnLabel(name){ return t('kanban_status_' + name) || name; }
-function _kanbanTaskTitle(task){ return task.title || task.summary || task.id || t('kanban_task'); }
-function _kanbanTaskBody(task){ return task.body || task.description || task.prompt || ''; }
-function _kanbanTaskMeta(task){
+export function _kanbanColumnLabel(name){ return t('kanban_status_' + name) || name; }
+export function _kanbanTaskTitle(task){ return task.title || task.summary || task.id || t('kanban_task'); }
+export function _kanbanTaskBody(task){ return task.body || task.description || task.prompt || ''; }
+export function _kanbanTaskMeta(task){
   const bits = [];
   bits.push(task.assignee ? task.assignee : t('kanban_unassigned'));
   if (task.tenant) bits.push(task.tenant);
@@ -15,7 +18,7 @@ function _kanbanTaskMeta(task){
   return bits;
 }
 
-function _kanbanCurrentFilters(){
+export function _kanbanCurrentFilters(){
   const q = $('kanbanSearch') ? $('kanbanSearch').value.trim().toLowerCase() : '';
   const assigneeEl = $('kanbanAssigneeFilter');
   const tenantEl = $('kanbanTenantFilter');
@@ -26,21 +29,20 @@ function _kanbanCurrentFilters(){
   return {q, assignee, tenant, includeArchived, onlyMine};
 }
 
-function _kanbanApplyConfigDefaults(config){
+export function _kanbanApplyConfigDefaults(config){
   if (!config) return;
-  _kanbanLanesByProfile = config.lane_by_profile === true;
+  state._kanbanLanesByProfile = config.lane_by_profile === true;
   syncKanbanViewToggle();
-  if (_kanbanConfigApplied) return;
+  if (state._kanbanConfigApplied) return;
   if ($('kanbanTenantFilter') && config.default_tenant) $('kanbanTenantFilter').dataset.defaultValue = config.default_tenant;
   if ($('kanbanIncludeArchived') && config.include_archived_by_default === true) $('kanbanIncludeArchived').checked = true;
-  _kanbanConfigApplied = true;
+  state._kanbanConfigApplied = true;
 }
-let _kanbanConfigApplied = false;
 
-function syncKanbanViewToggle(){
+export function syncKanbanViewToggle(){
   const btn = $('btnKanbanViewToggle');
   if (!btn) return;
-  const consolidated = !_kanbanLanesByProfile;
+  const consolidated = !state._kanbanLanesByProfile;
   const label = t('kanban_view_consolidated');
   btn.setAttribute('aria-pressed', consolidated ? 'true' : 'false');
   btn.setAttribute('aria-label', label);
@@ -50,16 +52,16 @@ function syncKanbanViewToggle(){
   else btn.setAttribute('data-tooltip', label);
 }
 
-async function toggleKanbanViewMode(){
+export async function toggleKanbanViewMode(){
   const btn = $('btnKanbanViewToggle');
-  const nextLaneByProfile = !_kanbanLanesByProfile;
+  const nextLaneByProfile = !state._kanbanLanesByProfile;
   if (btn) btn.disabled = true;
   try {
     const saved = await api('/api/kanban/config', {method: 'PATCH', body: JSON.stringify({lane_by_profile: nextLaneByProfile})});
-    _kanbanLanesByProfile = saved.lane_by_profile === true;
+    state._kanbanLanesByProfile = saved.lane_by_profile === true;
     syncKanbanViewToggle();
     _kanbanRenderBoard();
-    showToast(t(_kanbanLanesByProfile ? 'kanban_view_lanes_saved' : 'kanban_view_consolidated_saved'));
+    showToast(t(state._kanbanLanesByProfile ? 'kanban_view_lanes_saved' : 'kanban_view_consolidated_saved'));
   } catch(e) {
     showToast(t('kanban_view_update_failed') + (e.message || e), 4000, 'error');
   } finally {
@@ -67,7 +69,7 @@ async function toggleKanbanViewMode(){
   }
 }
 
-function _kanbanSetSelectOptions(el, values, allLabelKey){
+export function _kanbanSetSelectOptions(el, values, allLabelKey){
   if (!el) return;
   const current = el.value || el.dataset.defaultValue || '';
   const opts = [`<option value="">${esc(t(allLabelKey))}</option>`]
@@ -76,9 +78,9 @@ function _kanbanSetSelectOptions(el, values, allLabelKey){
   if ([...el.options].some(o => o.value === current)) el.value = current;
 }
 
-function _kanbanVisibleTasks(){
+export function _kanbanVisibleTasks(){
   const filters = _kanbanCurrentFilters();
-  const columns = (_kanbanBoard && _kanbanBoard.columns) || [];
+  const columns = (state._kanbanBoard && state._kanbanBoard.columns) || [];
   return columns.map(col => {
     const tasks = (col.tasks || []).filter(task => {
       if (!filters.q) return true;
@@ -90,7 +92,7 @@ function _kanbanVisibleTasks(){
   });
 }
 
-function _kanbanRenderSidebar(columns){
+export function _kanbanRenderSidebar(columns){
   const list = $('kanbanList');
   if (!list) return;
   const tasks = columns.flatMap(col => (col.tasks || []).map(task => ({...task, status: task.status || col.name})));
@@ -113,7 +115,7 @@ function _kanbanRenderSidebar(columns){
  * Render inline markdown (bold, italic, code, links, strikethrough).
  * Input is already HTML-escaped.
  */
-function _kanbanRenderMarkdownInline(escaped){
+export function _kanbanRenderMarkdownInline(escaped){
   return String(escaped || '')
     .replace(/~~([^~\n]+)~~/g, (_m, text) => `<del>${text}</del>`)
     .replace(/`([^`\n]+)`/g, (_m, code) => `<code>${code}</code>`)
@@ -126,7 +128,7 @@ function _kanbanRenderMarkdownInline(escaped){
  * Render full markdown block content: headings, code blocks, lists, tables,
  * task lists, blockquotes, horizontal rules, paragraphs + inline formatting.
  */
-function _kanbanRenderMarkdown(source){
+export function _kanbanRenderMarkdown(source){
   if (!source) return '';
   const lines = esc(source).split(/\r?\n/);
   const out = [];
@@ -293,7 +295,7 @@ function _kanbanRenderMarkdown(source){
   return `<div class="hermes-kanban-md">${out.join('\n')}</div>`;
 }
 
-function _kanbanFormatDuration(seconds){
+export function _kanbanFormatDuration(seconds){
   const n = Number(seconds);
   if (!Number.isFinite(n) || n <= 0) return '';
   if (n < 60) return Math.round(n) + 's';
@@ -302,13 +304,13 @@ function _kanbanFormatDuration(seconds){
   return Math.round(n / 86400) + 'd';
 }
 
-function _kanbanTaskAge(task){
+export function _kanbanTaskAge(task){
   const age = task && (task.age_seconds || task.age);
   if (Number.isFinite(Number(age))) return _kanbanFormatDuration(age);
   return '';
 }
 
-function _kanbanCardStalenessClass(task){
+export function _kanbanCardStalenessClass(task){
   const age = Number(task && (task.age_seconds || task.age));
   const status = task && task.status;
   if (!Number.isFinite(age)) return '';
@@ -317,7 +319,7 @@ function _kanbanCardStalenessClass(task){
   return '';
 }
 
-function _kanbanCardQuickActions(task){
+export function _kanbanCardQuickActions(task){
   const id = esc(task.id || '');
   const status = task.status || '';
   const complete = status !== 'done' && status !== 'archived' ? `<button type="button" class="kanban-card-action" onclick="quickKanbanCardAction(event,'${id}','done')">${esc(t('kanban_card_complete'))}</button>` : '';
@@ -325,28 +327,28 @@ function _kanbanCardQuickActions(task){
   return `<div class="kanban-card-actions" onclick="event.stopPropagation()">${complete}${archive}</div>`;
 }
 
-async function quickKanbanCardAction(event, taskId, status){
+export async function quickKanbanCardAction(event, taskId, status){
   if (event) event.stopPropagation();
   return updateKanbanTask(taskId, {status});
 }
 
-function _kanbanSuppressNextCardClick(){
-  _kanbanSuppressCardClickUntil = Date.now() + 700;
+export function _kanbanSuppressNextCardClick(){
+  state._kanbanSuppressCardClickUntil = Date.now() + 700;
 }
 
-function dragKanbanTask(event, taskId){
+export function dragKanbanTask(event, taskId){
   _kanbanSuppressNextCardClick();
   if (!event.dataTransfer) return;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', taskId);
 }
 
-function finishKanbanDrag(event){
+export function finishKanbanDrag(event){
   if (event) _kanbanSuppressNextCardClick();
 }
 
-function openKanbanCard(event, taskId){
-  if (Date.now() < _kanbanSuppressCardClickUntil) {
+export function openKanbanCard(event, taskId){
+  if (Date.now() < state._kanbanSuppressCardClickUntil) {
     if (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -357,7 +359,7 @@ function openKanbanCard(event, taskId){
   return false;
 }
 
-function allowKanbanDrop(event){
+export function allowKanbanDrop(event){
   // Don't accept drops into the 'running' column. Entering 'running' is owned
   // by the dispatcher/claim_task path (sets claim_lock + claim_expires +
   // started_at + worker_pid). A drag-drop would bypass that contract and the
@@ -372,11 +374,11 @@ function allowKanbanDrop(event){
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
 }
 
-function clearKanbanDrop(event){
+export function clearKanbanDrop(event){
   if (event && event.currentTarget) event.currentTarget.classList.remove('drop-target');
 }
 
-async function dropKanbanTask(event, status){
+export async function dropKanbanTask(event, status){
   _kanbanSuppressNextCardClick();
   event.preventDefault();
   event.stopPropagation();
@@ -386,10 +388,10 @@ async function dropKanbanTask(event, status){
   _kanbanSuppressNextCardClick();
 }
 const KANBAN_UNASSIGNED_LANE = '__unassigned__';
-function _kanbanLaneKey(task){ return task && task.assignee ? String(task.assignee) : KANBAN_UNASSIGNED_LANE; }
-function _kanbanLaneLabel(lane){ return lane === KANBAN_UNASSIGNED_LANE ? t('kanban_unassigned') : lane; }
+export function _kanbanLaneKey(task){ return task && task.assignee ? String(task.assignee) : KANBAN_UNASSIGNED_LANE; }
+export function _kanbanLaneLabel(lane){ return lane === KANBAN_UNASSIGNED_LANE ? t('kanban_unassigned') : lane; }
 
-function _kanbanLaneNames(columns){
+export function _kanbanLaneNames(columns){
   const names = new Set();
   columns.forEach(col => (col.tasks || []).forEach(task => names.add(_kanbanLaneKey(task))));
   const assigned = Array.from(names).filter(n => n !== KANBAN_UNASSIGNED_LANE).sort((a, b) => {
@@ -401,7 +403,7 @@ function _kanbanLaneNames(columns){
   return assigned;
 }
 
-function _kanbanRenderColumn(col){
+export function _kanbanRenderColumn(col){
   const tasks = col.tasks || [];
   return `<section class="kanban-column" data-status="${esc(col.name)}" data-kanban-status="${esc(col.name)}" ondragover="allowKanbanDrop(event)" ondragenter="event.currentTarget.classList.add('drop-target')" ondragleave="clearKanbanDrop(event)" ondrop="dropKanbanTask(event, '${esc(col.name)}')">
       <div class="kanban-column-head">
@@ -414,7 +416,7 @@ function _kanbanRenderColumn(col){
     </section>`;
 }
 
-function _kanbanRenderProfileLanes(columns){
+export function _kanbanRenderProfileLanes(columns){
   const lanes = _kanbanLaneNames(columns);
   if (!lanes.length) return columns.map(_kanbanRenderColumn).join('');
   return `<div class="kanban-profile-lanes">${lanes.map(lane => {
@@ -425,15 +427,15 @@ function _kanbanRenderProfileLanes(columns){
   }).join('')}</div>`;
 }
 
-function _kanbanEmptyBoardHtml(){
+export function _kanbanEmptyBoardHtml(){
   return `<div class="main-view-empty"><div class="main-view-empty-title">${esc(t('kanban_no_data'))}</div><div class="main-view-empty-sub">${esc(t('kanban_work_queue_hint'))}</div></div>`;
 }
 
-function _kanbanHiddenByFiltersHtml(){
+export function _kanbanHiddenByFiltersHtml(){
   return `<div class="main-view-empty"><div class="main-view-empty-title">${esc(t('kanban_tasks_hidden_by_filters'))}</div><div class="main-view-empty-sub"><button class="btn-link" onclick="clearKanbanFilters()">${esc(t('kanban_clear_filters'))}</button></div></div>`;
 }
 
-function clearKanbanFilters(){
+export function clearKanbanFilters(){
   const s = $('kanbanSearch'); if (s) s.value = '';
   const a = $('kanbanAssigneeFilter'); if (a) { a.value = ''; a.dataset.defaultValue = ''; }
   const te = $('kanbanTenantFilter'); if (te) { te.value = ''; te.dataset.defaultValue = ''; }
@@ -442,10 +444,10 @@ function clearKanbanFilters(){
   loadKanban(true);
 }
 
-function _kanbanRenderBoard(){
+export function _kanbanRenderBoard(){
   const board = $('kanbanBoard');
   if (!board) return;
-  if (!_kanbanBoard || !_kanbanBoard.columns) {
+  if (!state._kanbanBoard || !state._kanbanBoard.columns) {
     board.innerHTML = _kanbanEmptyBoardHtml();
     return;
   }
@@ -454,14 +456,14 @@ function _kanbanRenderBoard(){
   if ($('kanbanSummary')) $('kanbanSummary').textContent = String(t('kanban_visible_tasks')).replace('{0}', total);
   _kanbanRenderSidebar(columns);
   if (total === 0) {
-    const unfilteredTotal = (_kanbanBoard.columns || []).reduce((n, col) => n + (col.tasks || []).length, 0);
+    const unfilteredTotal = (state._kanbanBoard.columns || []).reduce((n, col) => n + (col.tasks || []).length, 0);
     board.innerHTML = unfilteredTotal > 0 ? _kanbanHiddenByFiltersHtml() : _kanbanEmptyBoardHtml();
     return;
   }
-  board.innerHTML = _kanbanLanesByProfile ? _kanbanRenderProfileLanes(columns) : columns.map(_kanbanRenderColumn).join('');
+  board.innerHTML = state._kanbanLanesByProfile ? _kanbanRenderProfileLanes(columns) : columns.map(_kanbanRenderColumn).join('');
 }
 
-function _kanbanCard(task, status){
+export function _kanbanCard(task, status){
   const priority = Number(task.priority || 0);
   const links = task.link_counts || {};
   const linkTotal = Number(links.parents || 0) + Number(links.children || 0);
@@ -479,7 +481,7 @@ function _kanbanCard(task, status){
   </article>`;
 }
 
-async function hardRefreshWebUIClient(){
+export async function hardRefreshWebUIClient(){
   try {
     if (navigator.serviceWorker) {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -495,7 +497,7 @@ async function hardRefreshWebUIClient(){
   window.location.reload();
 }
 
-function _normalizeWebUIVersion(value){
+export function _normalizeWebUIVersion(value){
   if(!value) return '';
   const s=String(value).trim();
   if(!s) return '';
@@ -509,7 +511,7 @@ function _normalizeWebUIVersion(value){
   return s;
 }
 
-function _currentWebUIBundleVersion(){
+export function _currentWebUIBundleVersion(){
   try{
     const raw=window.__HERMES_WEBUI_BUNDLE_VERSION__;
     if(!raw) return '';
@@ -519,7 +521,7 @@ function _currentWebUIBundleVersion(){
   }catch(_){ return ''; }
 }
 
-function _showStaleWebUIClientBanner(clientVersion,serverVersion){
+export function _showStaleWebUIClientBanner(clientVersion,serverVersion){
   const banner=document.getElementById('staleClientBanner');
   if(!banner) return;
   const msg=document.getElementById('staleClientMessage');
@@ -529,7 +531,7 @@ function _showStaleWebUIClientBanner(clientVersion,serverVersion){
   banner.style.display='flex';
 }
 
-function checkWebUIVersionSkew(settings){
+export function checkWebUIVersionSkew(settings){
   try{
     if(!settings) return;
     const client=_currentWebUIBundleVersion();
@@ -539,9 +541,8 @@ function checkWebUIVersionSkew(settings){
     _showStaleWebUIClientBanner(client,server);
   }catch(_){}
 }
-window.checkWebUIVersionSkew=checkWebUIVersionSkew;
 
-function _startWebUIVersionSkewMonitor(){
+export function _startWebUIVersionSkewMonitor(){
   let _pollTimer=null;
   function _isBannerVisible(){
     const banner=document.getElementById('staleClientBanner');
@@ -569,7 +570,7 @@ function _startWebUIVersionSkewMonitor(){
 }
 _startWebUIVersionSkewMonitor();
 
-function _kanbanLooksLikeStaleClientError(err){
+export function _kanbanLooksLikeStaleClientError(err){
   const msg = String((err && err.message) || err || '').toLowerCase();
   return !!(err && err.status === 404 && (
     msg === 'not found' ||
@@ -578,7 +579,7 @@ function _kanbanLooksLikeStaleClientError(err){
   ));
 }
 
-function _kanbanUnavailableHtml(err){
+export function _kanbanUnavailableHtml(err){
   const raw = String((err && err.message) || err || '');
   if (_kanbanLooksLikeStaleClientError(err)) {
     return `<div class="main-view-empty"><div class="main-view-empty-title">Kanban needs a hard refresh</div><div class="main-view-empty-subtitle">The server rejected an obsolete Kanban endpoint. This usually means the browser or Mac app is still running a stale cached WebUI bundle after an update.</div><button class="btn primary" type="button" onclick="hardRefreshWebUIClient()">${esc(t('update_hard_refresh_now')||'Hard refresh now')}</button><div class="main-view-empty-subtitle">Original error: ${esc(raw || 'not found')}</div></div>`;
@@ -587,7 +588,7 @@ function _kanbanUnavailableHtml(err){
   return `<div class="main-view-empty"><div class="main-view-empty-title">${msg}</div></div>`;
 }
 
-async function loadKanban(animate){
+export async function loadKanban(animate){
   const board = $('kanbanBoard');
   const list = $('kanbanList');
   try {
@@ -606,24 +607,24 @@ async function loadKanban(animate){
     if (filters.tenant) params.set('tenant', filters.tenant);
     if (filters.includeArchived) params.set('include_archived', '1');
     if (filters.onlyMine) params.set('only_mine', '1');
-    if (_kanbanCurrentBoard) params.set('board', _kanbanCurrentBoard);
+    if (state._kanbanCurrentBoard) params.set('board', state._kanbanCurrentBoard);
     const path = '/api/kanban/board' + (params.toString() ? '?' + params.toString() : '');
     const data = await api(path);
-    if (data && data.changed === false && _kanbanBoard) { _kanbanRenderBoard(); return; }
-    _kanbanBoard = data || {columns: []};
-    if ((!_kanbanBoard.columns || !_kanbanBoard.columns.length) && config && config.columns) {
-      _kanbanBoard.columns = config.columns.map(name => ({name, tasks: []}));
+    if (data && data.changed === false && state._kanbanBoard) { _kanbanRenderBoard(); return; }
+    state._kanbanBoard = data || {columns: []};
+    if ((!state._kanbanBoard.columns || !state._kanbanBoard.columns.length) && config && config.columns) {
+      state._kanbanBoard.columns = config.columns.map(name => ({name, tasks: []}));
     }
-    _kanbanLatestEventId = Number(_kanbanBoard.latest_event_id || 0);
+    state._kanbanLatestEventId = Number(state._kanbanBoard.latest_event_id || 0);
     // Toggle the "Read-only view" banner based on the bridge's read_only flag.
     // Bridge sets read_only=true only when the kanban_db connection cannot accept
     // writes (e.g. dispatcher contention or library missing). Hide otherwise.
     try {
       const ro = document.querySelector('.kanban-readonly');
-      if (ro) ro.style.display = _kanbanBoard.read_only ? '' : 'none';
+      if (ro) ro.style.display = state._kanbanBoard.read_only ? '' : 'none';
     } catch(_) {}
-    _kanbanSetSelectOptions($('kanbanAssigneeFilter'), _kanbanBoard.assignees || (assignees && assignees.assignees) || (config && config.assignees), 'kanban_all_assignees');
-    _kanbanSetSelectOptions($('kanbanTenantFilter'), _kanbanBoard.tenants, 'kanban_all_tenants');
+    _kanbanSetSelectOptions($('kanbanAssigneeFilter'), state._kanbanBoard.assignees || (assignees && assignees.assignees) || (config && config.assignees), 'kanban_all_assignees');
+    _kanbanSetSelectOptions($('kanbanTenantFilter'), state._kanbanBoard.tenants, 'kanban_all_tenants');
     await loadKanbanStats();
     // Note: PR #1828 (v0.51.20) moved the boards refresh to the start of
     // loadKanban() so the active board is resolved BEFORE board-scoped
@@ -641,9 +642,9 @@ async function loadKanban(animate){
   }
 }
 
-function filterKanban(){ _kanbanRenderBoard(); }
+export function filterKanban(){ _kanbanRenderBoard(); }
 
-async function loadKanbanStats(){
+export async function loadKanbanStats(){
   try {
     const stats = await api('/api/kanban/stats' + _kanbanBoardQuery());
     const el = $('kanbanStats');
@@ -657,128 +658,75 @@ async function loadKanbanStats(){
   } catch(e) { /* stats are best-effort */ }
 }
 
-async function refreshKanbanEvents(){
-  if (_currentPanel !== 'kanban' || !_kanbanLatestEventId) return;
+export async function refreshKanbanEvents(){
+  if (state._currentPanel !== 'kanban' || !state._kanbanLatestEventId) return;
   try {
     const eventsEndpoint = '/api/kanban/events';
-    const events = await api(eventsEndpoint + _kanbanBoardQuery({since: _kanbanLatestEventId}));
+    const events = await api(eventsEndpoint + _kanbanBoardQuery({since: state._kanbanLatestEventId}));
     if (events && Array.isArray(events.events) && events.events.length) {
-      _kanbanLatestEventId = Number(events.latest_event_id || events.cursor || _kanbanLatestEventId);
+      state._kanbanLatestEventId = Number(events.latest_event_id || events.cursor || state._kanbanLatestEventId);
       await loadKanban(true);
-      if (_kanbanCurrentTaskId && events.events.some(ev => ev.task_id === _kanbanCurrentTaskId)) await loadKanbanTask(_kanbanCurrentTaskId);
+      if (state._kanbanCurrentTaskId && events.events.some(ev => ev.task_id === state._kanbanCurrentTaskId)) await loadKanbanTask(state._kanbanCurrentTaskId);
     }
   } catch(e) { /* polling should not spam toasts */ }
 }
 
-function _kanbanStartPolling(){
+export function _kanbanStartPolling(){
   // Prefer SSE for low-latency live updates. Fall back to polling on
   // browsers without EventSource or after repeated stream failures.
-  if (typeof EventSource === 'undefined' || _kanbanEventSourceFailures >= 3) {
-    if (_kanbanPollTimer) return;
-    _kanbanPollTimer = setInterval(refreshKanbanEvents, 30000);
+  if (typeof EventSource === 'undefined' || state._kanbanEventSourceFailures >= 3) {
+    if (state._kanbanPollTimer) return;
+    state._kanbanPollTimer = setInterval(refreshKanbanEvents, 30000);
     return;
   }
   _kanbanStartEventStream();
 }
 
-function _kanbanStopPolling(){
-  if (_kanbanPollTimer) { clearInterval(_kanbanPollTimer); _kanbanPollTimer = null; }
-  if (_kanbanEventSource) { try { if(_kanbanEventSource.readyState!==2)_kanbanEventSource.close(); } catch(_) {} _kanbanEventSource = null; }
+export function _kanbanStopPolling(){
+  if (state._kanbanPollTimer) { clearInterval(state._kanbanPollTimer); state._kanbanPollTimer = null; }
+  if (state._kanbanEventSource) { try { if(state._kanbanEventSource.readyState!==2)state._kanbanEventSource.close(); } catch(_) {} state._kanbanEventSource = null; }
 }
 
-function _kanbanStartEventStream(){
+export function _kanbanStartEventStream(){
   // Tear down any prior stream before opening a new one (board switch,
   // login change, etc.).
-  if (_kanbanEventSource) { try { if(_kanbanEventSource.readyState!==2)_kanbanEventSource.close(); } catch(_) {} _kanbanEventSource = null; }
-  const since = Number(_kanbanLatestEventId || 0);
+  if (state._kanbanEventSource) { try { if(state._kanbanEventSource.readyState!==2)state._kanbanEventSource.close(); } catch(_) {} state._kanbanEventSource = null; }
+  const since = Number(state._kanbanLatestEventId || 0);
   let url = '/api/kanban/events/stream' + _kanbanBoardQuery({since: since});
   let es;
   try {
     es = new EventSource(url);
   } catch(e) {
-    _kanbanEventSourceFailures += 1;
-    if (_kanbanEventSourceFailures < 3 && !_kanbanPollTimer) {
-      _kanbanPollTimer = setInterval(refreshKanbanEvents, 30000);
+    state._kanbanEventSourceFailures += 1;
+    if (state._kanbanEventSourceFailures < 3 && !state._kanbanPollTimer) {
+      state._kanbanPollTimer = setInterval(refreshKanbanEvents, 30000);
     }
     return;
   }
-  _kanbanEventSource = es;
+  state._kanbanEventSource = es;
   es.addEventListener('hello', (ev) => {
     // Reset the failure counter on a successful handshake.
-    _kanbanEventSourceFailures = 0;
+    state._kanbanEventSourceFailures = 0;
   });
   es.addEventListener('events', async (ev) => {
-    if (_currentPanel !== 'kanban') return;  // ignore while user is on another panel
+    if (state._currentPanel !== 'kanban') return;  // ignore while user is on another panel
     let data;
     try { data = JSON.parse(ev.data); } catch(_) { return; }
     if (!data || !Array.isArray(data.events) || !data.events.length) return;
-    _kanbanLatestEventId = Number(data.cursor || _kanbanLatestEventId);
+    state._kanbanLatestEventId = Number(data.cursor || state._kanbanLatestEventId);
     // Re-fetch the board so the visual state reflects the new events.
     // Throttle: if events are arriving faster than ~1/sec we coalesce.
     _scheduleKanbanRefresh(data.events);
   });
   es.onerror = () => {
-    _kanbanEventSourceFailures += 1;
-    if (_kanbanEventSourceFailures >= 3) {
+    state._kanbanEventSourceFailures += 1;
+    if (state._kanbanEventSourceFailures >= 3) {
       // Give up on SSE for this session — fall back to HTTP polling.
       try { es.close(); } catch(_) {}
-      _kanbanEventSource = null;
-      if (!_kanbanPollTimer) _kanbanPollTimer = setInterval(refreshKanbanEvents, 30000);
+      state._kanbanEventSource = null;
+      if (!state._kanbanPollTimer) state._kanbanPollTimer = setInterval(refreshKanbanEvents, 30000);
     }
     // EventSource auto-reconnects under the hood; nothing more to do here
     // until we hit the failure limit.
   };
 }
-
-window.HermesPanels.kanbanBoard = {
-  _kanbanColumnLabel,
-  _kanbanTaskTitle,
-  _kanbanTaskBody,
-  _kanbanTaskMeta,
-  _kanbanCurrentFilters,
-  _kanbanApplyConfigDefaults,
-  syncKanbanViewToggle,
-  toggleKanbanViewMode,
-  _kanbanSetSelectOptions,
-  _kanbanVisibleTasks,
-  _kanbanRenderSidebar,
-  _kanbanRenderMarkdownInline,
-  _kanbanRenderMarkdown,
-  _kanbanFormatDuration,
-  _kanbanTaskAge,
-  _kanbanCardStalenessClass,
-  _kanbanCardQuickActions,
-  quickKanbanCardAction,
-  _kanbanSuppressNextCardClick,
-  dragKanbanTask,
-  finishKanbanDrag,
-  openKanbanCard,
-  allowKanbanDrop,
-  clearKanbanDrop,
-  dropKanbanTask,
-  _kanbanLaneKey,
-  _kanbanLaneLabel,
-  _kanbanLaneNames,
-  _kanbanRenderColumn,
-  _kanbanRenderProfileLanes,
-  _kanbanEmptyBoardHtml,
-  _kanbanHiddenByFiltersHtml,
-  clearKanbanFilters,
-  _kanbanRenderBoard,
-  _kanbanCard,
-  hardRefreshWebUIClient,
-  _normalizeWebUIVersion,
-  _currentWebUIBundleVersion,
-  _showStaleWebUIClientBanner,
-  checkWebUIVersionSkew,
-  _startWebUIVersionSkewMonitor,
-  _kanbanLooksLikeStaleClientError,
-  _kanbanUnavailableHtml,
-  loadKanban,
-  filterKanban,
-  loadKanbanStats,
-  refreshKanbanEvents,
-  _kanbanStartPolling,
-  _kanbanStopPolling,
-  _kanbanStartEventStream,
-};

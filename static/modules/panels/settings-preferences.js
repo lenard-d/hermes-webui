@@ -1,7 +1,14 @@
-// Panels domain: settings preferences and hydration
-window.HermesPanels = window.HermesPanels || {};
+import { state } from "./state.js";
+import { checkWebUIVersionSkew } from "./kanban-board.js";
+import { loadExtensionsPanel,loadPluginsPanel } from "./settings-extensions.js";
+import { _bindMainAdvancedOptionsButton,_loadAuxiliaryModels,_renderSettingsAuthStatus,_setSettingsAuthButtonsVisible,_syncPasswordlessButton,_syncUpdateChannelBadge,_updateAuthDisabledWarning,_updateAuthWarningBadge,_updateCurrentPasswordVisibility,checkUpdatesNow,loadPasskeys } from "./settings-models-auth.js";
+import { _applyStructuredCodeViewSettings,_applyTtsEnabled,_captureSpeechPreferenceOwnership,_markSettingsDirty,_markSpeechPreferenceChanged,_pickChatActivityDisplayMode,_pickTransparentEventTimestamps,_preferencesPayloadFromUi,_scheduleAppearanceAutosave,_setOwnedSpeechPayload,_structuredCodeViewFromUi,_syncChatActivityDisplayModeControl,_syncHermesPanelSessionActions,_syncSpeechPreferenceCache,_syncStructuredCodeLinesEnabled,_syncTransparentEventTimestampsControl,switchSettingsSection } from "./settings-navigation.js";
+import { loadProvidersPanel } from "./settings-providers.js";
+import { _applyTabOrder,_applyTabVisibility,_ensureComposerControlVisibilityState,_getHiddenTabs,_getTabOrder,_renderComposerControlChips,_renderComposerSituationalControlChips,_renderTabVisibilityChips,_setComposerControlOrder,_setHiddenTabs,_setTabOrder } from "./settings-state.js";
 
-function _speechPreferencesPayloadFromUi(){
+// Panels domain: settings preferences and hydration
+
+export function _speechPreferencesPayloadFromUi(){
   const payload={};
   const ttsEnabledCb=$('settingsTtsEnabled');
   if(ttsEnabledCb) _setOwnedSpeechPayload(payload,'tts_enabled',ttsEnabledCb.checked);
@@ -25,7 +32,7 @@ function _speechPreferencesPayloadFromUi(){
   return payload;
 }
 
-function _setPreferencesAutosaveStatus(state){
+export function _setPreferencesAutosaveStatus(state){
   const el=$('settingsPreferencesAutosaveStatus');
   if(!el) return;
   el.className='settings-autosave-status';
@@ -43,13 +50,13 @@ function _setPreferencesAutosaveStatus(state){
   }
 }
 
-function _rememberPreferencesSaved(payload){
+export function _rememberPreferencesSaved(payload){
   if(!payload) return;
   if(payload.send_key!==undefined) localStorage.setItem('hermes-pref-send_key',payload.send_key);
   if(payload.language!==undefined) localStorage.setItem('hermes-pref-language',payload.language);
 }
 
-function _applyWorkspaceTodosTabVisibility(){
+export function _applyWorkspaceTodosTabVisibility(){
   const tab=$('workspaceTodosTab');
   if(tab) tab.hidden=!window._workspaceTodosTab;
   const rp=document.querySelector('.rightpanel');
@@ -58,16 +65,16 @@ function _applyWorkspaceTodosTabVisibility(){
   }
 }
 
-function _schedulePreferencesAutosave(){
+export function _schedulePreferencesAutosave(){
   const payload=_preferencesPayloadFromUi();
   _rememberPreferencesSaved(payload);
-  _settingsPreferencesAutosaveRetryPayload=payload;
+  state._settingsPreferencesAutosaveRetryPayload=payload;
   _setPreferencesAutosaveStatus('saving');
-  if(_settingsPreferencesAutosaveTimer) clearTimeout(_settingsPreferencesAutosaveTimer);
-  _settingsPreferencesAutosaveTimer=setTimeout(()=>_autosavePreferencesSettings(payload),350);
+  if(state._settingsPreferencesAutosaveTimer) clearTimeout(state._settingsPreferencesAutosaveTimer);
+  state._settingsPreferencesAutosaveTimer=setTimeout(()=>_autosavePreferencesSettings(payload),350);
 }
 
-async function _autosavePreferencesSettings(payload){
+export async function _autosavePreferencesSettings(payload){
   try{
     const saved=await api('/api/settings',{method:'POST',body:JSON.stringify(payload)});
     if(payload&&payload.terminal_auto_expand_on_output!==undefined){
@@ -107,7 +114,7 @@ async function _autosavePreferencesSettings(payload){
     if(payload&&payload.new_chat_on_workspace_switch!==undefined){
       window._newChatOnWorkspaceSwitch=!!(saved&&saved.new_chat_on_workspace_switch);  // #5473
     }
-    _settingsPreferencesAutosaveRetryPayload=null;
+    state._settingsPreferencesAutosaveRetryPayload=null;
     _setPreferencesAutosaveStatus('saved');
     // Only clear the global dirty flag and hide the unsaved-changes bar when
     // there is no pending edit on a manually-saved field. Password and model
@@ -124,8 +131,8 @@ async function _autosavePreferencesSettings(payload){
       : {model:String((modelSel&&modelSel.value)||''),model_provider:null};
     const modelDirty=!!(
       modelSel&&(
-        (modelState.model||'')!==(_settingsHermesDefaultModelOnOpen||'')||
-        ((modelState.model_provider||null)!==(_settingsHermesDefaultModelProviderOnOpen||null))
+        (modelState.model||'')!==(state._settingsHermesDefaultModelOnOpen||'')||
+        ((modelState.model_provider||null)!==(state._settingsHermesDefaultModelProviderOnOpen||null))
       )
     );
     if(!pwDirty&&!modelDirty){
@@ -135,7 +142,7 @@ async function _autosavePreferencesSettings(payload){
         String(maxTokensField.value||'')!==String(maxTokensField.dataset.initialValue||'')
       );
       if(!maxTokensDirty){
-        _settingsDirty=false;
+        state._settingsDirty=false;
         const bar=$('settingsUnsavedBar');
         if(bar) bar.style.display='none';
       }
@@ -146,13 +153,13 @@ async function _autosavePreferencesSettings(payload){
   }
 }
 
-function _retryPreferencesAutosave(){
-  const payload=_settingsPreferencesAutosaveRetryPayload||_preferencesPayloadFromUi();
+export function _retryPreferencesAutosave(){
+  const payload=state._settingsPreferencesAutosaveRetryPayload||_preferencesPayloadFromUi();
   _setPreferencesAutosaveStatus('saving');
   _autosavePreferencesSettings(payload);
 }
 
-function _syncSettingsMaxTokensPlaceholder(field, fallbackValue){
+export function _syncSettingsMaxTokensPlaceholder(field, fallbackValue){
   if(!field) return;
   const parsedFallback=parseInt(fallbackValue,10);
   if(Number.isFinite(parsedFallback)&&parsedFallback>0&&typeof t==='function'){
@@ -163,7 +170,7 @@ function _syncSettingsMaxTokensPlaceholder(field, fallbackValue){
     ? t('settings_placeholder_max_tokens_none')
     : 'No override';
 }
-function _loadSettingsAppearance(settings){
+export function _loadSettingsAppearance(settings){
   checkWebUIVersionSkew(settings);
   // Populate the version badges from the server — keeps them in sync with git
   // tags automatically without any manual release step.
@@ -383,7 +390,7 @@ function _loadSettingsAppearance(settings){
   }
     return resolvedLanguage;
 }
-async function _loadSettingsModelControls(settings){
+export async function _loadSettingsModelControls(settings){
   // Populate model dropdown from /api/models + live model fetch (#872)
   const modelSel=$('settingsModel');
   if(modelSel){
@@ -413,17 +420,17 @@ async function _loadSettingsModelControls(settings){
         _fetchLiveModels(models.active_provider, modelSel);
       }
     }catch(e){}
-    _settingsHermesDefaultModelOnOpen=(models&&models.default_model)||'';
-    _settingsHermesDefaultModelProviderOnOpen=(models&&models.active_provider)||null;
+    state._settingsHermesDefaultModelOnOpen=(models&&models.default_model)||'';
+    state._settingsHermesDefaultModelProviderOnOpen=(models&&models.active_provider)||null;
     // Use the smart matcher so a saved bare form like "anthropic/claude-opus-4.6"
     // (what the CLI's `hermes model` command writes) still selects the matching
     // `@nous:anthropic/claude-opus-4.6` option on a Nous setup. Without this, the
     // picker renders blank for any user whose default was persisted without the
     // @-prefix — CLI-first users, legacy installs, etc.
     if(typeof _applyModelToDropdown==='function'){
-      _applyModelToDropdown(_settingsHermesDefaultModelOnOpen, modelSel, (models&&models.active_provider)||window._activeProvider||null);
+      _applyModelToDropdown(state._settingsHermesDefaultModelOnOpen, modelSel, (models&&models.active_provider)||window._activeProvider||null);
     }else{
-      modelSel.value=_settingsHermesDefaultModelOnOpen;
+      modelSel.value=state._settingsHermesDefaultModelOnOpen;
     }
     if(typeof closeSettingsModelDropdown==='function') closeSettingsModelDropdown();
     if(typeof mountSettingsModelPicker==='function') mountSettingsModelPicker();
@@ -437,7 +444,7 @@ async function _loadSettingsModelControls(settings){
   _bindMainAdvancedOptionsButton();
   _loadAuxiliaryModels();
 }
-function _loadSettingsPreferences(settings, resolvedLanguage){
+export function _loadSettingsPreferences(settings, resolvedLanguage){
   // Send key preference
   const sendKeySel=$('settingsSendKey');
   if(sendKeySel){sendKeySel.value=settings.send_key||'enter';sendKeySel.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
@@ -614,7 +621,7 @@ function _loadSettingsPreferences(settings, resolvedLanguage){
   const soundCb=$('settingsSoundEnabled');
   if(soundCb){soundCb.checked=!!settings.sound_enabled;soundCb.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
 }
-function _loadSettingsSpeechAndRuntime(settings){
+export function _loadSettingsSpeechAndRuntime(settings){
   // Right-to-left chat layout (#1721 salvage) — Settings-only, no composer button.
   const rtlCb=$('settingsRtl');
   if(rtlCb){
@@ -707,13 +714,13 @@ function _loadSettingsSpeechAndRuntime(settings){
     ttsEngineSel.onchange=function(){
       _markSpeechPreferenceChanged('tts_engine');
       localStorage.setItem('hermes-tts-engine',this.value);
-      window._populateTtsVoices();
+      populateTtsVoices();
       _schedulePreferencesAutosave();
     };
   }
   // Populate voice selector based on engine
   const ttsVoiceSel=$('settingsTtsVoice');
-  window._populateTtsVoices=function(){
+  const populateTtsVoices=()=>{
     if(!ttsVoiceSel) return;
     const engine=localStorage.getItem('hermes-tts-engine')||'browser';
     const current=String(_speechSetting('tts_voice','hermes-tts-voice','')||'');
@@ -756,10 +763,10 @@ function _loadSettingsSpeechAndRuntime(settings){
     }
   };
   if(ttsVoiceSel&&'speechSynthesis' in window){
-    window._populateTtsVoices();
+    populateTtsVoices();
     speechSynthesis.addEventListener('voiceschanged',function(){
       const engine=localStorage.getItem('hermes-tts-engine')||'browser';
-      if(engine==='browser') window._populateTtsVoices();
+      if(engine==='browser') populateTtsVoices();
     },{once:false});
     ttsVoiceSel.onchange=function(){_markSpeechPreferenceChanged('tts_voice');localStorage.setItem('hermes-tts-voice',this.value);_schedulePreferencesAutosave();};
   }
@@ -829,7 +836,7 @@ function _loadSettingsSpeechAndRuntime(settings){
     },{once:false});
   }
 }
-async function _loadSettingsAuthentication(settings){
+export async function _loadSettingsAuthentication(settings){
   // Password field: always blank (we don't send hash back)
   const pwField=$('settingsPassword');
   if(pwField){pwField.value='';pwField.addEventListener('input',_markSettingsDirty,{once:false});}
@@ -838,7 +845,7 @@ async function _loadSettingsAuthentication(settings){
   // tells the truth before a user tries (and the backend now also returns
   // 409 as defense-in-depth).
   const pwEnvLocked=!!settings.password_env_var;
-  _settingsPasswordEnvLocked=pwEnvLocked;
+  state._settingsPasswordEnvLocked=pwEnvLocked;
   const pwLockBanner=$('settingsPasswordEnvLock');
   if(pwField){
     pwField.disabled=pwEnvLocked;
@@ -851,7 +858,7 @@ async function _loadSettingsAuthentication(settings){
   // Show auth buttons only when auth is active
   try{
     const authStatus=await api('/api/auth/status');
-    _settingsPasswordAuthEnabled=!!authStatus.password_auth_enabled;
+    state._settingsPasswordAuthEnabled=!!authStatus.password_auth_enabled;
     _setSettingsAuthButtonsVisible(!!authStatus.auth_enabled);
     _syncPasswordlessButton(authStatus);
     _renderSettingsAuthStatus(authStatus);
@@ -873,10 +880,10 @@ async function _loadSettingsAuthentication(settings){
   loadProvidersPanel(); // load provider cards in background
   loadPluginsPanel(); // load plugin/hook visibility in background
   loadExtensionsPanel(); // load extension diagnostics in background
-  switchSettingsSection(_settingsSection);
+  switchSettingsSection(state._settingsSection);
 }
 
-async function loadSettingsPanel(){
+export async function loadSettingsPanel(){
   try{
     const settings=await api('/api/settings');
     const resolvedLanguage=_loadSettingsAppearance(settings);
@@ -888,20 +895,3 @@ async function loadSettingsPanel(){
     showToast(t('settings_load_failed')+e.message);
   }
 }
-
-window.HermesPanels.settingsPreferences = {
-  _speechPreferencesPayloadFromUi,
-  _setPreferencesAutosaveStatus,
-  _rememberPreferencesSaved,
-  _applyWorkspaceTodosTabVisibility,
-  _schedulePreferencesAutosave,
-  _autosavePreferencesSettings,
-  _retryPreferencesAutosave,
-  _syncSettingsMaxTokensPlaceholder,
-  _loadSettingsAppearance,
-  _loadSettingsModelControls,
-  _loadSettingsPreferences,
-  _loadSettingsSpeechAndRuntime,
-  _loadSettingsAuthentication,
-  loadSettingsPanel,
-};

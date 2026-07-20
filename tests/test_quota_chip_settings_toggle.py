@@ -8,7 +8,6 @@ from tests.frontend_asset_contract import family_source
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
-PANELS = REPO_ROOT / "static" / "panels.js"
 UI_JS = REPO_ROOT / "static" / "ui.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
 SETTINGS = REPO_ROOT / "api" / "config" / "settings.py"

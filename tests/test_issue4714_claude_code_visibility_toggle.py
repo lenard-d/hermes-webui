@@ -18,12 +18,11 @@ import api.profiles as profiles
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = ROOT / "static" / "panels.js"
 INDEX_HTML = ROOT / "static" / "index.html"
 PANELS_PREFERENCES = next(
     path.read_text(encoding="utf-8")
     for path in family_asset_paths("panels")
-    if path.name == "012-settings-preferences.js"
+    if path.name == "settings-preferences.js"
 )
 
 

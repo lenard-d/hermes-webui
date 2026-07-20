@@ -1,11 +1,16 @@
+import { state } from "./state.js";
+import { _gatewayStatusReason } from "./cron-list.js";
+
+import { onSettingsSectionChange } from "./settings-navigation.js";
+
+
 // Panels domain: MCP, gateway, and checkpoints
-window.HermesPanels = window.HermesPanels || {};
 
 // Event wiring
 
 
 // ── MCP Server Management ──
-function _mcpStatusLabel(status){
+export function _mcpStatusLabel(status){
   const key={
     active:'mcp_status_active',
     configured:'mcp_status_configured',
@@ -14,7 +19,7 @@ function _mcpStatusLabel(status){
   }[status]||'mcp_status_unknown';
   return t(key);
 }
-function toggleMcpServer(name, enabled){
+export function toggleMcpServer(name, enabled){
   api('/api/mcp/servers/'+encodeURIComponent(name),{
     method:'PATCH',
     body:JSON.stringify({enabled:enabled}),
@@ -27,10 +32,10 @@ function toggleMcpServer(name, enabled){
     loadMcpServers();
   }).catch(()=>{showToast(t('mcp_toggle_failed'),'error');loadMcpServers();});
 }
-function _refreshMcpToolsetsCatalog(payload){
+export function _refreshMcpToolsetsCatalog(payload){
   if(typeof window.invalidateToolsetsCatalog==='function') window.invalidateToolsetsCatalog(payload);
 }
-function loadMcpServers(){
+export function loadMcpServers(){
   const list=$('mcpServerList');
   if(!list) return;
   list.innerHTML=`<div style="color:var(--muted);font-size:12px;padding:6px 0">${esc(t('loading'))}</div>`;
@@ -71,12 +76,8 @@ function loadMcpServers(){
     }).join('');
   }).catch(()=>{list.innerHTML=`<div class="mcp-error-state" style="color:#ef4444;font-size:12px;padding:6px 0">${esc(t('mcp_load_failed'))}</div>`});
 }
-let _mcpToolsCache=[];
-let _mcpToolsMeta={};
-let _mcpToolsPage=1;
-let _mcpToolsPageSize=5;
 const MCP_TOOLS_PAGE_SIZE_OPTIONS=[5,10,20,40];
-function _filterMcpToolsForSearch(tools, query){
+export function _filterMcpToolsForSearch(tools, query){
   const q=(query||'').trim().toLowerCase();
   if(!q) return Array.isArray(tools)?tools:[];
   return (Array.isArray(tools)?tools:[]).filter(tool=>{
@@ -84,7 +85,7 @@ function _filterMcpToolsForSearch(tools, query){
     return hay.includes(q);
   });
 }
-function _mcpToolSchemaText(schemaSummary){
+export function _mcpToolSchemaText(schemaSummary){
   if(!Array.isArray(schemaSummary)||!schemaSummary.length) return t('mcp_tools_schema_empty');
   return schemaSummary.map(p=>{
     const req=p.required?'*':'';
@@ -92,30 +93,30 @@ function _mcpToolSchemaText(schemaSummary){
     return `${p.name}${req}: ${p.type||'unknown'}${desc}`;
   }).join('\n');
 }
-function _mcpToolsSummary(total, filtered, page, pages, query){
+export function _mcpToolsSummary(total, filtered, page, pages, query){
   const trimmedQuery=(query||'').trim();
   if(!filtered){
     if(trimmedQuery) return t('mcp_tools_summary_no_matches',trimmedQuery,total);
     return total?t('mcp_tools_summary_none'):'';
   }
-  const pageSize=_mcpToolsPageSize||5;
+  const pageSize=state._mcpToolsPageSize||5;
   const start=(page-1)*pageSize+1;
   const end=Math.min(filtered,page*pageSize);
   const searchNote=trimmedQuery?t('mcp_tools_summary_matching',trimmedQuery):'';
   const totalNote=filtered===total?'':t('mcp_tools_summary_total_note',total);
   return t('mcp_tools_summary_showing',start,end,filtered,searchNote,totalNote,page,pages);
 }
-function _mcpToolPageSizeControl(){
-  const options=MCP_TOOLS_PAGE_SIZE_OPTIONS.map(size=>`<option value="${size}" ${size===_mcpToolsPageSize?'selected':''}>${size}</option>`).join('');
+export function _mcpToolPageSizeControl(){
+  const options=MCP_TOOLS_PAGE_SIZE_OPTIONS.map(size=>`<option value="${size}" ${size===state._mcpToolsPageSize?'selected':''}>${size}</option>`).join('');
   return `<label class="mcp-tool-page-size">${esc(t('mcp_tools_page_size_prefix'))} <select aria-label="${esc(t('mcp_tools_per_page_aria'))}" onchange="setMcpToolsPageSize(this.value)">${options}</select> ${esc(t('mcp_tools_page_size_suffix'))}</label>`;
 }
-function _mcpToolsEmptyMessage(query){
+export function _mcpToolsEmptyMessage(query){
   const base=esc(t(query?'mcp_tools_no_matches':'mcp_tools_no_tools'));
-  const unavailable=Array.isArray(_mcpToolsMeta.unavailable_servers)?_mcpToolsMeta.unavailable_servers:[];
+  const unavailable=Array.isArray(state._mcpToolsMeta.unavailable_servers)?state._mcpToolsMeta.unavailable_servers:[];
   if(query||!unavailable.length) return base;
   return `${base}<br><span class="mcp-tool-empty-detail">${esc(t('mcp_tools_inactive_configured_servers',unavailable.join(', ')))}</span>`;
 }
-function _renderMcpToolPager(filteredCount, page, pages){
+export function _renderMcpToolPager(filteredCount, page, pages){
   const pager=$('mcpToolPager');
   if(!pager) return;
   if(pages<=1){
@@ -126,21 +127,21 @@ function _renderMcpToolPager(filteredCount, page, pages){
     <span class="mcp-tool-page-label">${page} / ${pages}</span>
     <button type="button" class="mcp-tool-page-btn" onclick="setMcpToolsPage(${page+1})" ${page>=pages?'disabled':''} aria-label="${esc(t('mcp_tools_next_page_aria'))}">${esc(t('mcp_tools_next_page'))}</button>`;
 }
-function _renderMcpTools(tools, query){
+export function _renderMcpTools(tools, query){
   const list=$('mcpToolList');
   const toolbar=$('mcpToolToolbar');
   if(!list) return;
   const filtered=_filterMcpToolsForSearch(tools, query);
   const total=Array.isArray(tools)?tools.length:0;
-  const pages=Math.max(1,Math.ceil(filtered.length/_mcpToolsPageSize));
-  _mcpToolsPage=Math.min(Math.max(1,_mcpToolsPage||1),pages);
-  if(toolbar) toolbar.innerHTML=`<span class="mcp-tool-summary">${esc(_mcpToolsSummary(total,filtered.length,_mcpToolsPage,pages,query))}</span>${_mcpToolPageSizeControl()}`;
-  _renderMcpToolPager(filtered.length,_mcpToolsPage,pages);
+  const pages=Math.max(1,Math.ceil(filtered.length/state._mcpToolsPageSize));
+  state._mcpToolsPage=Math.min(Math.max(1,state._mcpToolsPage||1),pages);
+  if(toolbar) toolbar.innerHTML=`<span class="mcp-tool-summary">${esc(_mcpToolsSummary(total,filtered.length,state._mcpToolsPage,pages,query))}</span>${_mcpToolPageSizeControl()}`;
+  _renderMcpToolPager(filtered.length,state._mcpToolsPage,pages);
   if(!filtered.length){
     list.innerHTML=`<div class="mcp-tool-empty-state" style="color:var(--muted);font-size:12px;padding:6px 0">${_mcpToolsEmptyMessage(query)}</div>`;
     return;
   }
-  const visible=filtered.slice((_mcpToolsPage-1)*_mcpToolsPageSize,_mcpToolsPage*_mcpToolsPageSize);
+  const visible=filtered.slice((state._mcpToolsPage-1)*state._mcpToolsPageSize,state._mcpToolsPage*state._mcpToolsPageSize);
   list.innerHTML=visible.map(tool=>{
     const status=tool.status||'unknown';
     const statusBadge=`<span class="mcp-status-badge mcp-status-${esc(status)}">${esc(_mcpStatusLabel(status))}</span>`;
@@ -156,31 +157,31 @@ function _renderMcpTools(tools, query){
     </div>`;
   }).join('');
 }
-function setMcpToolsPage(page){
-  _mcpToolsPage=page;
+export function setMcpToolsPage(page){
+  state._mcpToolsPage=page;
   const input=$('mcpToolSearch');
-  _renderMcpTools(_mcpToolsCache,input?input.value:'');
+  _renderMcpTools(state._mcpToolsCache,input?input.value:'');
   const list=$('mcpToolList');
   if(list) list.scrollTop=0;
 }
-function setMcpToolsPageSize(size){
+export function setMcpToolsPageSize(size){
   const next=Number(size);
   if(!MCP_TOOLS_PAGE_SIZE_OPTIONS.includes(next)) return;
-  _mcpToolsPageSize=next;
-  _mcpToolsPage=1;
+  state._mcpToolsPageSize=next;
+  state._mcpToolsPage=1;
   const input=$('mcpToolSearch');
-  _renderMcpTools(_mcpToolsCache,input?input.value:'');
+  _renderMcpTools(state._mcpToolsCache,input?input.value:'');
   const list=$('mcpToolList');
   if(list) list.scrollTop=0;
 }
-function filterMcpTools(){
-  _mcpToolsPage=1;
+export function filterMcpTools(){
+  state._mcpToolsPage=1;
   const input=$('mcpToolSearch');
-  _renderMcpTools(_mcpToolsCache,input?input.value:'');
+  _renderMcpTools(state._mcpToolsCache,input?input.value:'');
   const list=$('mcpToolList');
   if(list) list.scrollTop=0;
 }
-function loadMcpTools(){
+export function loadMcpTools(){
   const list=$('mcpToolList');
   const toolbar=$('mcpToolToolbar');
   const pager=$('mcpToolPager');
@@ -189,22 +190,21 @@ function loadMcpTools(){
   if(pager) pager.innerHTML='';
   list.innerHTML=`<div style="color:var(--muted);font-size:12px;padding:6px 0">${esc(t('loading'))}</div>`;
   api('/api/mcp/tools').then(r=>{
-    _mcpToolsCache=(r&&Array.isArray(r.tools))?r.tools:[];
-    _mcpToolsMeta=r||{};
-    _mcpToolsPage=1;
+    state._mcpToolsCache=(r&&Array.isArray(r.tools))?r.tools:[];
+    state._mcpToolsMeta=r||{};
+    state._mcpToolsPage=1;
     filterMcpTools();
   }).catch(()=>{list.innerHTML=`<div class="mcp-tool-error-state" style="color:#ef4444;font-size:12px;padding:6px 0">${esc(t('mcp_tools_load_failed'))}</div>`});
 }
-let _gatewayActionInFlight=false;
-function _gatewayActionButton(action){
+export function _gatewayActionButton(action){
   const labels={start:t('gateway_start'),stop:t('gateway_stop'),restart:t('gateway_restart')};
-  return `<button class="sm-btn gateway-action-btn" data-gateway-action="${esc(action)}" onclick="_gatewayAction('${esc(action)}')" ${_gatewayActionInFlight?'disabled':''} style="padding:5px 10px;font-size:12px">${esc(labels[action]||action)}</button>`;
+  return `<button class="sm-btn gateway-action-btn" data-gateway-action="${esc(action)}" onclick="_gatewayAction('${esc(action)}')" ${state._gatewayActionInFlight?'disabled':''} style="padding:5px 10px;font-size:12px">${esc(labels[action]||action)}</button>`;
 }
-function _gatewayActionControls(r){
+export function _gatewayActionControls(r){
   const actions=(r&&r.running)?['stop','restart']:['start'];
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${actions.map(_gatewayActionButton).join('')}</div>`;
 }
-function _renderGatewayStatus(r){
+export function _renderGatewayStatus(r){
   const card=$('gatewayStatusCard');
   if(!card||!r) return;
   if(!r.configured){
@@ -233,14 +233,14 @@ function _renderGatewayStatus(r){
   const sessionInfo=r.session_count?`<span style="font-size:11px;color:var(--muted)">${r.session_count} ${esc(r.session_count!==1?t('gateway_sessions'):t('gateway_session'))}</span>`:'';
   card.innerHTML=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span><span style="font-size:13px;font-weight:500;color:#22c55e">${esc(t('gateway_running'))}</span></div>${badges?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${badges}</div>`:''}<div style="display:flex;gap:12px">${sessionInfo}${lastActive}</div>${_gatewayActionControls(r)}`;
 }
-function loadGatewayStatus(){
+export function loadGatewayStatus(){
   const card=$('gatewayStatusCard');
   if(!card) return;
   return api('/api/gateway/status').then(r=>_renderGatewayStatus(r)).catch(()=>{card.innerHTML=`<div style="color:#ef4444;font-size:12px">${esc(t('gateway_status_load_failed'))}</div>`});
 }
-async function _gatewayAction(action){
-  if(_gatewayActionInFlight) return;
-  _gatewayActionInFlight=true;
+export async function _gatewayAction(action){
+  if(state._gatewayActionInFlight) return;
+  state._gatewayActionInFlight=true;
   const buttons=[...document.querySelectorAll('.gateway-action-btn')];
   buttons.forEach(btn=>{btn.disabled=true;});
   try{
@@ -250,21 +250,19 @@ async function _gatewayAction(action){
     const msg=e&&e.message?e.message:String(e||'');
     if(typeof showToast==='function') showToast(`${t(`gateway_${action}_failed`)}${msg?': '+msg:''}`,5000,'error');
   }finally{
-    _gatewayActionInFlight=false;
+    state._gatewayActionInFlight=false;
     await loadGatewayStatus();
   }
 }
-// Load MCP servers when system settings tab opens
-const _origSwitchSettings=switchSettingsSection;
-switchSettingsSection=function(name, opts){
-  _origSwitchSettings(name, opts);
-  if(name==='preferences') updateNotificationPermissionStatus();
-  if(name==='system'){loadMcpServers();loadMcpTools();loadGatewayStatus();}
-};
+// Load system owners only when their settings section becomes visible.
+onSettingsSectionChange((section) => {
+  if(section==='preferences') updateNotificationPermissionStatus();
+  if(section==='system'){loadMcpServers();loadMcpTools();loadGatewayStatus();}
+});
 
 // ── Checkpoints / Rollback ──────────────────────────────────────────────────
 
-async function _loadCheckpoints(workspace){
+export async function _loadCheckpoints(workspace){
   const container=$('checkpointListContainer');
   if(!container) return;
   try{
@@ -306,7 +304,7 @@ async function _loadCheckpoints(workspace){
   }
 }
 
-async function _viewCheckpointDiff(workspace,checkpoint){
+export async function _viewCheckpointDiff(workspace,checkpoint){
   const modal=document.getElementById('checkpointDiffModal');
   if(!modal){
     const m=document.createElement('div');
@@ -354,7 +352,7 @@ async function _viewCheckpointDiff(workspace,checkpoint){
   }
 }
 
-async function _restoreCheckpoint(workspace,checkpoint,message){
+export async function _restoreCheckpoint(workspace,checkpoint,message){
   const label=message||checkpoint;
   const ok=await showConfirmDialog({title:t('checkpoint_restore_confirm_title'),message:t('checkpoint_restore_confirm_message',label),confirmLabel:t('checkpoint_restore'),danger:true,focusCancel:true});
   if(!ok) return;
@@ -371,7 +369,7 @@ async function _restoreCheckpoint(workspace,checkpoint,message){
 }
 
 
-function updateNotificationPermissionStatus(){
+export function updateNotificationPermissionStatus(){
   const el=$('notificationPermissionStatus');
   const btn=$('notificationPermissionButton');
   const btnWrap=$('notificationPermissionButtonWrap');
@@ -400,30 +398,3 @@ function updateNotificationPermissionStatus(){
   }
   if(btnWrap) btnWrap.title=label;
 }
-
-window.HermesPanels.gateway = {
-  _mcpStatusLabel,
-  toggleMcpServer,
-  _refreshMcpToolsetsCatalog,
-  loadMcpServers,
-  _filterMcpToolsForSearch,
-  _mcpToolSchemaText,
-  _mcpToolsSummary,
-  _mcpToolPageSizeControl,
-  _mcpToolsEmptyMessage,
-  _renderMcpToolPager,
-  _renderMcpTools,
-  setMcpToolsPage,
-  setMcpToolsPageSize,
-  filterMcpTools,
-  loadMcpTools,
-  _gatewayActionButton,
-  _gatewayActionControls,
-  _renderGatewayStatus,
-  loadGatewayStatus,
-  _gatewayAction,
-  _loadCheckpoints,
-  _viewCheckpointDiff,
-  _restoreCheckpoint,
-  updateNotificationPermissionStatus,
-};

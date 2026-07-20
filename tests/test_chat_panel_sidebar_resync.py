@@ -1,11 +1,9 @@
 """Regression coverage for chat sidebar virtualization after panel navigation."""
-from pathlib import Path
-
-PANELS_JS = Path(__file__).parent.parent / "static" / "panels.js"
+from tests.frontend_asset_contract import family_source
 
 
 def _read_source() -> str:
-    return PANELS_JS.read_text(encoding="utf-8")
+    return family_source("panels")
 
 
 def _function_block(src: str, name: str) -> str:

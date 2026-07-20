@@ -1,13 +1,18 @@
+import { state } from "./state.js";
+import { _clearCronDetail,_renderCronDetail,openCronDetail } from "./cron-editor.js";
+import { _cronNewJobIds } from "./runtime-alerts.js";
+
+
+
 // Panels domain: cron scheduling and list
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Cron panel ──
-function _isRecurringCronJob(job) {
+export function _isRecurringCronJob(job) {
   const kind = job && job.schedule && job.schedule.kind;
   return kind === 'cron' || kind === 'interval';
 }
 
-function _cronScheduleKindForInput(value) {
+export function _cronScheduleKindForInput(value) {
   const schedule = String(value || '').trim();
   if (!schedule) return '';
   const lower = schedule.toLowerCase();
@@ -20,7 +25,7 @@ function _cronScheduleKindForInput(value) {
   return '';
 }
 
-function _syncCronScheduleWarning() {
+export function _syncCronScheduleWarning() {
   const input = $('cronFormSchedule');
   const warning = $('cronFormScheduleOnceWarning');
   if (!input || !warning) return;
@@ -31,7 +36,7 @@ function _syncCronScheduleWarning() {
 // Live preview of the generated cron expression in the preset hint line (the
 // cron-job.org / GitHub-schedule-editor convention) so a cron-literate user sees
 // exactly what the friendly controls produce. Empty on Custom (the raw field is shown).
-function _syncCronSchedulePreview() {
+export function _syncCronSchedulePreview() {
   const preview = $('cronFormSchedulePreview');
   const presetEl = $('cronFormSchedulePreset');
   const scheduleEl = $('cronFormSchedule');
@@ -50,17 +55,17 @@ const CRON_SCHEDULE_PRESETS = [
   { id: 'custom', label: 'cron_schedule_preset_custom', fallback: 'Custom', fields: [] },
 ];
 
-function _cronSchedulePresetOptionHtml() {
+export function _cronSchedulePresetOptionHtml() {
   return CRON_SCHEDULE_PRESETS
     .map((preset) => `<option value="${preset.id}">${esc(t(preset.label) || preset.fallback)}</option>`)
     .join('');
 }
 
-function _cronSchedulePresetForId(presetId) {
+export function _cronSchedulePresetForId(presetId) {
   return CRON_SCHEDULE_PRESETS.find((entry) => entry.id === presetId) || null;
 }
 
-function _cronSchedulePresetControlIds() {
+export function _cronSchedulePresetControlIds() {
   return {
     time: 'cronFormScheduleTime',
     minute: 'cronFormScheduleMinute',
@@ -72,7 +77,7 @@ function _cronSchedulePresetControlIds() {
 // Which visible control wrapper each logical field lives in. `hour`+`minute` for
 // time-based presets share the single #cronFormScheduleTime picker (in the Time
 // field); `minute` alone (Hourly) uses the standalone Minute field.
-function _cronSchedulePresetFieldWrapId(field) {
+export function _cronSchedulePresetFieldWrapId(field) {
   if (field === 'time' || field === 'hour') return 'cronFormScheduleTimeField';
   if (field === 'minute') return 'cronFormScheduleMinuteField';
   if (field === 'weekday') return 'cronFormScheduleWeekdayField';
@@ -80,17 +85,17 @@ function _cronSchedulePresetFieldWrapId(field) {
   return '';
 }
 
-function _cronSchedulePresetFieldId(field) {
+export function _cronSchedulePresetFieldId(field) {
   const ids = _cronSchedulePresetControlIds();
   return ids[field] || '';
 }
 
-function _cronSchedulePresetFieldEl(field) {
+export function _cronSchedulePresetFieldEl(field) {
   const id = _cronSchedulePresetFieldId(field);
   return id ? $(id) : null;
 }
 
-function _cronSchedulePresetBounds(field) {
+export function _cronSchedulePresetBounds(field) {
   if (field === 'hour') return { min: 0, max: 23 };
   if (field === 'minute') return { min: 0, max: 59 };
   if (field === 'weekday') return { min: 0, max: 6 };
@@ -98,7 +103,7 @@ function _cronSchedulePresetBounds(field) {
   return { min: 0, max: 999 };
 }
 
-function _cronSchedulePresetNormalizeValue(field, value, fallback) {
+export function _cronSchedulePresetNormalizeValue(field, value, fallback) {
   const bounds = _cronSchedulePresetBounds(field);
   const parsed = parseInt(String(value ?? '').trim(), 10);
   const fallbackParsed = parseInt(String(fallback ?? bounds.min).trim(), 10);
@@ -107,7 +112,7 @@ function _cronSchedulePresetNormalizeValue(field, value, fallback) {
   return String(Math.min(bounds.max, Math.max(bounds.min, n)));
 }
 
-function _cronSchedulePresetValueForField(field, fallback) {
+export function _cronSchedulePresetValueForField(field, fallback) {
   // hour/minute for time-based presets come from the single #cronFormScheduleTime
   // picker ("HH:MM"); the standalone Minute box (Hourly) still reads directly.
   if (field === 'hour' || field === 'minute') {
@@ -131,12 +136,12 @@ function _cronSchedulePresetValueForField(field, fallback) {
 
 // The standalone Minute box is the active minute source only for the Hourly preset
 // (the only preset whose visible fields include a bare 'minute').
-function _cronScheduleMinuteBoxIsActive() {
+export function _cronScheduleMinuteBoxIsActive() {
   const presetEl = $('cronFormSchedulePreset');
   return !!(presetEl && presetEl.value === 'hourly');
 }
 
-function _cronSchedulePresetRawFieldInBounds(field, value) {
+export function _cronSchedulePresetRawFieldInBounds(field, value) {
   const raw = String(value || '').trim();
   if (!/^\d+$/.test(raw)) return false;
   const bounds = _cronSchedulePresetBounds(field);
@@ -144,7 +149,7 @@ function _cronSchedulePresetRawFieldInBounds(field, value) {
   return Number.isFinite(parsed) && parsed >= bounds.min && parsed <= bounds.max;
 }
 
-function _cronSchedulePresetApplyValues(values) {
+export function _cronSchedulePresetApplyValues(values) {
   // Write hour/minute into the single time picker as zero-padded HH:MM.
   if (values.hour != null || values.minute != null) {
     const timeEl = $('cronFormScheduleTime');
@@ -165,7 +170,7 @@ function _cronSchedulePresetApplyValues(values) {
   });
 }
 
-function _cronSchedulePresetSyncVisibility(presetId) {
+export function _cronSchedulePresetSyncVisibility(presetId) {
   const wrapper = $('cronFormSchedulePresetParams');
   const customRow = $('cronFormScheduleCustomRow');
   const preset = _cronSchedulePresetForId(presetId);
@@ -181,7 +186,7 @@ function _cronSchedulePresetSyncVisibility(presetId) {
   });
 }
 
-function _cronSchedulePresetValuesForSelection(presetId) {
+export function _cronSchedulePresetValuesForSelection(presetId) {
   const preset = _cronSchedulePresetForId(presetId);
   const defaults = (preset && preset.defaults) || {};
   if (presetId === 'hourly') {
@@ -210,7 +215,7 @@ function _cronSchedulePresetValuesForSelection(presetId) {
   return {};
 }
 
-function _cronSchedulePresetValueForSelection(presetId, selectedValues) {
+export function _cronSchedulePresetValueForSelection(presetId, selectedValues) {
   const values = selectedValues || _cronSchedulePresetValuesForSelection(presetId);
   if (presetId === 'hourly') return `${values.minute} * * * *`;
   if (presetId === 'daily') return `${values.minute} ${values.hour} * * *`;
@@ -220,7 +225,7 @@ function _cronSchedulePresetValueForSelection(presetId, selectedValues) {
   return '';
 }
 
-function _cronSchedulePresetStateForInput(value) {
+export function _cronSchedulePresetStateForInput(value) {
   const schedule = String(value || '').trim();
   if (!schedule) return { presetId: 'custom' };
   if (/^every\s+1h$/i.test(schedule)) {
@@ -249,11 +254,11 @@ function _cronSchedulePresetStateForInput(value) {
   return { presetId: 'custom' };
 }
 
-function _cronSchedulePresetIdForValue(value) {
+export function _cronSchedulePresetIdForValue(value) {
   return _cronSchedulePresetStateForInput(value).presetId;
 }
 
-function _syncCronSchedulePresetFromInput() {
+export function _syncCronSchedulePresetFromInput() {
   const presetEl = $('cronFormSchedulePreset');
   const scheduleEl = $('cronFormSchedule');
   if (!presetEl || !scheduleEl) return;
@@ -263,12 +268,12 @@ function _syncCronSchedulePresetFromInput() {
   if (state.presetId !== 'custom') _cronSchedulePresetApplyValues(state);
 }
 
-function _syncCronSchedulePresetAndWarning() {
+export function _syncCronSchedulePresetAndWarning() {
   _syncCronSchedulePresetFromInput();
   _syncCronScheduleWarning();
 }
 
-function _applyCronSchedulePresetSelection() {
+export function _applyCronSchedulePresetSelection() {
   const presetEl = $('cronFormSchedulePreset');
   const scheduleEl = $('cronFormSchedule');
   if (!presetEl || !scheduleEl) return;
@@ -289,7 +294,7 @@ function _applyCronSchedulePresetSelection() {
 // clamped values back into the field the user is editing — so typing into the Minute
 // box (or the time picker) doesn't snap a half-entered value to the default/clamp
 // mid-keystroke. Value clamping still happens on `change`/blur via the full apply.
-function _regenCronScheduleFromFields() {
+export function _regenCronScheduleFromFields() {
   const presetEl = $('cronFormSchedulePreset');
   const scheduleEl = $('cronFormSchedule');
   if (!presetEl || !scheduleEl) return;
@@ -299,7 +304,7 @@ function _regenCronScheduleFromFields() {
   _syncCronScheduleWarning();
 }
 
-function _initCronSchedulePresetControls() {
+export function _initCronSchedulePresetControls() {
   const presetEl = $('cronFormSchedulePreset');
   const scheduleEl = $('cronFormSchedule');
   if (!presetEl || !scheduleEl) return;
@@ -326,11 +331,11 @@ function _initCronSchedulePresetControls() {
   scheduleEl.addEventListener('change', _syncCronSchedulePresetAndWarning);
   _syncCronSchedulePresetAndWarning();
 }
-function _hasUnlimitedRepeat(job) {
+export function _hasUnlimitedRepeat(job) {
   return !!(job && job.repeat && job.repeat.times == null);
 }
 
-function _isCronNeedsAttention(job) {
+export function _isCronNeedsAttention(job) {
   return _isRecurringCronJob(job) &&
     _hasUnlimitedRepeat(job) &&
     job.enabled === false &&
@@ -338,13 +343,13 @@ function _isCronNeedsAttention(job) {
     !job.next_run_at;
 }
 
-function _isCronScheduleError(job) {
+export function _isCronScheduleError(job) {
   return _isRecurringCronJob(job) &&
     !job.next_run_at &&
     (job.state === 'error' || job.last_status === 'error');
 }
 
-function _cronStatusMeta(job) {
+export function _cronStatusMeta(job) {
   if (_isCronNeedsAttention(job)) return {
     state: 'needs_attention',
     listClass: 'attention',
@@ -384,86 +389,86 @@ function _cronStatusMeta(job) {
 }
 
 
-function _cronProfileName(profile){
+export function _cronProfileName(profile){
   return (profile || '').toString().trim();
 }
 
-function _cronProfileLabel(profile){
+export function _cronProfileLabel(profile){
   const name = _cronProfileName(profile);
   return name || (t('cron_profile_server_default') || 'server default');
 }
 
-function _cronProfileTitle(profile){
+export function _cronProfileTitle(profile){
   const name = _cronProfileName(profile);
   if (name) return (t('cron_profile_label') || 'Profile') + ': ' + name;
   return t('cron_profile_server_default_hint') || 'Uses the WebUI server default profile at run time';
 }
 
-function _cronOwnerProfileName(job){
+export function _cronOwnerProfileName(job){
   return _cronProfileName(job && (job.owner_profile ?? job.profile));
 }
 
-function _cronJobKey(job){
+export function _cronJobKey(job){
   return `${_cronOwnerProfileName(job)}\u0000${String(job && job.id || '')}`;
 }
 
-function _cronItemId(job){
+export function _cronItemId(job){
   return 'cron-' + encodeURIComponent(_cronJobKey(job));
 }
 
-function _cronDetailMatches(jobId, detailKey){
+export function _cronDetailMatches(jobId, detailKey){
   return !!(
     detailKey &&
-    _currentCronDetail &&
-    !_currentCronDetail.read_only &&
-    String(_currentCronDetail.id) === String(jobId) &&
-    _currentCronDetailKey === detailKey &&
-    _cronJobKey(_currentCronDetail) === detailKey
+    state._currentCronDetail &&
+    !state._currentCronDetail.read_only &&
+    String(state._currentCronDetail.id) === String(jobId) &&
+    state._currentCronDetailKey === detailKey &&
+    _cronJobKey(state._currentCronDetail) === detailKey
   );
 }
 
-function _findCronJob(jobOrId){
+export function _findCronJob(jobOrId){
   if (jobOrId && typeof jobOrId === 'object') return jobOrId;
   const id = String(jobOrId || '');
-  if (!_cronList || !id) return null;
-  return _cronList.find(j => !j.read_only && String(j.id) === id) ||
-    _cronList.find(j => String(j.id) === id) ||
+  if (!state._cronList || !id) return null;
+  return state._cronList.find(j => !j.read_only && String(j.id) === id) ||
+    state._cronList.find(j => String(j.id) === id) ||
     null;
 }
 
-function _appendCronProfileToggle(parent){
-  if (!parent || (!_showAllCronProfiles && _cronOtherProfileCount <= 0)) return;
+export function _appendCronProfileToggle(parent){
+  if (!parent || (!state._showAllCronProfiles && state._cronOtherProfileCount <= 0)) return;
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:10px 0 0';
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'sm-btn';
   btn.style.cssText = 'width:100%;justify-content:center';
-  btn.textContent = _showAllCronProfiles
+  btn.textContent = state._showAllCronProfiles
     ? 'Show active profile only'
-    : `Show ${_cronOtherProfileCount} from other profiles`;
+    : `Show ${state._cronOtherProfileCount} from other profiles`;
   btn.onclick = async () => {
-    _showAllCronProfiles = !_showAllCronProfiles;
+    state._showAllCronProfiles = !state._showAllCronProfiles;
     await loadCrons();
   };
   wrap.appendChild(btn);
   parent.appendChild(wrap);
 }
 
-async function loadCronProfiles(){
-  if (_cronProfilesCache) return _cronProfilesCache;
+export async function loadCronProfiles(){
+  if (state._cronProfilesCache) return state._cronProfilesCache;
   try {
     const data = await api('/api/profiles');
-    _cronProfilesCache = Array.isArray(data.profiles) ? data.profiles : [];
+    state._cronProfilesCache = Array.isArray(data.profiles) ? data.profiles : [];
   } catch(e) {
-    _cronProfilesCache = [];
+    state._cronProfilesCache = [];
   }
-  return _cronProfilesCache;
+  return state._cronProfilesCache;
 }
 
-function _cronProfileOptions(selected){
+export function _cronProfileOptions(selected){
   const current = _cronProfileName(selected);
-  const profiles = Array.isArray(_cronProfilesCache) ? _cronProfilesCache : [];
+  const profiles = Array.isArray(state._cronProfilesCache) ? state._cronProfilesCache : [];
   const seen = new Set(['']);
   const opts = [`<option value=""${current ? '' : ' selected'}>${esc(t('cron_profile_server_default') || 'server default')}</option>`];
   for (const p of profiles) {
@@ -479,14 +484,14 @@ function _cronProfileOptions(selected){
   return opts.join('');
 }
 
-function _refreshCronProfileSelect(selected){
+export function _refreshCronProfileSelect(selected){
   const sel = $('cronFormProfile');
   if (!sel) return;
   const keep = selected === undefined ? sel.value : selected;
   sel.innerHTML = _cronProfileOptions(keep);
 }
 
-function _cronDiagnostics(job) {
+export function _cronDiagnostics(job) {
   const fields = {
     id: job.id,
     name: job.name || null,
@@ -505,13 +510,13 @@ function _cronDiagnostics(job) {
   return JSON.stringify(fields, null, 2);
 }
 
-function _gatewayStatusReason(status) {
+export function _gatewayStatusReason(status) {
   const health = status && typeof status.health === 'object' ? status.health : null;
   if (!health) return '';
   return typeof health.reason === 'string' ? health.reason.trim() : '';
 }
 
-function _cronGatewayNoticeHtml(status) {
+export function _cronGatewayNoticeHtml(status) {
   if (!status || (status.configured && status.running)) return '';
   const reason = _gatewayStatusReason(status);
   const isStaleMetadata = reason === 'gateway_stale_running_state';
@@ -542,7 +547,7 @@ function _cronGatewayNoticeHtml(status) {
   `;
 }
 
-async function loadCronGatewayNotice() {
+export async function loadCronGatewayNotice() {
   const box = $('cronGatewayNotice');
   if (!box) return;
   try {
@@ -561,7 +566,7 @@ async function loadCronGatewayNotice() {
   }
 }
 
-async function loadCrons(animate) {
+export async function loadCrons(animate) {
   const box = $('cronList');
   const refreshBtn = $('cronRefreshBtn');
   loadCronGatewayNotice();
@@ -571,21 +576,21 @@ async function loadCrons(animate) {
   }
   try {
     await loadCronProfiles();
-    const allProfilesQS = _showAllCronProfiles ? '?all_profiles=1' : '';
+    const allProfilesQS = state._showAllCronProfiles ? '?all_profiles=1' : '';
     const data = await api('/api/crons' + allProfilesQS);
-    _cronList = data.jobs || [];
-    _cronOtherProfileCount = Number(data.other_profile_count || 0);
-    if (_showAllCronProfiles && !_cronList.some(job => job && job.read_only)) {
-      _showAllCronProfiles = false;
-      _cronOtherProfileCount = 0;
+    state._cronList = data.jobs || [];
+    state._cronOtherProfileCount = Number(data.other_profile_count || 0);
+    if (state._showAllCronProfiles && !state._cronList.some(job => job && job.read_only)) {
+      state._showAllCronProfiles = false;
+      state._cronOtherProfileCount = 0;
     }
     box.innerHTML = '';
     // Partition active vs paused so paused jobs don't drown the list (#4026).
-    // _cronList stays the single source of truth — only the render is split,
+    // state._cronList stays the single source of truth — only the render is split,
     // which keeps openCronDetail, _cronNewJobIds, and detail refresh untouched.
     const _activeJobs = [];
     const _pausedJobs = [];
-    for (const job of _cronList) {
+    for (const job of state._cronList) {
       const status = _cronStatusMeta(job);
       (status.state === 'paused' ? _pausedJobs : _activeJobs).push({ job, status });
     }
@@ -614,16 +619,16 @@ async function loadCrons(animate) {
           ${readOnlyBadge}
         </div>`;
       item.onclick = () => openCronDetail(job, item);
-      if (_currentCronDetailKey && _currentCronDetailKey === _cronJobKey(job)) item.classList.add('active');
+      if (state._currentCronDetailKey && state._currentCronDetailKey === _cronJobKey(job)) item.classList.add('active');
       parent.appendChild(item);
     };
-    if (!_cronList.length) {
-      const emptyText = (!_showAllCronProfiles && _cronOtherProfileCount > 0)
+    if (!state._cronList.length) {
+      const emptyText = (!state._showAllCronProfiles && state._cronOtherProfileCount > 0)
         ? 'No cron jobs in the active profile.'
         : (t('cron_no_jobs') || 'No jobs yet');
       box.innerHTML = `<div style="padding:16px;color:var(--muted);font-size:12px">${esc(emptyText)}</div>`;
       _appendCronProfileToggle(box);
-      if (_cronMode !== 'create' && _cronMode !== 'edit') _clearCronDetail();
+      if (state._cronMode !== 'create' && state._cronMode !== 'edit') _clearCronDetail();
       return;
     }
     for (const entry of _activeJobs) _appendCronItem(box, entry);
@@ -650,8 +655,8 @@ async function loadCrons(animate) {
     }
     _appendCronProfileToggle(box);
     // Re-render current detail with fresh data if we have one and we're not in a form
-    if (_currentCronDetail && _cronMode !== 'create' && _cronMode !== 'edit') {
-      const refreshed = _cronList.find(j => _cronJobKey(j) === _currentCronDetailKey);
+    if (state._currentCronDetail && state._cronMode !== 'create' && state._cronMode !== 'edit') {
+      const refreshed = state._cronList.find(j => _cronJobKey(j) === state._currentCronDetailKey);
       if (refreshed) _renderCronDetail(refreshed);
       else _clearCronDetail();
     }
@@ -663,53 +668,3 @@ async function loadCrons(animate) {
     }
   }
 }
-
-window.HermesPanels.cronList = {
-  _isRecurringCronJob,
-  _cronScheduleKindForInput,
-  _syncCronScheduleWarning,
-  _syncCronSchedulePreview,
-  _cronSchedulePresetOptionHtml,
-  _cronSchedulePresetForId,
-  _cronSchedulePresetControlIds,
-  _cronSchedulePresetFieldWrapId,
-  _cronSchedulePresetFieldId,
-  _cronSchedulePresetFieldEl,
-  _cronSchedulePresetBounds,
-  _cronSchedulePresetNormalizeValue,
-  _cronSchedulePresetValueForField,
-  _cronScheduleMinuteBoxIsActive,
-  _cronSchedulePresetRawFieldInBounds,
-  _cronSchedulePresetApplyValues,
-  _cronSchedulePresetSyncVisibility,
-  _cronSchedulePresetValuesForSelection,
-  _cronSchedulePresetValueForSelection,
-  _cronSchedulePresetStateForInput,
-  _cronSchedulePresetIdForValue,
-  _syncCronSchedulePresetFromInput,
-  _syncCronSchedulePresetAndWarning,
-  _applyCronSchedulePresetSelection,
-  _regenCronScheduleFromFields,
-  _initCronSchedulePresetControls,
-  _hasUnlimitedRepeat,
-  _isCronNeedsAttention,
-  _isCronScheduleError,
-  _cronStatusMeta,
-  _cronProfileName,
-  _cronProfileLabel,
-  _cronProfileTitle,
-  _cronOwnerProfileName,
-  _cronJobKey,
-  _cronItemId,
-  _cronDetailMatches,
-  _findCronJob,
-  _appendCronProfileToggle,
-  loadCronProfiles,
-  _cronProfileOptions,
-  _refreshCronProfileSelect,
-  _cronDiagnostics,
-  _gatewayStatusReason,
-  _cronGatewayNoticeHtml,
-  loadCronGatewayNotice,
-  loadCrons,
-};

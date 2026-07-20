@@ -12,7 +12,7 @@ STATIC_FAMILIES = {
     "/static/workspace.js": "workspace",
     "/static/modules/sessions/index.js": "sessions",
     "/static/modules/messages/index.js": "messages",
-    "/static/panels.js": "panels",
+    "/static/modules/panels/index.js": "panels",
     "/static/modules/boot/index.js": "boot",
 }
 
@@ -92,9 +92,9 @@ def test_messages_js_served(cleanup_test_sessions):
     assert "function transcript(" in src
 
 def test_panels_js_served(cleanup_test_sessions):
-    served = get_text("/static/panels.js")
-    assert "HermesPanels" in served
-    src = get_family_source("/static/panels.js")
+    served = get_text("/static/modules/panels/index.js")
+    assert "installPanelCompatibility" in served
+    src = get_family_source("/static/modules/panels/index.js")
     assert "async function switchPanel(" in src
     assert "async function loadCrons(" in src
     assert "async function loadSkills(" in src
@@ -114,7 +114,7 @@ def test_app_js_no_longer_referenced_in_html(cleanup_test_sessions):
     html = get_text("/")
     assert 'src="static/app.js"' not in html
     # All split modules must be present with the server-injected cache-busting version query.
-    for module in ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "panels.js"]:
+    for module in ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "modules/panels/index.js"]:
         assert f'src="static/{module}?v=' in html, f"Missing versioned {module} in index.html"
     assert 'src="static/modules/boot/index.js?v=' in html
 
@@ -125,14 +125,14 @@ def test_module_load_order_correct(cleanup_test_sessions):
     ws_pos = html.find('src="static/workspace.js?v=')
     sess_pos = html.find('src="static/modules/sessions/index.js?v=')
     msg_pos = html.find('src="static/modules/messages/index.js?v=')
-    panels_pos = html.find('src="static/panels.js?v=')
+    panels_pos = html.find('src="static/modules/panels/index.js?v=')
     boot_pos = html.find('src="static/modules/boot/index.js?v=')
     assert ui_pos < ws_pos < sess_pos < msg_pos < panels_pos < boot_pos
 
 def test_no_duplicate_function_definitions(cleanup_test_sessions):
     """No function name should appear in more than one module."""
     import re
-    modules = ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "panels.js", "modules/boot/index.js"]
+    modules = ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "modules/panels/index.js", "modules/boot/index.js"]
     seen = {}
     for m in modules:
         src = family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")
@@ -145,7 +145,7 @@ def test_no_duplicate_function_definitions(cleanup_test_sessions):
 
 def test_all_functions_present_across_modules(cleanup_test_sessions):
     """Key functions must be present somewhere in the split modules."""
-    modules = ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "panels.js", "modules/boot/index.js"]
+    modules = ["ui.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "modules/panels/index.js", "modules/boot/index.js"]
     all_src = ""
     for m in modules:
         all_src += family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")

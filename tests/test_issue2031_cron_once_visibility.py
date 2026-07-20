@@ -11,7 +11,6 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PANELS_JS = ROOT / "static" / "panels.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -42,10 +41,11 @@ def _cron_schedule_save_source() -> str:
 def _run_node(script: str) -> str:
     proc = subprocess.run(
         [NODE, "-e", script],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    assert proc.returncode == 0, proc.stderr
     return proc.stdout.strip()
 
 

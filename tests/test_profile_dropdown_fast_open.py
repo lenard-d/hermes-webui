@@ -5,6 +5,7 @@ for a cold /api/profiles request before showing the menu. On machines where the
 profile metadata scan is slow, that made the click feel frozen for seconds.
 """
 import json
+import re
 from tests.frontend_asset_contract import family_source
 import subprocess
 import textwrap
@@ -12,6 +13,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 PANELS_JS = family_source("panels")
+PROFILE_MODULE_JS = (REPO_ROOT / "static/modules/panels/profiles.js").read_text(encoding="utf-8")
+PROFILE_HARNESS_JS = re.sub(r"^import .*?;\n", "", PROFILE_MODULE_JS, flags=re.MULTILINE)
+PROFILE_HARNESS_JS = re.sub(r"^export ", "", PROFILE_HARNESS_JS, flags=re.MULTILINE)
+PROFILE_HARNESS_JS = PROFILE_HARNESS_JS.replace("state._", "_")
 
 
 def _function_body(src: str, marker: str, next_marker: str | None = None) -> str:
@@ -101,9 +106,12 @@ def test_profile_dropdown_prefetches_after_page_load():
 
 def test_poisoned_profile_cache_opens_then_switches_after_fresh_refresh():
     snippets = [
-        PANELS_JS[
-            PANELS_JS.index("let _profilesCache = null;") : PANELS_JS.index("async function _profileSwitchPanelLoad(){")
-        ],
+        """let _profilesCache = null;
+let _profileDropdownFetchPromise = null;
+let _profileDropdownCacheLoadedFromStorage = false;
+let _profileDropdownTrigger = null;
+let _profileDropdownOpenGeneration = 0;
+""" + PROFILE_HARNESS_JS[:PROFILE_HARNESS_JS.index("async function _profileSwitchPanelLoad(){")],
         _function_body(PANELS_JS, "function renderProfileDropdown(data) {"),
         _function_body(PANELS_JS, "function toggleProfileDropdown(e) {"),
         _function_body(PANELS_JS, "function closeProfileDropdown() {"),

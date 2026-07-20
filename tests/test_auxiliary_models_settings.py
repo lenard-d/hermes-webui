@@ -16,8 +16,8 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).parent.parent
-PANELS_JS_PATH = ROOT / "static" / "panels.js"
 PANELS_JS = family_source("panels")
+PANEL_STATE_JS = (ROOT / "static" / "modules" / "panels" / "state.js").read_text(encoding="utf-8")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
 STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
@@ -75,7 +75,7 @@ class TestAuxiliaryModelsJS:
 
     def test_auxiliary_task_metadata_is_normalized(self):
         """Frontend should keep auxiliary task rows backed by normalized metadata."""
-        assert "let _auxTasks=[]" in PANELS_JS, "Missing _auxTasks cache in panels.js"
+        assert "_auxTasks: []" in PANEL_STATE_JS, "Missing _auxTasks cache in panel state owner"
         assert "function _normalizeAuxiliaryTasks" in PANELS_JS, (
             "Missing _normalizeAuxiliaryTasks() in panels.js"
         )

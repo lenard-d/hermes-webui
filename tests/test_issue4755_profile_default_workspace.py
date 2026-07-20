@@ -14,7 +14,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS = ROOT / "static" / "sessions.js"
-PANELS_JS = ROOT / "static" / "panels.js"
 NODE = shutil.which("node")
 
 node_test = pytest.mark.skipif(NODE is None, reason="node not on PATH")

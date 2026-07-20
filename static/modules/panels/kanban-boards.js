@@ -1,7 +1,11 @@
-// Panels domain: kanban task detail and board management
-window.HermesPanels = window.HermesPanels || {};
+import { state } from "./state.js";
+import { _closeMobileSidebarAfterPanelSelection } from "./core.js";
+import { _kanbanColumnLabel,_kanbanRenderMarkdown,_kanbanStartPolling,_kanbanStopPolling,_kanbanTaskBody,_kanbanTaskMeta,_kanbanTaskTitle,loadKanban } from "./kanban-board.js";
+import { _kanbanBoardQuery,_kanbanCommentHtml,_kanbanDetailSection,_kanbanEventHtml,_kanbanLinksHtml,_kanbanRunHtml,_trapModalFocus,blockKanbanTask,closeKanbanTaskDetail,closeKanbanTaskModal,openKanbanEdit,unblockKanbanTask } from "./kanban-tasks.js";
 
-async function submitKanbanTaskModal(){
+// Panels domain: kanban task detail and board management
+
+export async function submitKanbanTaskModal(){
   const titleEl = document.getElementById('kanbanTaskModalTitleInput');
   const bodyEl = document.getElementById('kanbanTaskModalBody');
   const statusEl = document.getElementById('kanbanTaskModalStatus');
@@ -23,7 +27,7 @@ async function submitKanbanTaskModal(){
   }
   // Build payload — for create we omit defaulted fields so the backend chooses;
   // for edit we send every field so users can clear assignee/tenant/body.
-  const isEdit = _kanbanTaskModalMode === 'edit';
+  const isEdit = state._kanbanTaskModalMode === 'edit';
   // Validate workspace path for non-scratch workspace kinds (create mode only)
   const workspaceKind = workspaceKindEl ? workspaceKindEl.value : 'scratch';
   if (!isEdit && workspaceKind !== 'scratch') {
@@ -52,7 +56,7 @@ async function submitKanbanTaskModal(){
     // value the modal opened with.  Otherwise editing a 'running'/'blocked'/
     // 'done'/'archived' task — whose real status maps to the dropdown's
     // 'triage' default — would silently demote the task on every save.
-    if (statusVal && statusVal !== _kanbanTaskModalInitialDisplayedStatus) {
+    if (statusVal && statusVal !== state._kanbanTaskModalInitialDisplayedStatus) {
       payload.status = statusVal;
     }
     const n = parseInt(priorityRaw, 10);
@@ -103,9 +107,9 @@ async function submitKanbanTaskModal(){
   if (errEl) { errEl.textContent = ''; delete errEl.dataset.warningShown; }
   try {
     let saved;
-    if (isEdit && _kanbanTaskModalEditingId) {
+    if (isEdit && state._kanbanTaskModalEditingId) {
       saved = await api(
-        '/api/kanban/tasks/' + encodeURIComponent(_kanbanTaskModalEditingId) + _kanbanBoardQuery(),
+        '/api/kanban/tasks/' + encodeURIComponent(state._kanbanTaskModalEditingId) + _kanbanBoardQuery(),
         {method: 'PATCH', body: JSON.stringify(payload)},
       );
     } else {
@@ -119,8 +123,8 @@ async function submitKanbanTaskModal(){
     const savedId = saved && saved.task && saved.task.id;
     if (savedId) {
       await loadKanbanTask(savedId);
-    } else if (isEdit && _kanbanTaskModalEditingId) {
-      await loadKanbanTask(_kanbanTaskModalEditingId);
+    } else if (isEdit && state._kanbanTaskModalEditingId) {
+      await loadKanbanTask(state._kanbanTaskModalEditingId);
     }
   } catch(e) {
     if (errEl) errEl.textContent = (e.message || String(e));
@@ -128,7 +132,7 @@ async function submitKanbanTaskModal(){
   }
 }
 
-async function updateKanbanTask(taskId, patch, opts){
+export async function updateKanbanTask(taskId, patch, opts){
   if (!taskId || !patch) return;
   try {
     const openDetail = !opts || opts.openDetail !== false;
@@ -141,7 +145,7 @@ async function updateKanbanTask(taskId, patch, opts){
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
 }
 
-async function addKanbanComment(taskId){
+export async function addKanbanComment(taskId){
   const input = document.getElementById('kanbanCommentInput');
   const body = input ? input.value.trim() : '';
   if (!taskId || !body) return;
@@ -155,7 +159,7 @@ async function addKanbanComment(taskId){
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
 }
 
-async function addKanbanDependency(taskId){
+export async function addKanbanDependency(taskId){
   const input = document.getElementById('kanbanDependencyInput');
   const linkTo = input ? input.value.trim() : '';
   if (!taskId || !linkTo) return;
@@ -178,18 +182,18 @@ async function addKanbanDependency(taskId){
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
 }
 
-async function removeKanbanDependency(parentId, childId){
+export async function removeKanbanDependency(parentId, childId){
   if (!parentId || !childId) return;
   try {
     await api('/api/kanban/links/delete' + _kanbanBoardQuery(), {
       method: 'POST',
       body: JSON.stringify({parent_id: parentId, child_id: childId}),
     });
-    await loadKanbanTask(_kanbanCurrentTaskId);
+    await loadKanbanTask(state._kanbanCurrentTaskId);
   } catch(e) { showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error'); }
 }
 
-function _kanbanRenderTaskDetail(data){
+export function _kanbanRenderTaskDetail(data){
   const task = data.task || {};
   const log = data.log || {};
   const title = _kanbanTaskTitle(task);
@@ -228,12 +232,12 @@ function _kanbanRenderTaskDetail(data){
     </div>`;
 }
 
-async function loadKanbanTask(taskId){
+export async function loadKanbanTask(taskId){
   if (!taskId) return;
   try {
     const data = await api('/api/kanban/tasks/' + encodeURIComponent(taskId) + _kanbanBoardQuery());
     try { data.log = await api('/api/kanban/tasks/' + encodeURIComponent(taskId) + '/log' + _kanbanBoardQuery({tail: 65536})); } catch(e) { data.log = {}; }
-    _kanbanCurrentTaskId = taskId;
+    state._kanbanCurrentTaskId = taskId;
     const task = data.task || {};
     const title = _kanbanTaskTitle(task);
     const board = $('kanbanBoard');
@@ -264,7 +268,7 @@ async function loadKanbanTask(taskId){
 // in ui.js): repeated emissions that yield identical DOM are no-ops.
 // Coalescing of bursty live updates happens upstream in
 // scheduleTodosRefresh().
-function loadTodos() {
+export function loadTodos() {
   const panel = $('todoPanel');
   if (!panel) return;
 
@@ -305,7 +309,7 @@ function loadTodos() {
 // test (R-todo-survive-refresh in tests/test_regressions.py) keeps
 // catching any future refactor that drops the raw-session-messages
 // fallback. See the test for the exact contract.
-function _legacyTodosFromMessages() {
+export function _legacyTodosFromMessages() {
   const sourceMessages = (S.session && Array.isArray(S.session.messages) && S.session.messages.length) ? S.session.messages : S.messages;
   if (!Array.isArray(sourceMessages)) return [];
   for (let i = sourceMessages.length - 1; i >= 0; i--) {
@@ -335,18 +339,18 @@ function _legacyTodosFromMessages() {
 
 const KANBAN_BOARD_LS_KEY = 'hermes-kanban-active-board';
 
-function _kanbanGetSavedBoard(){
+export function _kanbanGetSavedBoard(){
   try { return localStorage.getItem(KANBAN_BOARD_LS_KEY) || null; } catch(_) { return null; }
 }
 
-function _kanbanSetSavedBoard(slug){
+export function _kanbanSetSavedBoard(slug){
   try {
     if (slug && slug !== 'default') localStorage.setItem(KANBAN_BOARD_LS_KEY, slug);
     else localStorage.removeItem(KANBAN_BOARD_LS_KEY);
   } catch(_) {}
 }
 
-async function loadKanbanBoards(){
+export async function loadKanbanBoards(){
   // Fetches the boards list and updates the switcher UI. Best-effort —
   // failures hide the switcher rather than blocking the panel from rendering.
   const switcher = document.getElementById('kanbanBoardSwitcher');
@@ -361,7 +365,7 @@ async function loadKanbanBoards(){
   }
   const boards = (data && data.boards) || [];
   const serverCurrent = (data && data.current) || 'default';
-  _kanbanBoardsList = boards;
+  state._kanbanBoardsList = boards;
   // Resolution chain for the active board:
   //   localStorage hint → server's `current` → 'default'.
   // The localStorage hint is honoured ONLY if it points at a board that
@@ -373,7 +377,7 @@ async function loadKanbanBoards(){
   } else if (saved) {
     _kanbanSetSavedBoard('default');
   }
-  _kanbanCurrentBoard = (active === 'default') ? null : active;
+  state._kanbanCurrentBoard = (active === 'default') ? null : active;
   // The switcher is visible whenever ≥1 non-default board exists OR the
   // current board is non-default. (If you only have 'default', a switcher
   // adds clutter without value.)
@@ -399,7 +403,7 @@ async function loadKanbanBoards(){
 // does not block CSS-context injection (`color:red;background:url(...)`
 // would otherwise exfiltrate page state via an attacker-controlled URL,
 // since neither this bridge nor the agent's kanban_db validates color).
-function _kanbanSafeColor(c){
+export function _kanbanSafeColor(c){
   if (typeof c !== 'string') return '';
   const s = c.trim();
   if (!s) return '';
@@ -408,7 +412,7 @@ function _kanbanSafeColor(c){
   return '';
 }
 
-function _renderKanbanBoardMenu(boards, current){
+export function _renderKanbanBoardMenu(boards, current){
   const menu = document.getElementById('kanbanBoardSwitcherMenu');
   if (!menu) return;
   const items = boards.map(b => {
@@ -446,15 +450,15 @@ function _renderKanbanBoardMenu(boards, current){
   menu.innerHTML = items + actions;
 }
 
-function toggleKanbanBoardMenu(ev){
+export function toggleKanbanBoardMenu(ev){
   if (ev) ev.stopPropagation();
   const menu = document.getElementById('kanbanBoardSwitcherMenu');
   const toggle = document.getElementById('kanbanBoardSwitcherToggle');
   if (!menu || !toggle) return;
-  _kanbanBoardMenuOpen = !_kanbanBoardMenuOpen;
-  menu.hidden = !_kanbanBoardMenuOpen;
-  toggle.setAttribute('aria-expanded', String(_kanbanBoardMenuOpen));
-  if (_kanbanBoardMenuOpen) {
+  state._kanbanBoardMenuOpen = !state._kanbanBoardMenuOpen;
+  menu.hidden = !state._kanbanBoardMenuOpen;
+  toggle.setAttribute('aria-expanded', String(state._kanbanBoardMenuOpen));
+  if (state._kanbanBoardMenuOpen) {
     // Click-away close
     setTimeout(() => {
       document.addEventListener('click', _kanbanCloseBoardMenuOnOutside, {once: true, capture: true});
@@ -462,10 +466,10 @@ function toggleKanbanBoardMenu(ev){
   }
 }
 
-function _kanbanCloseBoardMenuOnOutside(ev){
+export function _kanbanCloseBoardMenuOnOutside(ev){
   const switcher = document.getElementById('kanbanBoardSwitcher');
   if (!switcher || !switcher.contains(ev.target)) {
-    _kanbanBoardMenuOpen = false;
+    state._kanbanBoardMenuOpen = false;
     const menu = document.getElementById('kanbanBoardSwitcherMenu');
     const toggle = document.getElementById('kanbanBoardSwitcherToggle');
     if (menu) menu.hidden = true;
@@ -479,20 +483,20 @@ function _kanbanCloseBoardMenuOnOutside(ev){
   }
 }
 
-async function switchKanbanBoard(slug){
+export async function switchKanbanBoard(slug){
   if (!slug) return;
   const newBoard = (slug === 'default') ? null : slug;
-  if (newBoard === _kanbanCurrentBoard) {
+  if (newBoard === state._kanbanCurrentBoard) {
     // No-op switch — just close the menu.
-    _kanbanBoardMenuOpen = false;
+    state._kanbanBoardMenuOpen = false;
     const menu = document.getElementById('kanbanBoardSwitcherMenu');
     if (menu) menu.hidden = true;
     return;
   }
-  _kanbanCurrentBoard = newBoard;
+  state._kanbanCurrentBoard = newBoard;
   _kanbanSetSavedBoard(slug);
-  _kanbanLatestEventId = 0;  // reset cursor — new board has its own event sequence
-  _kanbanBoardMenuOpen = false;
+  state._kanbanLatestEventId = 0;  // reset cursor — new board has its own event sequence
+  state._kanbanBoardMenuOpen = false;
   const menu = document.getElementById('kanbanBoardSwitcherMenu');
   if (menu) menu.hidden = true;
   // Tell the server too (sets the on-disk active-board pointer for CLI/dashboard).
@@ -511,7 +515,7 @@ async function switchKanbanBoard(slug){
 
 // ── Create / rename / archive board modals ──────────────────────────────────
 
-function openKanbanCreateBoard(){
+export function openKanbanCreateBoard(){
   const modal = document.getElementById('kanbanBoardModal');
   if (!modal) return;
   document.getElementById('kanbanBoardModalMode').value = 'create';
@@ -526,11 +530,11 @@ function openKanbanCreateBoard(){
   document.getElementById('kanbanBoardModalColor').value = '#7aa2ff';
   document.getElementById('kanbanBoardModalError').textContent = '';
   modal.hidden = false;
-  if (_kanbanBoardModalFocusCleanup) {
-    _kanbanBoardModalFocusCleanup();
-    _kanbanBoardModalFocusCleanup = null;
+  if (state._kanbanBoardModalFocusCleanup) {
+    state._kanbanBoardModalFocusCleanup();
+    state._kanbanBoardModalFocusCleanup = null;
   }
-  _kanbanBoardModalFocusCleanup = _trapModalFocus(modal);
+  state._kanbanBoardModalFocusCleanup = _trapModalFocus(modal);
   // Auto-focus name field
   setTimeout(() => document.getElementById('kanbanBoardModalName').focus(), 50);
   // Auto-suggest slug from name as user types
@@ -550,12 +554,12 @@ function openKanbanCreateBoard(){
   document.addEventListener('keydown', _kanbanBoardModalEsc);
 }
 
-function openKanbanRenameBoard(){
+export function openKanbanRenameBoard(){
   const modal = document.getElementById('kanbanBoardModal');
   if (!modal) return;
-  const current = _kanbanCurrentBoard || 'default';
+  const current = state._kanbanCurrentBoard || 'default';
   if (current === 'default') return;  // default's slug is immutable
-  const meta = (_kanbanBoardsList || []).find(b => b.slug === current);
+  const meta = (state._kanbanBoardsList || []).find(b => b.slug === current);
   if (!meta) return;
   document.getElementById('kanbanBoardModalMode').value = 'rename';
   document.getElementById('kanbanBoardModalSlug').value = current;
@@ -570,30 +574,30 @@ function openKanbanRenameBoard(){
   document.getElementById('kanbanBoardModalColor').value = meta.color || '#7aa2ff';
   document.getElementById('kanbanBoardModalError').textContent = '';
   modal.hidden = false;
-  if (_kanbanBoardModalFocusCleanup) {
-    _kanbanBoardModalFocusCleanup();
-    _kanbanBoardModalFocusCleanup = null;
+  if (state._kanbanBoardModalFocusCleanup) {
+    state._kanbanBoardModalFocusCleanup();
+    state._kanbanBoardModalFocusCleanup = null;
   }
-  _kanbanBoardModalFocusCleanup = _trapModalFocus(modal);
+  state._kanbanBoardModalFocusCleanup = _trapModalFocus(modal);
   setTimeout(() => document.getElementById('kanbanBoardModalName').focus(), 50);
   document.addEventListener('keydown', _kanbanBoardModalEsc);
 }
 
-function _kanbanBoardModalEsc(ev){
+export function _kanbanBoardModalEsc(ev){
   if (ev.key === 'Escape') closeKanbanBoardModal();
 }
 
-function closeKanbanBoardModal(){
+export function closeKanbanBoardModal(){
   const modal = document.getElementById('kanbanBoardModal');
   if (modal) modal.hidden = true;
-  if (_kanbanBoardModalFocusCleanup) {
-    _kanbanBoardModalFocusCleanup();
-    _kanbanBoardModalFocusCleanup = null;
+  if (state._kanbanBoardModalFocusCleanup) {
+    state._kanbanBoardModalFocusCleanup();
+    state._kanbanBoardModalFocusCleanup = null;
   }
   document.removeEventListener('keydown', _kanbanBoardModalEsc);
 }
 
-async function submitKanbanBoardModal(){
+export async function submitKanbanBoardModal(){
   const errEl = document.getElementById('kanbanBoardModalError');
   errEl.textContent = '';
   const mode = document.getElementById('kanbanBoardModalMode').value;
@@ -621,9 +625,9 @@ async function submitKanbanBoardModal(){
       closeKanbanBoardModal();
       // Switch to the new board and reload
       const newSlug = (res && res.board && res.board.slug) || slugInput;
-      _kanbanCurrentBoard = (newSlug === 'default') ? null : newSlug;
+      state._kanbanCurrentBoard = (newSlug === 'default') ? null : newSlug;
       _kanbanSetSavedBoard(newSlug);
-      _kanbanLatestEventId = 0;
+      state._kanbanLatestEventId = 0;
       _kanbanStopPolling();
       await loadKanban(true);
       await loadKanbanBoards();
@@ -652,10 +656,10 @@ async function submitKanbanBoardModal(){
   }
 }
 
-async function archiveKanbanBoard(){
-  const current = _kanbanCurrentBoard || 'default';
+export async function archiveKanbanBoard(){
+  const current = state._kanbanCurrentBoard || 'default';
   if (current === 'default') return;
-  const meta = (_kanbanBoardsList || []).find(b => b.slug === current);
+  const meta = (state._kanbanBoardsList || []).find(b => b.slug === current);
   const label = meta && meta.name ? meta.name : current;
   const ok = await showConfirmDialog({
     title: t('kanban_archive_board') || 'Archive board',
@@ -674,9 +678,9 @@ async function archiveKanbanBoard(){
   try {
     await api('/api/kanban/boards/' + encodeURIComponent(current), {method: 'DELETE'});
     // Server falls back to default — match that locally.
-    _kanbanCurrentBoard = null;
+    state._kanbanCurrentBoard = null;
     _kanbanSetSavedBoard('default');
-    _kanbanLatestEventId = 0;
+    state._kanbanLatestEventId = 0;
     await loadKanban(true);
     await loadKanbanBoards();
     _kanbanStartPolling();
@@ -687,29 +691,3 @@ async function archiveKanbanBoard(){
     showToast(t('kanban_unavailable') + ': ' + (e.message || e), 'error');
   }
 }
-
-window.HermesPanels.kanbanDetail = {
-  submitKanbanTaskModal,
-  updateKanbanTask,
-  addKanbanComment,
-  addKanbanDependency,
-  removeKanbanDependency,
-  _kanbanRenderTaskDetail,
-  loadKanbanTask,
-  loadTodos,
-  _legacyTodosFromMessages,
-  _kanbanGetSavedBoard,
-  _kanbanSetSavedBoard,
-  loadKanbanBoards,
-  _kanbanSafeColor,
-  _renderKanbanBoardMenu,
-  toggleKanbanBoardMenu,
-  _kanbanCloseBoardMenuOnOutside,
-  switchKanbanBoard,
-  openKanbanCreateBoard,
-  openKanbanRenameBoard,
-  _kanbanBoardModalEsc,
-  closeKanbanBoardModal,
-  submitKanbanBoardModal,
-  archiveKanbanBoard,
-};

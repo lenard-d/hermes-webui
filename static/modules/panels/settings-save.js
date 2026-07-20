@@ -1,12 +1,18 @@
-// Panels domain: settings persistence and cron alerts
-window.HermesPanels = window.HermesPanels || {};
+import { state } from "./state.js";
 
-async function saveSettings(andClose){
+import { _applySavedSettingsUi,_renderSettingsAuthStatus,_setSettingsAuthButtonsVisible,_syncPasswordlessButton,_updateAuthDisabledWarning,_updateAuthWarningBadge,_updateCurrentPasswordVisibility,loadPasskeys } from "./settings-models-auth.js";
+import { _hideSettingsPanel,_resetSettingsPanelState,_structuredCodeViewFromUi } from "./settings-navigation.js";
+import { _speechPreferencesPayloadFromUi } from "./settings-preferences.js";
+import { _composerControlVisibilityPayload,_getComposerControlOrder } from "./settings-state.js";
+
+// Panels domain: settings persistence and cron alerts
+
+export async function saveSettings(andClose){
   const model=($('settingsModel')||{}).value;
   const modelState=(typeof _captureModelDropdownSelection==='function'&&$('settingsModel'))
     ? (_captureModelDropdownSelection($('settingsModel'))||{model:String(model||''),model_provider:null})
     : {model:String(model||''),model_provider:null};
-  const modelChanged=(model||'')!==(_settingsHermesDefaultModelOnOpen||'')||((modelState.model_provider||null)!==(_settingsHermesDefaultModelProviderOnOpen||null));
+  const modelChanged=(model||'')!==(state._settingsHermesDefaultModelOnOpen||'')||((modelState.model_provider||null)!==(state._settingsHermesDefaultModelProviderOnOpen||null));
   const sendKey=($('settingsSendKey')||{}).value;
   const showTokenUsage=!!($('settingsShowTokenUsage')||{}).checked;
   const showQuotaChip=!!($('settingsShowQuotaChip')||{}).checked;
@@ -93,13 +99,13 @@ async function saveSettings(andClose){
   if(pw && pw.trim()){
     const currentPwField=$('settingsCurrentPassword');
     const currentPw=(currentPwField||{}).value||'';
-    if(_settingsPasswordAuthEnabled && !currentPw.trim()){
+    if(state._settingsPasswordAuthEnabled && !currentPw.trim()){
       if(currentPwField) currentPwField.focus();
       showToast(t('current_password_required'));
       return;
     }
     const payload={...body,_set_password:pw.trim()};
-    if(_settingsPasswordAuthEnabled) payload._current_password=currentPw;
+    if(state._settingsPasswordAuthEnabled) payload._current_password=currentPw;
     try{
       const saved=await api('/api/settings',{method:'POST',body:JSON.stringify(payload)});
       if(modelChanged && model){
@@ -115,7 +121,7 @@ async function saveSettings(andClose){
       showToast(t(saved.auth_just_enabled?'settings_saved_pw':'settings_saved_pw_updated'));
       const cpField=$('settingsCurrentPassword'); if(cpField) cpField.value='';
       const pwField=$('settingsPassword'); if(pwField) pwField.value='';
-      _settingsPasswordAuthEnabled=!!saved.password_auth_enabled;
+      state._settingsPasswordAuthEnabled=!!saved.password_auth_enabled;
       _updateCurrentPasswordVisibility();
       try{
         const authStatus=await api('/api/auth/status');
@@ -123,9 +129,9 @@ async function saveSettings(andClose){
         _updateAuthWarningBadge(authStatus);
         _updateAuthDisabledWarning(authStatus);
       }catch(e){}
-      _settingsDirty=false;
+      state._settingsDirty=false;
       _resetSettingsPanelState();
-      if(!andClose) _pendingSettingsTargetPanel = null;
+      if(!andClose) state._pendingSettingsTargetPanel = null;
       if(andClose) _hideSettingsPanel();
       return;
     }catch(e){showToast(t('settings_save_failed')+e.message);return;}
@@ -143,16 +149,16 @@ async function saveSettings(andClose){
     }
     _applySavedSettingsUi(saved, body, {sendKey,showTokenUsage,showQuotaChip,showConversationOutline,showBusyPlaceholderHint,showTps,fadeTextEffect,showCliSessions,theme,skin,language,sidebarDensity,fontSize});
     showToast(t('settings_saved'));
-    _settingsDirty=false;
+    state._settingsDirty=false;
     _resetSettingsPanelState();
-    if(!andClose) _pendingSettingsTargetPanel = null;
+    if(!andClose) state._pendingSettingsTargetPanel = null;
     if(andClose) _hideSettingsPanel();
   }catch(e){
     showToast(t('settings_save_failed')+e.message);
   }
 }
 
-async function signOut(){
+export async function signOut(){
   try{
     const response=await api('/api/auth/logout',{method:'POST',body:'{}'});
     window.location.href=response.trusted_logout_url||'login';
@@ -161,12 +167,12 @@ async function signOut(){
   }
 }
 
-async function goPasswordless(){
+export async function goPasswordless(){
   const ok=await showConfirmDialog({title:'Go passwordless?',message:'This removes the password and keeps passkey sign-in enabled. Keep at least one passkey registered or you could lose access.',confirmLabel:'Go passwordless',danger:false,focusCancel:true});
   if(!ok) return;
   const currentPw=($('settingsCurrentPassword')||{}).value;
   const payload={_passwordless:true};
-  if(_settingsPasswordAuthEnabled && currentPw) payload._current_password=currentPw;
+  if(state._settingsPasswordAuthEnabled && currentPw) payload._current_password=currentPw;
   try{
     const saved=await api('/api/settings',{method:'POST',body:JSON.stringify(payload)});
     showToast('Password removed. Passkey sign-in remains enabled.');
@@ -174,7 +180,7 @@ async function goPasswordless(){
     _syncPasswordlessButton({auth_enabled:saved.auth_enabled,password_auth_enabled:false,passkeys_count:1});
     const pwField=$('settingsPassword'); if(pwField) pwField.value='';
     const cpField=$('settingsCurrentPassword'); if(cpField) cpField.value='';
-    _settingsPasswordAuthEnabled=false;
+    state._settingsPasswordAuthEnabled=false;
     _updateCurrentPasswordVisibility();
     try{
       const authStatus=await api('/api/auth/status');
@@ -184,10 +190,10 @@ async function goPasswordless(){
   }catch(e){showToast('Failed to go passwordless: '+e.message);}
 }
 
-async function disableAuth(){
+export async function disableAuth(){
   const currentPwField=$('settingsCurrentPassword');
   const currentPw=(currentPwField||{}).value||'';
-  if(_settingsPasswordAuthEnabled && !currentPw.trim()){
+  if(state._settingsPasswordAuthEnabled && !currentPw.trim()){
     if(currentPwField) currentPwField.focus();
     showToast(t('current_password_required'));
     return;
@@ -196,7 +202,7 @@ async function disableAuth(){
   const userInput=await showPromptDialog({title:t('disable_auth_confirm_title'),message:t('disable_auth_confirm_message')+' '+t('disable_auth_typed_confirm'),placeholder:confirmText,confirmLabel:t('disable_auth'),danger:true});
   if(!userInput || userInput.trim()!==confirmText) return;
   const payload={_clear_password:true};
-  if(_settingsPasswordAuthEnabled) payload._current_password=currentPw;
+  if(state._settingsPasswordAuthEnabled) payload._current_password=currentPw;
   try{
     const saved=await api('/api/settings',{method:'POST',body:JSON.stringify(payload)});
     showToast(t('auth_disabled'));
@@ -205,7 +211,7 @@ async function disableAuth(){
     const signOutBtn=$('btnSignOut');
     if(signOutBtn) signOutBtn.style.display='none';
     _syncPasswordlessButton({auth_enabled:false,password_auth_enabled:false,passkeys_count:0});
-    _settingsPasswordAuthEnabled=false;
+    state._settingsPasswordAuthEnabled=false;
     _updateCurrentPasswordVisibility();
     const cpField=$('settingsCurrentPassword'); if(cpField) cpField.value='';
     loadPasskeys();
@@ -219,10 +225,3 @@ async function disableAuth(){
     showToast(t('disable_auth_failed')+e.message);
   }
 }
-
-window.HermesPanels.settingsSave = {
-  saveSettings,
-  signOut,
-  goPasswordless,
-  disableAuth,
-};

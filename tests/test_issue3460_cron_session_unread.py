@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_asset_paths, module_family_paths
+from tests.frontend_asset_contract import family_asset_paths, family_source, module_family_paths
 
 import io
 import json
@@ -19,7 +19,6 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 SESSIONS_JS_PATH = REPO / "static" / "sessions.js"
-PANELS_JS_PATH = REPO / "static" / "panels.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -47,6 +46,8 @@ def _payload(handler):
 
 
 def _family_path_arg(family: str) -> str:
+    if family == "panels":
+        return family_source(family)
     paths = module_family_paths(family) if family == "sessions" else family_asset_paths(family)
     return json.dumps([str(path) for path in paths])
 
@@ -479,7 +480,7 @@ def test_cron_polling_marks_sidebar_unread_without_needing_toast():
     script = f"""
 const fs = require('fs');
 // Ordered split family: {"panels"}
-const src = JSON.parse(process.argv[1]).map(p=>fs.readFileSync(p, 'utf8')).join('').replace(/\\b[A-Za-z][A-Za-z0-9]*Bindings\\./g, '');
+const src = process.argv[1];
 function extractFunc(name) {{
   const re = new RegExp('function\\\\s+' + name + '\\\\s*\\\\(');
   const start = src.search(re);

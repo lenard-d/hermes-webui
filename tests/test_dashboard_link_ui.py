@@ -14,7 +14,6 @@ INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 STYLE_CSS = family_source("style")
 UI_PATH = REPO / "static" / "ui.js"
-PANELS_PATH = REPO / "static" / "panels.js"
 NODE = shutil.which("node")
 requires_node = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 

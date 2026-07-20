@@ -1,31 +1,37 @@
-// Panels domain: cron detail, editing, and runtime
-window.HermesPanels = window.HermesPanels || {};
+import { state } from "./state.js";
+import { _closeMobileSidebarAfterPanelSelection,switchPanel } from "./core.js";
+import { _cronDetailMatches,_cronDiagnostics,_cronItemId,_cronJobKey,_cronOwnerProfileName,_cronProfileLabel,_cronProfileName,_cronProfileOptions,_cronProfileTitle,_cronSchedulePresetOptionHtml,_cronStatusMeta,_findCronJob,_initCronSchedulePresetControls,_refreshCronProfileSelect,loadCronProfiles,loadCrons } from "./cron-list.js";
+import { _clearCronUnreadForJob,_cronNewJobIds } from "./runtime-alerts.js";
 
-function _cronPanelExpandKey(jobId, suffix){
+
+
+// Panels domain: cron detail, editing, and runtime
+
+export function _cronPanelExpandKey(jobId, suffix){
   return `hermes-webui-cron-${suffix}-expanded-${encodeURIComponent(String(jobId||''))}`;
 }
 
-function _cronRunExpandKey(jobId, filename){
+export function _cronRunExpandKey(jobId, filename){
   return `${_cronPanelExpandKey(jobId, 'run')}-${encodeURIComponent(String(filename||''))}`;
 }
 
-function _cronExpansionGet(key){
+export function _cronExpansionGet(key){
   try { return localStorage.getItem(key) === '1'; } catch(_) { return false; }
 }
 
-function _cronExpansionSet(key, expanded){
+export function _cronExpansionSet(key, expanded){
   try { localStorage.setItem(key, expanded ? '1' : '0'); } catch(_) {}
 }
 
-function toggleCronPromptExpanded(jobId){
+export function toggleCronPromptExpanded(jobId){
   const key = _cronPanelExpandKey(jobId, 'prompt');
   _cronExpansionSet(key, !_cronExpansionGet(key));
-  if (_currentCronDetail && String(_currentCronDetail.id) === String(jobId)) {
-    _renderCronDetail(_currentCronDetail);
+  if (state._currentCronDetail && String(state._currentCronDetail.id) === String(jobId)) {
+    _renderCronDetail(state._currentCronDetail);
   }
 }
 
-function toggleCronRunExpanded(jobId, filename, runId){
+export function toggleCronRunExpanded(jobId, filename, runId){
   const key = _cronRunExpandKey(jobId, filename);
   const expanded = !_cronExpansionGet(key);
   _cronExpansionSet(key, expanded);
@@ -40,30 +46,30 @@ function toggleCronRunExpanded(jobId, filename, runId){
   }
 }
 
-function _isCronScriptJob(job){
+export function _isCronScriptJob(job){
   return !!(job && job.no_agent);
 }
 
-function _cronModeLabel(job){
+export function _cronModeLabel(job){
   return _isCronScriptJob(job)
     ? (t('cron_mode_script') || 'Script')
     : (t('cron_mode_agent') || 'Agent');
 }
 
-function _cronOutputTitle(job){
+export function _cronOutputTitle(job){
   return _isCronScriptJob(job)
     ? (t('cron_script_output') || 'Script output')
     : (t('cron_last_output') || 'Last output');
 }
 
-function _cronScriptJobBannerHtml(){
+export function _cronScriptJobBannerHtml(){
   return `<div class="detail-alert cron-script-job-banner">
         <div class="detail-alert-title">${esc(t('cron_mode_script') || 'Script')}</div>
         <p>${esc(t('cron_script_job_banner') || 'Runs a script on schedule — stdout is delivered to the target. No agent, prompt, or skills.')}</p>
       </div>`;
 }
 
-function _cronScriptCardHtml(job){
+export function _cronScriptCardHtml(job){
   const script = String(job && job.script || '').trim() || '—';
   const workdir = String(job && job.workdir || '').trim();
   const workdirRow = workdir
@@ -77,7 +83,7 @@ function _cronScriptCardHtml(job){
       </div>`;
 }
 
-function _cronAgentPromptCardHtml(job){
+export function _cronAgentPromptCardHtml(job){
   const promptExpanded = _cronExpansionGet(_cronPanelExpandKey(job.id, 'prompt'));
   const promptToggleLabel = promptExpanded ? (t('cron_collapse_prompt') || 'Collapse prompt') : (t('cron_expand_prompt') || 'Expand prompt');
   return `<div class="detail-card">
@@ -89,9 +95,9 @@ function _cronAgentPromptCardHtml(job){
       </div>`;
 }
 
-function _renderCronDetail(job){
-  _currentCronDetail = job;
-  _currentCronDetailKey = _cronJobKey(job);
+export function _renderCronDetail(job){
+  state._currentCronDetail = job;
+  state._currentCronDetailKey = _cronJobKey(job);
   const title = $('taskDetailTitle');
   const body = $('taskDetailBody');
   const empty = $('taskDetailEmpty');
@@ -169,13 +175,13 @@ function _renderCronDetail(job){
     </div>`;
   body.style.display = '';
   if (empty) empty.style.display = 'none';
-  _cronMode = 'read';
+  state._cronMode = 'read';
   _setCronHeaderButtons('read', job);
   // Load runs asynchronously
-  if (!isReadOnly) _loadCronDetailRuns(job.id, _currentCronDetailKey);
+  if (!isReadOnly) _loadCronDetailRuns(job.id, state._currentCronDetailKey);
 }
 
-function _setCronHeaderButtons(mode, job) {
+export function _setCronHeaderButtons(mode, job) {
   const runBtn = $('btnRunTaskDetail');
   const pauseBtn = $('btnPauseTaskDetail');
   const resumeBtn = $('btnResumeTaskDetail');
@@ -212,14 +218,14 @@ function _setCronHeaderButtons(mode, job) {
   }
 }
 
-async function _loadCronDetailRuns(jobId, detailKey){
+export async function _loadCronDetailRuns(jobId, detailKey){
   try {
     const data = await api(`/api/crons/history?job_id=${encodeURIComponent(jobId)}&limit=50`);
     if (!_cronDetailMatches(jobId, detailKey)) return;
     const card = $('cronDetailRuns');
     if (!card) return;
-    const outputTitle = _cronOutputTitle(_currentCronDetail);
-    const isScriptJob = _isCronScriptJob(_currentCronDetail);
+    const outputTitle = _cronOutputTitle(state._currentCronDetail);
+    const isScriptJob = _isCronScriptJob(state._currentCronDetail);
     if (!data.runs || !data.runs.length) {
       card.innerHTML = `<div class="detail-card-title">${esc(outputTitle)}</div><div style="color:var(--muted);font-size:12px">${esc(t('cron_no_runs_yet'))}</div>`;
       return;
@@ -248,7 +254,7 @@ async function _loadCronDetailRuns(jobId, detailKey){
   } catch(e) { /* ignore */ }
 }
 
-async function _loadRunContent(jobId, filename, runId){
+export async function _loadRunContent(jobId, filename, runId){
   const body = document.querySelector(`#${runId} .detail-run-body`);
   if (!body) return;
   const item = document.getElementById(runId);
@@ -326,7 +332,7 @@ async function _loadRunContent(jobId, filename, runId){
   }
 }
 
-function openCronDetail(jobOrId, el){
+export function openCronDetail(jobOrId, el){
   const job = _findCronJob(jobOrId);
   if (!job) return;
   const detailKey = _cronJobKey(job);
@@ -337,18 +343,18 @@ function openCronDetail(jobOrId, el){
   if (!job.read_only) _clearCronUnreadForJob(job.id);
   const dot = target && target.querySelector('.cron-new-dot');
   if (dot && !job.read_only) dot.remove();
-  _cronPreFormDetail = null;
-  _editingCronId = null;
+  state._cronPreFormDetail = null;
+  state._editingCronId = null;
   _stopCronWatch();
   _renderCronDetail(job);
   if (!job.read_only) _checkCronWatchOnDetail(job.id, detailKey);
   _closeMobileSidebarAfterPanelSelection();
 }
 
-function _clearCronDetail(){
-  _currentCronDetail = null;
-  _currentCronDetailKey = '';
-  _cronMode = 'empty';
+export function _clearCronDetail(){
+  state._currentCronDetail = null;
+  state._currentCronDetailKey = '';
+  state._cronMode = 'empty';
   _stopCronWatch();
   const title = $('taskDetailTitle');
   const body = $('taskDetailBody');
@@ -359,34 +365,34 @@ function _clearCronDetail(){
   _setCronHeaderButtons('empty');
 }
 
-async function runCurrentCron(){ if (_currentCronDetail) await cronRun(_currentCronDetail.id); }
-async function pauseCurrentCron(){ if (_currentCronDetail) await cronPause(_currentCronDetail.id); }
-async function resumeCurrentCron(){ if (_currentCronDetail) await cronResume(_currentCronDetail.id); }
-async function copyCurrentCronDiagnostics(){
-  if (!_currentCronDetail) return;
+export async function runCurrentCron(){ if (state._currentCronDetail) await cronRun(state._currentCronDetail.id); }
+export async function pauseCurrentCron(){ if (state._currentCronDetail) await cronPause(state._currentCronDetail.id); }
+export async function resumeCurrentCron(){ if (state._currentCronDetail) await cronResume(state._currentCronDetail.id); }
+export async function copyCurrentCronDiagnostics(){
+  if (!state._currentCronDetail) return;
   try {
-    await _copyText(_cronDiagnostics(_currentCronDetail));
+    await _copyText(_cronDiagnostics(state._currentCronDetail));
     showToast(t('cron_diagnostics_copied'));
   } catch(e) { showToast(t('copy_failed'), 4000); }
 }
-function editCurrentCron(){
-  if (!_currentCronDetail) return;
-  openCronEdit(_currentCronDetail);
+export function editCurrentCron(){
+  if (!state._currentCronDetail) return;
+  openCronEdit(state._currentCronDetail);
 }
-function duplicateCurrentCron(){
-  if (!_currentCronDetail) return;
-  const job = _currentCronDetail;
-  if (typeof switchPanel === 'function' && _currentPanel !== 'tasks') switchPanel('tasks');
-  _cronPreFormDetail = { ...job };
-  _editingCronId = null;
-  _cronMode = 'create';
-  _cronIsDuplicate = true;
-  _cronSelectedSkills = Array.isArray(job.skills) ? [...job.skills] : [];
+export function duplicateCurrentCron(){
+  if (!state._currentCronDetail) return;
+  const job = state._currentCronDetail;
+  if (typeof switchPanel === 'function' && state._currentPanel !== 'tasks') switchPanel('tasks');
+  state._cronPreFormDetail = { ...job };
+  state._editingCronId = null;
+  state._cronMode = 'create';
+  state._cronIsDuplicate = true;
+  state._cronSelectedSkills = Array.isArray(job.skills) ? [...job.skills] : [];
   // Deduplicate name: append "(copy)", "(copy 2)", "(copy 3)" etc.
   const baseName = job.name || '';
   let dupName = baseName + ' (copy)';
-  if (_cronList && _cronList.length) {
-    const taken = new Set(_cronList.filter(j => j.name).map(j => j.name));
+  if (state._cronList && state._cronList.length) {
+    const taken = new Set(state._cronList.filter(j => j.name).map(j => j.name));
     if (taken.has(dupName)) {
       let n = 2;
       while (taken.has(baseName + ' (copy ' + n + ')')) n++;
@@ -406,15 +412,15 @@ function duplicateCurrentCron(){
     provider: job.provider || '',
     isEdit: false,
   });
-  if (!_cronSkillsCache) {
-    api('/api/skills').then(d=>{_cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
+  if (!state._cronSkillsCache) {
+    api('/api/skills').then(d=>{state._cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
   } else {
     _bindCronSkillPicker();
   }
 }
-async function deleteCurrentCron(){
-  if (!_currentCronDetail) return;
-  const id = _currentCronDetail.id;
+export async function deleteCurrentCron(){
+  if (!state._currentCronDetail) return;
+  const id = state._currentCronDetail.id;
   const _ok = await showConfirmDialog({title:t('cron_delete_confirm_title'),message:t('cron_delete_confirm_message'),confirmLabel:t('delete_title'),danger:true,focusCancel:true});
   if(!_ok) return;
   try {
@@ -424,31 +430,26 @@ async function deleteCurrentCron(){
     await loadCrons();
   } catch(e) { showToast(t('delete_failed') + e.message, 4000); }
 }
-let _cronSelectedSkills=[];
-let _cronIsDuplicate = false;
-let _cronSkillsCache=null;
-let _cronProfilesCache=null;
-let _cronDeliveryOptionsCache=null;
 
-function openCronCreate(){
-  if (typeof switchPanel === 'function' && _currentPanel !== 'tasks') switchPanel('tasks');
-  _cronPreFormDetail = _currentCronDetail ? { ..._currentCronDetail } : null;
-  _editingCronId = null;
-  _cronMode = 'create';
-  _cronIsDuplicate = false;
-  _cronSelectedSkills = [];
+export function openCronCreate(){
+  if (typeof switchPanel === 'function' && state._currentPanel !== 'tasks') switchPanel('tasks');
+  state._cronPreFormDetail = state._currentCronDetail ? { ..._currentCronDetail } : null;
+  state._editingCronId = null;
+  state._cronMode = 'create';
+  state._cronIsDuplicate = false;
+  state._cronSelectedSkills = [];
   _renderCronForm({ name:'', schedule:'0 9 * * *', prompt:'', deliver:'local', profile:'', toast_notifications:true, model:'', provider:'', isEdit:false });
-  _cronSkillsCache = null;
-  api('/api/skills').then(d=>{_cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
+  state._cronSkillsCache = null;
+  api('/api/skills').then(d=>{state._cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
   loadCronProfiles().then(()=>_refreshCronProfileSelect('')).catch(()=>{});
 }
 
-function openCronEdit(job){
+export function openCronEdit(job){
   if (!job) return;
-  _cronPreFormDetail = { ...job };
-  _editingCronId = job.id;
-  _cronMode = 'edit';
-  _cronSelectedSkills = Array.isArray(job.skills) ? [...job.skills] : [];
+  state._cronPreFormDetail = { ...job };
+  state._editingCronId = job.id;
+  state._cronMode = 'edit';
+  state._cronSelectedSkills = Array.isArray(job.skills) ? [...job.skills] : [];
   _renderCronForm({
     name: job.name || '',
     schedule: job.schedule_display || (job.schedule && job.schedule.expression) || '',
@@ -462,15 +463,15 @@ function openCronEdit(job){
     provider: job.provider || '',
     isEdit: true,
   });
-  if (!_cronSkillsCache) {
-    api('/api/skills').then(d=>{_cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
+  if (!state._cronSkillsCache) {
+    api('/api/skills').then(d=>{state._cronSkillsCache=d.skills||[]; _bindCronSkillPicker();}).catch(()=>{});
   } else {
     _bindCronSkillPicker();
   }
   loadCronProfiles().then(()=>_refreshCronProfileSelect(job.profile || '')).catch(()=>{});
 }
 
-function _renderCronForm({ name, schedule, prompt, deliver, profile, toast_notifications=true, no_agent=false, script='', model='', provider='', isEdit }){
+export function _renderCronForm({ name, schedule, prompt, deliver, profile, toast_notifications=true, no_agent=false, script='', model='', provider='', isEdit }){
   const title = $('taskDetailTitle');
   const body = $('taskDetailBody');
   const empty = $('taskDetailEmpty');
@@ -594,18 +595,18 @@ function _renderCronForm({ name, schedule, prompt, deliver, profile, toast_notif
   if (focusEl) focusEl.focus();
 }
 
-async function _populateCronDeliverOptions(selectedValue, isEdit) {
+export async function _populateCronDeliverOptions(selectedValue, isEdit) {
   var sel = $('cronFormDeliver');
   if (!sel) return;
   sel.disabled = true;
   try {
-    if (!_cronDeliveryOptionsCache) {
+    if (!state._cronDeliveryOptionsCache) {
       var res = await api('/api/crons/delivery-options');
-      _cronDeliveryOptionsCache = res && res.platforms ? res.platforms : [];
+      state._cronDeliveryOptionsCache = res && res.platforms ? res.platforms : [];
     }
     sel.innerHTML = '';
-    for (var i = 0; i < _cronDeliveryOptionsCache.length; i++) {
-      var p = _cronDeliveryOptionsCache[i];
+    for (var i = 0; i < state._cronDeliveryOptionsCache.length; i++) {
+      var p = state._cronDeliveryOptionsCache[i];
       var opt = document.createElement('option');
       opt.value = p.value;
       opt.textContent = p.label;
@@ -625,7 +626,7 @@ async function _populateCronDeliverOptions(selectedValue, isEdit) {
   sel.disabled = false;
 }
 
-async function _populateCronFormModelSelect(selectedModel, selectedProvider, disabled){
+export async function _populateCronFormModelSelect(selectedModel, selectedProvider, disabled){
   const sel = $('cronFormModel');
   if (!sel) return;
   delete sel.dataset.loaded;
@@ -691,32 +692,32 @@ async function _populateCronFormModelSelect(selectedModel, selectedProvider, dis
   sel.disabled = !!disabled;
 }
 
-function _renderCronSkillTags(){
+export function _renderCronSkillTags(){
   const wrap=$('cronFormSkillTags');
   if(!wrap)return;
   wrap.innerHTML='';
-  for(const name of _cronSelectedSkills){
+  for(const name of state._cronSelectedSkills){
     const tag=document.createElement('span');
     tag.className='skill-tag';
     tag.dataset.skill=name;
     const rm=document.createElement('span');
     rm.className='remove-tag';rm.textContent='×';
-    rm.onclick=()=>{_cronSelectedSkills=_cronSelectedSkills.filter(s=>s!==name);tag.remove();};
+    rm.onclick=()=>{state._cronSelectedSkills=state._cronSelectedSkills.filter(s=>s!==name);tag.remove();};
     tag.appendChild(document.createTextNode(name));
     tag.appendChild(rm);
     wrap.appendChild(tag);
   }
 }
 
-function _bindCronSkillPicker(){
+export function _bindCronSkillPicker(){
   const search=$('cronFormSkillSearch');
   const dropdown=$('cronFormSkillDropdown');
   if(!search||!dropdown)return;
   search.oninput=()=>{
     const q=search.value.trim().toLowerCase();
-    if(!q||!_cronSkillsCache){dropdown.style.display='none';return;}
-    const matches=_cronSkillsCache.filter(s=>
-      !_cronSelectedSkills.includes(s.name)&&
+    if(!q||!state._cronSkillsCache){dropdown.style.display='none';return;}
+    const matches=state._cronSkillsCache.filter(s=>
+      !state._cronSelectedSkills.includes(s.name)&&
       (s.name.toLowerCase().includes(q)||(s.category||'').toLowerCase().includes(q))
     ).slice(0,8);
     if(!matches.length){dropdown.style.display='none';return;}
@@ -726,7 +727,7 @@ function _bindCronSkillPicker(){
       opt.className='skill-opt';
       opt.textContent=s.name+(s.category?' ('+s.category+')':'');
       opt.onclick=()=>{
-        _cronSelectedSkills.push(s.name);
+        state._cronSelectedSkills.push(s.name);
         _renderCronSkillTags();
         search.value='';
         dropdown.style.display='none';
@@ -738,19 +739,19 @@ function _bindCronSkillPicker(){
   search.onblur=()=>setTimeout(()=>{dropdown.style.display='none';},150);
 }
 
-function cancelCronForm(){
-  _editingCronId = null;
-  if (_cronPreFormDetail) {
-    const snap = _cronPreFormDetail;
-    _cronPreFormDetail = null;
+export function cancelCronForm(){
+  state._editingCronId = null;
+  if (state._cronPreFormDetail) {
+    const snap = state._cronPreFormDetail;
+    state._cronPreFormDetail = null;
     _renderCronDetail(snap);
     return;
   }
-  _cronPreFormDetail = null;
+  state._cronPreFormDetail = null;
   _clearCronDetail();
 }
 
-function _cronModelBareName(model, provider) {
+export function _cronModelBareName(model, provider) {
   // Strip @provider: prefix from a model value when provider is stored separately.
   // The model dropdown may contain values like "@custom:9router:chat" (from
   // _apply_provider_prefix) but cron jobs store model and provider separately,
@@ -761,7 +762,7 @@ function _cronModelBareName(model, provider) {
   return model;
 }
 
-async function saveCronForm(){
+export async function saveCronForm(){
   const nameEl=$('cronFormName');
   const schEl=$('cronFormSchedule');
   const promptEl=$('cronFormPrompt');
@@ -770,7 +771,7 @@ async function saveCronForm(){
   const toastEl=$('cronFormToastNotifications');
   const errEl=$('cronFormError');
   if(!schEl||!errEl) return;
-  const isNoAgent = !!(_cronPreFormDetail && _cronPreFormDetail.no_agent);
+  const isNoAgent = !!(state._cronPreFormDetail && state._cronPreFormDetail.no_agent);
   if(!isNoAgent && !promptEl) return;
   const name=(nameEl?nameEl.value:'').trim();
   const schedule=schEl.value.trim();
@@ -785,8 +786,8 @@ async function saveCronForm(){
     const modelEl = $('cronFormModel');
     const modelLoaded = !!(modelEl && modelEl.dataset.loaded === '1');
     const selectedModel = modelEl ? (modelEl.value || '').trim() : '';
-    if (_editingCronId) {
-      const updates = {job_id: _editingCronId, schedule, profile: profile, toast_notifications: toastNotifications};
+    if (state._editingCronId) {
+      const updates = {job_id: state._editingCronId, schedule, profile: profile, toast_notifications: toastNotifications};
       if (!isNoAgent) updates.prompt = prompt;
       if (name) updates.name = name;
       if (deliver) updates.deliver = deliver;
@@ -804,19 +805,19 @@ async function saveCronForm(){
         // else: select not yet populated — omit model/provider to preserve saved value
       }
       await api('/api/crons/update', {method:'POST', body: JSON.stringify(updates)});
-      const editedId = _editingCronId;
-      _editingCronId = null;
-      _cronPreFormDetail = null;
+      const editedId = state._editingCronId;
+      state._editingCronId = null;
+      state._cronPreFormDetail = null;
       showToast(t('cron_job_updated'));
       await loadCrons();
-      const job = _cronList && _cronList.find(j => j.id === editedId);
+      const job = state._cronList && state._cronList.find(j => j.id === editedId);
       if (job) openCronDetail(job);
       return;
     }
     const body={schedule,prompt,deliver,profile: profile, toast_notifications: toastNotifications};
-    if(_cronIsDuplicate) body.enabled=false;
+    if(state._cronIsDuplicate) body.enabled=false;
     if(name)body.name=name;
-    if(_cronSelectedSkills.length)body.skills=_cronSelectedSkills;
+    if(state._cronSelectedSkills.length)body.skills=state._cronSelectedSkills;
     if (modelEl && modelLoaded) {
       if (selectedModel) {
         const modelState = (typeof _modelStateForSelect === 'function')
@@ -825,18 +826,18 @@ async function saveCronForm(){
         body.model = _cronModelBareName(modelState.model, modelState.model_provider) || null;
         body.provider = modelState.model_provider || null;
       }
-    } else if (_cronIsDuplicate && _cronPreFormDetail && _cronPreFormDetail.model) {
-      body.model = _cronModelBareName(_cronPreFormDetail.model, _cronPreFormDetail.provider) || null;
-      body.provider = _cronPreFormDetail.provider || null;
+    } else if (state._cronIsDuplicate && state._cronPreFormDetail && state._cronPreFormDetail.model) {
+      body.model = _cronModelBareName(state._cronPreFormDetail.model, state._cronPreFormDetail.provider) || null;
+      body.provider = state._cronPreFormDetail.provider || null;
     }
     const res = await api('/api/crons/create',{method:'POST',body:JSON.stringify(body)});
-    _cronPreFormDetail = null;
-    _cronIsDuplicate = false;
+    state._cronPreFormDetail = null;
+    state._cronIsDuplicate = false;
     showToast(t('cron_job_created'));
     await loadCrons();
     const newId = res && (res.id || (res.job && res.job.id));
     if (newId) openCronDetail(newId);
-    else if (_cronList && _cronList.length) openCronDetail(_cronList[_cronList.length - 1]);
+    else if (state._cronList && state._cronList.length) openCronDetail(state._cronList[state._cronList.length - 1]);
   }catch(e){
     errEl.textContent=t('error_prefix')+e.message;errEl.style.display='';
   }
@@ -844,9 +845,9 @@ async function saveCronForm(){
 
 // Back-compat aliases for any stale callers
 const submitCronCreate = saveCronForm;
-function toggleCronForm(){ openCronCreate(); }
+export function toggleCronForm(){ openCronCreate(); }
 
-function _cronOutputSnippet(content) {
+export function _cronOutputSnippet(content) {
   // Extract the response body from a cron output .md file
   const lines = content.split('\n');
   const responseIdx = lines.findIndex(l => l.startsWith('## Response') || l.startsWith('# Response'));
@@ -854,7 +855,7 @@ function _cronOutputSnippet(content) {
   return body.slice(0, 600) || '(empty)';
 }
 
-function _formatCronRunUsageStrip(usage) {
+export function _formatCronRunUsageStrip(usage) {
   if (!usage || typeof usage !== 'object') return '';
   const parts = [];
   const fmt = n => {
@@ -875,14 +876,11 @@ function _formatCronRunUsageStrip(usage) {
   return parts.join(' · ');
 }
 // ── Cron run watch ────────────────────────────────────────────────────────────
-let _cronWatchInterval = null;
-let _cronWatchStart = null;
-let _cronWatchTimerInterval = null;
 
-function _startCronWatch(jobId, detailKey) {
+export function _startCronWatch(jobId, detailKey) {
   _stopCronWatch();
-  _cronWatchStart = Date.now();
-  _cronWatchInterval = setInterval(async () => {
+  state._cronWatchStart = Date.now();
+  state._cronWatchInterval = setInterval(async () => {
     try {
       const data = await api(`/api/crons/status?job_id=${encodeURIComponent(jobId)}`,{timeoutToast:false});
       if (!data.running) {
@@ -900,10 +898,10 @@ function _startCronWatch(jobId, detailKey) {
     } catch(e) { /* ignore poll errors */ }
   }, 3000);
   // Timer update every second
-  _cronWatchTimerInterval = setInterval(() => {
-    if (_cronDetailMatches(jobId, detailKey) && _cronWatchStart) {
+  state._cronWatchTimerInterval = setInterval(() => {
+    if (_cronDetailMatches(jobId, detailKey) && state._cronWatchStart) {
       const el = $('cronRunningIndicator');
-      if (el) el.querySelector('.cron-watch-elapsed').textContent = _formatElapsed((Date.now() - _cronWatchStart) / 1000);
+      if (el) el.querySelector('.cron-watch-elapsed').textContent = _formatElapsed((Date.now() - state._cronWatchStart) / 1000);
     }
   }, 1000);
   // Inject running indicator into detail card
@@ -912,15 +910,15 @@ function _startCronWatch(jobId, detailKey) {
   }
 }
 
-function _stopCronWatch() {
-  if (_cronWatchInterval) { clearInterval(_cronWatchInterval); _cronWatchInterval = null; }
-  if (_cronWatchTimerInterval) { clearInterval(_cronWatchTimerInterval); _cronWatchTimerInterval = null; }
-  _cronWatchStart = null;
+export function _stopCronWatch() {
+  if (state._cronWatchInterval) { clearInterval(state._cronWatchInterval); state._cronWatchInterval = null; }
+  if (state._cronWatchTimerInterval) { clearInterval(state._cronWatchTimerInterval); state._cronWatchTimerInterval = null; }
+  state._cronWatchStart = null;
   const el = $('cronRunningIndicator');
   if (el) el.remove();
 }
 
-function _injectRunningIndicator() {
+export function _injectRunningIndicator() {
   const card = $('cronDetailRuns');
   if (!card || $('cronRunningIndicator')) return;
   const div = document.createElement('div');
@@ -930,14 +928,14 @@ function _injectRunningIndicator() {
   card.insertAdjacentElement('beforebegin', div);
 }
 
-function _formatElapsed(seconds) {
+export function _formatElapsed(seconds) {
   if (seconds < 60) return Math.round(seconds) + 's';
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return m + 'm ' + s + 's';
 }
 
-function _checkCronWatchOnDetail(jobId, detailKey) {
+export function _checkCronWatchOnDetail(jobId, detailKey) {
   // When opening a detail view, check if job is running
   api(`/api/crons/status?job_id=${encodeURIComponent(jobId)}`,{timeoutToast:false}).then(data => {
     if (data.running && _cronDetailMatches(jobId, detailKey)) {
@@ -946,15 +944,15 @@ function _checkCronWatchOnDetail(jobId, detailKey) {
   }).catch(() => {});
 }
 
-async function cronRun(id) {
+export async function cronRun(id) {
   try {
     await api('/api/crons/run', {method:'POST', body: JSON.stringify({job_id: id})});
     showToast(t('cron_job_triggered'));
-    _startCronWatch(id, _currentCronDetailKey);
+    _startCronWatch(id, state._currentCronDetailKey);
   } catch(e) { showToast(t('failed_colon') + e.message, 4000); }
 }
 
-async function cronPause(id) {
+export async function cronPause(id) {
   try {
     await api('/api/crons/pause', {method:'POST', body: JSON.stringify({job_id: id})});
     showToast(t('cron_job_paused'));
@@ -962,61 +960,10 @@ async function cronPause(id) {
   } catch(e) { showToast(t('failed_colon') + e.message, 4000); }
 }
 
-async function cronResume(id) {
+export async function cronResume(id) {
   try {
     await api('/api/crons/resume', {method:'POST', body: JSON.stringify({job_id: id})});
     showToast(t('cron_job_resumed'));
     await loadCrons();
   } catch(e) { showToast(t('failed_colon') + e.message, 4000); }
 }
-
-let _editingCronId = null;
-
-window.HermesPanels.cronEditor = {
-  _cronPanelExpandKey,
-  _cronRunExpandKey,
-  _cronExpansionGet,
-  _cronExpansionSet,
-  toggleCronPromptExpanded,
-  toggleCronRunExpanded,
-  _isCronScriptJob,
-  _cronModeLabel,
-  _cronOutputTitle,
-  _cronScriptJobBannerHtml,
-  _cronScriptCardHtml,
-  _cronAgentPromptCardHtml,
-  _renderCronDetail,
-  _setCronHeaderButtons,
-  _loadCronDetailRuns,
-  _loadRunContent,
-  openCronDetail,
-  _clearCronDetail,
-  runCurrentCron,
-  pauseCurrentCron,
-  resumeCurrentCron,
-  copyCurrentCronDiagnostics,
-  editCurrentCron,
-  duplicateCurrentCron,
-  deleteCurrentCron,
-  openCronCreate,
-  openCronEdit,
-  _renderCronForm,
-  _populateCronDeliverOptions,
-  _populateCronFormModelSelect,
-  _renderCronSkillTags,
-  _bindCronSkillPicker,
-  cancelCronForm,
-  _cronModelBareName,
-  saveCronForm,
-  toggleCronForm,
-  _cronOutputSnippet,
-  _formatCronRunUsageStrip,
-  _startCronWatch,
-  _stopCronWatch,
-  _injectRunningIndicator,
-  _formatElapsed,
-  _checkCronWatchOnDetail,
-  cronRun,
-  cronPause,
-  cronResume,
-};

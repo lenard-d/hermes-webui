@@ -256,18 +256,16 @@ class TestSwitchPanelGuard:
         assert "_syncSidebarAria" in PANELS_JS, \
             "panels.js must call _syncSidebarAria after panel switch"
 
-    def test_legacy_proxy_forwards_opts(self):
-        # The proxy at the bottom of the file must forward opts to keep the
-        # rail-click gesture working when the proxy runs (it overrides the
-        # function reference, so the original definition is unreachable).
+    def test_native_function_accepts_opts_without_proxy(self):
+        # Native modules export the authoritative implementation directly;
+        # compatibility publishing must not replace it with a second owner.
         m = re.search(
-            r"switchPanel\s*=\s*async\s+function\s*\(([^)]*)\)\s*\{[^}]*_origSwitchPanel\(([^)]*)\)",
+            r"async\s+function\s+switchPanel\s*\(([^)]*)\)",
             PANELS_JS
         )
-        assert m, "switchPanel proxy not found at end of panels.js"
-        params, args = m.group(1), m.group(2)
-        assert "opts" in params and "opts" in args, \
-            f"Proxy must forward opts to _origSwitchPanel — got params={params!r}, args={args!r}"
+        assert m, "native switchPanel export not found"
+        assert "opts" in m.group(1)
+        assert "_origSwitchPanel" not in PANELS_JS
 
 
 # ── HTML contract ──────────────────────────────────────────────────────────

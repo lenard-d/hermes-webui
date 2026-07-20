@@ -14,7 +14,6 @@ from pathlib import Path
 import api.routes as routes  # noqa: F401  (ensures repo import path is set up)
 
 SESSIONS_JS = Path(__file__).resolve().parent.parent / "static" / "sessions.js"
-PANELS_JS = Path(__file__).resolve().parent.parent / "static" / "panels.js"
 STYLE_CSS = Path(__file__).resolve().parent.parent / "static" / "style.css"
 
 

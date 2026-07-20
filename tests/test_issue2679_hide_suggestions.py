@@ -6,7 +6,6 @@ from tests.frontend_asset_contract import family_source
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "static" / "index.html"
 STYLE = REPO_ROOT / "static" / "style.css"
-PANELS = REPO_ROOT / "static" / "panels.js"
 I18N = REPO_ROOT / "static" / "i18n.js"
 CONFIG = REPO_ROOT / "api" / "config" / "settings.py"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"

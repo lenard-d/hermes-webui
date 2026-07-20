@@ -1,25 +1,27 @@
+import { state } from "./state.js";
+import { MAIN_VIEW_PANELS } from "./core.js";
+
 // Panels domain: extensions and plugins
-window.HermesPanels = window.HermesPanels || {};
 
 // ── Extensions panel (browser-origin diagnostics + local enable controls) ──
 
-function _extensionStatusLabel(value){
+export function _extensionStatusLabel(value){
   return value ? 'Enabled' : 'Disabled';
 }
 
-function _extensionBooleanBadge(value){
+export function _extensionBooleanBadge(value){
   const cls=value?'extension-status-badge-on':'extension-status-badge-off';
   return `<span class="extension-status-badge ${cls}">${value?'true':'false'}</span>`;
 }
 
-function _extensionAssetList(urls){
+export function _extensionAssetList(urls){
   if(!Array.isArray(urls)||urls.length===0){
     return '<div class="extension-url-empty">None</div>';
   }
   return '<ul class="extension-url-list">'+urls.map(url=>`<li><code>${esc(url)}</code></li>`).join('')+'</ul>';
 }
 
-function _extensionWarningList(warnings){
+export function _extensionWarningList(warnings){
   if(!Array.isArray(warnings)||warnings.length===0){
     return '<div class="extension-url-empty">No warnings.</div>';
   }
@@ -34,12 +36,12 @@ function _extensionWarningList(warnings){
   }).join('')+'</ul>';
 }
 
-function _extensionCountValue(counts,key,urls){
+export function _extensionCountValue(counts,key,urls){
   if(counts&&Number.isFinite(Number(counts[key]))) return Number(counts[key]);
   return Array.isArray(urls)?urls.length:0;
 }
 
-function _extensionEntryStatusLabel(entry){
+export function _extensionEntryStatusLabel(entry){
   const status=(entry&&entry.status)||'';
   if(status==='manifest_disabled') return 'Disabled in manifest';
   if(status==='user_disabled') return 'Disabled';
@@ -47,18 +49,18 @@ function _extensionEntryStatusLabel(entry){
   return 'Unknown';
 }
 
-function _extensionEntryBadge(entry){
+export function _extensionEntryBadge(entry){
   const enabled=!!(entry&&entry.effective_enabled);
   const cls=enabled?'extension-status-badge-on':'extension-status-badge-off';
   return `<span class="extension-status-badge ${cls}">${esc(_extensionEntryStatusLabel(entry))}</span>`;
 }
 
-function _configureExtensionSettingsFromStatus(data){
+export function _configureExtensionSettingsFromStatus(data){
   if(!window.HermesExtensionSettings||!data||!Array.isArray(data.extensions)) return;
   window.HermesExtensionSettings.primeFromStatus({extensions:data.extensions});
 }
 
-function _extensionSettingsFieldHtml(field,value){
+export function _extensionSettingsFieldHtml(field,value){
   const key=String(field&&field.key||'');
   const type=String(field&&field.type||'');
   const label=String(field&&field.label||key);
@@ -83,7 +85,7 @@ function _extensionSettingsFieldHtml(field,value){
   return `<div class="extension-setting-field">${control}${desc?`<div class="extension-setting-desc">${esc(desc)}</div>`:''}</div>`;
 }
 
-function _extensionSettingsControls(entry){
+export function _extensionSettingsControls(entry){
   const id=(entry&&entry.id)||'';
   const storageOwned=!!(entry&&entry.storage_owned);
   if(!storageOwned){
@@ -114,7 +116,7 @@ function _extensionSettingsControls(entry){
   </div>`;
 }
 
-function _extensionInstalledList(extensions,extensionDirConfigured){
+export function _extensionInstalledList(extensions,extensionDirConfigured){
   const list=Array.isArray(extensions)?extensions:[];
   if(!list.length){
     if(!extensionDirConfigured) return '<div class="extension-url-empty">No extension directory is configured.</div>';
@@ -145,25 +147,25 @@ function _extensionInstalledList(extensions,extensionDirConfigured){
   }).join('')}</div>`;
 }
 
-function _extensionSidecarHealthBadge(status,label){
+export function _extensionSidecarHealthBadge(status,label){
   const safeStatus=['checking','healthy','unhealthy','blocked'].includes(status)?status:'checking';
   return `<span class="extension-sidecar-status-badge extension-sidecar-status-${safeStatus}">${esc(label||safeStatus)}</span>`;
 }
 
-function _extensionRuntimeStatusValue(value){
+export function _extensionRuntimeStatusValue(value){
   const normalized=String(value||'').trim().toLowerCase();
   return ['running','connected','waiting','stale','unloaded','stopped','not_registered','unknown'].includes(normalized)
     ? normalized
     : 'unknown';
 }
 
-function _extensionRuntimeStatusLabel(value){
+export function _extensionRuntimeStatusLabel(value){
   const normalized=_extensionRuntimeStatusValue(value);
   if(normalized==='not_registered') return 'not registered';
   return normalized.replace(/_/g,' ');
 }
 
-function _extensionRuntimeLastSeen(value){
+export function _extensionRuntimeLastSeen(value){
   const text=String(value??'').trim();
   if(!/^\d+(?:\.\d+)?$/.test(text)) return '';
   const raw=Number(text);
@@ -181,7 +183,7 @@ function _extensionRuntimeLastSeen(value){
   return `${Math.floor(hours/24)}d ago`;
 }
 
-function _extensionRuntimeOrigin(value){
+export function _extensionRuntimeOrigin(value){
   const text=String(value||'').trim();
   if(!text) return '';
   try{
@@ -193,7 +195,7 @@ function _extensionRuntimeOrigin(value){
   return '';
 }
 
-function _extensionRuntimeRows(runtime){
+export function _extensionRuntimeRows(runtime){
   if(!runtime||typeof runtime!=='object') return [];
   const rows=[];
   if(Object.prototype.hasOwnProperty.call(runtime,'sidecar')){
@@ -212,13 +214,13 @@ function _extensionRuntimeRows(runtime){
   return rows;
 }
 
-function _extensionRuntimeDetails(runtime){
+export function _extensionRuntimeDetails(runtime){
   const rows=_extensionRuntimeRows(runtime);
   if(!rows.length) return '';
   return rows.map(([label,value])=>`<div><span>${esc(label)}</span><code>${esc(value)}</code></div>`).join('');
 }
 
-function _extensionSidecarCard(sidecars){
+export function _extensionSidecarCard(sidecars){
   const list=Array.isArray(sidecars)?sidecars:[];
   const body=list.length?`<div class="extension-sidecar-list">${list.map((sidecar,index)=>{
     const id=(sidecar&&sidecar.id)||'';
@@ -275,12 +277,12 @@ function _extensionSidecarCard(sidecars){
     </div>`;
 }
 
-function _setExtensionSidecarHealth(index,status,label){
+export function _setExtensionSidecarHealth(index,status,label){
   const el=document.querySelector(`[data-sidecar-health-index="${index}"]`);
   if(el) el.innerHTML=_extensionSidecarHealthBadge(status,label);
 }
 
-function _setExtensionSidecarRuntime(index,runtime){
+export function _setExtensionSidecarRuntime(index,runtime){
   const el=document.querySelector(`[data-sidecar-runtime-index="${index}"]`);
   if(!el) return;
   const details=_extensionRuntimeDetails(runtime);
@@ -293,7 +295,7 @@ function _setExtensionSidecarRuntime(index,runtime){
   el.innerHTML=details;
 }
 
-async function _checkExtensionSidecarHealth(sidecar,index,seq){
+export async function _checkExtensionSidecarHealth(sidecar,index,seq){
   const healthUrl=sidecar&&sidecar.health_url;
   if(!healthUrl){
     _setExtensionSidecarHealth(index,'blocked','unreachable / blocked');
@@ -308,21 +310,21 @@ async function _checkExtensionSidecarHealth(sidecar,index,seq){
       timeoutId=setTimeout(()=>controller.abort(),2500);
     }
     const res=await fetch(healthUrl,{credentials:'omit',cache:'no-store',signal:controller?controller.signal:undefined});
-    if(seq!==_extensionsSidecarMonitorSeq) return;
+    if(seq!==state._extensionsSidecarMonitorSeq) return;
     if(res.ok){
       _setExtensionSidecarHealth(index,'healthy','healthy');
       let body=null;
       try{
         body=await res.json();
       }catch(_e){}
-      if(seq!==_extensionsSidecarMonitorSeq) return;
+      if(seq!==state._extensionsSidecarMonitorSeq) return;
       _setExtensionSidecarRuntime(index,body&&typeof body==='object'?body.runtime:null);
     }else{
       _setExtensionSidecarHealth(index,'unhealthy','unhealthy');
       _setExtensionSidecarRuntime(index,null);
     }
   }catch(_e){
-    if(seq!==_extensionsSidecarMonitorSeq) return;
+    if(seq!==state._extensionsSidecarMonitorSeq) return;
     _setExtensionSidecarHealth(index,'blocked','unreachable / blocked');
     _setExtensionSidecarRuntime(index,null);
   }finally{
@@ -330,16 +332,16 @@ async function _checkExtensionSidecarHealth(sidecar,index,seq){
   }
 }
 
-function _monitorExtensionSidecars(sidecars,seq){
+export function _monitorExtensionSidecars(sidecars,seq){
   if(!Array.isArray(sidecars)||sidecars.length===0) return;
   sidecars.forEach((sidecar,index)=>_checkExtensionSidecarHealth(sidecar,index,seq));
 }
 
-function _renderExtensionsPanel(data,seq){
+export function _renderExtensionsPanel(data,seq){
   const target=$('extensionsDiagnostics');
   const copyBtn=$('extensionsCopyDiagnosticsBtn');
   if(!target) return;
-  _extensionsStatusData=data||null;
+  state._extensionsStatusData=data||null;
   _configureExtensionSettingsFromStatus(data);
   if(copyBtn) copyBtn.disabled=!data;
   const manifest=(data&&data.manifest)||{};
@@ -426,21 +428,21 @@ function _renderExtensionsPanel(data,seq){
   _monitorExtensionSidecars(sidecars,seq);
 }
 
-function _bindExtensionToggleButtons(root){
+export function _bindExtensionToggleButtons(root){
   if(!root) return;
   root.querySelectorAll('[data-extension-toggle-id]').forEach(btn=>{
     btn.addEventListener('click',()=>handleExtensionToggle(btn));
   });
 }
 
-function _bindExtensionSidecarProxyButtons(root){
+export function _bindExtensionSidecarProxyButtons(root){
   if(!root) return;
   root.querySelectorAll('[data-extension-sidecar-proxy-id]').forEach(btn=>{
     btn.addEventListener('click',()=>handleExtensionSidecarProxyConsent(btn));
   });
 }
 
-async function handleExtensionToggle(btn){
+export async function handleExtensionToggle(btn){
   if(!btn||btn.disabled) return;
   const id=btn.dataset.extensionToggleId||'';
   const enabled=btn.dataset.extensionNextEnabled==='true';
@@ -451,7 +453,7 @@ async function handleExtensionToggle(btn){
   try{
     const data=await api('/api/extensions/toggle',{method:'POST',body:JSON.stringify({id,enabled})});
     showToast(enabled?'Extension enabled. Reload WebUI to apply changes.':'Extension disabled. Reload WebUI to apply changes.');
-    _renderExtensionsPanel(data,++_extensionsSidecarMonitorSeq);
+    _renderExtensionsPanel(data,++state._extensionsSidecarMonitorSeq);
   }catch(e){
     btn.disabled=false;
     btn.textContent=previousText;
@@ -459,7 +461,7 @@ async function handleExtensionToggle(btn){
   }
 }
 
-async function handleExtensionSidecarProxyConsent(btn){
+export async function handleExtensionSidecarProxyConsent(btn){
   if(!btn||btn.disabled) return;
   const id=btn.dataset.extensionSidecarProxyId||'';
   const approved=btn.dataset.extensionSidecarProxyApproved==='true';
@@ -470,14 +472,14 @@ async function handleExtensionSidecarProxyConsent(btn){
   try{
     const data=await api('/api/extensions/sidecar-proxy-consent',{method:'POST',body:JSON.stringify({id,approved})});
     showToast(approved?'Extension sidecar proxy approved.':'Extension sidecar proxy consent revoked.');
-    _renderExtensionsPanel(data,++_extensionsSidecarMonitorSeq);
+    _renderExtensionsPanel(data,++state._extensionsSidecarMonitorSeq);
   }catch(e){
     btn.disabled=false;
     btn.textContent=previousText;
     showToast('Failed to update extension sidecar proxy consent: '+(e&&e.message?e.message:String(e)));
   }
 }
-function _readExtensionSettingsForm(row){
+export function _readExtensionSettingsForm(row){
   const values={};
   row.querySelectorAll('[data-extension-setting-input]').forEach(input=>{
     const key=input.dataset.extensionSettingInput||'';
@@ -491,7 +493,7 @@ function _readExtensionSettingsForm(row){
   return values;
 }
 
-function _fillExtensionSettingsForm(row,id){
+export function _fillExtensionSettingsForm(row,id){
   if(!window.HermesExtensionSettings) return;
   const values=window.HermesExtensionSettings.settingsForExtension(id).values;
   row.querySelectorAll('[data-extension-setting-input]').forEach(input=>{
@@ -503,7 +505,7 @@ function _fillExtensionSettingsForm(row,id){
   });
 }
 
-function _bindExtensionSettingsButtons(root){
+export function _bindExtensionSettingsButtons(root){
   if(!root) return;
   root.querySelectorAll('[data-extension-settings-save]').forEach(btn=>{
     btn.addEventListener('click',()=>handleExtensionSettingsSave(btn));
@@ -516,7 +518,7 @@ function _bindExtensionSettingsButtons(root){
   });
 }
 
-function handleExtensionSettingsSave(btn){
+export function handleExtensionSettingsSave(btn){
   const id=btn&&btn.dataset.extensionSettingsSave;
   const row=btn&&btn.closest('[data-extension-id]');
   if(!id||!row||!window.HermesExtensionSettings) return;
@@ -530,7 +532,7 @@ function handleExtensionSettingsSave(btn){
   showToast('Extension settings saved in this browser.');
 }
 
-function handleExtensionSettingsReset(btn){
+export function handleExtensionSettingsReset(btn){
   const id=btn&&btn.dataset.extensionSettingsReset;
   const row=btn&&btn.closest('[data-extension-id]');
   if(!id||!row||!window.HermesExtensionSettings) return;
@@ -539,14 +541,14 @@ function handleExtensionSettingsReset(btn){
   showToast('Extension settings reset in this browser.');
 }
 
-function handleExtensionStorageClear(btn){
+export function handleExtensionStorageClear(btn){
   const id=btn&&btn.dataset.extensionStorageClear;
   if(!id||!window.HermesExtensionSettings) return;
   window.HermesExtensionSettings.storageForExtension(id).clear();
   showToast('Extension storage cleared in this browser.');
 }
 
-async function loadExtensionsPanel(opts){
+export async function loadExtensionsPanel(opts){
   const target=$('extensionsDiagnostics');
   const copyBtn=$('extensionsCopyDiagnosticsBtn');
   if(!target) return;
@@ -558,24 +560,24 @@ async function loadExtensionsPanel(opts){
     &&!target.querySelector('.extensions-loading,.extensions-error')
   );
   if(copyBtn&&!preserveExisting) copyBtn.disabled=true;
-  const seq=++_extensionsSidecarMonitorSeq;
+  const seq=++state._extensionsSidecarMonitorSeq;
   if(!preserveExisting) target.innerHTML='<div class="extensions-loading">Loading extension diagnostics…</div>';
   try{
     const data=await api('/api/extensions/status');
-    if(seq!==_extensionsSidecarMonitorSeq) return;
+    if(seq!==state._extensionsSidecarMonitorSeq) return;
     _renderExtensionsPanel(data,seq);
   }catch(e){
-    if(seq!==_extensionsSidecarMonitorSeq) return;
+    if(seq!==state._extensionsSidecarMonitorSeq) return;
     if(preserveExisting&&target.innerHTML.trim()) return;
-    _extensionsStatusData=null;
+    state._extensionsStatusData=null;
     if(copyBtn) copyBtn.disabled=true;
     target.innerHTML='<div class="extensions-error">Failed to load extension diagnostics: '+esc(e.message||String(e))+'</div>';
   }
-  if(_extensionsActiveTab==='gallery'&&!_extensionsGalleryLoaded) loadExtensionsGallery();
+  if(state._extensionsActiveTab==='gallery'&&!state._extensionsGalleryLoaded) loadExtensionsGallery();
 }
 
-function switchExtensionsTab(tab){
-  _extensionsActiveTab=tab;
+export function switchExtensionsTab(tab){
+  state._extensionsActiveTab=tab;
   document.querySelectorAll('[data-extensions-tab]').forEach(btn=>{
     btn.classList.toggle('extensions-tab-active',btn.dataset.extensionsTab===tab);
   });
@@ -583,10 +585,10 @@ function switchExtensionsTab(tab){
     pane.hidden=pane.dataset.extensionsPane!==tab;
   });
   if(tab==='diagnostics') loadExtensionsPanel({preserveExisting:true});
-  if(tab==='gallery'&&!_extensionsGalleryLoaded) loadExtensionsGallery();
+  if(tab==='gallery'&&!state._extensionsGalleryLoaded) loadExtensionsGallery();
 }
 
-function _extensionSafeHttpUrl(value){
+export function _extensionSafeHttpUrl(value){
   if(!value) return '';
   const raw=String(value).trim();
   if(!/^https?:\/\//i.test(raw)) return '';
@@ -599,7 +601,7 @@ function _extensionSafeHttpUrl(value){
   }
 }
 
-function _extensionRegistrySourceUrl(entryPath){
+export function _extensionRegistrySourceUrl(entryPath){
   const raw=String(entryPath||'').trim();
   if(!raw||raw.startsWith('/')||raw.includes('\\')||raw.includes('\0')) return '';
   const parts=raw.split('/').filter(Boolean);
@@ -608,7 +610,7 @@ function _extensionRegistrySourceUrl(entryPath){
   return 'https://github.com/hermes-webui/hermes-webui-extensions/tree/main/'+folder.map(encodeURIComponent).join('/');
 }
 
-function _extensionSourceUrl(entry){
+export function _extensionSourceUrl(entry){
   if(!entry||typeof entry!=='object') return '';
   const candidates=[
     entry.homepage,
@@ -630,13 +632,13 @@ function _extensionSourceUrl(entry){
   return _extensionSafeHttpUrl(_extensionRegistrySourceUrl(entry.entry_path||entry.runtime_manifest_path));
 }
 
-function _extensionSourceLink(entry){
+export function _extensionSourceLink(entry){
   const url=_extensionSourceUrl(entry);
   if(!url) return '';
   return `<a class="extension-gallery-source-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Source</a>`;
 }
 
-function _extensionPermissionList(value){
+export function _extensionPermissionList(value){
   if(!Array.isArray(value)) return '';
   const items=value
     .map(item=>String(item||'').trim())
@@ -644,7 +646,7 @@ function _extensionPermissionList(value){
   return items.length?items.join(', '):'';
 }
 
-function _extensionPermissionRows(perms){
+export function _extensionPermissionRows(perms){
   if(!perms||typeof perms!=='object') return [];
   const rows=[];
   const api=(perms.webui_api&&typeof perms.webui_api==='object')?perms.webui_api:{};
@@ -695,7 +697,7 @@ function _extensionPermissionRows(perms){
   return rows;
 }
 
-function _extensionPermissionSummary(perms){
+export function _extensionPermissionSummary(perms){
   const rows=_extensionPermissionRows(perms);
   const body=rows.length
     ? '<div class="extension-gallery-permission-list">'+rows.map(([label,value])=>`
@@ -710,7 +712,7 @@ function _extensionPermissionSummary(perms){
   </details>`;
 }
 
-function _extensionPostInstallNote(entry,isInstalled){
+export function _extensionPostInstallNote(entry,isInstalled){
   const lifecycle=(entry&&entry.lifecycle&&typeof entry.lifecycle==='object')?entry.lifecycle:{};
   const post=(entry&&entry.post_install&&typeof entry.post_install==='object')?entry.post_install:null;
   const needsSidecar=!!lifecycle.sidecar_start_required;
@@ -741,8 +743,8 @@ function _extensionPostInstallNote(entry,isInstalled){
   </div>`;
 }
 
-async function loadExtensionsGallery(){
-  _extensionsGalleryLoaded=true;
+export async function loadExtensionsGallery(){
+  state._extensionsGalleryLoaded=true;
   const galleryEl=$('extensionsGallery');
   const installedEl=$('extensionsInstalled');
   if(galleryEl) galleryEl.innerHTML='<div class="extensions-loading">Loading gallery…</div>';
@@ -752,17 +754,17 @@ async function loadExtensionsGallery(){
       api('/api/extensions/registry'),
       api('/api/extensions/status'),
     ]);
-    _extensionsGalleryData={regData,statusData};
+    state._extensionsGalleryData={regData,statusData};
     _renderExtensionsGallery(regData.entries||[],statusData);
   }catch(e){
-    _extensionsGalleryLoaded=false;
+    state._extensionsGalleryLoaded=false;
     const msg=esc(e&&e.message?e.message:String(e));
     if(galleryEl) galleryEl.innerHTML='<div class="extensions-error">Failed to load gallery: '+msg+'</div>';
     if(installedEl) installedEl.innerHTML='<div class="extensions-error">Failed to load extension status.</div>';
   }
 }
 
-function _renderExtensionsGallery(entries,statusData){
+export function _renderExtensionsGallery(entries,statusData){
   const galleryEl=$('extensionsGallery');
   const installedEl=$('extensionsInstalled');
   _configureExtensionSettingsFromStatus(statusData);
@@ -831,7 +833,7 @@ function _renderExtensionsGallery(entries,statusData){
   _bindExtensionGalleryButtons(entries);
 }
 
-function _bindExtensionGalleryButtons(entries){
+export function _bindExtensionGalleryButtons(entries){
   const entryMap=new Map();
   if(Array.isArray(entries)) entries.forEach(e=>{if(e&&e.id)entryMap.set(String(e.id),e);});
   document.querySelectorAll('[data-ext-install-id]').forEach(btn=>{
@@ -843,7 +845,7 @@ function _bindExtensionGalleryButtons(entries){
   });
 }
 
-async function handleExtensionInstall(btn,entry){
+export async function handleExtensionInstall(btn,entry){
   if(!btn||btn.disabled) return;
   const previousText=btn.textContent;
   btn.disabled=true;
@@ -859,7 +861,7 @@ async function handleExtensionInstall(btn,entry){
     showToast(restart
       ? t('ext_gallery_install_restart_required')
       : (hasPostInstall?t('ext_gallery_install_followup'):t('ext_gallery_install_ok')));
-    _extensionsGalleryLoaded=false;
+    state._extensionsGalleryLoaded=false;
     await loadExtensionsGallery();
   }catch(e){
     btn.disabled=false;
@@ -868,7 +870,7 @@ async function handleExtensionInstall(btn,entry){
   }
 }
 
-async function handleExtensionUninstall(btn,id){
+export async function handleExtensionUninstall(btn,id){
   if(!btn||btn.disabled) return;
   const previousText=btn.textContent;
   btn.disabled=true;
@@ -876,7 +878,7 @@ async function handleExtensionUninstall(btn,id){
   try{
     await api('/api/extensions/uninstall',{method:'POST',body:JSON.stringify({id})});
     showToast('Extension uninstalled.');
-    _extensionsGalleryLoaded=false;
+    state._extensionsGalleryLoaded=false;
     await loadExtensionsGallery();
   }catch(e){
     btn.disabled=false;
@@ -885,9 +887,9 @@ async function handleExtensionUninstall(btn,id){
   }
 }
 
-async function copyExtensionsDiagnostics(){
-  if(!_extensionsStatusData) return;
-  const text=JSON.stringify(_extensionsStatusData,null,2);
+export async function copyExtensionsDiagnostics(){
+  if(!state._extensionsStatusData) return;
+  const text=JSON.stringify(state._extensionsStatusData,null,2);
   const success=()=>showToast(t('copied')||'Copied!');
   const fail=()=>showToast(t('copy_failed')||'Copy failed');
   if(typeof _copyText==='function'){
@@ -902,7 +904,7 @@ async function copyExtensionsDiagnostics(){
 }
 // ── Plugins panel (read-only plugin/hook visibility) ───────────────────────
 
-async function handlePluginEnableToggle(pluginKey, checked){
+export async function handlePluginEnableToggle(pluginKey, checked){
   try{
     const body={dashboard_plugins:{}};
     body.dashboard_plugins[pluginKey]=!!checked;
@@ -913,7 +915,7 @@ async function handlePluginEnableToggle(pluginKey, checked){
   }
 }
 
-function _pluginActivationState(plugin){
+export function _pluginActivationState(plugin){
   const activation=(plugin&&typeof plugin.activation==='string')
     ? plugin.activation
     : (plugin&&plugin.enabled===false ? 'disabled' : 'enabled');
@@ -929,7 +931,7 @@ function _pluginActivationState(plugin){
   return 'disabled';
 }
 
-function _partitionPluginsActiveFirst(plugins){
+export function _partitionPluginsActiveFirst(plugins){
   const active=[];
   const inactive=[];
   for(const p of plugins){
@@ -939,7 +941,7 @@ function _partitionPluginsActiveFirst(plugins){
   return active.concat(inactive);
 }
 
-async function loadPluginsPanel(){
+export async function loadPluginsPanel(){
   const list=$('pluginsList');
   const empty=$('pluginsEmpty');
   if(!list) return;
@@ -965,7 +967,7 @@ async function loadPluginsPanel(){
   }
 }
 
-function _buildPluginCard(plugin){
+export function _buildPluginCard(plugin){
   const card=document.createElement('div');
   card.className='provider-card plugin-card';
   card.dataset.plugin=(plugin&&plugin.key)||'';
@@ -1065,19 +1067,18 @@ const enabled=plugin&&plugin.enabled!==false;
 
 // ── Plugin pages ─────────────────────────────────────────────────────────────
 
-let _currentPluginPage = null;
 
-async function switchPluginPage(event, path, label) {
+export async function switchPluginPage(event, path, label) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
   }
-  if (!_currentPluginPage || _currentPluginPage.path !== path) {
+  if (!state._currentPluginPage || state._currentPluginPage.path !== path) {
     await _loadPluginPage(path, label);
   }
-  // Update _currentPanel so clicking sidebar items won't short-circuit,
+  // Update state._currentPanel so clicking sidebar items won't short-circuit,
   // but keep the sidebar panel views intact (no panelPlugin exists).
-  _currentPanel = 'plugin';
+  state._currentPanel = 'plugin';
   const mainEl = document.querySelector('main.main');
   if (mainEl) {
     MAIN_VIEW_PANELS.forEach(p => {
@@ -1086,7 +1087,7 @@ async function switchPluginPage(event, path, label) {
   }
 }
 
-async function _loadPluginPage(path, label) {
+export async function _loadPluginPage(path, label) {
   const container = $('pluginPageContainer');
   const titleEl = $('pluginPageTitle');
   if (!container) return;
@@ -1102,65 +1103,5 @@ async function _loadPluginPage(path, label) {
   iframe.setAttribute('title', label || 'Plugin');
   iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
   container.appendChild(iframe);
-  _currentPluginPage = { path, label };
+  state._currentPluginPage = { path, label };
 }
-
-window.HermesPanels.extensions = {
-  _extensionStatusLabel,
-  _extensionBooleanBadge,
-  _extensionAssetList,
-  _extensionWarningList,
-  _extensionCountValue,
-  _extensionEntryStatusLabel,
-  _extensionEntryBadge,
-  _configureExtensionSettingsFromStatus,
-  _extensionSettingsFieldHtml,
-  _extensionSettingsControls,
-  _extensionInstalledList,
-  _extensionSidecarHealthBadge,
-  _extensionRuntimeStatusValue,
-  _extensionRuntimeStatusLabel,
-  _extensionRuntimeLastSeen,
-  _extensionRuntimeOrigin,
-  _extensionRuntimeRows,
-  _extensionRuntimeDetails,
-  _extensionSidecarCard,
-  _setExtensionSidecarHealth,
-  _setExtensionSidecarRuntime,
-  _checkExtensionSidecarHealth,
-  _monitorExtensionSidecars,
-  _renderExtensionsPanel,
-  _bindExtensionToggleButtons,
-  _bindExtensionSidecarProxyButtons,
-  handleExtensionToggle,
-  handleExtensionSidecarProxyConsent,
-  _readExtensionSettingsForm,
-  _fillExtensionSettingsForm,
-  _bindExtensionSettingsButtons,
-  handleExtensionSettingsSave,
-  handleExtensionSettingsReset,
-  handleExtensionStorageClear,
-  loadExtensionsPanel,
-  switchExtensionsTab,
-  _extensionSafeHttpUrl,
-  _extensionRegistrySourceUrl,
-  _extensionSourceUrl,
-  _extensionSourceLink,
-  _extensionPermissionList,
-  _extensionPermissionRows,
-  _extensionPermissionSummary,
-  _extensionPostInstallNote,
-  loadExtensionsGallery,
-  _renderExtensionsGallery,
-  _bindExtensionGalleryButtons,
-  handleExtensionInstall,
-  handleExtensionUninstall,
-  copyExtensionsDiagnostics,
-  handlePluginEnableToggle,
-  _pluginActivationState,
-  _partitionPluginsActiveFirst,
-  loadPluginsPanel,
-  _buildPluginCard,
-  switchPluginPage,
-  _loadPluginPage,
-};

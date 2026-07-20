@@ -345,7 +345,7 @@ assert.strictEqual(localStorage.getItem('hermes-tts-pitch'), '1');
 
 def test_settings_panel_speech_payload_is_sparse_by_ownership():
     speech_helpers_start = PANELS_JS.index("const _SETTINGS_SPEECH_STORAGE_KEYS=")
-    speech_helpers_end = PANELS_JS.index("window.HermesPanels.settingsNavigation", speech_helpers_start)
+    speech_helpers_end = PANELS_JS.index("function _speechPreferencesPayloadFromUi()", speech_helpers_start)
     speech_helpers_block = PANELS_JS[speech_helpers_start:speech_helpers_end].strip()
     payload_start = PANELS_JS.index("function _speechPreferencesPayloadFromUi()")
     payload_open = PANELS_JS.index("{", payload_start)
@@ -448,4 +448,4 @@ def test_settings_panel_persists_speech_fields_and_keeps_immediate_cache_writes(
     assert "Object.assign(body,_speechPreferencesPayloadFromUi());" in PANELS_JS
     assert "_schedulePreferencesAutosave()" in panel_block
     assert "_applyVoiceModePref" in panel_block
-    assert "_populateTtsVoices" in panel_block
+    assert "populateTtsVoices" in panel_block

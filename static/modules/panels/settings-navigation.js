@@ -1,13 +1,27 @@
-// Panels domain: settings navigation and autosave
-window.HermesPanels = window.HermesPanels || {};
+import { state } from "./state.js";
+import { _closeMobileSidebarAfterPanelSelection,_consumeSettingsTargetPanel,switchPanel } from "./core.js";
+import { loadExtensionsPanel,loadPluginsPanel } from "./settings-extensions.js";
+import { _speechPreferencesPayloadFromUi } from "./settings-preferences.js";
+import { loadProvidersPanel } from "./settings-providers.js";
+import { saveSettings } from "./settings-save.js";
+import { _composerControlVisibilityPayload,_ensureComposerControlVisibilityState,_getComposerControlOrder,_getHiddenTabs,_getTabOrder,_renderComposerControlChips,_renderComposerSituationalControlChips,_setComposerControlOrder } from "./settings-state.js";
 
-function switchSettingsSection(name,opts){
+// Panels domain: settings navigation and autosave
+
+const settingsSectionListeners = new Set();
+
+export function onSettingsSectionChange(listener) {
+  settingsSectionListeners.add(listener);
+  return () => settingsSectionListeners.delete(listener);
+}
+
+export function switchSettingsSection(name,opts){
   // If the main content is not showing settings, just remember the section
   // without force-switching the panel. The section will be applied when the
   // user next opens settings via switchPanel(). (#appearance-auto-reopen)
-  if (_currentPanel !== 'settings') {
-    _currentSettingsSection = name;
-    _settingsSection = name;
+  if (state._currentPanel !== 'settings') {
+    state._currentSettingsSection = name;
+    state._settingsSection = name;
     return;
   }
   let section=(name==='appearance'||name==='preferences'||name==='providers'||name==='plugins'||name==='extensions'||name==='system'||name==='help')?name:'conversation';
@@ -20,8 +34,8 @@ function switchSettingsSection(name,opts){
     const pluginsTabBtn=document.querySelector('[data-settings-section="plugins"]');
     if(pluginsTabBtn && pluginsTabBtn.style.display==='none') section='conversation';
   }
-  _settingsSection=section;
-  _currentSettingsSection=section;
+  state._settingsSection=section;
+  state._currentSettingsSection=section;
   const map={conversation:'Conversation',appearance:'Appearance',preferences:'Preferences',providers:'Providers',plugins:'Plugins',extensions:'Extensions',system:'System',help:'Help'};
   // Sidebar menu items
   document.querySelectorAll('#settingsMenu .side-menu-item').forEach(it=>{
@@ -43,17 +57,18 @@ function switchSettingsSection(name,opts){
     if(section==='plugins') loadPluginsPanel();
     if(section==='extensions') loadExtensionsPanel();
   }
+  settingsSectionListeners.forEach(listener => listener(section));
   if(opts&&opts.fromSidebarItem)_closeMobileSidebarAfterPanelSelection();
 }
 
-function _normalizeSettingsSearchText(value) {
+export function _normalizeSettingsSearchText(value) {
   return String(value || '')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
 }
 
-function _extractSettingsDescriptionText(field, labelEl) {
+export function _extractSettingsDescriptionText(field, labelEl) {
   const chunks = [];
   const settingsSearch = (field.dataset && field.dataset.settingsSearch) || '';
   if (settingsSearch) chunks.push(settingsSearch);
@@ -65,7 +80,7 @@ function _extractSettingsDescriptionText(field, labelEl) {
   return chunks.join(' ');
 }
 
-function _extractSettingsValueText(field) {
+export function _extractSettingsValueText(field) {
   const chunks = [];
   const controls = [...field.querySelectorAll('select, input, textarea')];
   controls.forEach(control => {
@@ -87,11 +102,11 @@ function _extractSettingsValueText(field) {
   return chunks.join(' ');
 }
 
-async function _buildSettingsIndex() {
-  if (_settingsIndex) return;
+export async function _buildSettingsIndex() {
+  if (state._settingsIndex) return;
   // Memoize the in-flight build so concurrent searches share one pass; the
   // lazy pane loaders are not guaranteed re-entrant.
-  if (_settingsIndexPromise) return _settingsIndexPromise;
+  if (state._settingsIndexPromise) return state._settingsIndexPromise;
   const promise = (async () => {
     // Ensure lazy-loaded panes are populated before reading the DOM
     await Promise.all([loadProvidersPanel(), loadPluginsPanel(), loadExtensionsPanel()]);
@@ -217,21 +232,21 @@ async function _buildSettingsIndex() {
     }
     // A panel-session reset while building clears the memo; drop this result
     // instead of resurrecting a stale index for the new session.
-    if (_settingsIndexPromise === promise) _settingsIndex = index;
-  })().catch(e => { if (_settingsIndexPromise === promise) _settingsIndexPromise = null; throw e; });
-  _settingsIndexPromise = promise;
+    if (state._settingsIndexPromise === promise) state._settingsIndex = index;
+  })().catch(e => { if (state._settingsIndexPromise === promise) state._settingsIndexPromise = null; throw e; });
+  state._settingsIndexPromise = promise;
   return promise;
 }
 
-async function filterSettings(query) {
+export async function filterSettings(query) {
   const resultsEl = $('settingsSearchResults');
   if (!resultsEl) return;
   const q = (query || '').trim().toLowerCase();
-  if (!q) { ++_settingsSearchSeq; resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return; }
-  const seq = ++_settingsSearchSeq;
+  if (!q) { ++state._settingsSearchSeq; resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return; }
+  const seq = ++state._settingsSearchSeq;
   await _buildSettingsIndex();
   // A newer keystroke superseded this query while the index was building.
-  if (seq !== _settingsSearchSeq) return;
+  if (seq !== state._settingsSearchSeq) return;
   const sectionLabels = {
     conversation: t('settings_tab_conversation') || 'Conversation',
     appearance: t('settings_tab_appearance') || 'Appearance',
@@ -242,7 +257,7 @@ async function filterSettings(query) {
     system: t('settings_tab_system') || 'System',
     help: t('settings_tab_help') || 'Help',
   };
-  const matches = (_settingsIndex || []).map((entry) => {
+  const matches = (state._settingsIndex || []).map((entry) => {
     const score = _scoreSettingsSearchMatch(entry, q);
     return score ? { entry, score, index: entry._settingsSearchIndex } : null;
   }).filter(Boolean);
@@ -280,7 +295,7 @@ async function filterSettings(query) {
   resultsEl.style.display = '';
 }
 
-function _scoreSettingsSearchMatch(entry, q) {
+export function _scoreSettingsSearchMatch(entry, q) {
   const query = (q || '').toLowerCase().trim();
   if (!query) return null;
   const buckets = [
@@ -303,7 +318,7 @@ function _scoreSettingsSearchMatch(entry, q) {
   return null;
 }
 
-function _navigateToSettingsField(entry) {
+export function _navigateToSettingsField(entry) {
   // The panes were populated when the index was built, so skip the tab-switch
   // lazy reload: loadProvidersPanel()/loadPluginsPanel() rebuild the pane DOM
   // from a fresh fetch and would detach the node mid-scroll.
@@ -316,7 +331,7 @@ function _navigateToSettingsField(entry) {
   });
 }
 
-function _resolveSettingsField(entry) {
+export function _resolveSettingsField(entry) {
   // Re-resolve in the live DOM: any pane re-render since indexing (e.g. the
   // user visited the tab) replaces the node the index captured.
   const paneIds = {
@@ -357,7 +372,7 @@ function _resolveSettingsField(entry) {
   return entry.el && entry.el.isConnected ? entry.el : null;
 }
 
-function _highlightSettingsField(el) {
+export function _highlightSettingsField(el) {
   if (!el) return;
   el.classList.remove('settings-field-highlight');
   void el.offsetWidth;
@@ -365,7 +380,7 @@ function _highlightSettingsField(el) {
   setTimeout(() => el.classList.remove('settings-field-highlight'), 1800);
 }
 
-function _syncHermesPanelSessionActions(){
+export function _syncHermesPanelSessionActions(){
   const hasSession=!!S.session;
   const visibleMessages=hasSession?(S.messages||[]).filter(m=>m&&m.role&&m.role!=='tool').length:0;
   const title=hasSession?(S.session.title||t('untitled')):t('active_conversation_none');
@@ -396,46 +411,46 @@ function _syncHermesPanelSessionActions(){
 
 // Thin wrapper: settings now live in the main content area. External callers
 // (keyboard shortcuts, commands) keep working through this name.
-function toggleSettings(){
-  if(_currentPanel==='settings'){
+export function toggleSettings(){
+  if(state._currentPanel==='settings'){
     _closeSettingsPanel();
   } else {
     switchPanel('settings');
   }
 }
 
-function _resetSettingsPanelState(){
+export function _resetSettingsPanelState(){
   const bar=$('settingsUnsavedBar');
   if(bar) bar.style.display='none';
   _setAppearanceAutosaveStatus('');
 }
 
-function _hideSettingsPanel(){
+export function _hideSettingsPanel(){
   _resetSettingsPanelState();
   const target = _consumeSettingsTargetPanel('chat');
-  if(_currentPanel==='settings') switchPanel(target, {bypassSettingsGuard:true});
+  if(state._currentPanel==='settings') switchPanel(target, {bypassSettingsGuard:true});
 }
 
 // Close with unsaved-changes check. If dirty, show a confirm dialog.
-function _closeSettingsPanel(){
-  if(!_settingsDirty){
+export function _closeSettingsPanel(){
+  if(!state._settingsDirty){
     _revertSettingsPreview();
     _hideSettingsPanel();
     return;
   }
-  _pendingSettingsTargetPanel = _pendingSettingsTargetPanel || 'chat';
+  state._pendingSettingsTargetPanel = state._pendingSettingsTargetPanel || 'chat';
   _showSettingsUnsavedBar();
 }
 
 // Revert live DOM/localStorage to what they were when the panel opened
-function _revertSettingsPreview(){
+export function _revertSettingsPreview(){
   // Appearance controls autosave immediately. Closing/discarding the settings
   // panel must not roll back theme, skin, or font-size after the user sees the
   // inline saved state.
 }
 
 // Show the "Unsaved changes" bar inside the settings panel
-function _showSettingsUnsavedBar(){
+export function _showSettingsUnsavedBar(){
   let bar = $('settingsUnsavedBar');
   if(bar){ bar.style.display=''; return; }
   // Create it
@@ -451,15 +466,15 @@ function _showSettingsUnsavedBar(){
   if(body) body.prepend(bar);
 }
 
-function _discardSettings(){
+export function _discardSettings(){
   _revertSettingsPreview();
-  _settingsDirty = false;
+  state._settingsDirty = false;
   _hideSettingsPanel();
 }
 
 // Mark settings as dirty whenever anything changes
-function _markSettingsDirty(){
-  _settingsDirty = true;
+export function _markSettingsDirty(){
+  state._settingsDirty = true;
 }
 
 // Apply TTS enabled state: toggles a body class so the CSS rule
@@ -467,14 +482,14 @@ function _markSettingsDirty(){
 // body class instead of writing inline `style.display` because the parent
 // `.msg-action-btn` has no display rule, so clearing the inline style let the
 // `.msg-tts-btn{display:none;}` cascade re-hide the button (#1409).
-function _applyTtsEnabled(enabled){
+export function _applyTtsEnabled(enabled){
   document.body.classList.toggle('tts-enabled', !!enabled);
 }
 
 // Read + sanitize the JSON/YAML structured code-block default-view controls
 // (#484). mode is one of auto|on|off; lines is clamped to an int 1..1000 with a
 // fallback of 10 (the original hardcoded threshold).
-function _structuredCodeViewFromUi(){
+export function _structuredCodeViewFromUi(){
   const modeSel=$('settingsStructuredCodeMode');
   const mode=modeSel&&['auto','on','off'].includes(modeSel.value)?modeSel.value:'auto';
   const linesField=$('settingsStructuredCodeAutoLines');
@@ -486,7 +501,7 @@ function _structuredCodeViewFromUi(){
 // Apply the structured code-block settings to runtime globals and re-render the
 // transcript so already-rendered JSON/YAML blocks pick up the new default. The
 // per-block Raw/Tree toggle is unaffected.
-function _applyStructuredCodeViewSettings(mode,lines,rerender){
+export function _applyStructuredCodeViewSettings(mode,lines,rerender){
   window._structuredCodeDefaultView=['auto','on','off'].includes(mode)?mode:'auto';
   const n=parseInt(lines,10);
   window._structuredCodeAutoTreeLines=(Number.isFinite(n)&&n>=1&&n<=1000)?n:10;
@@ -498,7 +513,7 @@ function _applyStructuredCodeViewSettings(mode,lines,rerender){
 
 // The Auto-threshold input is only meaningful in 'auto' mode; disable it
 // otherwise so the control reads as inactive without hiding it.
-function _syncStructuredCodeLinesEnabled(){
+export function _syncStructuredCodeLinesEnabled(){
   const modeSel=$('settingsStructuredCodeMode');
   const linesField=$('settingsStructuredCodeAutoLines');
   // Both controls live in the same settings-field and are present together;
@@ -509,7 +524,7 @@ function _syncStructuredCodeLinesEnabled(){
   linesField.style.opacity=isAuto?'':'0.5';
 }
 
-function _appearancePayloadFromUi(){
+export function _appearancePayloadFromUi(){
   const worklogDetailsExpanded=!!($('settingsWorklogDetailsExpandedDefault')||{}).checked;
   const chatActivityModeSel=$('settingsChatActivityDisplayMode');
   const transparentEventTimestamps=$('settingsTransparentEventTimestamps');
@@ -538,7 +553,7 @@ function _appearancePayloadFromUi(){
   };
 }
 
-function _syncChatActivityDisplayModeControl(mode){
+export function _syncChatActivityDisplayModeControl(mode){
   const next=mode==='transparent_stream'||mode==='hide_all_activity' ? mode : 'compact_worklog';
   const select=$('settingsChatActivityDisplayMode');
   if(select) select.value=next;
@@ -553,7 +568,7 @@ function _syncChatActivityDisplayModeControl(mode){
   if(next==='hide_all_activity'&&typeof window._hideLiveActivityForFinalAnswerOnly==='function') window._hideLiveActivityForFinalAnswerOnly();
 }
 
-function _syncTransparentEventTimestampsControl(enabled, mode){
+export function _syncTransparentEventTimestampsControl(enabled, mode){
   const next=enabled!==false;
   const activeMode=mode==='transparent_stream'||mode==='hide_all_activity' ? mode : (window._chatActivityDisplayMode||'compact_worklog');
   const checkbox=$('settingsTransparentEventTimestamps');
@@ -565,23 +580,21 @@ function _syncTransparentEventTimestampsControl(enabled, mode){
   window._transparentEventTimestamps=next;
 }
 
-function _pickChatActivityDisplayMode(mode){
+export function _pickChatActivityDisplayMode(mode){
   _syncChatActivityDisplayModeControl(mode);
   if(typeof clearMessageRenderCache==='function') clearMessageRenderCache();
   if(typeof renderMessages==='function') renderMessages({preserveScroll:true});
   _scheduleAppearanceAutosave();
 }
-if(typeof window!=='undefined') window._pickChatActivityDisplayMode=_pickChatActivityDisplayMode;
 
-function _pickTransparentEventTimestamps(enabled){
+export function _pickTransparentEventTimestamps(enabled){
   _syncTransparentEventTimestampsControl(enabled,window._chatActivityDisplayMode);
   if(typeof clearMessageRenderCache==='function') clearMessageRenderCache();
   if(typeof renderMessages==='function') renderMessages({preserveScroll:true});
   _scheduleAppearanceAutosave();
 }
-if(typeof window!=='undefined') window._pickTransparentEventTimestamps=_pickTransparentEventTimestamps;
 
-function _setAppearanceAutosaveStatus(state){
+export function _setAppearanceAutosaveStatus(state){
   const el=$('settingsAppearanceAutosaveStatus');
   if(!el) return;
   el.className='settings-autosave-status';
@@ -599,28 +612,28 @@ function _setAppearanceAutosaveStatus(state){
   }
 }
 
-function _rememberAppearanceSaved(payload){
+export function _rememberAppearanceSaved(payload){
   if(!payload) return;
-  _settingsThemeOnOpen=payload.theme||localStorage.getItem('hermes-theme')||'dark';
-  _settingsSkinOnOpen=payload.skin||localStorage.getItem('hermes-skin')||'default';
-  _settingsFontSizeOnOpen=payload.font_size||localStorage.getItem('hermes-font-size')||'default';
+  state._settingsThemeOnOpen=payload.theme||localStorage.getItem('hermes-theme')||'dark';
+  state._settingsSkinOnOpen=payload.skin||localStorage.getItem('hermes-skin')||'default';
+  state._settingsFontSizeOnOpen=payload.font_size||localStorage.getItem('hermes-font-size')||'default';
 }
 
-function _scheduleAppearanceAutosave(){
+export function _scheduleAppearanceAutosave(){
   const payload=_appearancePayloadFromUi();
   // Keep discard/close behavior aligned with the new mental model: appearance
   // changes are committed immediately instead of treated as preview-only edits.
   _rememberAppearanceSaved(payload);
-  _settingsAppearanceAutosaveRetryPayload=payload;
+  state._settingsAppearanceAutosaveRetryPayload=payload;
   _setAppearanceAutosaveStatus('saving');
-  if(_settingsAppearanceAutosaveTimer) clearTimeout(_settingsAppearanceAutosaveTimer);
-  _settingsAppearanceAutosaveTimer=setTimeout(()=>_autosaveAppearanceSettings(payload),350);
+  if(state._settingsAppearanceAutosaveTimer) clearTimeout(state._settingsAppearanceAutosaveTimer);
+  state._settingsAppearanceAutosaveTimer=setTimeout(()=>_autosaveAppearanceSettings(payload),350);
 }
 
-async function _autosaveAppearanceSettings(payload){
+export async function _autosaveAppearanceSettings(payload){
   try{
     const saved=await api('/api/settings',{method:'POST',body:JSON.stringify(payload)});
-    _settingsAppearanceAutosaveRetryPayload=null;
+    state._settingsAppearanceAutosaveRetryPayload=null;
     _rememberAppearanceSaved(payload);
     if(saved&&saved.font_size){
       localStorage.setItem('hermes-font-size',saved.font_size);
@@ -680,8 +693,8 @@ async function _autosaveAppearanceSettings(payload){
   }
 }
 
-function _retryAppearanceAutosave(){
-  const payload=_settingsAppearanceAutosaveRetryPayload||_appearancePayloadFromUi();
+export function _retryAppearanceAutosave(){
+  const payload=state._settingsAppearanceAutosaveRetryPayload||_appearancePayloadFromUi();
   _setAppearanceAutosaveStatus('saving');
   _autosaveAppearanceSettings(payload);
 }
@@ -700,38 +713,35 @@ const _SETTINGS_SPEECH_STORAGE_KEYS={
   voice_silence_ms:'hermes-voice-silence-ms',
   raw_audio_mode:'hermes-raw-audio-mode',
 };
-let _settingsSpeechPersistedKeys=new Set();
-let _settingsSpeechLocalStorageKeys=new Set();
-let _settingsSpeechChangedKeys=new Set();
 
-function _captureSpeechPreferenceOwnership(settings){
-  _settingsSpeechPersistedKeys=new Set(Array.isArray(settings&&settings.persisted_speech_keys)?settings.persisted_speech_keys:[]);
-  _settingsSpeechLocalStorageKeys=new Set();
-  _settingsSpeechChangedKeys=new Set();
+export function _captureSpeechPreferenceOwnership(settings){
+  state._settingsSpeechPersistedKeys=new Set(Array.isArray(settings&&settings.persisted_speech_keys)?settings.persisted_speech_keys:[]);
+  state._settingsSpeechLocalStorageKeys=new Set();
+  state._settingsSpeechChangedKeys=new Set();
   Object.entries(_SETTINGS_SPEECH_STORAGE_KEYS).forEach(([settingKey,storageKey])=>{
-    try{if(localStorage.getItem(storageKey)!==null) _settingsSpeechLocalStorageKeys.add(settingKey);}catch(_){}
+    try{if(localStorage.getItem(storageKey)!==null) state._settingsSpeechLocalStorageKeys.add(settingKey);}catch(_){}
   });
 }
 
-function _speechPreferenceIsOwned(settingKey){
-  return _settingsSpeechPersistedKeys.has(settingKey)||_settingsSpeechLocalStorageKeys.has(settingKey)||_settingsSpeechChangedKeys.has(settingKey);
+export function _speechPreferenceIsOwned(settingKey){
+  return state._settingsSpeechPersistedKeys.has(settingKey)||state._settingsSpeechLocalStorageKeys.has(settingKey)||state._settingsSpeechChangedKeys.has(settingKey);
 }
 
-function _markSpeechPreferenceChanged(settingKey){
-  _settingsSpeechChangedKeys.add(settingKey);
+export function _markSpeechPreferenceChanged(settingKey){
+  state._settingsSpeechChangedKeys.add(settingKey);
 }
 
-function _syncSpeechPreferenceCache(settingKey,value){
+export function _syncSpeechPreferenceCache(settingKey,value){
   if(!_speechPreferenceIsOwned(settingKey)) return;
   const storageKey=_SETTINGS_SPEECH_STORAGE_KEYS[settingKey];
   if(storageKey) localStorage.setItem(storageKey,String(value));
 }
 
-function _setOwnedSpeechPayload(payload,settingKey,value){
+export function _setOwnedSpeechPayload(payload,settingKey,value){
   if(_speechPreferenceIsOwned(settingKey)) payload[settingKey]=value;
 }
 
-function _preferencesPayloadFromUi(){
+export function _preferencesPayloadFromUi(){
   const payload={};
   const sendKeySel=$('settingsSendKey');
   if(sendKeySel) payload.send_key=sendKeySel.value;
@@ -810,45 +820,3 @@ function _preferencesPayloadFromUi(){
   Object.assign(payload,_speechPreferencesPayloadFromUi());
   return payload;
 }
-
-window.HermesPanels.settingsNavigation = {
-  switchSettingsSection,
-  _normalizeSettingsSearchText,
-  _extractSettingsDescriptionText,
-  _extractSettingsValueText,
-  _buildSettingsIndex,
-  filterSettings,
-  _scoreSettingsSearchMatch,
-  _navigateToSettingsField,
-  _resolveSettingsField,
-  _highlightSettingsField,
-  _syncHermesPanelSessionActions,
-  toggleSettings,
-  _resetSettingsPanelState,
-  _hideSettingsPanel,
-  _closeSettingsPanel,
-  _revertSettingsPreview,
-  _showSettingsUnsavedBar,
-  _discardSettings,
-  _markSettingsDirty,
-  _applyTtsEnabled,
-  _structuredCodeViewFromUi,
-  _applyStructuredCodeViewSettings,
-  _syncStructuredCodeLinesEnabled,
-  _appearancePayloadFromUi,
-  _syncChatActivityDisplayModeControl,
-  _syncTransparentEventTimestampsControl,
-  _pickChatActivityDisplayMode,
-  _pickTransparentEventTimestamps,
-  _setAppearanceAutosaveStatus,
-  _rememberAppearanceSaved,
-  _scheduleAppearanceAutosave,
-  _autosaveAppearanceSettings,
-  _retryAppearanceAutosave,
-  _captureSpeechPreferenceOwnership,
-  _speechPreferenceIsOwned,
-  _markSpeechPreferenceChanged,
-  _syncSpeechPreferenceCache,
-  _setOwnedSpeechPayload,
-  _preferencesPayloadFromUi,
-};

@@ -1,52 +1,27 @@
+import { state } from "./state.js";
+import { loadCrons } from "./cron-list.js";
+import { _syncLogsAutoRefresh,loadInsights,loadLogs } from "./diagnostics.js";
+import { _kanbanStopPolling,loadKanban } from "./kanban-board.js";
+import { loadTodos } from "./kanban-boards.js";
+import { loadProfilesPanel } from "./profiles.js";
+import { _resetSettingsPanelState,_revertSettingsPreview,_showSettingsUnsavedBar,filterSettings,switchSettingsSection } from "./settings-navigation.js";
+import { loadSettingsPanel } from "./settings-preferences.js";
+import { loadMemory,loadSkills } from "./skills-memory.js";
+import { loadWorkspacesPanel } from "./workspaces.js";
+
 /**
- * Panels core and compatibility namespace.
+ * Panel navigation and open/close lifecycle owner.
  *
- * The files in panels_parts are ordered classic scripts. Existing top-level
- * function declarations remain compatibility globals for markup and sibling
- * scripts; each domain also publishes its owned functions on HermesPanels.
+ * Domain behavior is imported explicitly. Remaining classic and inline callers
+ * are installed only by compatibility.js.
  */
-window.HermesPanels = window.HermesPanels || {
-  interface: 'classic-global',
-};
-let _currentPanel = 'chat';
-let _renamingAppTitlebar = false;  // guard against re-entrant rename
-let _kanbanBoard = null;
-let _kanbanLatestEventId = 0;
-let _kanbanPollTimer = null;
-let _kanbanCurrentTaskId = null;
-let _kanbanLanesByProfile = true;
-// Multi-board state. _kanbanCurrentBoard is the slug of the active board
+// Multi-board state. state._kanbanCurrentBoard is the slug of the active board
 // the UI is currently viewing. null means "use whatever the server reports
 // as active" (i.e. don't pin a specific board in API calls). The UI
 // persists the last-viewed slug to localStorage so refresh stays put.
-let _kanbanCurrentBoard = null;
-let _kanbanBoardsList = null;
-let _kanbanBoardMenuOpen = false;
-let _kanbanIsDispatching = false;
-let _kanbanSuppressCardClickUntil = 0;
 // SSE event stream — replaces the 30s polling cadence with a long-lived
 // /api/kanban/events/stream connection. Falls back to polling when the
 // EventSource fails to connect (proxy that strips text/event-stream, etc).
-let _kanbanEventSource = null;
-let _kanbanEventSourceFailures = 0;
-let _skillsData = null; // cached skills list
-let _cronList = null; // cached cron jobs (array)
-let _currentCronDetail = null; // full cron job object
-let _currentCronDetailKey = '';
-let _cronMode = 'empty'; // 'empty' | 'read' | 'create' | 'edit'
-let _cronPreFormDetail = null; // snapshot of prior selection when entering a form
-let _showAllCronProfiles = false;
-let _cronOtherProfileCount = 0;
-let _currentWorkspaceDetail = null; // { path, name, is_default }
-let _workspaceMode = 'empty'; // 'empty' | 'read' | 'create' | 'edit'
-let _workspacePreFormDetail = null;
-let _currentProfileDetail = null; // full profile object
-let _profileMode = 'empty'; // 'empty' | 'read' | 'create'
-let _profilePreFormDetail = null;
-let _pendingSettingsTargetPanel = null; // destination selected while settings had unsaved changes
-let _logsAutoRefreshTimer = null;
-let _lastLogsLines = [];
-let _logsSeverityFilter = 'all';
 
 // Map of panel names → i18n keys for the app titlebar label.
 const APP_TITLEBAR_KEYS = {
@@ -54,18 +29,18 @@ const APP_TITLEBAR_KEYS = {
   memory: 'tab_memory', workspaces: 'tab_workspaces',
   profiles: 'tab_profiles', todos: 'tab_todos', insights: 'tab_insights', logs: 'tab_logs', settings: 'tab_settings',
 };
-const MAIN_VIEW_PANELS = ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'];
+export const MAIN_VIEW_PANELS = ['settings','skills','memory','tasks','kanban','workspaces','profiles','insights','logs','plugin'];
 const MAIN_VIEW_SIDEBAR_PANEL_FALLBACKS = { plugin: 'settings' };
 
 /**
  * Update the top app titlebar to reflect the current page or selected conversation.
  * On the chat panel, a selected session's title takes precedence over the page name.
  */
-function syncAppTitlebar() {
+export function syncAppTitlebar() {
   const titleEl = document.getElementById('appTitlebarTitle');
   const subEl = document.getElementById('appTitlebarSub');
   if (!titleEl) return;
-  const panel = (typeof _currentPanel === 'string' && _currentPanel) ? _currentPanel : 'chat';
+  const panel = (typeof state._currentPanel === 'string' && state._currentPanel) ? state._currentPanel : 'chat';
   let mainText = '';
   let subText = '';
   let sourceLabel = '';
@@ -84,7 +59,7 @@ function syncAppTitlebar() {
   // Don't touch the element while an inline rename is in progress — replacing
   // the span with an input would fire a MutationObserver that calls
   // syncAppTitlebar again, destroying the input before the user finishes.
-  if (_renamingAppTitlebar) return;
+  if (state._renamingAppTitlebar) return;
 
   titleEl.textContent = mainText;
   if (panel !== 'chat') {
@@ -114,8 +89,8 @@ function syncAppTitlebar() {
     titleEl.ondblclick = (e) => {
       e.stopPropagation();
       e.preventDefault();
-      if (_renamingAppTitlebar) return;
-      _renamingAppTitlebar = true;
+      if (state._renamingAppTitlebar) return;
+      state._renamingAppTitlebar = true;
 
       const inp = document.createElement('input');
       inp.type = 'text';
@@ -129,7 +104,7 @@ function syncAppTitlebar() {
       );
 
       const finish = async (save) => {
-        _renamingAppTitlebar = false;
+        state._renamingAppTitlebar = false;
         if (save) {
           const newTitle = inp.value.trim() || (typeof t === 'function' ? t('untitled') : 'Untitled');
           S.session.title = newTitle;
@@ -191,7 +166,7 @@ function syncAppTitlebar() {
         }
       };
       titleEl.addEventListener('click', function _onTitleClick(e) {
-        if (_renamingAppTitlebar) return;
+        if (state._renamingAppTitlebar) return;
         if (titleEl._titlePopover) {
           _dismissTitlePopover();
           return;
@@ -264,14 +239,14 @@ function syncAppTitlebar() {
   }
 }
 
-function _beginSettingsPanelSession() {
-  _settingsIndex = null;
-  _settingsIndexPromise = null;
+export function _beginSettingsPanelSession() {
+  state._settingsIndex = null;
+  state._settingsIndexPromise = null;
   // Invalidate any in-flight search render from a PRIOR Settings session and
   // reset the search UI, so a slow index build that resolves after the panel
   // was closed/reopened can't paint stale results into the dropdown. #4340
   // review fix (filterSettings() bails when its captured seq != current).
-  ++_settingsSearchSeq;
+  ++state._settingsSearchSeq;
   const _searchInput = $('settingsSearch');
   if (_searchInput) _searchInput.value = '';
   const _searchResults = $('settingsSearchResults');
@@ -279,23 +254,23 @@ function _beginSettingsPanelSession() {
     _searchResults.style.display = 'none';
     _searchResults.innerHTML = '';
   }
-  _settingsDirty = false;
-  _settingsThemeOnOpen = localStorage.getItem('hermes-theme') || 'dark';
-  _settingsSkinOnOpen = localStorage.getItem('hermes-skin') || 'default';
-  _settingsFontSizeOnOpen = localStorage.getItem('hermes-font-size') || 'default';
-  _pendingSettingsTargetPanel = null;
-  if (_settingsAppearanceAutosaveTimer) {
-    clearTimeout(_settingsAppearanceAutosaveTimer);
-    _settingsAppearanceAutosaveTimer = null;
+  state._settingsDirty = false;
+  state._settingsThemeOnOpen = localStorage.getItem('hermes-theme') || 'dark';
+  state._settingsSkinOnOpen = localStorage.getItem('hermes-skin') || 'default';
+  state._settingsFontSizeOnOpen = localStorage.getItem('hermes-font-size') || 'default';
+  state._pendingSettingsTargetPanel = null;
+  if (state._settingsAppearanceAutosaveTimer) {
+    clearTimeout(state._settingsAppearanceAutosaveTimer);
+    state._settingsAppearanceAutosaveTimer = null;
   }
-  _settingsAppearanceAutosaveRetryPayload = null;
-  if (!_settingsSearchDismissListenerRegistered) {
-    _settingsSearchDismissListenerRegistered = true;
+  state._settingsAppearanceAutosaveRetryPayload = null;
+  if (!state._settingsSearchDismissListenerRegistered) {
+    state._settingsSearchDismissListenerRegistered = true;
     document.addEventListener('click', e => {
       if (!e.target.closest('#settingsMenu')) {
         // Invalidate an in-flight first-build too, so it can't resurrect the
         // dropdown after an outside-click dismiss. #4340 review fix.
-        ++_settingsSearchSeq;
+        ++state._settingsSearchSeq;
         const r = $('settingsSearchResults');
         if (r) {
           r.style.display = 'none';
@@ -307,32 +282,32 @@ function _beginSettingsPanelSession() {
   _resetSettingsPanelState();
 }
 
-function _beforePanelSwitch(nextPanel) {
-  if (_currentPanel !== 'settings' || nextPanel === 'settings') return true;
-  if (_settingsDirty) {
-    _pendingSettingsTargetPanel = nextPanel || 'chat';
+export function _beforePanelSwitch(nextPanel) {
+  if (state._currentPanel !== 'settings' || nextPanel === 'settings') return true;
+  if (state._settingsDirty) {
+    state._pendingSettingsTargetPanel = nextPanel || 'chat';
     _showSettingsUnsavedBar();
     return false;
   }
   _revertSettingsPreview();
-  _pendingSettingsTargetPanel = null;
+  state._pendingSettingsTargetPanel = null;
   _resetSettingsPanelState();
   return true;
 }
 
-function _consumeSettingsTargetPanel(fallback = 'chat') {
-  const target = (_pendingSettingsTargetPanel && _pendingSettingsTargetPanel !== 'settings')
-    ? _pendingSettingsTargetPanel
+export function _consumeSettingsTargetPanel(fallback = 'chat') {
+  const target = (state._pendingSettingsTargetPanel && state._pendingSettingsTargetPanel !== 'settings')
+    ? state._pendingSettingsTargetPanel
     : fallback;
-  _pendingSettingsTargetPanel = null;
+  state._pendingSettingsTargetPanel = null;
   return target;
 }
 
-function _resyncChatSidebarAfterPanelSwitch() {
-  if (_currentPanel !== 'chat') return;
+export function _resyncChatSidebarAfterPanelSwitch() {
+  if (state._currentPanel !== 'chat') return;
   if (typeof renderSessionListFromCache !== 'function') return;
   const run = () => {
-    if (_currentPanel !== 'chat') return;
+    if (state._currentPanel !== 'chat') return;
     if (typeof _renamingSid !== 'undefined' && _renamingSid) return;
     // If the user opens the per-conversation action menu immediately after
     // returning to Chat, do not let the deferred sidebar resync tear it down.
@@ -346,37 +321,37 @@ function _resyncChatSidebarAfterPanelSwitch() {
   else run();
 }
 
-function _closeMobileSidebarAfterPanelSelection(){
+export function _closeMobileSidebarAfterPanelSelection(){
   if(typeof closeMobileSidebar!=='function')return;
   if(typeof _isDesktopWidth==='function'&&_isDesktopWidth())return;
   closeMobileSidebar();
 }
 
-function _panelFromCurrentMainView(){
+export function _panelFromCurrentMainView(){
   const mainEl=document.querySelector('main.main');
-  if(!mainEl)return _currentPanel||'chat';
+  if(!mainEl)return state._currentPanel||'chat';
   for(const panel of MAIN_VIEW_PANELS){
     if(mainEl.classList.contains('showing-'+panel))return MAIN_VIEW_SIDEBAR_PANEL_FALLBACKS[panel]||panel;
   }
-  if(_currentPanel&&$('panel'+_currentPanel.charAt(0).toUpperCase()+_currentPanel.slice(1)))return _currentPanel;
+  if(state._currentPanel&&$('panel'+state._currentPanel.charAt(0).toUpperCase()+state._currentPanel.slice(1)))return state._currentPanel;
   return 'chat';
 }
 
-function _syncMobileSidebarPanelFromMainView(){
+export function _syncMobileSidebarPanelFromMainView(){
   const panel=_panelFromCurrentMainView();
-  if(!panel)return _currentPanel||'chat';
+  if(!panel)return state._currentPanel||'chat';
   const panelEl=$('panel'+panel.charAt(0).toUpperCase()+panel.slice(1));
-  if(!panelEl)return _currentPanel||'chat';
-  _currentPanel=panel;
+  if(!panelEl)return state._currentPanel||'chat';
+  state._currentPanel=panel;
   document.querySelectorAll('[data-panel]').forEach(t=>t.classList.toggle('active',t.dataset.panel===panel));
   document.querySelectorAll('.panel-view').forEach(p=>p.classList.remove('active'));
   panelEl.classList.add('active');
   return panel;
 }
 
-async function switchPanel(name, opts = {}) {
+export async function switchPanel(name, opts = {}) {
   const nextPanel = name || 'chat';
-  const prevPanel = _currentPanel;
+  const prevPanel = state._currentPanel;
   // ── Desktop sidebar collapse toggle (rail-click only) ──
   // If the click came from a rail icon AND we're on desktop, the rail icon
   // does double duty: clicking the already-active panel collapses the sidebar;
@@ -404,7 +379,7 @@ async function switchPanel(name, opts = {}) {
   if (prevPanel === 'kanban' && nextPanel !== 'kanban') {
     if (typeof _kanbanStopPolling === 'function') _kanbanStopPolling();
   }
-  _currentPanel = nextPanel;
+  state._currentPanel = nextPanel;
   // Update nav tabs (rail + mobile sidebar-nav share data-panel)
   document.querySelectorAll('[data-panel]').forEach(t => t.classList.toggle('active', t.dataset.panel === nextPanel));
   // Refresh aria-expanded on the newly-active rail button to mirror sidebar state.
@@ -434,7 +409,7 @@ async function switchPanel(name, opts = {}) {
   _syncLogsAutoRefresh();
   if (typeof _syncSystemHealthMonitorVisibility === 'function') _syncSystemHealthMonitorVisibility();
   if (nextPanel === 'settings') {
-    switchSettingsSection(_currentSettingsSection);
+    switchSettingsSection(state._currentSettingsSection);
     loadSettingsPanel();
   }
   if (opts.fromRailClick && typeof _isDesktopWidth === 'function' && !_isDesktopWidth()) {
@@ -449,15 +424,3 @@ async function switchPanel(name, opts = {}) {
   else syncAppTitlebar();
   return true;
 }
-
-window.HermesPanels.core = {
-  syncAppTitlebar,
-  _beginSettingsPanelSession,
-  _beforePanelSwitch,
-  _consumeSettingsTargetPanel,
-  _resyncChatSidebarAfterPanelSwitch,
-  _closeMobileSidebarAfterPanelSelection,
-  _panelFromCurrentMainView,
-  _syncMobileSidebarPanelFromMainView,
-  switchPanel,
-};
