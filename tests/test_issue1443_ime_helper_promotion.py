@@ -31,7 +31,7 @@ import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 BOOT_JS = family_source("boot")
-COMPAT_JS = (REPO_ROOT / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
+COMPAT_JS = (REPO_ROOT / "static" / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
 

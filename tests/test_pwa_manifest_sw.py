@@ -20,7 +20,7 @@ SW = ROOT / "static" / "sw.js"
 PWA_STARTUP = ROOT / "static" / "pwa-startup.js"
 INDEX = ROOT / "static" / "index.html"
 ROUTES = ROOT / "api" / "routes.py"
-AUTH = ROOT / "api" / "auth.py"
+AUTH = ROOT / "api" / "auth" / "authorization.py"
 
 
 class TestManifest:
@@ -252,7 +252,6 @@ class TestIndexHtmlIntegration:
         for asset in (
             "style.css",
             "modules/boot/index.js",
-            "session_render_cache_adapter.js",
             "modules/ui/index.js",
             "modules/messages/index.js",
             "modules/sessions/index.js",
@@ -274,7 +273,7 @@ class TestIndexHtmlIntegration:
 
         assert "'./static/session_render_cache.js'," in src, (
             "the service worker must pre-cache the unversioned URL requested "
-            "by the adapter's static relative module import"
+            "by the UI module's static relative import"
         )
         for module in (
             "modules/compatibility.js",

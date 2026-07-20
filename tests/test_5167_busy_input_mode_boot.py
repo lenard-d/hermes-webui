@@ -27,7 +27,7 @@ ROOT = Path(__file__).parent.parent
 BOOT_JS = family_source("boot")
 BOOT_INDEX = (ROOT / "static" / "modules" / "boot" / "index.js").read_text(encoding="utf-8")
 PUBLIC_INTERFACES = (ROOT / "static" / "modules" / "boot" / "public-interfaces.js").read_text(encoding="utf-8")
-COMPATIBILITY = (ROOT / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
+COMPATIBILITY = (ROOT / "static" / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
 PANELS_JS = family_source("panels")
 MESSAGES_JS = family_source("messages")
 UI_JS = family_source("ui")
@@ -37,7 +37,7 @@ class TestEagerDefault:
     def test_eager_default_assigned_at_module_scope(self):
         """An eager top-level assignment must exist so first sends honor the preference."""
         assert "const eagerDefaultMessageMode=_readPersistedDefaultMessageMode();" in PUBLIC_INTERFACES
-        assert "globalThis._defaultMessageMode=eagerDefaultMessageMode;" in COMPATIBILITY, (
+        assert "_defaultMessageMode:eagerDefaultMessageMode" in COMPATIBILITY, (
             "boot.js must eagerly initialise window._defaultMessageMode from the persisted "
             "mirror at module scope so sends during the boot window don't default silently"
         )
@@ -48,20 +48,16 @@ class TestEagerDefault:
         This is the whole point of the fix: the value must be deterministic during
         the window between page load and the settings fetch resolving.
         """
-        assert "import '../compatibility.js';" in BOOT_INDEX
+        assert "import './legacy-interface.js';" in BOOT_INDEX
         assert "const s=await api('/api/settings')" in BOOT_INDEX
-        assert BOOT_INDEX.index("import '../compatibility.js';") < BOOT_INDEX.index("(async()=>{")
+        assert BOOT_INDEX.index("import './legacy-interface.js';") < BOOT_INDEX.index("(async()=>{")
 
     def test_eager_default_precedes_send_definition(self):
         """The eager default in boot.js loads after messages.js (defer order), but the
         assignment itself must sit at top level so it runs during script evaluation,
         not inside a later-firing callback."""
-        eager_idx = COMPATIBILITY.find("globalThis._defaultMessageMode=eagerDefaultMessageMode;")
-        line_start = COMPATIBILITY.rfind("\n", 0, eager_idx) + 1
-        assert COMPATIBILITY[line_start:eager_idx].strip() == "", (
-            "the eager default must be a top-level statement (not nested in a function "
-            "or callback) so it runs during script evaluation"
-        )
+        assert "\npublishCompatibilityDomain('boot',{" in COMPATIBILITY
+        assert "bindings:{...definedBootCompatibility,_defaultMessageMode:eagerDefaultMessageMode}" in COMPATIBILITY
 
 
 class TestSyncMirrorHelpers:

@@ -21,6 +21,7 @@ import {
   stopClarifyPolling,
 } from './clarify.js';
 import { attachLiveStream } from './stream.js';
+import {handlePetSlashCommand} from '../commands/desktop-companion.js';
 
 // Guard against concurrent send() calls.  Without this, two rapid sends
 // (e.g. queue drain + user click) can both pass the S.busy check because

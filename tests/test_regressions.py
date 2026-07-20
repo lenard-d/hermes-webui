@@ -5,7 +5,7 @@ These tests exist specifically to prevent those bugs from silently returning.
 Each test is tagged with the sprint/commit where the bug was found and fixed.
 """
 import json
-from tests.frontend_asset_contract import family_asset_paths, family_source
+from tests.frontend_asset_contract import family_asset_paths, family_source, module_family_paths
 import os
 import pathlib
 import re
@@ -18,8 +18,8 @@ STREAM_RENDERER_SRC = (
     REPO_ROOT / "static" / "modules" / "messages" / "rendering.js"
 ).read_text(encoding="utf-8")
 SESSION_LIFECYCLE_SRC = next(
-    path for path in family_asset_paths("sessions")
-    if path.name == "002-session-lifecycle.js"
+    path for path in module_family_paths("sessions")
+    if path.name == "lifecycle.js"
 ).read_text(encoding="utf-8")
 RESTORE_LOADED_SESSION_SRC = SESSION_LIFECYCLE_SRC[
     SESSION_LIFECYCLE_SRC.index("async function _restoreLoadedSession"):

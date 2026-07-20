@@ -18,7 +18,7 @@ COMMANDS_JS = family_source("commands")
 BOOT_JS = family_source("boot")
 PANELS_JS = family_source("panels")
 STYLE_CSS = family_source("style")
-COMPATIBILITY_JS = (REPO_ROOT / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
+COMPATIBILITY_JS = (REPO_ROOT / "static" / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
 
 
 def _function_body(source, name):

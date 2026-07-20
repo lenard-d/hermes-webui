@@ -1,9 +1,9 @@
 /**
- * Temporary outer seam for classic-script and inline-handler callers.
+ * Explicit inventory for classic-script and inline-handler callers.
  *
  * Internal panel modules use imports. Only names referenced by index.html,
  * generated inline handlers, or the remaining classic frontend families are
- * installed on window here.
+ * exposed. The central ../compatibility.js module is the only global writer.
  */
 import { state } from './state.js';
 import * as core from './core.js';
@@ -26,7 +26,7 @@ import * as settingsSave from './settings-save.js';
 import * as runtimeAlerts from './runtime-alerts.js';
 import * as gateway from './settings-system.js';
 
-const modules = {
+export const panelModules = Object.freeze({
   core,
   cronList,
   cronEditor,
@@ -46,7 +46,7 @@ const modules = {
   settingsSave,
   runtimeAlerts,
   gateway,
-};
+});
 
 const compatibilityGlobalNames = [
   '_applyLogsSeverityFilter', '_applyTabOrder', '_applyTabVisibility', '_applyTtsEnabled', '_applyWorkspaceTodosTabVisibility', '_closeSettingsPanel',
@@ -75,24 +75,20 @@ const compatibilityGlobalNames = [
   'unblockKanbanTask', 'updateKanbanTask', 'updateNotificationPermissionStatus',
 ];
 
-const exportedByName = Object.assign({}, ...Object.values(modules));
+const exportedByName = Object.assign({}, ...Object.values(panelModules));
+const panelLegacyBindings = Object.fromEntries(
+  compatibilityGlobalNames
+    .map((name) => [name, exportedByName[name]])
+    .filter(([, value]) => typeof value !== 'undefined')
+);
 
-export function installPanelCompatibility(target = window) {
-  for (const name of compatibilityGlobalNames) {
-    const value = exportedByName[name];
-    if (typeof value !== 'undefined') target[name] = value;
-  }
-
-  // These four state bindings still have evidenced classic-script readers;
-  // _workspaceList also has one legacy writer. Accessors preserve live state.
-  for (const name of ['_currentPanel', '_profilesCache', '_workspaceList', '_cronPollGeneration']) {
-    Object.defineProperty(target, name, {
-      configurable: true,
-      enumerable: false,
-      get: () => state[name],
-      set: (value) => { state[name] = value; },
-    });
-  }
-
-  return target;
+// These four state bindings still have evidenced classic-script readers;
+// _workspaceList also has one legacy writer. Descriptors preserve live state.
+for (const name of ['_currentPanel', '_profilesCache', '_workspaceList', '_cronPollGeneration']) {
+  panelLegacyBindings[name] = Object.freeze({
+    get: () => state[name],
+    set: (value) => { state[name] = value; },
+  });
 }
+
+export { panelLegacyBindings };

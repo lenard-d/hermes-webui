@@ -47,6 +47,7 @@ const SHELL_ASSETS = [
   './static/modules/boot/server-lifecycle.js',
   './static/modules/boot/speech-capture.js',
   './static/modules/boot/voice-mode.js',
+  './static/modules/boot/legacy-interface.js',
   './static/modules/commands/desktop-companion.js',
   './static/modules/commands/index.js',
   './static/modules/commands/manual-compression.js',
@@ -56,9 +57,7 @@ const SHELL_ASSETS = [
   './static/modules/assistant-turn-anchors/index.js' + VQ,
   './static/modules/assistant-turn-anchors/model.js',
   './static/modules/assistant-turn-anchors/activity-scene.js',
-  './static/modules/assistant-turn-anchors/legacy-adapter.js',
-  './static/session_render_cache_adapter.js' + VQ,
-  // The adapter's static relative import requests this dependency without VQ.
+  // The UI module's static relative import requests this dependency without VQ.
   './static/session_render_cache.js',
   './static/modules/ui/index.js' + VQ,
   // Native-module dependencies use static relative imports and therefore load
@@ -94,13 +93,11 @@ const SHELL_ASSETS = [
   './static/modules/sessions/sidebar-interactions.js',
   './static/modules/sessions/sidebar-renderer.js',
   './static/modules/sessions/management.js',
-  './static/modules/sessions/legacy-adapter.js',
   './static/modules/messages/index.js' + VQ,
   // Native relative imports do not inherit the entrypoint's version query.
   './static/modules/messages/anchor-scene.js',
   './static/modules/messages/approvals.js',
   './static/modules/messages/clarify.js',
-  './static/modules/messages/compatibility.js',
   './static/modules/messages/composer-context.js',
   './static/modules/messages/core.js',
   './static/modules/messages/live-tools.js',
@@ -114,7 +111,7 @@ const SHELL_ASSETS = [
   './static/modules/messages/stream.js',
   './static/modules/panels/index.js' + VQ,
   // Native module imports do not inherit the entrypoint query string.
-  './static/modules/panels/compatibility.js',
+  './static/modules/panels/legacy-interface.js',
   './static/modules/panels/core.js',
   './static/modules/panels/cron-editor.js',
   './static/modules/panels/cron-list.js',

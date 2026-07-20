@@ -22,7 +22,7 @@ def test_start_mic_capture_extracted():
 def test_toggle_mic_capture_exposed_on_window():
     src = _boot_src()
     assert "async function _toggleMicCapture()" in src
-    compat = (Path(__file__).resolve().parents[1] / "static" / "modules" / "compatibility.js").read_text()
+    compat = (Path(__file__).resolve().parents[1] / "static" / "modules" / "boot" / "legacy-interface.js").read_text()
     assert "_toggleMicCapture:speechCapture.toggleMicCapture" in compat
 
 
@@ -89,7 +89,7 @@ def test_reserved_ctrl_shift_d_shortcut_is_not_bound():
 
 def test_stop_mic_still_exposed_and_active_capture_mode_retained():
     src = _boot_src()
-    compat = (Path(__file__).resolve().parents[1] / "static" / "modules" / "compatibility.js").read_text()
+    compat = (Path(__file__).resolve().parents[1] / "static" / "modules" / "boot" / "legacy-interface.js").read_text()
     assert "_stopMic:speechCapture.stopMic" in compat
     assert "_activeCaptureMode" in src
     assert "_stopMic();" in src

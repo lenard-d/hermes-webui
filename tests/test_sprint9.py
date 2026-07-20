@@ -78,7 +78,7 @@ def test_workspace_js_served(cleanup_test_sessions):
 
 def test_sessions_js_served(cleanup_test_sessions):
     served = get_text("/static/modules/sessions/index.js")
-    assert "installLegacySessionGlobals" in served
+    assert "publishCompatibilityDomain('sessions'" in served
     src = get_family_source("/static/modules/sessions/index.js")
     assert "async function newSession(" in src
     assert "async function loadSession(" in src
@@ -86,14 +86,14 @@ def test_sessions_js_served(cleanup_test_sessions):
 
 def test_messages_js_served(cleanup_test_sessions):
     served = get_text("/static/modules/messages/index.js")
-    assert "from './compatibility.js'" in served
+    assert "from '../compatibility.js'" in served
     src = get_family_source("/static/modules/messages/index.js")
     assert "async function send(" in src
     assert "function transcript(" in src
 
 def test_panels_js_served(cleanup_test_sessions):
     served = get_text("/static/modules/panels/index.js")
-    assert "installPanelCompatibility" in served
+    assert "publishCompatibilityDomain('panels'" in served
     src = get_family_source("/static/modules/panels/index.js")
     assert "async function switchPanel(" in src
     assert "async function loadCrons(" in src
@@ -102,7 +102,7 @@ def test_panels_js_served(cleanup_test_sessions):
 
 def test_boot_js_served(cleanup_test_sessions):
     served = get_text("/static/modules/boot/index.js")
-    assert "import '../compatibility.js'" in served
+    assert "import './legacy-interface.js'" in served
     src = get_family_source("/static/modules/boot/index.js")
     assert "btnSend" in src
     assert "btnNewChat" in src

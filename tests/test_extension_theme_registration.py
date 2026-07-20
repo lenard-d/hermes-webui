@@ -20,7 +20,7 @@ from pathlib import Path
 
 REPO = Path(__file__).parent.parent
 BOOT_JS = family_source("boot")
-COMPAT_JS = (REPO / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
+COMPAT_JS = (REPO / "static" / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
 
 
 # ── Layer 1: structural ──────────────────────────────────────────────────────

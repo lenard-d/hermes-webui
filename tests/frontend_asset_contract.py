@@ -60,7 +60,6 @@ _MESSAGE_MODULE_NAMES = (
     "session-events.js",
     "clarify.js",
     "notifications.js",
-    "compatibility.js",
     "index.js",
 )
 
@@ -82,6 +81,7 @@ _BOOT_MODULE_NAMES = (
     "navigation.js",
     "composer.js",
     "voice-mode.js",
+    "legacy-interface.js",
     "index.js",
 )
 
@@ -96,14 +96,12 @@ _SESSION_MODULE_NAMES = (
     "sidebar-interactions.js",
     "sidebar-renderer.js",
     "management.js",
-    "legacy-adapter.js",
     "index.js",
 )
 
 _ASSISTANT_TURN_ANCHOR_MODULE_NAMES = (
     "model.js",
     "activity-scene.js",
-    "legacy-adapter.js",
     "index.js",
 )
 
@@ -128,7 +126,7 @@ _PANEL_MODULE_NAMES = (
     "settings-save.js",
     "runtime-alerts.js",
     "settings-system.js",
-    "compatibility.js",
+    "legacy-interface.js",
     "index.js",
 )
 
@@ -270,7 +268,7 @@ def family_source(family: str) -> str:
         implementation = "".join(
             path.read_text(encoding="utf-8")
             for path in paths
-            if path.name not in {"state.js", "compatibility.js", "index.js"}
+            if path.name not in {"state.js", "legacy-interface.js", "index.js"}
         )
         implementation = re.sub(r"^import .*?;\n", "", implementation, flags=re.MULTILINE)
         implementation = re.sub(r"^export ", "", implementation, flags=re.MULTILINE)
@@ -294,6 +292,8 @@ def family_entrypoint_path(family: str) -> Path | None:
         return STATIC_DIR / "modules" / "boot" / "index.js"
     if family == "commands":
         return None  # imported by boot/index.js through the compatibility seam
+    if family == "assistant-turn-anchors":
+        return STATIC_DIR / "modules" / "assistant-turn-anchors" / "index.js"
     if family == "sessions":
         return STATIC_DIR / "modules" / "sessions" / "index.js"
     if family == "messages":

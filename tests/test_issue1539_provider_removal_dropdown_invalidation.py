@@ -97,12 +97,12 @@ class TestSlashModelCacheInvalidator:
         )
 
     def test_invalidator_exposed_on_window(self):
-        src = (REPO / "static" / "modules" / "compatibility.js").read_text()
+        src = (REPO / "static" / "modules" / "boot" / "legacy-interface.js").read_text()
         assert "_invalidateSlashModelCache:commandInterface.invalidateSlashModelCache" in src, (
             "_invalidateSlashModelCache must be published by the compatibility seam so static/panels.js "
             "can invoke it across module boundaries."
         )
-        assert "Object.assign(globalThis,commandCompatibility" in src
+        assert "publishCompatibilityDomain('commands'" in src
 
 
 class TestProviderRemoveInvalidatesDropdowns:

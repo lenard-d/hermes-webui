@@ -219,6 +219,7 @@ def _run_send_js(*, command, status, adapter_status=None, hook_result=None, hook
           }},
         }};
         ctx.window.window = ctx.window;
+        {hook_setup}
         (async () => {{
           Object.assign(globalThis, ctx);
           Object.assign(globalThis, ctx.window);
@@ -229,7 +230,6 @@ def _run_send_js(*, command, status, adapter_status=None, hook_result=None, hook
           globalThis.document.baseURI = 'http://test.local/';
           const commands = await import({json.dumps(COMMANDS_ENTRY.as_uri())});
           Object.assign(globalThis, commands.commandInterface, commands);
-          {hook_setup}
           const {{send}} = await import({SEND_MODULE_URL!r});
           await send();
           process.stdout.write(JSON.stringify({{

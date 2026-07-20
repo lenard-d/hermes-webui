@@ -18,6 +18,7 @@ import * as state from './state.js';
 import * as toolWorklog from './tool-worklog.js';
 import * as transparentWorklog from './transparent-worklog.js';
 import * as workspaceAndUploads from './workspace-and-uploads.js';
+import { publishCompatibilityDomain } from '../compatibility.js';
 
 const modules = Object.assign(Object.create(null), {
   state,
@@ -42,8 +43,8 @@ const modules = Object.assign(Object.create(null), {
   workspaceAndUploads,
 });
 
-const api = window.HermesUI || {};
-const compatibility = api.compat || Object.create(null);
+const api = {};
+const compatibility = Object.create(null);
 
 function exposeCompatibilityBinding(name, ownerBindings) {
   if (Object.prototype.hasOwnProperty.call(compatibility, name)) {
@@ -59,11 +60,6 @@ function exposeCompatibilityBinding(name, ownerBindings) {
     descriptor.set = (value) => { ownerBindings[name] = value; };
   }
   Object.defineProperty(compatibility, name, descriptor);
-
-  const existing = Object.getOwnPropertyDescriptor(window, name);
-  if (!existing || existing.configurable) {
-    Object.defineProperty(window, name, descriptor);
-  }
 }
 
 for (const moduleApi of Object.values(modules)) {
@@ -88,7 +84,11 @@ api.register = function registerHermesUIModule(name, exports) {
     value: Object.freeze(Object.assign(Object.create(null), exports)),
   });
 };
-window.HermesUI = api;
+publishCompatibilityDomain('ui', {
+  namespace: 'HermesUI',
+  api,
+  bindings: Object.getOwnPropertyDescriptors(compatibility),
+});
 window.dispatchEvent(new CustomEvent('hermes-ui-ready'));
 
 export { compatibility, modules };

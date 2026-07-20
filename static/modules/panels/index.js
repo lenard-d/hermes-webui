@@ -1,4 +1,5 @@
-import { installPanelCompatibility } from './compatibility.js';
+import { publishCompatibilityDomain } from '../compatibility.js';
+import { panelLegacyBindings, panelModules } from './legacy-interface.js';
 
 export { state } from './state.js';
 export { switchPanel, syncAppTitlebar } from './core.js';
@@ -10,4 +11,8 @@ export { loadProfilesPanel, switchToProfile } from './profiles.js';
 export { switchSettingsSection } from './settings-navigation.js';
 export { loadSettingsPanel } from './settings-preferences.js';
 
-installPanelCompatibility();
+publishCompatibilityDomain('panels', {
+  namespace: 'HermesPanels',
+  api: Object.freeze({modules: panelModules}),
+  bindings: panelLegacyBindings,
+});

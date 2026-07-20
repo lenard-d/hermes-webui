@@ -9,7 +9,6 @@ MODULE_NAMES = {
     "anchor-scene.js",
     "approvals.js",
     "clarify.js",
-    "compatibility.js",
     "composer-context.js",
     "core.js",
     "index.js",
@@ -47,16 +46,17 @@ def test_each_messages_module_parses_independently():
 
 
 def test_internal_modules_use_imports_exports_not_classic_assembly():
-    compatibility = (MODULE_DIR / "compatibility.js").read_text(encoding="utf-8")
-    assert "globalThis.HermesMessages" in compatibility
-    assert "Object.assign(globalThis" in compatibility
+    compatibility = (MODULE_DIR.parent / "compatibility.js").read_text(encoding="utf-8")
+    entrypoint = (MODULE_DIR / "index.js").read_text(encoding="utf-8")
+    assert "Object.defineProperty(globalThis" in compatibility
+    assert "publishCompatibilityDomain('messages'" in entrypoint
+    assert "from '../compatibility.js'" in entrypoint
 
     for path in MODULE_DIR.glob("*.js"):
         source = path.read_text(encoding="utf-8")
         assert "messages_parts" not in source
         assert "Object.assign(HermesMessages" not in source
-        if path.name != "compatibility.js":
-            assert "globalThis.HermesMessages" not in source
+        assert "globalThis.HermesMessages" not in source
 
     stream = (MODULE_DIR / "stream.js").read_text(encoding="utf-8")
     assert "from './stream-lifecycle.js'" in stream

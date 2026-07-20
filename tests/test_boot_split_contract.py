@@ -24,6 +24,7 @@ def test_boot_uses_semantic_native_modules_without_legacy_parts():
         "navigation.js",
         "composer.js",
         "voice-mode.js",
+        "legacy-interface.js",
         "index.js",
     ]
     assert not (STATIC / "boot.js").exists()
@@ -51,7 +52,10 @@ def test_boot_modules_parse_independently_and_declare_interfaces():
 
 def test_boot_index_imports_owners_and_compatibility_before_coordinating():
     source = INDEX.read_text(encoding="utf-8")
-    assert "import '../compatibility.js';" in source
+    assert "import './legacy-interface.js';" in source
+    legacy_interface = (MODULES_DIR / "legacy-interface.js").read_text(encoding="utf-8")
+    assert "from '../compatibility.js'" in legacy_interface
+    assert "publishCompatibilityDomain('boot'" in legacy_interface
     for owner in (
         "./navigation.js",
         "./run-control.js",

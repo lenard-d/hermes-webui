@@ -10,6 +10,7 @@ import { _redactToolTargetLabel, _syncToolCallGroupSummary, _toolWorklogListEl }
 import { _activityKeyForLiveTurn, _finalizeLiveActivityDisclosureGroup, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
 import { compatibilityBindings as composerBindings } from './composer.js';
+import {createRenderSignature,createSessionRenderCache} from '../../session_render_cache.js';
 
 // ── LiveFooter timer (module-level singleton) ──────────────────────────────
 const _liveRunStatusTimers={};  // keyed by sessionId, max 1 active
@@ -725,7 +726,7 @@ function renderCompressionUi(){
 // to a session whose rendered transcript inputs are unchanged.
 // Keyed by session_id. Only used on cross-session navigation, never for
 // in-session updates (new messages, edits, stream events).
-const _sessionHtmlCache=window.HermesSessionRenderCache.create({
+const _sessionHtmlCache=createSessionRenderCache({
   maxEntries:8,
   maxEntryBytes:2*1024*1024,
   maxTotalBytes:8*1024*1024,
@@ -750,7 +751,7 @@ function clearMessageRenderCache(){
 }
 
 function _messageRenderCacheSignature(){
-  return window.HermesSessionRenderCache.signature({
+  return createRenderSignature({
     messages:S.messages,
     toolCalls:S.toolCalls,
     session:S.session,

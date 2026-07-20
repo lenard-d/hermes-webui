@@ -61,16 +61,19 @@ def test_registry_imports_domain_handlers_and_exports_the_command_interface():
 
 def test_commands_are_loaded_transitively_by_the_single_boot_entrypoint():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    compatibility = (STATIC / "modules" / "compatibility.js").read_text(encoding="utf-8")
+    legacy_interface = (STATIC / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
     assert "static/commands.js" not in html
     assert "static/command_parts/" not in html
-    assert "./commands/index.js" in compatibility
+    assert "../commands/index.js" in legacy_interface
 
 
 def test_compatibility_seam_documents_and_exports_remaining_global_callers():
-    source = (STATIC / "modules" / "compatibility.js").read_text(encoding="utf-8")
-    assert "Temporary classic-script compatibility seam" in source
-    assert "Object.assign(globalThis,commandCompatibility,definedBootCompatibility);" in source
+    seam = (STATIC / "modules" / "compatibility.js").read_text(encoding="utf-8")
+    source = (STATIC / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
+    assert "Temporary classic-script compatibility seam" in seam
+    assert "Object.defineProperty(globalThis" in seam
+    assert "publishCompatibilityDomain('commands'" in source
+    assert "publishCompatibilityDomain('boot'" in source
     for name in (
         "COMMANDS",
         "handlePetSlashCommand",

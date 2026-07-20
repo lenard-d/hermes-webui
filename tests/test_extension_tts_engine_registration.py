@@ -21,7 +21,7 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 BOOT_JS = family_source("boot")
 PUBLIC_INTERFACES = REPO / "static" / "modules" / "boot" / "public-interfaces.js"
-COMPAT_JS = (REPO / "static" / "modules" / "compatibility.js").read_text(encoding="utf-8")
+COMPAT_JS = (REPO / "static" / "modules" / "boot" / "legacy-interface.js").read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 PANELS_JS = family_source("panels")
 def test_public_api_present():

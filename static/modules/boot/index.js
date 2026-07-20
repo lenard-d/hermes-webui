@@ -1,4 +1,4 @@
-import '../compatibility.js';
+import './legacy-interface.js';
 import {
   _finalizeComposerPrefillOnBoot,
   _isCompactWorkspaceViewport,

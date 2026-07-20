@@ -2,7 +2,7 @@
 // the scene module receives only the immutable projection support it needs.
 import { createAssistantTurnAnchorModel } from './model.js';
 import { createAssistantTurnAnchorScene } from './activity-scene.js';
-import { installLegacyAssistantTurnAnchors } from './legacy-adapter.js';
+import { publishCompatibilityDomain } from '../compatibility.js';
 
 const model=createAssistantTurnAnchorModel();
 const scene=createAssistantTurnAnchorScene(model.sceneSupport);
@@ -13,5 +13,8 @@ export const HermesAssistantTurnAnchors=Object.freeze({
   ...scene,
 });
 
-installLegacyAssistantTurnAnchors(globalThis,HermesAssistantTurnAnchors);
+publishCompatibilityDomain('assistant-turn-anchors',{
+  namespace:'HermesAssistantTurnAnchors',
+  api:HermesAssistantTurnAnchors,
+});
 export default HermesAssistantTurnAnchors;

@@ -113,7 +113,7 @@ def test_every_frontend_asset_is_precached_at_its_browser_request_url():
 
     native_dependencies = {
         path.relative_to(REPO_ROOT).as_posix()
-        for family in ("boot", "commands", "messages", "panels", "sessions", "assistant-turn-anchors")
+        for family in ("boot", "commands", "messages", "panels", "sessions", "assistant-turn-anchors", "ui")
         for path in module_family_paths(family)
         if path != family_entrypoint_path(family)
     }
@@ -121,20 +121,63 @@ def test_every_frontend_asset_is_precached_at_its_browser_request_url():
     assert native_dependencies <= unversioned_shell_paths
 
 
-@pytest.mark.parametrize("family", ("messages", "panels", "sessions", "assistant-turn-anchors"))
+def _module_graph(entrypoint):
+    discovered = set()
+    pending = [entrypoint.resolve()]
+    while pending:
+        path = pending.pop()
+        if path in discovered:
+            continue
+        discovered.add(path)
+        source = path.read_text(encoding="utf-8")
+        imports = re.findall(
+            r"(?:from\s+|import\s*)['\"](\.[^'\"]+\.js)['\"]",
+            source,
+        )
+        pending.extend((path.parent / target).resolve() for target in imports)
+    return discovered
+
+
+@pytest.mark.parametrize(
+    "family",
+    ("boot", "messages", "panels", "sessions", "assistant-turn-anchors", "ui"),
+)
 def test_native_module_family_imports_are_explicit_and_precached(family: str):
     paths = module_family_paths(family)
-    entrypoint = paths[-1]
-    source = entrypoint.read_text(encoding="utf-8")
-    imported_names = set(re.findall(r"from\s+['\"]\./([^'\"]+)['\"]", source))
-    expected_names = {path.name for path in paths[:-1]}
+    entrypoint = family_entrypoint_path(family)
+    assert entrypoint is not None
+    family_dir = entrypoint.parent.resolve()
+    graph = {path for path in _module_graph(entrypoint) if path.parent == family_dir}
 
-    assert imported_names == expected_names
+    assert graph == {path.resolve() for path in paths}
 
     shell_assets = SERVICE_WORKER.read_text(encoding="utf-8")
-    for dependency in paths[:-1]:
+    for dependency in paths:
+        if dependency == entrypoint:
+            continue
         relative = dependency.relative_to(REPO_ROOT).as_posix()
         assert f"'./{relative}'" in shell_assets
+
+
+def test_migrated_domains_publish_globals_only_through_the_central_seam():
+    compatibility = REPO_ROOT / "static" / "modules" / "compatibility.js"
+    migrated = (
+        "boot",
+        "messages",
+        "panels",
+        "sessions",
+        "assistant-turn-anchors",
+        "ui",
+    )
+    for family in migrated:
+        for path in module_family_paths(family):
+            source = path.read_text(encoding="utf-8")
+            assert "Object.defineProperty(globalThis" not in source, path
+            assert not re.search(r"globalThis\.Hermes[A-Za-z]+\s*=", source), path
+
+    central_source = compatibility.read_text(encoding="utf-8")
+    assert "Object.defineProperty(globalThis" in central_source
+    assert "export function publishCompatibilityDomain" in central_source
 
 
 def test_split_families_use_direct_assets_not_runtime_manifests():

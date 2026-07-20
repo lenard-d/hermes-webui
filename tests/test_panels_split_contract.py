@@ -97,20 +97,21 @@ function load(file) {
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert int(result.stdout) == len(_panel_modules())
+    assert int(result.stdout) == len(_panel_modules()) + 1
 
 
 def test_internal_modules_do_not_publish_or_rebind_globals():
-    compatibility = (MODULE_DIR / "compatibility.js").read_text(encoding="utf-8")
-    assert "compatibilityGlobalNames" in compatibility
-    assert "Object.defineProperty" in compatibility
-    assert "HermesPanels" not in compatibility
-    assert "_currentPanel" in compatibility
-    assert "_workspaceList" in compatibility
+    legacy_interface = (MODULE_DIR / "legacy-interface.js").read_text(encoding="utf-8")
+    entrypoint = (MODULE_DIR / "index.js").read_text(encoding="utf-8")
+    compatibility = (MODULE_DIR.parent / "compatibility.js").read_text(encoding="utf-8")
+    assert "panelLegacyBindings" in legacy_interface
+    assert "Object.defineProperty" not in legacy_interface
+    assert "_currentPanel" in legacy_interface
+    assert "_workspaceList" in legacy_interface
+    assert "publishCompatibilityDomain('panels'" in entrypoint
+    assert "Object.defineProperty(globalThis" in compatibility
 
     for module in _panel_modules():
-        if module.name == "compatibility.js":
-            continue
         source = module.read_text(encoding="utf-8")
         assert "window.HermesPanels" not in source
         assert "window.checkWebUIVersionSkew=" not in source

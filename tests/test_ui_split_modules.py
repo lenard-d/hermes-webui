@@ -111,7 +111,6 @@ globalThis.MutationObserver = class { observe(){} disconnect(){} };
 globalThis.IntersectionObserver = class { observe(){} disconnect(){} };
 globalThis.ResizeObserver = class { observe(){} disconnect(){} };
 globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });
-globalThis.HermesSessionRenderCache = { create(){ return {}; } };
 globalThis.matchMedia = () => ({ matches: false, addEventListener(){}, removeEventListener(){} });
 (async () => {
 await import(pathToFileURL(process.argv[1]));

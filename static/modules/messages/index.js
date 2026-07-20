@@ -55,7 +55,7 @@ import {
   startBackgroundPolling,
 } from './notifications.js';
 import { enhanceMarkdownTables } from './markdown-tables.js';
-import { installMessagesCompatibility } from './compatibility.js';
+import { publishCompatibilityDomain } from '../compatibility.js';
 
 const messagesApi = {
   send,
@@ -88,7 +88,7 @@ const messagesApi = {
   extractInlineThinkingFromContent: _extractInlineThinkingFromContent,
 };
 
-installMessagesCompatibility(messagesApi, {
+const legacyBindings = {
   ...messagesApi,
   _attentionSoundKey,
   _chatPayloadModel,
@@ -109,6 +109,12 @@ installMessagesCompatibility(messagesApi, {
   toggleApprovalCardCollapsed,
   toggleClarifyCardCollapsed,
   toggleYoloFromApproval,
+};
+
+publishCompatibilityDomain('messages', {
+  namespace: 'HermesMessages',
+  api: Object.freeze({...messagesApi}),
+  bindings: legacyBindings,
 });
 
 export {

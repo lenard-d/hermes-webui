@@ -1,35 +1,28 @@
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
 from tests.test_sessions_split_support import (
     REPO_ROOT,
-    SESSIONS_MANIFEST,
+    SESSIONS_PARTS_DIR,
     read_sessions_source,
     sessions_part_paths,
 )
 
 
-def test_sessions_manifest_is_a_strict_ordered_relative_file_list():
-    manifest = json.loads(SESSIONS_MANIFEST.read_text(encoding="utf-8"))
-
-    assert set(manifest) == {"version", "entrypoint", "modules"}
-    assert manifest["version"] == 2
-    assert manifest["entrypoint"] == "index.js"
-    assert 10 <= len(manifest["modules"]) <= 14
-    assert len(manifest["modules"]) == len(set(manifest["modules"]))
-    assert manifest["modules"][-1] == manifest["entrypoint"]
-    assert not any(name[:3].isdigit() for name in manifest["modules"])
-    for name in manifest["modules"]:
-        assert Path(name).name == name
-        assert name.endswith(".js")
-        assert (SESSIONS_MANIFEST.parent / name).is_file()
+def test_sessions_use_a_semantic_module_inventory_without_runtime_manifests():
+    modules = sessions_part_paths()
+    assert 10 <= len(modules) <= 14
+    assert len(modules) == len(set(modules))
+    assert modules[-1].name == "index.js"
+    assert not (SESSIONS_PARTS_DIR / "manifest.json").exists()
+    assert not any(path.name[:3].isdigit() for path in modules)
+    assert all(path.is_file() and path.suffix == ".js" for path in modules)
 
 
 def test_every_session_module_fits_the_coarse_module_budget():
-    production_files = [SESSIONS_MANIFEST, *sessions_part_paths()]
+    production_files = sessions_part_paths()
 
     for path in production_files:
         line_count = len(path.read_text(encoding="utf-8").splitlines())
@@ -43,7 +36,7 @@ def test_sessions_modules_are_individually_parseable_and_entrypoint_typechecks()
         subprocess.run(["node", "--check", str(path)], check=True, capture_output=True, text=True)
 
     subprocess.run(
-        ["deno", "check", str(SESSIONS_MANIFEST.parent / "index.js")],
+        ["deno", "check", str(SESSIONS_PARTS_DIR / "index.js")],
         check=True,
         capture_output=True,
         text=True,
@@ -84,17 +77,19 @@ def test_sessions_modules_publish_semantic_interfaces_and_one_legacy_seam():
 
     internal_paths = [
         path for path in sessions_part_paths()
-        if path.name not in {"index.js", "legacy-adapter.js"}
+        if path.name != "index.js"
     ]
     for path in internal_paths:
         module_source = path.read_text(encoding="utf-8")
         assert "HermesSessions" not in module_source
         assert "window.HermesSessions" not in module_source
 
-    entrypoint = (SESSIONS_MANIFEST.parent / "index.js").read_text(encoding="utf-8")
-    adapter = (SESSIONS_MANIFEST.parent / "legacy-adapter.js").read_text(encoding="utf-8")
-    assert "installLegacySessionGlobals" in entrypoint
-    assert "Object.defineProperty(root,'HermesSessions'" in adapter
+    entrypoint = (SESSIONS_PARTS_DIR / "index.js").read_text(encoding="utf-8")
+    compatibility = (SESSIONS_PARTS_DIR.parent / "compatibility.js").read_text(encoding="utf-8")
+    assert "publishCompatibilityDomain('sessions'" in entrypoint
+    assert "from '../compatibility.js'" in entrypoint
+    assert "Object.defineProperty(globalThis" in compatibility
+    assert not (SESSIONS_PARTS_DIR / "legacy-adapter.js").exists()
 
 
 def test_oversized_list_renderer_was_deepened_without_changing_call_order():

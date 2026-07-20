@@ -20,7 +20,7 @@ import * as sessionDiscoveryModule from './session-discovery.js';
 import * as sidebarInteractionsModule from './sidebar-interactions.js';
 import * as sidebarRendererModule from './sidebar-renderer.js';
 import * as managementModule from './management.js';
-import { installLegacySessionGlobals } from './legacy-adapter.js';
+import { publishCompatibilityDomain } from '../compatibility.js';
 
 export const parts=Object.freeze({
   sessionState,
@@ -108,5 +108,9 @@ const legacyBindings=Object.freeze({
 });
 
 export const HermesSessions=Object.freeze({version:'native-es-modules-v1',parts,api});
-installLegacySessionGlobals(globalThis,{sessions:HermesSessions,bindings:legacyBindings});
+publishCompatibilityDomain('sessions',{
+  namespace:'HermesSessions',
+  api:HermesSessions,
+  bindings:legacyBindings,
+});
 export default HermesSessions;
