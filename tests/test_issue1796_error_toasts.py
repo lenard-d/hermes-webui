@@ -3,7 +3,9 @@ from tests.frontend_asset_contract import family_source
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = family_source("ui")
+UI_JS = (ROOT / "static" / "modules" / "ui" / "toast-notifications.js").read_text(
+    encoding="utf-8"
+)
 STYLE_CSS = family_source("style")
 
 
@@ -15,7 +17,7 @@ def test_error_toast_default_duration_is_substantially_longer_than_info_toasts()
 
 
 def test_error_toast_keeps_explicit_duration_override():
-    show_toast = UI_JS[UI_JS.index("function showToast"):UI_JS.index("// ── Shared app dialogs")]
+    show_toast = UI_JS[UI_JS.index("function showToast"):UI_JS.index("function setStatus")]
     assert "ms==null" in show_toast
     assert "?TOAST_ERROR_DEFAULT_MS" in show_toast
     assert ":TOAST_DEFAULT_MS" in show_toast
@@ -23,7 +25,7 @@ def test_error_toast_keeps_explicit_duration_override():
 
 
 def test_error_toast_has_copy_button_for_exact_error_text():
-    show_toast = UI_JS[UI_JS.index("function showToast"):UI_JS.index("// ── Shared app dialogs")]
+    show_toast = UI_JS[UI_JS.index("function showToast"):UI_JS.index("function setStatus")]
     assert "toast-copy" in show_toast
     assert "data-toast-copy" in show_toast
     assert "copyToastText" in show_toast

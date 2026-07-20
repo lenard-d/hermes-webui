@@ -1,5 +1,5 @@
 import { msgContent } from './assistant-turn-presentation.js';
-import { setStatus } from './composer.js';
+import { setStatus } from './toast-notifications.js';
 import { _deliberateSessionModelPick, _reArmRecoveryPick } from './model-state.js';
 import { renderMessages } from './renderer.js';
 import { $, S } from './state.js';

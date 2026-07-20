@@ -1,7 +1,7 @@
 import { _activityStatusNode, _sanitizeThinkingDisplayText, scrollIfPinned } from './activity-and-scroll.js';
 import { ensureActivityGroup } from './anchor-scenes.js';
 import { _firstValidTimestampSeconds, _messageUserUnpinned, _nearBottomCount, _scrollPinned, _timestampSeconds } from './composer-controls.js';
-import { renderMd } from './composer.js';
+import { renderMd } from './markdown-renderer.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
 import { _renderThinkingInto } from './thinking-lifecycle.js';
 import { _autoCompressionWorklogNode } from './compression-ui.js';

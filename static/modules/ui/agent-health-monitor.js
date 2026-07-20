@@ -1,4 +1,4 @@
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { $ } from './state.js';
 
 const AGENT_HEALTH_INTERVAL_MS=30000;

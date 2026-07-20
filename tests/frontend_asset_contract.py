@@ -161,9 +161,11 @@ _UI_MODULE_NAMES = (
     "activity-and-scroll.js",
     "topbar-presentation.js",
     "assistant-turn-presentation.js",
-    "clipboard.js",
     "activity-presentation.js",
     "composer.js",
+    "composer-primary-control.js",
+    "composer-queue.js",
+    "composer-state.js",
     "app-dialogs.js",
     "clipboard.js",
     "inflight-state.js",
@@ -187,6 +189,7 @@ _UI_MODULE_NAMES = (
     "message-render-cache.js",
     "cli-tool-presentation.js",
     "message-scroll-snapshot.js",
+    "markdown-renderer.js",
     "live-activity.js",
     "live-turn-preservation.js",
     "markdown-postprocessing.js",
@@ -205,6 +208,7 @@ _UI_MODULE_NAMES = (
     "upload-tray.js",
     "upload-status.js",
     "upload-transport.js",
+    "toast-notifications.js",
     "workspace-and-uploads.js",
 )
 
@@ -222,6 +226,7 @@ function _uiTestBindingProxy() {
 }
 const composerBindings = _uiTestBindingProxy();
 const composerControlsBindings = _uiTestBindingProxy();
+const composerStateBindings = _uiTestBindingProxy();
 const liveActivityBindings = _uiTestBindingProxy();
 const stateBindings = _uiTestBindingProxy();
 const transparentWorklogBindings = _uiTestBindingProxy();

@@ -1,4 +1,4 @@
-import { setStatus, showToast } from './composer.js';
+import { setStatus, showToast } from './toast-notifications.js';
 import { _ARCHIVE_EXTS } from './media-and-quota.js';
 import { MAX_UPLOAD_BYTES, S, _redirectIfUnauth } from './state.js';
 import { renderTray, _uploadTooLargeMessage } from './upload-tray.js';

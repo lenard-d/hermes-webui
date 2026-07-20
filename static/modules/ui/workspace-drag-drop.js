@@ -1,4 +1,4 @@
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { S } from './state.js';
 
 let _wsActiveDragPath=null;

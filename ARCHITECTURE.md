@@ -153,6 +153,16 @@ actions. The topbar remains focused on conversation context and the workspace/fi
       style.css            Base CSS loaded before ordered domain styles
       style_parts/         Direct-loaded theme, layout, transcript, settings, and panel CSS
       modules/ui/          Native UI owners plus `index.js` entrypoint and compatibility publication
+        composer.js      Stable interface for Markdown, composer state/actions,
+                         queued turns, and toast owners
+        composer-primary-control.js Composer action selection, lock/status, and busy lifecycle
+        composer-queue.js Queued-turn card rendering and per-session display state
+        composer-state.js Mutable clarify/compression placeholder state
+        upload-tray.js Attachment tray rendering and validation
+        upload-status.js Per-session upload progress lifecycle
+        upload-transport.js Upload request and archive extraction lifecycle
+        markdown-renderer.js Sanitized Markdown/media rendering pipeline
+        toast-notifications.js Toast classification, timing, copy, and dismissal lifecycle
         composer-controls.js Stable import facade for the extracted composer-adjacent owners
         toolsets-controls.js Session toolset chip, picker, catalog, and persistence owner
         mobile-composer-config.js Narrow-layout composer configuration panel owner
@@ -741,10 +751,14 @@ The main directly loaded families are:
 1. `style.css`, then `style_parts/` for theme, layout, transcript, settings, and panel CSS.
 2. `i18n.js`, helpers, one complete locale file per language, then the i18n runtime.
 3. `modules/ui/index.js`, the native-module entrypoint for UI state, navigation,
-   model/composer controls, transcript presentation, and rendering. The former
-   composer-control bucket is split by ownership: `toolsets-controls.js`,
-   `mobile-composer-config.js`, `message-scroll-follow.js`, and
-   `activity-timing.js`; `composer-controls.js` is only their stable import facade.
+   model/composer controls, transcript presentation, and rendering. Composer
+   behavior is owned by `composer-primary-control.js`, `composer-queue.js`,
+   `composer-state.js`, `markdown-renderer.js`, and `toast-notifications.js`;
+   `composer.js` is their stable public interface. Attachment tray, progress,
+   and transport behavior stays with the existing `upload-*` owners.
+   Adjacent toolset, mobile-config, scroll-follow, and activity-timing behavior
+   lives in its same-named owner, with `composer-controls.js` retained only as
+   that group's stable public interface.
    Live transcript support is likewise owned by focused modules:
    `live-run-status.js` owns the active-run footer and timers,
    `compression-ui.js` owns compression lifecycle and cards, `handoff-ui.js`

@@ -320,13 +320,15 @@ def test_set_busy_calls_update_send_btn():
     assert 'updateSendBtn' in busy_body
 
 
-def test_render_tray_calls_update_send_btn():
-    """renderTray must call updateSendBtn() so button appears when files are attached."""
+def test_render_tray_notifies_composer_primary_control():
+    """Attachment changes must notify the owner that refreshes the primary action."""
     js, _ = get_family_text("ui", "/static/modules/ui/index.js")
     tray_idx = js.find('function renderTray')
     tray_end = js.find('\n}', tray_idx) + 2
     tray_body = js[tray_idx:tray_end]
-    assert 'updateSendBtn' in tray_body
+    assert '_notifyComposerContentChanged' in tray_body
+    assert "new CustomEvent('hermes-composer-content-change')" in js
+    assert "addEventListener('hermes-composer-content-change',updateSendBtn)" in js
 
 
 # ── boot.js ──────────────────────────────────────────────────────────────

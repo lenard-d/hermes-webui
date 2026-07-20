@@ -1,7 +1,7 @@
 import { scrollIfPinned } from './activity-and-scroll.js';
 import { _renderLiveAnchorActivitySceneForStream } from './anchor-scenes.js';
 import { _clearCompressionElapsedTimer, _compressionElapsedStartedAt, _startCompressionElapsedTimer } from './composer-controls.js';
-import { _compressionPlaceholderSaved } from './composer.js';
+import { _compressionPlaceholderSaved, compatibilityBindings as composerStateBindings } from './composer-state.js';
 import { _assistantTurnBlocks, _createAssistantTurn, msgContent } from './assistant-turn-presentation.js';
 import { closeCurrentLiveActivityGroup, _moveLiveRunStatusToTurnEnd } from './live-run-status.js';
 import { _captureMessageScrollSnapshot } from './message-scroll-snapshot.js';
@@ -9,7 +9,6 @@ import { _restoreMessageScrollSnapshotSameFrame } from './render-support.js';
 import { $, S, _compressionSessionLock, _setCompressionSessionLock, esc } from './state.js';
 import { _syncToolCallGroupSummary, _toolWorklogListEl } from './tool-worklog.js';
 import { _activityKeyForLiveTurn, ensureLiveWorklogContainer, isLiveAnchorActivitySceneOwner } from './transparent-worklog.js';
-import { compatibilityBindings as composerBindings } from './composer.js';
 
 function _compressionStateForCurrentSession(){
   const state=window._compressionUi;
@@ -30,7 +29,7 @@ function _restoreCompressionPlaceholder(){
   if(_input&&typeof _compressionPlaceholderSaved==='string'){
     _input.placeholder=_compressionPlaceholderSaved;
   }
-  composerBindings._compressionPlaceholderSaved=null;
+  composerStateBindings._compressionPlaceholderSaved=null;
 }
 function clearCompressionUi(){
   window._compressionUi=null;
@@ -54,7 +53,7 @@ function setCompressionUi(state){
     _startCompressionElapsedTimer();
     const _input=$('msg');
     if(_input&&_compressionPlaceholderSaved===null){
-      composerBindings._compressionPlaceholderSaved=_input.placeholder;
+      composerStateBindings._compressionPlaceholderSaved=_input.placeholder;
       _input.placeholder=typeof t==='function'?t('composer_compression_will_queue')||'Type a message — it will queue and send after compression':'Type a message — it will queue and send after compression';
     }
   } else {

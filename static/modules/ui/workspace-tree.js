@@ -1,5 +1,5 @@
 import { showConfirmDialog } from './app-dialogs.js';
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { $, S } from './state.js';
 import {
   deleteWorkspaceDir,

@@ -3,7 +3,7 @@ import { clearInflight, dismissReconnect, showReconnectBanner } from './reconnec
 import { _isContextCompactionMessage } from './compression-ui.js';
 import { msgContent } from './assistant-turn-presentation.js';
 import { _renderMessagesWithScrollSnapshot } from './render-support.js';
-import { setStatus, showToast } from './composer.js';
+import { setStatus, showToast } from './toast-notifications.js';
 import { $, S } from './state.js';
 import { syncTopbar } from './topbar-presentation.js';
 

@@ -1,4 +1,4 @@
-import { renderMd } from './composer.js';
+import { renderMd } from './markdown-renderer.js';
 import { _renderMessagesWithScrollSnapshot } from './render-support.js';
 import { S, esc } from './state.js';
 

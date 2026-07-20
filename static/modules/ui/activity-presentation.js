@@ -1,7 +1,7 @@
 import { _sanitizeThinkingDisplayText } from './activity-and-scroll.js';
 import { _revealTransparentEarlierSteps } from './anchor-scenes.js';
 import { _syncTransparentEventTimestamp } from './composer-controls.js';
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
 import { _renderThinkingInto } from './thinking-lifecycle.js';
 import { S, esc } from './state.js';

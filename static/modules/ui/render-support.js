@@ -1,6 +1,5 @@
 import { _followMessagesAfterDomReplace, scrollIfPinned, scrollToBottom } from './activity-and-scroll.js';
 import { _deferClearProgrammaticScroll, _firstValidTimestampSeconds, _lastMessageClientHeight, _lastScrollTop, _maybeShowNewMessageScrollCue, _messageUserUnpinned, _nearBottomCount, _programmaticScroll, _programmaticScrollSetAt, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _scrollPinned } from './composer-controls.js';
-import { _stripAttachedFilesMarkerForDisplay } from './composer.js';
 import { _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
 import { _sessionHtmlCache, _sessionHtmlCacheSid } from './message-render-cache.js';
 import { _captureMessageScrollSnapshot, _desktopAnchorRealignDelta, _restoreMessageScrollSnapshot, _restorePinnedMessageScrollSnapshot } from './message-scroll-snapshot.js';
@@ -11,6 +10,10 @@ import { renderMessages } from './renderer.js';
 import { $, S, _messageVirtualWindowKey, _stripWorkspaceDisplayPrefix } from './state.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';
 import { compatibilityBindings as stateBindings } from './state.js';
+
+function _stripAttachedFilesMarkerForDisplay(text){
+  return String(text||'').replace(/\n\n\[Attached files: [^\]]+\]$/,'').trim();
+}
 
 function _restoreMessageScrollSnapshotSameFrame(snapshot){
   const el=$('messages');
@@ -392,6 +395,7 @@ function _maybeRecoverVirtualizedBlankViewport(options, preserveScroll, virtualW
 
 
 export {
+  _stripAttachedFilesMarkerForDisplay,
   _restoreMessageScrollSnapshotSameFrame,
   _renderMessagesWithScrollSnapshot,
   _transparentStreamOrderedParts,
@@ -408,6 +412,7 @@ export {
 
 const compatibilityBindings = {};
 Object.defineProperties(compatibilityBindings, {
+  _stripAttachedFilesMarkerForDisplay: { enumerable: true, get: () => _stripAttachedFilesMarkerForDisplay, set: (value) => { _stripAttachedFilesMarkerForDisplay = value; } },
   _restoreMessageScrollSnapshotSameFrame: { enumerable: true, get: () => _restoreMessageScrollSnapshotSameFrame, set: (value) => { _restoreMessageScrollSnapshotSameFrame = value; } },
   _renderMessagesWithScrollSnapshot: { enumerable: true, get: () => _renderMessagesWithScrollSnapshot, set: (value) => { _renderMessagesWithScrollSnapshot = value; } },
   _transparentStreamOrderedParts: { enumerable: true, get: () => _transparentStreamOrderedParts, set: (value) => { _transparentStreamOrderedParts = value; } },

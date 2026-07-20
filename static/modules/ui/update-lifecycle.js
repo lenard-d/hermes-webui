@@ -1,4 +1,4 @@
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { showConfirmDialog } from './app-dialogs.js';
 import { $ } from './state.js';
 

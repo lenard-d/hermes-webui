@@ -1,4 +1,4 @@
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 
 // ── TTS: Text-to-Speech via Web Speech API (#499) ──
 // Strips markdown, code blocks, and MEDIA: paths for clean speech output.

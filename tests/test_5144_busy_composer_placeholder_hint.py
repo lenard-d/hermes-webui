@@ -11,15 +11,24 @@ CONFIG_PY = (ROOT / "api" / "config" / "settings.py").read_text(
 )
 PANELS_JS = family_source("panels")
 BOOT_JS = family_source("boot")
-UI_JS = family_source("ui")
+UI_JS = (ROOT / "static" / "modules" / "ui" / "composer-primary-control.js").read_text(
+    encoding="utf-8"
+)
 I18N_JS = family_source("i18n")
 def _function_block(src: str, name: str) -> str:
     marker = re.search(rf"(^|\n)(?:async\s+)?function\s+{re.escape(name)}\(", src)
     assert marker is not None, f"{name}() not found"
     start = marker.start()
-    next_marker = re.search(r"\n(?:function\s+\w+\(|async\s+function\s+\w+\()", src[start + 1:])
-    end = start + 1 + next_marker.start() if next_marker else len(src)
-    return src[start:end]
+    brace = src.index("{", marker.end())
+    depth = 0
+    for position in range(brace, len(src)):
+        if src[position] == "{":
+            depth += 1
+        elif src[position] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[start : position + 1]
+    raise AssertionError(f"{name}() body did not close")
 
 
 def test_setting_defaults_off_and_bool_registration():

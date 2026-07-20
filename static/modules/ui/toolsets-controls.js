@@ -1,4 +1,4 @@
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { closeOtherComposerMenus, registerComposerMenu } from './composer-menu-registry.js';
 import { $, S } from './state.js';
 

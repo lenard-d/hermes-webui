@@ -1,4 +1,4 @@
-import { setStatus, showToast } from './composer.js';
+import { setStatus, showToast } from './toast-notifications.js';
 import { showConfirmDialog, showPromptDialog } from './app-dialogs.js';
 import { $, S } from './state.js';
 import { _workspaceParentDir } from './workspace-drag-drop.js';

@@ -1,6 +1,7 @@
 import { _stripXmlToolCallsDisplay } from './activity-and-scroll.js';
 import { _deferClearProgrammaticScroll, _lastScrollTop, _messageUserUnpinned, _programmaticScroll, _programmaticScrollSetAt, _recentMessageScrollIntent, _recentMessageTouchScrollIntent, _scrollPinned } from './composer-controls.js';
-import { renderMd, showToast } from './composer.js';
+import { renderMd } from './markdown-renderer.js';
+import { showToast } from './toast-notifications.js';
 import { renderMessages } from './renderer.js';
 import { $, MESSAGE_RENDER_WINDOW_DEFAULT, S, _currentMessageVirtualWindow, _getVisibleMessagesWithIdx, _markMessageVirtualMeasurementsSettled, _messageRawIdxForSessionIndex, _messageRenderWindowSize, _messageSessionIndexForRawIdx, _messageVirtualEstimatedRowHeight, _messageVirtualHeightCache, _messageVirtualKeepTailCount, _messageVirtualScrollRaf, _messageVirtualScrollTopForVisibleIdx, _messageVirtualWindowKey, _messageVirtualWindowKeyFor, _messageVisibleIndexForAnchorKey, _messageVisibleIndexForRawIdx, _msgNodeRecycleEnabled, _renderUserFencedBlocks, _scheduleMessageVirtualMeasurementRefresh, _scrollbarDragActive, clearVisibleMessageRowCache, esc } from './state.js';
 import { compatibilityBindings as composerControlsBindings } from './composer-controls.js';

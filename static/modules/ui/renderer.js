@@ -1,6 +1,5 @@
 import { _isKeepSettledWorklogOpenArmed } from './anchor-scenes.js';
 import { _clearCompressionElapsedTimer, _deferClearProgrammaticScroll, _messageUserUnpinned } from './composer-controls.js';
-import { _stripAttachedFilesMarkerForDisplay } from './composer.js';
 import { _postProcessWithAnchorSuppression } from './content-postprocessing.js';
 import { _liveAssistantSegmentTextLength } from './live-turn-recovery.js';
 import { _assistantToolAnchorIdxForMessage, _cliPatchSnippetFromArgs, _cliToolCardHasDiffSnippet, _cliToolCardSnippet, _cliToolResultSnippet, _toolArgsSnapshot } from './cli-tool-presentation.js';
@@ -13,7 +12,7 @@ import { _initMediaPlaybackObserver, _renderAttachmentHtml } from './media-and-q
 import { _applySessionNavigationPrefs, _applyUserRowIntrinsicHeight, _getCachedRender, _questionJumpButtonHtml, _rememberRenderedUserRowIntrinsicHeights, _updateMessageVirtualMeasurements, _userMessageDomId, _wireMessageWindowLoadEarlierButton } from './navigation.js';
 import { _captureWorklogDetailDisclosureState, _decorateTransparentEventRow, _rehydrateTransparentStreamDom, _thinkingCardHtml, _transparentToolStatus, isCompactWorklogMode, isSimplifiedToolCalling, isTransparentStream } from './activity-presentation.js';
 import { _ERR_MSG_RE, _assistantMessageBelongsInWorklog, _assistantReasoningPayloadText, _assistantRoleHtml, _assistantThinkingBelongsInWorklog, _assistantTurnBlocks, _assistantTurnFinalVisibleContentMap, _assistantTurnVisibleContentMap, _createAssistantTurn, _fmtDateSep, _formatTurnTps, _isAssistantEmptyPlaceholderContent, _setLatestAssistantTurnLandmark, _worklogReasoningTextFromMessage, isTpsDisplayEnabled, msgContent } from './assistant-turn-presentation.js';
-import { _assistantTurnAnchorSettledFinalAnswer, _collectToolResultSnippetsByTid, _maybeRecoverVirtualizedBlankViewport, _reanchorPinnedTailAfterRender, _scrollAfterMessageRender, _transparentOrderedDisplayText, _transparentOrderedToolCall, _transparentStreamOrderedParts } from './render-support.js';
+import { _assistantTurnAnchorSettledFinalAnswer, _collectToolResultSnippetsByTid, _maybeRecoverVirtualizedBlankViewport, _reanchorPinnedTailAfterRender, _scrollAfterMessageRender, _stripAttachedFilesMarkerForDisplay, _transparentOrderedDisplayText, _transparentOrderedToolCall, _transparentStreamOrderedParts } from './render-support.js';
 import { $, INFLIGHT, S, _activeCompressionRecoveryPayload, _compressionRecoveryHtml, _currentMessageVirtualWindow, _getVisibleMessagesWithIdx, _messageRenderWindowSid, _messageSessionIndexForRawIdx, _messageViewportAnchorKeyForMessage, _messageVirtualKeepTailCount, _messageVirtualSpacer, _messageVirtualWindowKey, _messageVirtualWindowKeyFor, _msgNodeRecycleEnabled, _recycleResetAttrs, _recycleStash, _resetMessageRenderWindow, _setCompressionSessionLock, _statusCardHtml, _stripWorkspaceDisplayPrefix, esc } from './state.js';
 import { buildToolCard } from './tool-worklog.js';
 import { _rehydrateDeferredWorklogsFromCache } from './transparent-worklog.js';

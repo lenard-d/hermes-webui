@@ -1,4 +1,4 @@
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 import { refreshSession } from './session-recovery.js';
 import { _compressionMessageAnchorKey, _isContextCompactionMessage, _isPreservedCompressionTaskListMessage } from './compression-ui.js';
 import { _clearRenderCache, _clearUserRowIntrinsicHeightCache, _currentMessageRenderWindowSize, _scheduleMessageVirtualizedRender } from './navigation.js';

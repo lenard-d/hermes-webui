@@ -1,5 +1,5 @@
 import { _copyText } from './clipboard.js';
-import { showToast } from './composer.js';
+import { showToast } from './toast-notifications.js';
 
 function copyStatusSessionId(btn){
   const text=btn&&btn.getAttribute('data-copy-status-session');
