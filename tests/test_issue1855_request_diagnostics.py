@@ -1,18 +1,33 @@
 import json
 import logging
-from pathlib import Path
+from urllib.parse import urlsplit
 
-import api.sessions.store as models
-from api.sessions.store import Session
+import api.routes as routes
+import api.sessions.cache as session_cache
+import api.sessions.records as session_records
+import api.sessions.sidebar as session_sidebar
+from api.http import router
+from api.http.context import UNHANDLED
+from api.http.routes import (
+    platform_mutations,
+    provider_mutations,
+    session_creation_mutations,
+    session_queries,
+)
 from api.request_diagnostics import RequestDiagnostics
+from api.sessions.records import Session
 
 
 class _StageRecorder:
     def __init__(self):
         self.stages = []
+        self.finished = False
 
     def stage(self, name):
         self.stages.append(name)
+
+    def finish(self):
+        self.finished = True
 
 
 def test_request_diagnostics_timeout_record_includes_stage_and_thread_stacks(caplog):
@@ -50,10 +65,15 @@ def test_all_sessions_reports_internal_index_stages(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     index_file = session_dir / "_index.json"
-    monkeypatch.setattr(models, "SESSION_DIR", session_dir)
-    monkeypatch.setattr(models, "SESSION_INDEX_FILE", index_file)
-    monkeypatch.setattr(models, "_enrich_sidebar_lineage_metadata", lambda sessions: None)
-    models.SESSIONS.clear()
+    for owner in (session_cache, session_records, session_sidebar):
+        monkeypatch.setattr(owner, "SESSION_DIR", session_dir)
+        monkeypatch.setattr(owner, "SESSION_INDEX_FILE", index_file)
+    monkeypatch.setattr(
+        session_sidebar,
+        "_enrich_sidebar_lineage_metadata",
+        lambda sessions: None,
+    )
+    session_records.SESSIONS.clear()
 
     s = Session(
         session_id="issue1855_indexed",
@@ -83,7 +103,7 @@ def test_all_sessions_reports_internal_index_stages(tmp_path, monkeypatch):
     )
 
     diag = _StageRecorder()
-    rows = models.all_sessions(diag=diag)
+    rows = session_sidebar.all_sessions(diag=diag)
 
     assert [row["session_id"] for row in rows] == [s.session_id]
     assert "all_sessions.read_index" in diag.stages
@@ -91,18 +111,119 @@ def test_all_sessions_reports_internal_index_stages(tmp_path, monkeypatch):
     assert "all_sessions.lineage_metadata" in diag.stages
 
 
-def test_issue1855_target_routes_are_wired_to_diagnostics(monkeypatch):
+def test_get_sessions_passes_diagnostics_to_cache_owner(monkeypatch):
+    from api import profiles as profiles_api
+
+    diagnostics = []
+
+    class DiagnosticsOwner:
+        @classmethod
+        def maybe_start(cls, method, path, **_kwargs):
+            diag = _StageRecorder()
+            diagnostics.append((method, path, diag))
+            return diag
+
+    context = dict(vars(routes))
+    captured = {}
+
+    def build_session_list_payload(**kwargs):
+        captured["builder_diag"] = kwargs["diag"]
+        return {"sessions": [], "cli_count": 0}
+
+    def get_cached_session_list_payload(*, key, builder, diag):
+        captured["cache_key"] = key
+        captured["cache_diag"] = diag
+        return builder()
+
+    context.update(
+        {
+            "RequestDiagnostics": DiagnosticsOwner,
+            "load_settings": lambda: {},
+            "_session_list_cache_key": lambda **_kwargs: ("diagnostics",),
+            "_get_cached_session_list_payload": get_cached_session_list_payload,
+            "_build_session_list_cache_payload": build_session_list_payload,
+            "_session_list_payload_to_response": lambda payload: payload,
+            "j": lambda _handler, payload, **_kwargs: payload,
+        }
+    )
+    monkeypatch.setattr(profiles_api, "get_active_profile_name", lambda: "default")
+
+    result = session_queries.handle_get(
+        object(),
+        urlsplit("/api/sessions?all_profiles=1"),
+        context,
+    )
+
+    assert result == {"sessions": [], "cli_count": 0}
+    method, path, diag = diagnostics.pop(0)
+    assert (method, path) == ("GET", "/api/sessions")
+    assert captured == {
+        "cache_key": ("diagnostics",),
+        "cache_diag": diag,
+        "builder_diag": diag,
+    }
+    assert diag.stages == ["load_settings", "response_write"]
+    assert diag.finished is True
+    assert diagnostics == []
+
+
+def test_chat_start_passes_diagnostics_through_http_owner(monkeypatch):
+    diagnostics = []
+
+    class DiagnosticsOwner:
+        @classmethod
+        def maybe_start(cls, method, path, **_kwargs):
+            diag = _StageRecorder()
+            diagnostics.append((method, path, diag))
+            return diag
+
+    for owner in (platform_mutations, session_creation_mutations, provider_mutations):
+        monkeypatch.setattr(owner, "handle_post", lambda *_args, **_kwargs: UNHANDLED)
+
+    context = dict(vars(routes))
+    captured = {}
+
+    def handle_chat_start(_handler, body, diag=None):
+        captured["body"] = body
+        captured["diag"] = diag
+        return True
+
+    context.update(
+        {
+            "RequestDiagnostics": DiagnosticsOwner,
+            "_csrf_exempt_path": lambda _path: False,
+            "_check_csrf": lambda _handler: True,
+            "_handle_extension_sidecar_proxy": lambda *_args, **_kwargs: False,
+            "read_body": lambda _handler: {
+                "session_id": "diagnostic-admission",
+                "message": "trace admission",
+            },
+            "_guard_request_session_visibility": lambda *_args, **_kwargs: True,
+            "_handle_chat_start": handle_chat_start,
+        }
+    )
+
+    assert router.handle_post(
+        object(),
+        urlsplit("/api/chat/start"),
+        context,
+    ) is True
+    method, path, diag = diagnostics.pop(0)
+    assert (method, path) == ("POST", "/api/chat/start")
+    assert captured == {
+        "body": {
+            "session_id": "diagnostic-admission",
+            "message": "trace admission",
+        },
+        "diag": diag,
+    }
+    assert diag.stages == ["csrf", "read_body"]
+    assert diagnostics == []
+
+
+def test_local_turn_reports_internal_diagnostic_stages(monkeypatch):
     import api.config as config
     from api.runs import admission as turn_admission
-
-    src = Path("api/routes.py").read_text(encoding="utf-8")
-
-    assert 'RequestDiagnostics.maybe_start("GET", parsed.path' in src
-    assert "all_sessions(diag=diag, include_lineage_metadata=False)" in src
-    assert 'RequestDiagnostics.maybe_start("POST", parsed.path' in src
-    assert "_handle_chat_start(handler, body, diag=diag)" in src
-    for stage in ("read_body", "resolve_model_provider", "response_write"):
-        assert stage in src
 
     class Session:
         session_id = "diagnostic-admission"
@@ -148,4 +269,4 @@ def test_issue1855_target_routes_are_wired_to_diagnostics(monkeypatch):
     finally:
         config.finish_runtime_run(result["stream_id"])
         with config.LOCK:
-            models.SESSIONS.pop("diagnostic-admission", None)
+            session_records.SESSIONS.pop("diagnostic-admission", None)
