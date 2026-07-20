@@ -18,6 +18,9 @@ import urllib.request
 from tests.conftest import TEST_STATE_DIR
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
+PROVIDER_ERRORS = (
+    REPO_ROOT / "api" / "streaming_parts" / "provider_errors.py"
+).read_text(encoding="utf-8")
 from tests._pytest_port import BASE
 
 
@@ -50,9 +53,9 @@ class TestStreamingAuthErrorDetection:
 
     def test_auth_mismatch_type_defined_in_streaming(self):
         """'auth_mismatch' type must be emitted for auth errors."""
-        src = _read("api/streaming.py")
+        src = PROVIDER_ERRORS
         assert "auth_mismatch" in src, (
-            "auth_mismatch type not found in streaming.py — "
+            "auth_mismatch type not found in the provider error classifier — "
             "401/auth errors will not be surfaced with a helpful message"
         )
 
@@ -88,7 +91,7 @@ class TestStreamingAuthErrorDetection:
 
     def test_auth_error_hint_mentions_hermes_model(self):
         """The auth_mismatch hint must mention 'hermes model' command."""
-        src = _read("api/streaming.py")
+        src = PROVIDER_ERRORS
         # Find the auth_mismatch apperror block
         idx = src.find("auth_mismatch")
         block = src[idx:idx + 500]

@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 ROUTES = Path("api/routes.py").read_text(encoding="utf-8")
+CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")
 SESSION_EVENTS = Path("api/session_events.py").read_text(encoding="utf-8")
 PROFILES = Path("api/profiles.py").read_text(encoding="utf-8")
 TURN_ADMISSION = Path("api/turn_admission.py").read_text(encoding="utf-8")
@@ -56,7 +57,7 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
     assert 'publish_session_list_changed(\n            "session_move",' in ROUTES
     assert 'session_id=getattr(' in ROUTES
     assert 'publish_session_list_changed("chat_start")' not in ROUTES
-    assert '_publish_session_list_changed("cron_complete",' in ROUTES
+    assert '_publish_session_list_changed("cron_complete",' in CRON_ROUTES
     assert 'publish_session_list_changed("cron_complete",' in PROFILES
 
 
