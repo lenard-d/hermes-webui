@@ -3,12 +3,12 @@ import os
 import subprocess
 import tempfile
 
-UI_JS = os.path.join(os.path.dirname(__file__), '..', 'static', 'ui.js')
+from tests.frontend_asset_contract import family_source
 
 
 def _extract_js_functions():
     """Extract esc, fence helpers, and _renderUserFencedBlocks from ui.js."""
-    src = open(UI_JS).read()
+    src = family_source("ui")
 
     def extract_function(name):
         start = src.find(f"function {name}(")

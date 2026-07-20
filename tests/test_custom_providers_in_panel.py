@@ -4,6 +4,8 @@ Verifies that config.yaml custom_providers entries (e.g. glmcode, timicc)
 are surfaced in the /api/providers response alongside built-in providers.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import os
 import sys
@@ -106,7 +108,7 @@ class TestCustomProvidersInGetProviders:
 
     def test_providers_panel_renders_config_yaml_custom_providers(self):
         """Settings → Providers must not filter out read-only custom providers."""
-        src = open("static/panels.js", encoding="utf-8").read()
+        src = family_source("panels")
         assert "filter(p=>p.configurable||p.is_oauth||p.is_custom||p.is_plugin_provider||p.is_self_hosted)" in src
         assert "Custom provider loaded from config.yaml / hermes model" in src
         assert "if(p.configurable){" in src

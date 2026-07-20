@@ -4,13 +4,13 @@ The picker is a click-driven dropdown; users asked for arrow-key navigation
 and Enter-to-select on the existing search input. Verified at the source
 level so this stays fast.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-
-
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 def test_arrow_keys_wired_on_search_input():
     # ArrowDown / ArrowUp / Enter all handled in one keydown listener on _si.
     assert "ArrowDown" in UI_JS

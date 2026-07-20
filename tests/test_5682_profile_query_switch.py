@@ -1,4 +1,6 @@
 """Regression tests for #5682 profile query boot switching."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -7,14 +9,11 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
 BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
-PANELS_JS_PATH = REPO_ROOT / "static" / "panels.js"
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
-SESSIONS_JS = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 BOOT_JS = BOOT_JS_PATH.read_text(encoding="utf-8")
-PANELS_JS = PANELS_JS_PATH.read_text(encoding="utf-8")
-UI_JS = UI_JS_PATH.read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")

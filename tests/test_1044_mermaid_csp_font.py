@@ -7,13 +7,15 @@ fontFamily:'inherit' in themeVariables so Mermaid never requests an external
 font URL.
 """
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
 
 def _ui_js() -> str:
-    return (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 class TestMermaidCSPFont:

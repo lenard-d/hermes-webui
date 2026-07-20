@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 from api.compression_anchor import visible_messages_for_anchor
@@ -23,7 +25,7 @@ def _read(relpath: str) -> str:
 
 
 def _compressed_listener_block() -> str:
-    src = _read("static/messages.js")
+    src = family_source("messages")
     start = src.find("source.addEventListener('compressed'")
     assert start != -1, "compressed SSE listener not found"
     end = src.find("source.addEventListener('metering'", start)
@@ -32,7 +34,7 @@ def _compressed_listener_block() -> str:
 
 
 def _compressing_listener_block() -> str:
-    src = _read("static/messages.js")
+    src = family_source("messages")
     start = src.find("source.addEventListener('compressing'")
     assert start != -1, "compressing SSE listener not found"
     end = src.find("source.addEventListener('compressed'", start)
@@ -521,7 +523,7 @@ def test_agent_compression_start_status_matches_real_emitters_only():
 
 
 def test_snapshot_anchor_hydration_does_not_invent_compressing_rows():
-    src = _read("static/messages.js")
+    src = family_source("messages")
     start = src.find("function _sourceEventTypeForSnapshotAnchorRow")
     assert start != -1, "snapshot anchor source helper not found"
     end = src.find("function _hydrateAnchorRegistryFromActivityScene", start)
@@ -568,7 +570,7 @@ def test_fallback_lifecycle_message_predicate_matches_agent_emitters():
 
 
 def test_auto_compression_completion_transition_is_preserved_after_running_listener():
-    src = _read("static/messages.js")
+    src = family_source("messages")
     compressing_idx = src.find("source.addEventListener('compressing'")
     compressed_idx = src.find("source.addEventListener('compressed'")
     assert compressing_idx != -1 and compressed_idx != -1
@@ -595,7 +597,7 @@ def test_auto_compression_running_sse_stamps_elapsed_timer_start():
 
 
 def test_auto_compression_running_card_keeps_elapsed_timer_out_of_visible_copy():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionPreviewText")
     assert start != -1, "auto compression preview helper not found"
     end = src.find("function _compressionCardsNode", start)
@@ -618,7 +620,7 @@ def test_auto_compression_running_card_keeps_elapsed_timer_out_of_visible_copy()
 
 
 def test_auto_compression_uses_command_action_copy():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionPreviewText")
     assert start != -1, "auto compression preview helper not found"
     end = src.find("function _autoCompressionDetailText", start)
@@ -632,7 +634,7 @@ def test_auto_compression_uses_command_action_copy():
 
 
 def test_auto_compression_running_card_defaults_collapsed():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionCardsHtml")
     assert start != -1, "auto compression card helper not found"
     end = src.find("function _compressionCardsNode", start)
@@ -645,7 +647,7 @@ def test_auto_compression_running_card_defaults_collapsed():
 
 
 def test_auto_compression_uses_inline_noninteractive_status():
-    src = _read("static/style.css")
+    src = family_source("style")
 
     assert ".auto-compression-divider" in src
     assert "grid-template-columns:minmax(32px,1fr) auto minmax(32px,1fr)" not in src
@@ -657,7 +659,7 @@ def test_auto_compression_uses_inline_noninteractive_status():
 
 
 def test_auto_compression_worklog_row_does_not_use_tool_card_affordances():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionWorklogNode")
     assert start != -1, "auto compression worklog node helper not found"
     end = src.find("function _compressionCardsNode", start)
@@ -677,7 +679,7 @@ def test_auto_compression_worklog_row_does_not_use_tool_card_affordances():
 
 
 def test_auto_compression_live_card_appends_to_worklog_timeline():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function appendLiveCompressionCard")
     assert start != -1, "live compression card append helper not found"
     end = src.find("function _isHandoffSummaryToolPayload", start)
@@ -693,7 +695,7 @@ def test_auto_compression_live_card_appends_to_worklog_timeline():
 
 
 def test_final_settle_removes_live_auto_compression_row():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function clearLiveToolCards")
     assert start != -1, "live tool cleanup helper not found"
     end = src.find("function _removeEmptyLiveWorklogShells", start)
@@ -705,7 +707,7 @@ def test_final_settle_removes_live_auto_compression_row():
 
 
 def test_final_settle_drops_transient_automatic_compression_state():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function renderMessages")
     assert start != -1, "renderMessages not found"
     end = src.find("function _toolDisplayName", start)
@@ -718,7 +720,7 @@ def test_final_settle_drops_transient_automatic_compression_state():
 
 
 def test_auto_compression_elapsed_cap_uses_non_frozen_label():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _compressionElapsedLabel")
     assert start != -1, "elapsed label helper not found"
     end = src.find("function _compressionElapsedExpired", start)
@@ -731,7 +733,7 @@ def test_auto_compression_elapsed_cap_uses_non_frozen_label():
 
 
 def test_auto_compression_running_detail_avoids_duplicate_message_text():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionDetailText")
     assert start != -1, "auto compression detail helper not found"
     end = src.find("function _autoCompressionCardsHtml", start)
@@ -744,7 +746,7 @@ def test_auto_compression_running_detail_avoids_duplicate_message_text():
 
 
 def test_auto_compression_done_detail_is_not_persisted_in_worklog():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionDetailText")
     assert start != -1, "auto compression detail helper not found"
     end = src.find("function _autoCompressionCardsHtml", start)
@@ -757,7 +759,7 @@ def test_auto_compression_done_detail_is_not_persisted_in_worklog():
 
 
 def test_auto_compression_live_card_keeps_elapsed_state_for_timer_refresh():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function appendLiveCompressionCard")
     assert start != -1, "live compression card append helper not found"
     end = src.find("function _isHandoffSummaryToolPayload", start)
@@ -771,7 +773,7 @@ def test_auto_compression_live_card_keeps_elapsed_state_for_timer_refresh():
 
 def test_auto_compression_does_not_rerender_over_live_worklog():
     block = _compressing_listener_block()
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "const liveAnswerStarted=" not in block
     assert "appendLiveCompressionCard(state)" in block
@@ -784,7 +786,7 @@ def test_auto_compression_does_not_rerender_over_live_worklog():
 
 
 def test_auto_compression_live_repeated_starts_keep_only_current_running_row():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function appendLiveCompressionCard(state)")
     assert start != -1, "live compression card append helper not found"
     end = src.find("function _isHandoffSummaryToolPayload", start)
@@ -799,7 +801,7 @@ def test_auto_compression_live_repeated_starts_keep_only_current_running_row():
 
 
 def test_auto_compression_running_card_completes_on_followup_live_events():
-    src = _read("static/messages.js")
+    src = family_source("messages")
 
     assert "function _completeAutomaticCompressionOnLiveProgress" in src
     helper = src.split("function _completeAutomaticCompressionOnLiveProgress", 1)[1].split("source.addEventListener('token'", 1)[0]
@@ -825,7 +827,7 @@ def test_auto_compression_running_card_completes_on_followup_live_events():
 
 
 def test_auto_compression_elapsed_update_is_not_visible_detail_churn():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _updateCompressionElapsedCards")
     assert start != -1, "elapsed update helper not found"
     end = src.find("function _startCompressionElapsedTimer", start)
@@ -840,7 +842,7 @@ def test_auto_compression_elapsed_update_is_not_visible_detail_churn():
 
 def test_auto_compression_sse_uses_transient_card_not_fake_message():
     """Auto compression must not inject display-only text into S.messages."""
-    src = _read("static/messages.js")
+    src = family_source("messages")
     block = _compressed_listener_block()
 
     assert "*[Context was auto-compressed to continue the conversation]*" not in src
@@ -939,7 +941,7 @@ def test_auto_compression_rotation_tracks_origin_and_continuation_ids_for_sse():
 
 
 def test_auto_compression_card_reuses_compression_card_renderer():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _autoCompressionCardsHtml")
     assert start != -1, "auto compression card helper not found"
     end = src.find("function _compressionCardsNode", start)
@@ -962,14 +964,14 @@ def test_auto_compression_compressed_sse_does_not_show_persistent_completion_toa
 
 
 def test_auto_compression_card_survives_compression_session_rotation():
-    src = _read("static/messages.js")
+    src = family_source("messages")
 
     assert "window._compressionUi.sessionId===activeSid" in src
     assert "sessionId:d.session.session_id" in src
 
 
 def test_preserved_task_list_marker_is_detected_case_insensitively():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     marker = "[your active task list was preserved across context compression]"
     start = src.find("function _isPreservedCompressionTaskListMessage")
     assert start != -1, "preserved task list detector not found"
@@ -984,7 +986,7 @@ def test_preserved_task_list_marker_is_detected_case_insensitively():
 
 
 def test_context_compaction_marker_is_detected_across_roles():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _isContextCompactionMessage")
     assert start != -1, "context compaction detector not found"
     end = src.find("function _isPreservedCompressionTaskListMessage", start)
@@ -998,7 +1000,7 @@ def test_context_compaction_marker_is_detected_across_roles():
 
 
 def test_context_compaction_branch_precedes_user_bubble_branch():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     loop_start = src.find("for(let vi=0;vi<visWithIdx.length;vi++)")
     assert loop_start != -1, "message render loop not found"
     loop_end = src.find("if(!currentAssistantTurn)", loop_start)
@@ -1015,7 +1017,7 @@ def test_context_compaction_branch_precedes_user_bubble_branch():
 
 
 def test_settled_transcript_suppresses_context_compaction_reference_cards():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "function _shouldShowSettledCompressionReference" in src
     assert "!_isContextCompactionText(referenceText)" in src
@@ -1029,7 +1031,7 @@ def test_settled_transcript_suppresses_context_compaction_reference_cards():
 
 
 def test_preserved_task_list_skips_normal_visible_message_path():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     helper_start = src.find("function _messageIsRenderable")
     assert helper_start != -1, "renderable message helper not found"
@@ -1049,7 +1051,7 @@ def test_preserved_task_list_skips_normal_visible_message_path():
 
 
 def test_preserved_task_list_renders_through_compression_card_path():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _preservedCompressionTaskListCardHtml")
     assert start != -1, "preserved task list card helper not found"
     end = src.find("function _preservedCompressionTaskListCardsHtml", start)
@@ -1066,7 +1068,7 @@ def test_preserved_task_list_renders_through_compression_card_path():
 
 
 def test_context_anchor_reference_uses_session_summary_fallback():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "sessionCompressionSummary" in src
     assert "const sessionCompressionSummary" in src
@@ -1077,7 +1079,7 @@ def test_context_anchor_reference_uses_session_summary_fallback():
 
 
 def test_compression_anchor_matching_tolerates_legacy_missing_timestamp():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _compressionAnchorIndex")
     assert start != -1, "compression anchor matcher not found"
     end = src.find("function _compressionReferenceCardHtml", start)
@@ -1090,7 +1092,7 @@ def test_compression_anchor_matching_tolerates_legacy_missing_timestamp():
 
 
 def test_compression_anchor_index_is_translated_into_render_window():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("const insertionAnchorFull=_compressionAnchorIndex")
     assert start != -1, "full compression anchor lookup not found"
     end = src.find("let _prevSepKey=null", start)
@@ -1106,7 +1108,7 @@ def test_compression_anchor_index_is_translated_into_render_window():
 
 
 def test_reference_message_uses_raw_transcript_position_before_anchor_fallback():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "const {message:referenceMessage, rawIdx:referenceMessageRawIdx}=_latestCompressionReferenceMessage(" in src
     assert "if(referenceNode&&referenceMessageRawIdx>=0) _insertCompressionLikeNodeByRawIdx(referenceNode, referenceMessageRawIdx);" in src
@@ -1114,7 +1116,7 @@ def test_reference_message_uses_raw_transcript_position_before_anchor_fallback()
 
 
 def test_reference_message_inserted_before_future_assistant_anchor():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _insertCompressionLikeNodeByRawIdx")
     assert start != -1, "raw-index insertion helper not found"
     end = src.find("const preservedOnlyNode", start)
@@ -1127,8 +1129,8 @@ def test_reference_message_inserted_before_future_assistant_anchor():
 
 
 def test_frontend_uses_context_engine_metadata_for_indexed_context_copy():
-    src = _read("static/ui.js")
-    i18n = _read("static/i18n.js")
+    src = family_source("ui")
+    i18n = family_source("i18n")
 
     assert "function _compressionEngineForSession" in src
     assert "S.session.compression_anchor_engine" in src
@@ -1186,7 +1188,7 @@ def test_backend_auto_anchor_count_excludes_compaction_marker_cards():
 
 
 def test_frontend_reference_insertion_skips_when_reference_is_before_render_window():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _insertCompressionLikeNodeByRawIdx")
     assert start != -1, "raw-index insertion helper not found"
     end = src.find("const preservedOnlyNode=", start)
@@ -1197,7 +1199,7 @@ def test_frontend_reference_insertion_skips_when_reference_is_before_render_wind
 
 
 def test_reference_message_selection_prefers_latest_matching_marker():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _latestCompressionReferenceMessage")
     assert start != -1, "compression reference selection helper not found"
     end = src.find("function _compressionReferenceCardHtml", start)
@@ -1210,7 +1212,7 @@ def test_reference_message_selection_prefers_latest_matching_marker():
 
 
 def test_reference_message_falls_back_to_current_summary_when_only_stale_markers_exist():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _latestCompressionReferenceMessage")
     assert start != -1, "compression reference selection helper not found"
     end = src.find("function _compressionReferenceCardHtml", start)
@@ -1222,7 +1224,7 @@ def test_reference_message_falls_back_to_current_summary_when_only_stale_markers
 
 
 def test_preserved_task_list_attaches_once_per_render():
-    src = _read("static/ui.js")
+    src = family_source("ui")
 
     assert "function _latestPreservedCompressionTaskListMessages" in src
     assert ".reverse().find(m=>_isPreservedCompressionTaskListMessage(m))" in src
@@ -1234,7 +1236,7 @@ def test_preserved_task_list_attaches_once_per_render():
 
 
 def test_preserved_task_list_is_suppressed_when_latest_todo_state_has_no_active_items():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _latestTodoToolItems")
     assert start != -1, "latest todo state helper not found"
     end = src.find("function _isSameLocalDay", start)
@@ -1248,7 +1250,7 @@ def test_preserved_task_list_is_suppressed_when_latest_todo_state_has_no_active_
 
 
 def test_preserved_task_list_rendering_does_not_mutate_history():
-    src = _read("static/ui.js")
+    src = family_source("ui")
     start = src.find("function _isPreservedCompressionTaskListMessage")
     assert start != -1, "preserved task list detector not found"
     end = src.find("function _isSameLocalDay", start)

@@ -14,10 +14,12 @@ approval buttons. The fix raises `.approval-card.visible` to z-index 3.
 This test pins the invariant: approval-card.visible z-index must be strictly
 greater than queue-card z-index.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
-CSS = Path("static/style.css").read_text(encoding="utf-8")
+CSS = family_source("style")
 
 
 def _z_index_of(selector_regex: str) -> int | None:

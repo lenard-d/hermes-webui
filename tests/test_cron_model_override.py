@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 import sys
@@ -9,9 +11,7 @@ import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-
-
+PANELS_JS = family_source("panels")
 class _JSONHandler:
     def __init__(self):
         self.status = None

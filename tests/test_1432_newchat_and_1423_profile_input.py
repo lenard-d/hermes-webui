@@ -4,6 +4,8 @@ and #1423 (profile name input lacks autocapitalize/spellcheck attrs).
 
 Both bugs ship as static-asset diffs verified by reading the JS files.
 """
+from tests.frontend_asset_contract import family_source
+
 import os
 import re
 
@@ -81,7 +83,7 @@ class TestIssue1432NewChatGuardInFlight:
         'session is in flight' detector at messages.js:_restoreSettledSession.
         Verifying both files use the same shape so future refactors don't
         diverge."""
-        msgs_src = _read('messages.js')
+        msgs_src = family_source("messages")
         # The canonical detector
         assert 'session.active_stream_id||session.pending_user_message' in msgs_src, \
             "Canonical in-flight detector at _restoreSettledSession changed shape — " \
@@ -97,7 +99,7 @@ class TestIssue1423ProfileFormAutocapitalize:
     so stored data is correct; the bug is purely a misleading display."""
 
     def _profile_input_html(self, input_id):
-        src = _read('panels.js')
+        src = family_source("panels")
         # Match the input element — pull the full opening tag
         m = re.search(
             rf'<input\s+[^>]*id="{re.escape(input_id)}"[^>]*>',

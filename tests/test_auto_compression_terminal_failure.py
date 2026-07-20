@@ -1,5 +1,7 @@
 """Regression coverage for compression-exhausted stream finalization."""
 
+from tests.frontend_asset_contract import family_source
+
 import copy
 import json
 import queue
@@ -282,7 +284,7 @@ def test_assistant_tool_call_turn_followed_by_final_text_is_successful_answer():
 
 
 def test_compression_exhausted_apperror_clears_reference_ui_and_labels_error():
-    src = _read("static/messages.js")
+    src = family_source("messages")
     start = src.find("source.addEventListener('apperror'")
     assert start != -1, "apperror listener not found"
     end = src.find("source.addEventListener('warning'", start)
@@ -300,7 +302,7 @@ def test_compression_exhausted_apperror_clears_reference_ui_and_labels_error():
 
 
 def test_apperror_matches_only_current_or_continuation_session_for_background_errors():
-    src = _read("static/messages.js")
+    src = family_source("messages")
     start = src.find("source.addEventListener('apperror'")
     assert start != -1, "apperror listener not found"
     end = src.find("source.addEventListener('warning'", start)

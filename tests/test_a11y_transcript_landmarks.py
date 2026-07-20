@@ -1,12 +1,12 @@
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-
-
+UI_JS = family_source("ui")
 def _function_body(source: str, name: str) -> str:
     start = source.find(f"function {name}(")
     assert start != -1, f"{name}() not found"

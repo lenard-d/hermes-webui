@@ -1,15 +1,32 @@
 """Regression tests for the Settings → Extensions diagnostics and toggles."""
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 from pathlib import Path
 import re
 
 
 ROOT = Path(__file__).parent.parent
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+STYLE_CSS = family_source("style")
+I18N_JS = family_source("i18n")
 DOCS_EXTENSIONS = (ROOT / "docs" / "EXTENSIONS.md").read_text(encoding="utf-8")
 ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+
+
+def _locale_sources() -> dict[str, str]:
+    sources = {}
+    for path in family_asset_paths("i18n"):
+        if not path.name.startswith("locale-"):
+            continue
+        source = path.read_text(encoding="utf-8")
+        match = re.search(r"api\.registerLocale\((['\"])(?P<locale>[^'\"]+)\1,\s*\{", source)
+        assert match, f"locale registration not found in {path.name}"
+        sources[match.group("locale")] = source
+    return sources
+
+
+I18N_LOCALE_SOURCES = _locale_sources()
 
 
 def _function_block(name: str, *, extra: int = 2200) -> str:
@@ -27,16 +44,11 @@ def _between(start_marker: str, end_marker: str) -> str:
 
 
 def _locale_count() -> int:
-    return len(re.findall(r"^  (?:[A-Za-z_][A-Za-z0-9_]*|'[^']+'):\s*\{", I18N_JS, re.MULTILINE))
+    return len(I18N_LOCALE_SOURCES)
 
 
 def _locale_blocks() -> dict[str, str]:
-    matches = list(re.finditer(r"^  ((?:[A-Za-z_][A-Za-z0-9_]*|'[^']+')):\s*\{", I18N_JS, re.MULTILINE))
-    blocks = {}
-    for idx, match in enumerate(matches):
-        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(I18N_JS)
-        blocks[match.group(1)] = I18N_JS[match.start():end]
-    return blocks
+    return I18N_LOCALE_SOURCES
 
 
 def _locale_string(block: str, key: str) -> str:

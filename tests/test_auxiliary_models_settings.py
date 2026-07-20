@@ -4,6 +4,8 @@ Verifies that the auxiliary models card is present in the settings HTML,
 that the JS loading/saving logic is wired up, and that all locales have the
 required i18n keys.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -15,9 +17,9 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 PANELS_JS_PATH = ROOT / "static" / "panels.js"
-PANELS_JS = PANELS_JS_PATH.read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 STREAMING_PY = (ROOT / "api" / "streaming.py").read_text(encoding="utf-8")
 NODE = shutil.which("node")
 
@@ -88,7 +90,7 @@ class TestAuxiliaryModelsJS:
         )
 
     @pytest.mark.skipif(NODE is None, reason="node not on PATH")
-    def test_normalize_auxiliary_tasks_keeps_first_wins_and_unknown_metadata(self):
+    def test_normalize_auxiliary_tasks_keeps_first_wins_and_unknown_metadata(self, tmp_path):
         """Normalization should keep first occurrence and preserve unknown metadata."""
         script = r"""
 const fs = require('fs');
@@ -146,8 +148,10 @@ console.log(JSON.stringify({
 }));
 """
 
+        panels_source_path = tmp_path / "panels-family.js"
+        panels_source_path.write_text(PANELS_JS, encoding="utf-8")
         proc = subprocess.run(
-            [NODE, "-e", script, str(PANELS_JS_PATH)],
+            [NODE, "-e", script, str(panels_source_path)],
             capture_output=True,
             text=True,
             timeout=20,

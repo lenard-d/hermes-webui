@@ -1,9 +1,11 @@
 """Regression coverage for stale composer_draft restoration after send."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = ROOT.joinpath("static", "sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = ROOT.joinpath("static", "messages.js").read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 COMMANDS_JS = ROOT.joinpath("static", "commands.js").read_text(encoding="utf-8")
 
 

@@ -9,10 +9,18 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS = ROOT / "static" / "ui.js"
 NODE = shutil.which("node")
+
+
+def _ui_source_path(tmp_path: Path) -> Path:
+    path = tmp_path / "ui-family.js"
+    path.write_text(family_source("ui"), encoding="utf-8")
+    return path
 
 
 _DRIVER = r"""
@@ -102,10 +110,10 @@ process.stdout.write(JSON.stringify({
 
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
-def test_provider_qualified_missing_fallback_cannot_resolve_to_other_provider():
+def test_provider_qualified_missing_fallback_cannot_resolve_to_other_provider(tmp_path):
     assert NODE is not None
     result = subprocess.run(
-        [NODE, "-e", _DRIVER, str(UI_JS)],
+        [NODE, "-e", _DRIVER, str(_ui_source_path(tmp_path))],
         capture_output=True,
         text=True,
         timeout=30,
@@ -137,10 +145,10 @@ _COLON_DRIVER = _DRIVER.replace(
 
 
 @pytest.mark.skipif(NODE is None, reason="node not on PATH")
-def test_colon_bearing_missing_fallback_keeps_authoritative_provider():
+def test_colon_bearing_missing_fallback_keeps_authoritative_provider(tmp_path):
     assert NODE is not None
     result = subprocess.run(
-        [NODE, "-e", _COLON_DRIVER, str(UI_JS)],
+        [NODE, "-e", _COLON_DRIVER, str(_ui_source_path(tmp_path))],
         capture_output=True,
         text=True,
         timeout=30,
@@ -424,7 +432,7 @@ def test_rendered_missing_fallback_row_click_persists_its_own_provider(tmp_path)
     }
     assert NODE is not None
     result = subprocess.run(
-        [NODE, str(driver), str(UI_JS), json.dumps(payload)],
+        [NODE, str(driver), str(_ui_source_path(tmp_path)), json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,

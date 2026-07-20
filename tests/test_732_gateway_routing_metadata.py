@@ -1,5 +1,7 @@
 """Regression coverage for #732 LLM Gateway routing metadata display."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 from api.models import Session
@@ -8,12 +10,10 @@ from api.streaming import _normalize_gateway_routing_metadata
 
 REPO = Path(__file__).resolve().parents[1]
 STREAMING_PY = (REPO / "api" / "streaming.py").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
-
-
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 def test_gateway_routing_metadata_is_safely_normalized_from_response_metadata():
     metadata = {
         "used_provider": "Alibaba Cloud",

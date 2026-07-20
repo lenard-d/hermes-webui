@@ -4,6 +4,8 @@ The browser send path may fall back to the model dropdown for the model ID on a
 fresh session. The provider must follow only when that dropdown/persisted state
 describes the same model being sent.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -18,8 +20,8 @@ NODE = shutil.which("node")
 
 
 def test_messages_payloads_use_model_tied_provider_helper():
-    ui_src = UI_JS_PATH.read_text(encoding="utf-8")
-    messages_src = MESSAGES_JS_PATH.read_text(encoding="utf-8")
+    ui_src = family_source("ui")
+    messages_src = family_source("messages")
 
     assert "function _modelProviderForSend" in ui_src
     assert "function _chatPayloadModelState" in messages_src
@@ -116,14 +118,18 @@ node_test = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 @pytest.fixture(scope="module")
 def driver_path(tmp_path_factory):
-    p = tmp_path_factory.mktemp("chat_provider_fallback_driver") / "driver.js"
-    p.write_text(_DRIVER_SRC, encoding="utf-8")
-    return str(p)
+    base = tmp_path_factory.mktemp("chat_provider_fallback_driver")
+    driver = base / "driver.js"
+    ui_source = base / "ui-family.js"
+    driver.write_text(_DRIVER_SRC, encoding="utf-8")
+    ui_source.write_text(family_source("ui"), encoding="utf-8")
+    return str(driver), str(ui_source)
 
 
 def _run_helper(driver_path, payload):
+    driver, ui_source = driver_path
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), json.dumps(payload)],
+        [NODE, driver, ui_source, json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -134,9 +140,10 @@ def _run_helper(driver_path, payload):
 
 
 def _run_model_state_helper(driver_path, payload):
+    driver, ui_source = driver_path
     payload = {"mode": "modelState", **payload}
     result = subprocess.run(
-        [NODE, driver_path, str(UI_JS_PATH), json.dumps(payload)],
+        [NODE, driver, ui_source, json.dumps(payload)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -234,7 +241,7 @@ def test_model_state_does_not_use_unrelated_selected_option_provider(driver_path
 
 
 def test_live_custom_models_are_tagged_with_provider_metadata():
-    ui_src = UI_JS_PATH.read_text(encoding="utf-8")
+    ui_src = family_source("ui")
     start = ui_src.index("function _addLiveModelsToSelect")
     body = ui_src[start:ui_src.index("async function _fetchLiveModels", start)]
 
@@ -243,7 +250,7 @@ def test_live_custom_models_are_tagged_with_provider_metadata():
 
 
 def test_new_session_does_not_fallback_to_stale_named_custom_provider():
-    sessions_src = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    sessions_src = family_source("sessions")
     start = sessions_src.index("async function newSession(")
     body = sessions_src[start:sessions_src.index("const data=await api('/api/session/new'", start)]
     assignment = body[body.index("reqBody.model_provider="):].split(";", 1)[0]

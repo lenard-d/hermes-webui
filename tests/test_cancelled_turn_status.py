@@ -6,6 +6,8 @@ no explicit cancel/interruption signal.
 """
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 
 from api.streaming import (
@@ -108,12 +110,12 @@ class TestCancelledTurnFinalizer:
 
 
     def test_message_renderer_allows_non_provider_details_label(self):
-        src = _read("static/ui.js")
+        src = family_source("ui")
         assert "provider_details_label||'Provider details'" in src
         assert "provider-error-details" in src
 
     def test_cancel_error_carrier_is_not_folded_into_worklog(self):
-        src = _read("static/ui.js")
+        src = family_source("ui")
         start = src.index("function _assistantMessageBelongsInWorklog")
         end = src.index("function _assistantThinkingBelongsInWorklog", start)
         block = src[start:end]
@@ -207,7 +209,7 @@ class TestCancelledTurnPersistenceGuards:
         assert "return" in block
 
     def test_frontend_has_cancelled_and_interrupted_labels_for_apperror_fallbacks(self):
-        src = _read("static/messages.js")
+        src = family_source("messages")
         start = src.find("source.addEventListener('apperror'")
         end = src.find("source.addEventListener('warning'", start)
         assert start != -1 and end != -1, "apperror handler not found"
@@ -222,7 +224,7 @@ class TestCancelledTurnPersistenceGuards:
         assert "Interruption details" in block
 
     def test_frontend_cancel_prefers_embedded_session_payload(self):
-        src = _read("static/messages.js")
+        src = family_source("messages")
         start = src.find("source.addEventListener('cancel'")
         end = src.find("for(const _runJournalEventName", start)
         assert start != -1 and end != -1, "cancel handler not found"

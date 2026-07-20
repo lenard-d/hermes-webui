@@ -8,14 +8,12 @@ the paragraph split and restores them afterwards.
 """
 import re
 import subprocess
-import sys
-import os
 
-UI_JS = os.path.join(os.path.dirname(__file__), '..', 'static', 'ui.js')
+from tests.frontend_asset_contract import family_asset_paths, family_source
 
 
 def get_ui_js():
-    return open(UI_JS, encoding='utf-8').read()
+    return family_source("ui")
 
 
 class TestCodeBlockNewlinePreservation:
@@ -87,13 +85,14 @@ class TestCodeBlockNewlinePreservation:
             "pre-stash regex must cover katex-block divs"
 
     def test_js_syntax_valid(self):
-        """ui.js must pass node --check after the fix."""
-        result = subprocess.run(
-            ['node', '--check', UI_JS],
-            capture_output=True, text=True
-        )
-        assert result.returncode == 0, \
-            f"node --check failed:\n{result.stderr}"
+        """Every directly loaded ui asset must pass node --check."""
+        for path in family_asset_paths("ui"):
+            result = subprocess.run(
+                ['node', '--check', path],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, \
+                f"node --check failed for {path}:\n{result.stderr}"
 
     def test_stash_token_e_not_used_elsewhere(self):
         """\\x00E must only appear in the pre-stash section (not reused)."""

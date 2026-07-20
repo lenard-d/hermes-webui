@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-
-
+PANELS_JS = family_source("panels")
 def _function_body(name: str) -> str:
     marker = f"function {name}("
     start = PANELS_JS.find(marker)

@@ -1,5 +1,7 @@
 """Regression checks for Issue #5144 busy composer placeholder hints."""
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -7,12 +9,10 @@ ROOT = Path(__file__).parent.parent
 CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_text(
     encoding="utf-8"
 )
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-
-
+UI_JS = family_source("ui")
+I18N_JS = family_source("i18n")
 def _function_block(src: str, name: str) -> str:
     marker = re.search(rf"(^|\n)(?:async\s+)?function\s+{re.escape(name)}\(", src)
     assert marker is not None, f"{name}() not found"
@@ -32,11 +32,14 @@ def test_preferences_wiring_covers_busy_placeholder_hint():
     assert "$('settingsShowBusyPlaceholderHint')" in payload_block
     assert "payload.show_busy_placeholder_hint=" in payload_block
 
-    load_block = _function_block(PANELS_JS, "loadSettingsPanel")
+    load_block = _function_block(PANELS_JS, "_loadSettingsSpeechAndRuntime")
     assert "settingsShowBusyPlaceholderHint" in load_block
     assert "show_busy_placeholder_hint" in load_block
     assert "_schedulePreferencesAutosave" in load_block
     assert "_applyBusyComposerPlaceholder" in load_block
+
+    orchestration_block = _function_block(PANELS_JS, "loadSettingsPanel")
+    assert "_loadSettingsSpeechAndRuntime(settings)" in orchestration_block
 
     save_block = _function_block(PANELS_JS, "saveSettings")
     assert "const showBusyPlaceholderHint=" in save_block

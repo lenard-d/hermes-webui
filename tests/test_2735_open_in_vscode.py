@@ -26,11 +26,13 @@ import sys
 import urllib.error
 import urllib.request
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ROUTES = ROOT / "api" / "routes.py"
 WORKSPACE_FILES = ROOT / "api" / "routes_parts" / "workspace_files.py"
-UI = ROOT / "static" / "ui.js"
-I18N = ROOT / "static" / "i18n.js"
+UI_SOURCE = family_source("ui")
+I18N_SOURCE = family_source("i18n")
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from conftest import TEST_BASE  # noqa: E402
@@ -174,13 +176,13 @@ class TestOpenInVsCodeBackendWiring:
 class TestOpenInVsCodeFrontendWiring:
     def test_file_context_menu_has_vscode_item(self):
         """_showFileContextMenu must include the Open in VS Code action."""
-        src = UI.read_text(encoding="utf-8")
+        src = UI_SOURCE
         assert "t('open_in_vscode')" in src
         assert "/api/file/open-vscode" in src
 
     def test_workspace_root_context_menu_has_vscode_item(self):
         """_showWorkspaceRootContextMenu must also include the VS Code action."""
-        src = UI.read_text(encoding="utf-8")
+        src = UI_SOURCE
         # Both the file and root menus call the same endpoint; verify at least
         # two references in the file so we know both call sites exist.
         assert src.count("/api/file/open-vscode") >= 2
@@ -188,20 +190,20 @@ class TestOpenInVsCodeFrontendWiring:
     def test_vscode_item_uses_hover_bg(self):
         """VS Code menu item must use var(--hover-bg), not var(--hover) or
         any other undefined variable."""
-        src = UI.read_text(encoding="utf-8")
+        src = UI_SOURCE
         # Confirm the item is wired with the correct variable — count hover-bg
         # usages; as long as our item follows the pattern the suite is green.
         assert "var(--hover-bg)" in src
 
     def test_vscode_failure_toast_uses_i18n_key(self):
         """Error toast on VS Code open failure must use the translatable key."""
-        src = UI.read_text(encoding="utf-8")
+        src = UI_SOURCE
         assert "t('open_in_vscode_failed')" in src
 
     def test_vscode_item_guards_err_message(self):
         """Error handler must guard against non-Error objects with
         (err.message||err) consistent with reveal handler."""
-        src = UI.read_text(encoding="utf-8")
+        src = UI_SOURCE
         # Find the open-vscode call site and check for the guard pattern near it.
         idx = src.find("/api/file/open-vscode")
         assert idx != -1
@@ -228,7 +230,7 @@ class TestOpenInVsCodeI18n:
 
     def test_open_in_vscode_key_count(self):
         """open_in_vscode key must appear exactly once per locale (14 total)."""
-        src = I18N.read_text(encoding="utf-8")
+        src = I18N_SOURCE
         count = src.count("open_in_vscode:")
         assert count == 15, (
             f"Expected 14 open_in_vscode: entries (one per locale), found {count}"
@@ -236,7 +238,7 @@ class TestOpenInVsCodeI18n:
 
     def test_open_in_vscode_failed_key_count(self):
         """open_in_vscode_failed key must appear exactly once per locale (14 total)."""
-        src = I18N.read_text(encoding="utf-8")
+        src = I18N_SOURCE
         count = src.count("open_in_vscode_failed:")
         assert count == 15, (
             f"Expected 14 open_in_vscode_failed: entries (one per locale), found {count}"
@@ -244,13 +246,13 @@ class TestOpenInVsCodeI18n:
 
     def test_english_translation_not_a_placeholder(self):
         """English locale must have a human-readable string, not a TODO."""
-        src = I18N.read_text(encoding="utf-8")
+        src = I18N_SOURCE
         assert "open_in_vscode: 'Open in VS Code'" in src
         assert "open_in_vscode_failed: 'Failed to open in VS Code: '" in src
 
     def test_non_english_locales_translated(self):
         """Non-English locales must have real translations, not TODO stubs."""
-        src = I18N.read_text(encoding="utf-8")
+        src = I18N_SOURCE
         # Spot-check a selection of locales — none of these should be TODO stubs.
         assert "open_in_vscode: 'Apri in VS Code'" in src       # it
         assert "open_in_vscode: 'VS Codeで開く'" in src          # ja
@@ -262,7 +264,7 @@ class TestOpenInVsCodeI18n:
     def test_keys_adjacent_to_reveal_block(self):
         """New keys must appear near the reveal/copy block so locale coverage
         is easy to spot in code review."""
-        src = I18N.read_text(encoding="utf-8")
+        src = I18N_SOURCE
         # In the English block, open_in_vscode must appear between
         # copy_file_path and download_folder.
         copy_idx = src.index("copy_file_path: 'Copy file path'")

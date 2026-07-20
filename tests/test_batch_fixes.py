@@ -8,6 +8,8 @@ Covers:
   - System (auto) theme (#504/#506/#509/#514)
 """
 
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
@@ -78,7 +80,7 @@ class TestCustomProvidersVisibility:
 class TestCronSkillCacheInvalidation:
 
     def _panels_src(self):
-        return read("static/panels.js")
+        return family_source("panels")
 
     def test_cache_busted_on_form_open(self):
         src = self._panels_src()
@@ -193,7 +195,7 @@ class TestSystemTheme:
         )
 
     def test_panels_reverts_via_apply_theme(self):
-        src = read("static/panels.js")
+        src = family_source("panels")
         block = re.search(r"function _revertSettingsPreview\(\)\{.*?\n\}", src, re.DOTALL)
         assert block, "_revertSettingsPreview() should be present"
         assert "_applyTheme(" not in block.group(0), (
@@ -207,20 +209,20 @@ class TestSystemTheme:
         )
 
     def test_panels_saves_system_string_not_resolved(self):
-        src = read("static/panels.js")
+        src = family_source("panels")
         assert "localStorage.getItem('hermes-theme')" in src, (
             "_settingsThemeOnOpen must read from localStorage to preserve "
             "the 'system' string, not the resolved 'dark'/'light'"
         )
 
     def test_i18n_cmd_theme_includes_system_english(self):
-        src = read("static/i18n.js")
+        src = family_source("i18n")
         assert "system/dark/light" in src, (
             "English cmd_theme i18n key must include 'system' in the theme list"
         )
 
     def test_i18n_cmd_theme_all_locales(self):
-        src = read("static/i18n.js")
+        src = family_source("i18n")
         count = src.count("system/dark/light")
         assert count >= 5, (
             f"cmd_theme description should mention 'system' in all 5 locales; "
@@ -244,7 +246,7 @@ class TestSystemTheme:
         )
 
     def test_panels_hydrates_appearance_before_models_fetch(self):
-        src = read("static/panels.js")
+        src = family_source("panels")
         # PR #2799 (v0.51.119): skin precedence now prefers localStorage over settings.skin
         # so the inline-gate-resolved DOM skin survives the picker hydration.
         skin_idx = src.index("const skinVal=(localStorage.getItem('hermes-skin')||settings.skin||'default').toLowerCase();")

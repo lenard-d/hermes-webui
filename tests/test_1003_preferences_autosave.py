@@ -10,14 +10,14 @@ preferences-panel autosave pattern is wired correctly:
 - Status div exists in static/index.html
 - _autosavePreferencesSettings clears the dirty flag and hides the unsaved bar
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
-PANELS_JS = (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (Path(__file__).parent.parent / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (Path(__file__).parent.parent / "static" / "i18n.js").read_text(encoding="utf-8")
-
-
+I18N_JS = family_source("i18n")
 def _function_block(src: str, name: str) -> str:
     marker = re.search(rf"(^|\n)(?:async\s+)?function\s+{re.escape(name)}\(", src)
     assert marker is not None, f"{name}() not found"
@@ -27,8 +27,22 @@ def _function_block(src: str, name: str) -> str:
     return src[start:end]
 
 
-def _load_settings_panel_block() -> str:
-    return _function_block(PANELS_JS, "loadSettingsPanel")
+def _load_settings_preference_owners() -> str:
+    orchestration = _function_block(PANELS_JS, "loadSettingsPanel")
+    assert "_loadSettingsPreferences(settings,resolvedLanguage)" in orchestration
+    assert "_loadSettingsSpeechAndRuntime(settings)" in orchestration
+    return "\n".join(
+        (
+            _function_block(PANELS_JS, "_loadSettingsPreferences"),
+            _function_block(PANELS_JS, "_loadSettingsSpeechAndRuntime"),
+        )
+    )
+
+
+def _load_settings_authentication_block() -> str:
+    orchestration = _function_block(PANELS_JS, "loadSettingsPanel")
+    assert "await _loadSettingsAuthentication(settings)" in orchestration
+    return _function_block(PANELS_JS, "_loadSettingsAuthentication")
 
 
 # ── Field-by-field autosave wiring ───────────────────────────────────────
@@ -70,7 +84,7 @@ def test_preference_fields_use_schedule_autosave_not_mark_dirty():
     """All listener attachments (excluding bot_name's debounce wrapper) must
     use _schedulePreferencesAutosave. bot_name uses a wrapper but still
     eventually calls _schedulePreferencesAutosave."""
-    panel = _load_settings_panel_block()
+    panel = _load_settings_preference_owners()
     # Each field should have at least one addEventListener call wired to the autosave
     # path. We check that for each non-password/non-model field, the dirty marker
     # has been replaced.
@@ -85,7 +99,7 @@ def test_preference_fields_use_schedule_autosave_not_mark_dirty():
         # and verify it points to _schedulePreferencesAutosave.
         # We use a context window around the dom_id to find the listener.
         idx = panel.find(f"$('{dom_id}')")
-        assert idx != -1, f"{dom_id} not loaded in loadSettingsPanel"
+        assert idx != -1, f"{dom_id} not loaded by a settings preference owner"
         # Window of next ~600 chars covers the .addEventListener call
         window = panel[idx:idx + 600]
         assert "addEventListener" in window, f"{dom_id} has no addEventListener"
@@ -98,7 +112,7 @@ def test_preference_fields_use_schedule_autosave_not_mark_dirty():
 def test_password_still_uses_mark_dirty():
     """SECURITY INVARIANT: password field must NEVER autosave; it must still
     call _markSettingsDirty so user explicitly clicks Save Settings."""
-    panel = _load_settings_panel_block()
+    panel = _load_settings_authentication_block()
     idx = panel.find("$('settingsPassword')")
     assert idx != -1, "settingsPassword field not loaded"
     window = panel[idx:idx + 400]

@@ -10,6 +10,8 @@ Verifies:
   7. i18n keys exist for all branch-related strings
   8. git-branch icon exists in icons.js
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import io
 import re
@@ -25,7 +27,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMANDS_JS = ROOT / "static" / "commands.js"
-SESSIONS_JS = ROOT / "static" / "sessions.js"
 NODE = shutil.which("node")
 
 
@@ -87,7 +88,7 @@ def _run_node(script: str) -> str:
 
 def _commands_harness(body: str) -> str:
     source = COMMANDS_JS.read_text(encoding="utf-8")
-    session_source = SESSIONS_JS.read_text(encoding="utf-8")
+    session_source = family_source("sessions")
     cmd_branch = _extract_async_function(source, "cmdBranch")
     fork_from = _extract_async_function(source, "forkFromMessage")
     is_read_only = _extract_function(session_source, "_isReadOnlySession")
@@ -309,7 +310,7 @@ def test_branch_marks_explicit_forks_as_fork_sessions():
 
 def test_branch_fork_sessions_do_not_collapse_into_parent_lineage():
     """Fork sessions are not collapsed into compression-lineage; guard must remain in _sessionLineageKey."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     fn = re.search(r'function _sessionLineageKey\(.*?\n\}', src, re.DOTALL)
     assert fn, "Could not find _sessionLineageKey"
     block = fn.group(0)
@@ -321,7 +322,7 @@ def test_branch_fork_sessions_do_not_collapse_into_parent_lineage():
 def test_branch_fork_sessions_nest_under_parent():
     """Forks with a resolvable in-list parent are subgrouped via _isForkWithResolvableParent
     and fed into _attachChildSessionsToSidebarRows, not rendered as flat top-level rows."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     # Helper must exist
     assert 'function _isForkWithResolvableParent(' in src, \
         "Missing _isForkWithResolvableParent helper"
@@ -344,7 +345,7 @@ def test_branch_fork_sessions_nest_under_parent():
 
 def test_branch_nested_fork_rows_keep_session_actions():
     """Nested fork rows should keep the standard session action menu path."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     assert 'session-child-session-fork' in src, \
         "Missing fork-specific nested child row path"
     assert '_openSessionActionMenu(child, menuBtn)' in src, \
@@ -355,15 +356,15 @@ def test_branch_nested_fork_rows_keep_session_actions():
 
 def test_branch_nested_fork_search_results_auto_expand():
     """Nested fork hits should stay visible while sidebar search is active."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     assert "(_expandedChildSessionKeys.has(lineageKey)||!!searchQueryRaw)" in src, \
         "Search-active fork matches should auto-expand their nested child group"
 
 
 def test_branch_nested_fork_rows_render_their_own_state_indicator():
     """Expanded fork rows should keep unread/streaming/attention affordances."""
-    src = _read('static/sessions.js')
-    css = _read('static/style.css')
+    src = family_source("sessions")
+    css = family_source("style")
     assert "session-state-indicator session-child-session-state" in src, \
         "Nested fork rows should render a per-row state indicator"
     assert "session-child-session-fork.streaming" in css, \
@@ -538,7 +539,7 @@ def test_forkFromMessage_passes_keep_count():
 
 def test_fork_button_rendered_in_ui():
     """Verify fork button is rendered in message actions."""
-    src = _read('static/ui.js')
+    src = family_source("ui")
     assert "forkBtn" in src, "forkBtn variable should exist in ui.js"
     assert "fork_from_here" in src, \
         "fork_from_here i18n key should be referenced for tooltip"
@@ -548,7 +549,7 @@ def test_fork_button_rendered_in_ui():
 
 def test_fork_button_in_message_actions():
     """Verify fork button is included in the msg-actions span."""
-    src = _read('static/ui.js')
+    src = family_source("ui")
     # The footHtml template should include forkBtn
     assert '${forkBtn}' in src, \
         "forkBtn should be included in message actions template"
@@ -556,7 +557,7 @@ def test_fork_button_in_message_actions():
 
 def test_fork_button_is_hidden_for_read_only_sessions():
     """Non-cron read-only sessions should not render the message-level fork affordance."""
-    src = _read('static/ui.js')
+    src = family_source("ui")
     assert "const readOnlySession=typeof _isReadOnlySession==='function'" in src, \
         "ui.js should derive a read-only session flag from the shared helper"
     assert "const branchableReadOnlySession=typeof _isBranchableReadOnlySession==='function'" in src, \
@@ -567,7 +568,7 @@ def test_fork_button_is_hidden_for_read_only_sessions():
 
 def test_branchable_read_only_helper_accepts_cron_sources():
     """Read-only cron sessions should be forkable follow-up sources."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     assert "function _isBranchableReadOnlySession(session)" in src
     assert "session && session.source_tag" in src
     assert "session && session.raw_source" in src
@@ -681,7 +682,7 @@ def test_forkFromMessage_preserves_absolute_keep_count_for_writable_sessions():
 
 def test_sidebar_parent_indicator():
     """Verify parent session indicator is rendered in session list."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     assert 'parent_session_id' in src, \
         "sessions.js should check parent_session_id"
     assert 'session-branch-indicator' in src, \
@@ -694,7 +695,7 @@ def test_sidebar_parent_indicator():
 
 def test_parent_indicator_not_clickable():
     """Verify parent indicator is informational, not hidden navigation."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     # Find the parent indicator block
     parent_block = re.search(
         r'branch-indicator[\s\S]*?parent_session_id[\s\S]*?titleRow\.appendChild',
@@ -710,7 +711,7 @@ def test_parent_indicator_not_clickable():
 
 def test_parent_indicator_tooltip_uses_parent_title_fallback():
     """Tooltip should prefer a parent title and only fall back to a short id."""
-    src = _read('static/sessions.js')
+    src = family_source("sessions")
     assert 'function _sessionTitleForForkParent' in src, \
         "sessions.js should resolve a user-facing parent title"
     assert 'function _truncatedSessionId' in src, \
@@ -721,7 +722,7 @@ def test_parent_indicator_tooltip_uses_parent_title_fallback():
 
 def test_parent_indicator_hover_only_style():
     """The sidebar lineage indicator should be visually subdued until row hover/focus."""
-    src = _read('static/style.css')
+    src = family_source("style")
     assert '.session-branch-indicator' in src, \
         "Missing session branch indicator CSS"
     assert 'opacity:.35' in src, \
@@ -734,7 +735,7 @@ def test_parent_indicator_hover_only_style():
 
 def test_i18n_branch_keys():
     """Verify all branch-related i18n keys exist in English locale."""
-    src = _read('static/i18n.js')
+    src = family_source("i18n")
     required_keys = [
         'cmd_branch',
         'cmd_branch_usage',

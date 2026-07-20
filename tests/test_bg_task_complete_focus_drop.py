@@ -24,11 +24,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _read_messages_js() -> str:
-    return (REPO_ROOT / "static" / "messages.js").read_text()
+    return family_source("messages")
 
 
 def _handler_body() -> str:

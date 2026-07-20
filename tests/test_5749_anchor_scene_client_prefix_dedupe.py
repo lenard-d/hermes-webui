@@ -1,10 +1,10 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-
-
+MESSAGES_JS = family_source("messages")
 def _function_body(src: str, name: str) -> str:
     marker = f"function {name}"
     start = src.index(marker)
@@ -38,7 +38,7 @@ def test_settled_scene_keys_live_token_prefix_dedupe_to_final_answer_identity():
 
 
 def test_render_scene_passes_final_segment_eligibility_to_live_prefix_guard():
-    ui_js = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    ui_js = family_source("ui")
     render_body = _function_body(ui_js, "_renderSettledAnchorSceneTransparentForMessage")
     row_body = _function_body(ui_js, "_anchorSceneTransparentNodeForRow")
 

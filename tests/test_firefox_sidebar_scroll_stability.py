@@ -1,10 +1,10 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
+STYLE_CSS = family_source("style")
 def _block(start_marker: str, end_marker: str) -> str:
     start = SESSIONS_JS.find(start_marker)
     assert start != -1, f"{start_marker} not found"

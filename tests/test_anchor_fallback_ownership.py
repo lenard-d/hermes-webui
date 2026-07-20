@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS_PATH = ROOT / "static" / "ui.js"
@@ -31,7 +33,8 @@ def _read_required_text(path: Path, label: str) -> str:
 
 
 def _ui_js() -> str:
-    return _read_required_text(UI_JS_PATH, "static/ui.js")
+    assert UI_JS_PATH.exists(), f"static/ui.js not found at {UI_JS_PATH}"
+    return family_source("ui")
 
 
 def _phase0_doc() -> str:

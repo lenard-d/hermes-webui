@@ -8,6 +8,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_JS = ROOT / "static" / "workspace.js"
 SESSIONS_JS = ROOT / "static" / "sessions.js"
@@ -16,6 +18,14 @@ PANELS_JS = ROOT / "static" / "panels.js"
 
 
 def _source(path: Path) -> str:
+    family = {
+        SESSIONS_JS: "sessions",
+        UI_JS: "ui",
+        PANELS_JS: "panels",
+        ROOT / "static" / "messages.js": "messages",
+    }.get(path)
+    if family is not None:
+        return family_source(family)
     return path.read_text(encoding="utf-8")
 
 

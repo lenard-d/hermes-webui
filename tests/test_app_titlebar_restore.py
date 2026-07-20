@@ -1,13 +1,13 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-STYLE_CSS = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-
-
+STYLE_CSS = family_source("style")
+PANELS_JS = family_source("panels")
+UI_JS = family_source("ui")
 def test_app_titlebar_no_longer_contains_tps_chip():
     assert 'id="tpsStat"' not in INDEX_HTML
 

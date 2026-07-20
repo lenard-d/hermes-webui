@@ -18,9 +18,12 @@ These tests pin both layers so a future refactor can't silently re-introduce
 the silent-no-op UX bug.
 """
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import io
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -263,8 +266,23 @@ def test_post_set_password_succeeds_when_env_var_unset(monkeypatch):
 
 REPO_ROOT = Path(__file__).parent.parent
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-I18N_JS = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
+I18N_JS = family_source("i18n")
+
+
+def _locale_sources() -> dict[str, str]:
+    sources = {}
+    for path in family_asset_paths("i18n"):
+        if not path.name.startswith("locale-"):
+            continue
+        source = path.read_text(encoding="utf-8")
+        match = re.search(r"api\.registerLocale\((['\"])(?P<locale>[^'\"]+)\1,\s*\{", source)
+        assert match, f"locale registration not found in {path.name}"
+        sources[match.group("locale")] = source
+    return sources
+
+
+I18N_LOCALE_SOURCES = _locale_sources()
 
 
 def test_index_html_has_password_lock_banner_div():
@@ -337,26 +355,9 @@ EXPECTED_LOCALES = ("en", "it", "ja", "ru", "es", "de", "zh", "zh-Hant", "pt", "
 
 
 def _locale_block(locale_key: str) -> str:
-    """Return the slice of i18n.js between `<key>: {` and the next top-level
-    locale opener (or end-of-file). Good enough for substring assertions."""
-    # Locale openers look like `  en: {` or `  'zh-Hant': {` (two-space indent).
-    if "-" in locale_key:
-        opener = f"  '{locale_key}':"
-    else:
-        opener = f"  {locale_key}:"
-    start = I18N_JS.index(opener)
-    # Find the next locale opener, scanning all known locales.
-    rest = I18N_JS[start + len(opener):]
-    next_starts = []
-    for other in EXPECTED_LOCALES:
-        if other == locale_key:
-            continue
-        cand_opener = f"  '{other}':" if "-" in other else f"  {other}:"
-        idx = rest.find(cand_opener)
-        if idx >= 0:
-            next_starts.append(idx)
-    end = min(next_starts) if next_starts else len(rest)
-    return rest[:end]
+    """Return the independently loaded source for one locale registration."""
+    assert locale_key in I18N_LOCALE_SOURCES, f"missing {locale_key} locale asset"
+    return I18N_LOCALE_SOURCES[locale_key]
 
 
 def test_password_env_var_locked_key_present_in_all_locales():

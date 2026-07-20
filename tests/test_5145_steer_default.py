@@ -1,5 +1,7 @@
 """Focused regression coverage for #5145 busy-input defaults."""
 
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import re
 from pathlib import Path
 
@@ -8,9 +10,9 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
     encoding="utf-8"
 )
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+I18N_JS = family_source("i18n")
 LOCALE_KEYS = (
     "en",
     "it",
@@ -29,13 +31,25 @@ LOCALE_KEYS = (
 )
 
 
+def _locale_sources():
+    sources = {}
+    for path in family_asset_paths("i18n"):
+        if not path.name.startswith("locale-"):
+            continue
+        source = path.read_text(encoding="utf-8")
+        match = re.search(r"api\.registerLocale\((['\"])(?P<locale>[^'\"]+)\1,\s*\{", source)
+        assert match, f"locale registration not found in {path.name}"
+        key = match.group("locale")
+        sources[f"'{key}'" if "-" in key else key] = source
+    return sources
+
+
+I18N_LOCALE_SOURCES = _locale_sources()
+
+
 def _locale_block(locale_key):
-    escaped_keys = [re.escape(key) for key in LOCALE_KEYS]
-    next_keys = "|".join(key for key in escaped_keys if key != re.escape(locale_key))
-    pattern = rf"^  {re.escape(locale_key)}: \{{(?P<body>.*?)(?=^  (?:{next_keys}): \{{|\n\}};)"
-    match = re.search(pattern, I18N_JS, re.MULTILINE | re.DOTALL)
-    assert match, f"missing {locale_key} locale block"
-    return match.group("body")
+    assert locale_key in I18N_LOCALE_SOURCES, f"missing {locale_key} locale block"
+    return I18N_LOCALE_SOURCES[locale_key]
 
 
 def _default_message_mode_label(locale_key):

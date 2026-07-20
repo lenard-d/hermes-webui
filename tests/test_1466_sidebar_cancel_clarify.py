@@ -5,13 +5,13 @@ owns the stream. Cancelling a running session from the sidebar context menu must
 address that session's stream id and must only clear approval/clarify UI owned by
 that session.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
 def _function_body(src: str, name: str, window: int = 1800) -> str:
     idx = src.find(f"function {name}(")
     assert idx >= 0, f"{name} not found"

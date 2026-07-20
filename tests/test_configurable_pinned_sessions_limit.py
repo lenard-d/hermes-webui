@@ -1,5 +1,7 @@
 """Regression checks for configurable pinned session limits."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import urllib.error
@@ -12,11 +14,9 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
     encoding="utf-8"
 )
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
 def post(path, body=None):
     data = json.dumps(body or {}).encode()
     req = urllib.request.Request(

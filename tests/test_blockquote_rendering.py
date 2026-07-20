@@ -10,11 +10,12 @@ Root cause: the old rule was `s.replace(/^> (.+)$/gm, ...)` which had three bugs
 Fix: group consecutive `>` lines into a single `<blockquote>`, handle bare `>` lines
 as `<br>`, and strip the `>` prefix before passing each line to `inlineMd()`.
 """
+from tests.frontend_asset_contract import family_source
+
 import re
 import pathlib
 
-UI_JS = (pathlib.Path(__file__).parent.parent / "static" / "ui.js").read_text(encoding="utf-8")
-
+UI_JS = family_source("ui")
 # ---------------------------------------------------------------------------
 # Python mirror of the new blockquote rule + inlineMd (for behavioural tests)
 # ---------------------------------------------------------------------------

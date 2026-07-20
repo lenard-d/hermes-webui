@@ -4,12 +4,12 @@ The session list supports keyboard navigation using J (next) and K (previous)
 to move focus through sessions without mouse interaction. Verified at the source
 level so this stays fast.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
 def test_navigateSession_function_exists():
     """navigateSession function is defined and exported to global scope."""
     assert "function navigateSession(dir)" in SESSIONS_JS

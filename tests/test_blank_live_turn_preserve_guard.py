@@ -30,6 +30,8 @@ rendered content (`.msg-body`, `.tool-card-row`, or `.wl-reason`). A dead empty
 shell (no content, no active stream) is no longer preserved, so the swap wipe
 drops it and the settled transcript renders normally.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 import shutil
@@ -44,7 +46,7 @@ def read(rel):
 
 
 def _preserve_guard_src():
-    src = read("static/ui.js")
+    src = family_source("ui")
     i = src.find("let _preservedLiveTurn=null;")
     assert i >= 0, "_preservedLiveTurn guard not found"
     # capture through the closing of the if-block (next 'const compressionState')

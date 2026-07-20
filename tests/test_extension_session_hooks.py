@@ -6,6 +6,8 @@ _preloadNotified bridge. This module uses Node.js to run the new functions
 extracted from boot.js source.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import subprocess
@@ -14,9 +16,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
 def _extract_block(src, signature):
     start = src.find(signature)
     assert start >= 0, f"missing: {signature!r}"

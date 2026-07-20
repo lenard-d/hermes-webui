@@ -1,10 +1,10 @@
 """Regression coverage for busy-input settings search terms."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 INDEX_HTML = (Path(__file__).parent.parent / "static" / "index.html").read_text(encoding="utf-8")
-PANELS_JS = (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
-
-
+PANELS_JS = family_source("panels")
 class TestBusyInputSettingsSearchTerms:
     """Busy-input settings search must cover option, descriptor, and supplemental text."""
 

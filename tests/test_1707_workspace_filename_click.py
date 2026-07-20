@@ -35,19 +35,17 @@ import json
 import re
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
+
 NODE = shutil.which("node")
 
 
 def _read_ui_js() -> str:
-    with open(UI_JS_PATH, encoding="utf-8") as f:
-        return f.read()
+    return family_source("ui")
 
 
 def _name_handler_block() -> str:

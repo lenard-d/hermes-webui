@@ -19,15 +19,15 @@ flipped the default to 'steer'; this file was updated for the rename while
 preserving the persistence-mirror guarantees (the load-failure path must still
 honor the saved preference, not clobber it with a hardcoded default).
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-
-
+PANELS_JS = family_source("panels")
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
 class TestEagerDefault:
     """window._defaultMessageMode must be set eagerly, before the async settings fetch."""
 

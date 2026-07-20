@@ -1,5 +1,7 @@
 """Regression tests for #4167 sidebar payload and scope guards."""
 
+from tests.frontend_asset_contract import family_source
+
 import re
 import sys
 from pathlib import Path
@@ -40,7 +42,7 @@ def test_sidebar_response_item_preserves_read_only_flag():
 
 def test_failed_refresh_clears_cache_on_profile_scope_change():
     """The catch path must reject cached rows from a mismatched sidebar scope."""
-    src = (_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
+    src = family_source("sessions")
     assert "_allSessionsScope" in src, "cache is not scope-tagged"
     assert re.search(r"_scopeMatches", src), "catch path does not gate fallback on scope match"
     assert re.search(r"_allSessions\s*=\s*\[\]", src), "catch path does not clear stale rows on scope mismatch"

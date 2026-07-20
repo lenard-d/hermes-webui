@@ -1,9 +1,10 @@
 """Regression coverage for WebUI chat upload path handoff."""
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = ROOT / "static" / "messages.js"
 UPLOAD_PY = ROOT / "api" / "upload.py"
 
 
@@ -16,7 +17,7 @@ def test_image_uploads_use_server_path_in_attached_files_context():
     be downgraded to bare filenames there, otherwise tools like vision_analyze
     cannot open the uploaded file immediately.
     """
-    src = MESSAGES_JS.read_text(encoding="utf-8")
+    src = family_source("messages")
 
     assert "uploadedPaths=uploaded.map(u=>u&&u.is_image?" not in src
     assert "uploadedPaths=uploaded.map(u=>u&&u.path?u.path" in src
@@ -24,8 +25,7 @@ def test_image_uploads_use_server_path_in_attached_files_context():
 
 def test_attached_files_context_is_hidden_from_user_message_display():
     """Persist full attachment paths for the agent without showing them in chat."""
-    ui_src = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-
+    ui_src = family_source("ui")
     assert "function _stripAttachedFilesMarkerForDisplay" in ui_src
     assert "_stripAttachedFilesMarkerForDisplay(_stripWorkspaceDisplayPrefix(content))" in ui_src
     assert "const newRawText=String(displayContent).trim();" in ui_src
@@ -34,8 +34,7 @@ def test_attached_files_context_is_hidden_from_user_message_display():
 
 def test_attached_files_context_is_hidden_from_sidebar_titles():
     """Sidebar rows should not expose absolute uploaded image paths in titles."""
-    sessions_src = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
+    sessions_src = family_source("sessions")
     assert "function _stripAttachedFilesMarker" in sessions_src
     assert "? _stripAttachedFilesMarker" in sessions_src
     assert "replace(/\\n\\n\\[Attached files: [^\\]]+\\]$/" in sessions_src

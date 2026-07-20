@@ -4,6 +4,8 @@ Previously _pending[sid] held one entry, so simultaneous approvals overwrote
 each other. This PR changes submit_pending() to append to a list and adds
 approval_id so /api/approval/respond can target a specific entry.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import re
@@ -21,7 +23,7 @@ ROUTES_SRC_FULL = ROUTES_SRC + ROUTE_APPROVALS_SRC
 INTERACTIVE_RESPONSES_SRC = (
     REPO_ROOT / "api" / "routes_parts" / "interactive_responses.py"
 ).read_text(encoding="utf-8")
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
 INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
 

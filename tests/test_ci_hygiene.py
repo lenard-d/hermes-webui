@@ -1,5 +1,7 @@
 """Small hygiene regression checks for CI and frontend console noise."""
 
+from tests.frontend_asset_contract import family_source
+
 import os
 import shutil
 import stat
@@ -218,7 +220,6 @@ def test_local_test_runner_rejects_venv_without_accepted_python_path(tmp_path):
     assert not (repo / ".venv").exists()
 
 def test_live_model_success_log_is_debug_not_default_console_log():
-    ui = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-
+    ui = family_source("ui")
     assert "console.debug('[hermes] Live models loaded" in ui
     assert "console.log('[hermes] Live models loaded" not in ui

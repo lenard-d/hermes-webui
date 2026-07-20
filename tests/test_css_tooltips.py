@@ -13,6 +13,8 @@ import os
 import re
 import unittest
 
+from tests.frontend_asset_contract import family_source
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -199,7 +201,7 @@ class TestStyleCSSTooltipClasses(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.css = _read(STYLE_CSS)
+        cls.css = family_source("style")
 
     def test_has_tooltip_class_defined(self):
         """The .has-tooltip base class must be defined."""
@@ -268,7 +270,7 @@ class TestI18NTooltipSync(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.js = _read(I18N_JS)
+        cls.js = family_source("i18n")
 
     def test_data_tooltip_synced_in_i18n_title_handler(self):
         """The data-i18n-title handler must also sync data-tooltip attribute."""
@@ -367,7 +369,7 @@ class RailTooltipCascadeTests(unittest.TestCase):
     """
 
     def setUp(self):
-        self.css = _read(STYLE_CSS)
+        self.css = family_source("style")
 
     def test_rail_nav_tab_hover_after_killer_is_gone(self):
         """The `.rail .nav-tab:hover::after { content: none }` rule MUST NOT
@@ -470,7 +472,7 @@ class RailTooltipCascadeTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 class BottomRightTooltipVariantTests(unittest.TestCase):
     def setUp(self):
-        self.css = _read(STYLE_CSS)
+        self.css = family_source("style")
         self.html = _read(INDEX_HTML)
 
     def test_bottom_right_variant_defined(self):

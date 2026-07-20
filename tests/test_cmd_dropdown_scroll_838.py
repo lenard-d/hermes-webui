@@ -1,5 +1,7 @@
 """Tests for #838 — slash command dropdown keyboard navigation keeps the
 selected item in view."""
+from tests.frontend_asset_contract import family_source
+
 import os
 import re
 
@@ -58,7 +60,7 @@ class TestNavigateCmdDropdownScroll:
         """Regression guard: the .cmd-dropdown must have overflow-y:auto
         (or similar) so scrollIntoView finds it as the scroll ancestor
         rather than bubbling up to the viewport."""
-        css = _read("static/style.css")
+        css = family_source("style")
         m = re.search(r'\.cmd-dropdown\s*\{[^}]+\}', css)
         assert m, ".cmd-dropdown rule not found"
         block = m.group(0)

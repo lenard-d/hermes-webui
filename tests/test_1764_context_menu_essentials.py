@@ -27,13 +27,12 @@ in the wider suite).
 from pathlib import Path
 import re
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parent.parent
 ROUTES = ROOT / "api" / "routes.py"
 WORKSPACE_FILES = ROOT / "api" / "routes_parts" / "workspace_files.py"
-UI = ROOT / "static" / "ui.js"
-SESSIONS = ROOT / "static" / "sessions.js"
-I18N = ROOT / "static" / "i18n.js"
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -47,7 +46,7 @@ class TestCopyFilePathMenuItem:
         action that calls the new /api/file/path endpoint and writes the
         result to the clipboard.
         """
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         # Item label is sourced via t('copy_file_path') — pin the call.
         assert "t('copy_file_path')" in src
         # Endpoint POSTed to.
@@ -60,7 +59,7 @@ class TestCopyFilePathMenuItem:
         non-secure context). The action must fall back to the legacy
         execCommand pattern so users on those browsers still get a copy.
         """
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         assert "document.execCommand('copy')" in src
         # Hidden textarea pattern — uses a fixed-position offscreen element
         # so the page doesn't visibly scroll when select() runs.
@@ -70,7 +69,7 @@ class TestCopyFilePathMenuItem:
         """The success toast keys must be wired to translatable strings,
         not hardcoded English.
         """
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         assert "t('path_copied')" in src
         assert "t('path_copy_failed')" in src
 
@@ -124,7 +123,7 @@ class TestSessionRenameMenuItem:
         """The session three-dot menu (`_openSessionActionMenu`) must
         include Rename as the first item, gated on _isReadOnlySession.
         """
-        src = SESSIONS.read_text(encoding="utf-8")
+        src = family_source("sessions")
         # Rename block must be inside _openSessionActionMenu.
         # Pin the structural anchor.
         assert "if(!_isReadOnlySession(session)){" in src
@@ -136,7 +135,7 @@ class TestSessionRenameMenuItem:
         closure attached to the row element — no duplicated state, no
         separate API call out of band with the double-click path.
         """
-        src = SESSIONS.read_text(encoding="utf-8")
+        src = family_source("sessions")
         # Row-attached closure invocation.
         assert "row._startRename" in src
         # Row lookup by data-sid must include nested fork rows too.
@@ -150,7 +149,7 @@ class TestSessionRenameMenuItem:
         without duplicating the closure's state (oldTitle, applyTitle, the
         _renamingSid bookkeeping, etc.).
         """
-        src = SESSIONS.read_text(encoding="utf-8")
+        src = family_source("sessions")
         assert "el._startRename = startRename" in src
         assert "el.dataset.sid = s.session_id" in src
 
@@ -158,7 +157,7 @@ class TestSessionRenameMenuItem:
         """Cygnus's specific ask: Rename should be at the top of the menu,
         not buried under Pin / Move / Archive / etc. Pin that ordering.
         """
-        src = SESSIONS.read_text(encoding="utf-8")
+        src = family_source("sessions")
         rename_idx = src.find("t('session_rename')")
         pin_idx = src.find("t('session_pin')")
         assert rename_idx > 0 and pin_idx > 0
@@ -168,7 +167,7 @@ class TestSessionRenameMenuItem:
 
     def test_rename_translation_keys_present(self):
         """English translation keys must exist for the new menu item."""
-        src = I18N.read_text(encoding="utf-8")
+        src = family_source("i18n")
         assert "session_rename: 'Rename conversation'" in src
         assert "session_rename_desc: 'Edit the title of this conversation'" in src
 
@@ -211,7 +210,7 @@ class TestRevealFailedTostIncludesPath:
         is unchanged — the additional path comes from the server-side
         message, so the prefix + message concat still reads well.
         """
-        src = I18N.read_text(encoding="utf-8")
+        src = family_source("i18n")
         assert "reveal_failed: 'Failed to reveal: '" in src
 
     def test_reveal_call_site_uses_message_or_err(self):
@@ -220,7 +219,7 @@ class TestRevealFailedTostIncludesPath:
         .message). Previously `err.message` alone could produce
         "Failed to reveal: undefined" — we use `(err.message||err)`.
         """
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         # Match both possible forms (with or without parens).
         assert (
             "(err.message||err)" in src or "(err.message || err)" in src

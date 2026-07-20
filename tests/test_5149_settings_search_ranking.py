@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-PANELS_JS = ROOT / "static" / "panels.js"
+from tests.frontend_asset_contract import family_source
+
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
@@ -19,10 +19,8 @@ pytestmark = pytest.mark.skipif(
 
 _DRIVER = r"""
 const fs = require('fs');
-
-const panelsPath = process.argv[2];
-const scenario = JSON.parse(process.argv[3] || '{}');
-const src = fs.readFileSync(panelsPath, 'utf8');
+const scenario = JSON.parse(process.argv[2] || '{}');
+const src = fs.readFileSync(0, 'utf8');
 
 function extractSearchFunctions(source) {
   const start = source.indexOf('function _normalizeSettingsSearchText(value)');
@@ -549,9 +547,9 @@ def _run_driver(driver_file, command):
         [
             NODE,
             driver_file,
-            str(PANELS_JS),
             json.dumps(command if isinstance(command, dict) else {"command": command}),
         ],
+        input=family_source("panels"),
         capture_output=True,
         text=True,
         check=False,

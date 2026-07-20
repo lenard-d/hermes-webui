@@ -40,9 +40,10 @@ import queue
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 _CLARIFY = os.path.join(os.path.dirname(__file__), "..", "api", "clarify.py")
-_MESSAGES = os.path.join(os.path.dirname(__file__), "..", "static", "messages.js")
 
 
 def _read(path: str) -> str:
@@ -136,7 +137,7 @@ class TestRespondClarify409Terminal:
 
     @pytest.fixture(autouse=True)
     def _load_js(self):
-        self.js = _read(_MESSAGES)
+        self.js = family_source("messages")
 
     def _respond_clarify_body(self) -> str:
         start = self.js.index("async function respondClarify(")

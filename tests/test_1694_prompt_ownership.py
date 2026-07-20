@@ -5,13 +5,13 @@ session's approval/clarify event must not render over or hide the currently
 active pane's card, but the pending prompt should remain available when the user
 switches back to that session.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
-
+MESSAGES_JS = family_source("messages")
+SESSIONS_JS = family_source("sessions")
 def _body_from_brace(src: str, brace: int, label: str) -> str:
     assert brace >= 0, f"body opening brace not found for: {label}"
     depth = 1

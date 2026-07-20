@@ -5,18 +5,11 @@ is therefore misleading on directory rows.
 Fix: gate the tooltip on `item.type !== 'dir'` so it appears only on files.
 Folder rename is still reachable via the right-click context menu.
 """
-from pathlib import Path
-
-import pytest
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
+from tests.frontend_asset_contract import family_source
 
 
 def _read_ui_js() -> str:
-    with open(UI_JS_PATH, encoding="utf-8") as f:
-        return f.read()
+    return family_source("ui")
 
 
 def _name_block() -> str:
@@ -74,7 +67,7 @@ class TestFolderTooltipGated:
 
     def test_i18n_key_still_defined_in_all_locales(self):
         """The i18n key must remain defined in every locale block in static/i18n.js."""
-        i18n = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
+        i18n = family_source("i18n")
         # i18n.js has 9 locale blocks with the same key. Lock that the key still exists
         # at least 5 times (en, plus a quorum of locales) — exact count is i18n maintenance.
         count = i18n.count("double_click_rename:")

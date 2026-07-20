@@ -16,6 +16,8 @@ It also pins the CSS cursor affordance so users discover the feature.
 """
 from pathlib import Path
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parent.parent
 UI = ROOT / "static" / "ui.js"
@@ -29,7 +31,7 @@ class TestComposerChipLightboxDelegate:
 
         Previously the handler only looked for .msg-media-img.
         """
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         assert "e.target.closest('.attach-thumb')" in src, (
             "Document click delegate must also match .attach-thumb"
         )
@@ -43,7 +45,7 @@ class TestComposerChipLightboxDelegate:
 
     def test_delegate_still_handles_message_attached_images(self):
         """Existing .msg-media-img wiring must not regress."""
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         # The message-image branch must come first (so _openImgLightbox
         # fires for them without falling through to the .attach-thumb check).
         msg_branch = "let img = e.target.closest('.msg-media-img');\n  if(img){ _openImgLightbox(img); return; }"
@@ -56,7 +58,7 @@ class TestComposerChipLightboxDelegate:
         renderer uses .attach-chip--audio / .attach-chip--video sibling
         classes (no IMG with class attach-thumb in those branches).
         """
-        src = UI.read_text(encoding="utf-8")
+        src = family_source("ui")
         # Audio chip block — uses <audio>, no .attach-thumb img
         assert "<audio controls preload=\"metadata\"" in src
         # Video chip block — uses <video>, no .attach-thumb img
@@ -80,7 +82,7 @@ class TestComposerChipCursorAffordance:
         Previously it was `cursor: default` which silently advertised
         non-interactivity.
         """
-        src = STYLE.read_text(encoding="utf-8")
+        src = family_source("style")
         # The .attach-thumb rule must declare cursor:zoom-in
         # Use a substring search resilient to other property additions.
         for line in src.splitlines():
@@ -96,5 +98,5 @@ class TestComposerChipCursorAffordance:
         """Subtle hover emphasis (brightness + scale) reinforces the
         zoom-in cursor by giving instant visual feedback before click.
         """
-        src = STYLE.read_text(encoding="utf-8")
+        src = family_source("style")
         assert ".attach-thumb:hover{" in src or ".attach-thumb:hover {" in src

@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-
-
+UI_JS = family_source("ui")
 def _strip_comments(src: str) -> str:
     src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
     return re.sub(r"//.*", "", src)

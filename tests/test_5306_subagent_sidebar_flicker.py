@@ -21,6 +21,8 @@ The helpers under test are the *real* regions extracted from static/sessions.js
 and executed under node, matching the existing style in
 tests/test_session_lineage_collapse.py.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -29,7 +31,6 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
@@ -108,7 +109,7 @@ def test_5306_active_parent_delegate_child_survives_zero_message_partition():
     delegate child of the ACTIVE parent even when message_count===0, so it
     reaches sessionsRaw and gets stacked under the parent instead of vanishing.
     """
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global.S = { session: { session_id: 'active_parent', message_count: 5 }, busy: true, activeStreamId: 's1' };
 global._activeProject = null;
@@ -149,7 +150,7 @@ def test_5306_child_across_two_renders_stays_present():
     """#5306 invariant across a re-render: two consecutive partitions of the
     same active-parent + zero-message delegate child must BOTH keep the child
     (no flicker between polls)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global.S = { session: { session_id: 'active_parent', message_count: 5 }, busy: true, activeStreamId: 's1' };
 global._activeProject = null;
@@ -178,7 +179,7 @@ def test_5306_zero_message_child_of_inactive_parent_is_still_hidden():
     """Guard the scope of the #5306 fix: the exception is for the ACTIVE parent
     only. A zero-message delegate child of some OTHER (non-active) parent stays
     hidden, so we don't resurrect stale empty children for unrelated rows."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global.S = { session: { session_id: 'active_parent', message_count: 5 }, busy: true, activeStreamId: 's1' };
 global._activeProject = null;
@@ -195,7 +196,7 @@ def test_5305_delegate_child_with_filtered_out_parent_is_not_orphaned():
     """#5305: a subagent child whose WebUI parent is filtered out of the current
     render (here: project filter drops the parent, child survives) must NOT be
     promoted to a top-level orphan. It is suppressed and follows the parent."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global.S = { session: null, busy: false, activeStreamId: null };
 global._activeProject = global.NO_PROJECT_FILTER;
@@ -226,7 +227,7 @@ console.log(JSON.stringify({
 def test_5305_missing_parent_delegate_child_is_suppressed_not_orphaned():
     """#5305 at the attach layer: a cross-surface delegate child whose parent is
     entirely absent from the render is suppressed, not orphaned."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global._showArchived = false;
 const collapsed = [];  // parent absent from this render
@@ -244,7 +245,7 @@ def test_5305_visible_parent_still_stacks_subagent_child():
     """Guard the common #5244 case still holds after the #5305 change: when the
     WebUI parent IS visible in the same render, the delegate child stacks under
     it (not suppressed, not orphaned)."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global._showArchived = false;
 const collapsed = [{ session_id:'webui_parent', title:'Parent WebUI conversation', raw_source:'webui', source_tag:'webui', session_source:'webui', message_count:3 }];
@@ -268,7 +269,7 @@ def test_5305_external_parent_child_still_orphans():
     """The #5305 change must not swallow the legitimately-external case: a WebUI
     continuation child of a messaging (external) parent still renders top-level
     when the external parent has no WebUI-owned row to stack under."""
-    js = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+    js = family_source("sessions")
     source = _preamble(js) + """
 global._showArchived = false;
 const collapsed = [{ session_id:'telegram_parent', title:'Telegram parent', session_source:'messaging', raw_source:'telegram', source_label:'Telegram' }];

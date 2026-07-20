@@ -1,5 +1,7 @@
 """Browserless regression coverage for first-tab model catalog refresh (#4737)."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -9,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(

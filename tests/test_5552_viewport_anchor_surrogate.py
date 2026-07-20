@@ -39,18 +39,14 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS_PATH = ROOT / "static" / "ui.js"
-
-
-def _read_required_text(path: Path, label: str) -> str:
-    assert path.exists(), f"{label} not found at {path}"
-    return path.read_text(encoding="utf-8")
 
 
 def _ui_js() -> str:
-    return _read_required_text(UI_JS_PATH, "static/ui.js")
+    return family_source("ui")
 
 
 def _run_node_script(script: str) -> str:
@@ -60,6 +56,7 @@ def _run_node_script(script: str) -> str:
     try:
         result = subprocess.run(
             [node, "-e", script],
+            input=_ui_js(),
             cwd=ROOT,
             text=True,
             capture_output=True,
@@ -100,9 +97,7 @@ def test_safe_encode_uri_component_defined():
 def test_safe_encode_uri_component_handles_lone_surrogates():
     """The exact inputs that previously crashed ``renderMessages()`` must now succeed."""
     script = r"""
-    const src = require('fs').readFileSync(
-      'static/ui.js', 'utf8'
-    );
+    const src = require('fs').readFileSync(0, 'utf8');
     // Extract just the two functions we care about.
     const safeMatch = src.match(
       /function _safeEncodeURIComponent\(v\)\{[\s\S]*?\n\}/
@@ -173,9 +168,7 @@ def test_message_viewport_anchor_key_does_not_throw_on_surrogate_text():
     """End-to-end: a message whose ``text`` contains a lone surrogate must
     produce a key without throwing — the failure mode that blanked the chat."""
     script = r"""
-    const src = require('fs').readFileSync(
-      'static/ui.js', 'utf8'
-    );
+    const src = require('fs').readFileSync(0, 'utf8');
     const safeMatch = src.match(
       /function _safeEncodeURIComponent\(v\)\{[\s\S]*?\n\}/
     );

@@ -11,6 +11,8 @@ Verifies:
   - Frontend EventSource / fallback polling patterns
 """
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import queue
@@ -29,9 +31,7 @@ ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 _ROUTE_APPROVALS = REPO_ROOT / "api" / "route_approvals.py"
 APPROVAL_SRC = _ROUTE_APPROVALS.read_text(encoding="utf-8") if _ROUTE_APPROVALS.exists() else ""
 ROUTES_SRC_FULL = ROUTES_SRC + APPROVAL_SRC
-MESSAGES_JS = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-
-
+MESSAGES_JS = family_source("messages")
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. Static-analysis tests (no server needed)
 # ═══════════════════════════════════════════════════════════════════════════════

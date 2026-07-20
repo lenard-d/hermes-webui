@@ -12,6 +12,8 @@ Root causes fixed:
      custom_providers entries exist in config.yaml — the live enrichment
      step never added those models.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 import sys
@@ -174,7 +176,7 @@ class TestLiveModelsProviderNormalization:
 
 
 def test_shared_searchable_model_picker_helper_has_search_and_custom_controls():
-    src = read("static/ui.js")
+    src = family_source("ui")
     m = re.search(r"function _mountSearchableModelSelect\(opts=\{\}\)\{.*?\n\}", src, re.DOTALL)
     assert m, "_mountSearchableModelSelect helper not found in static/ui.js"
     fn = m.group(0)
@@ -579,14 +581,14 @@ class TestProviderIdInGroupResponse:
             )
 
     def test_provider_id_in_static_ui_js_optgroup(self):
-        src = read("static/ui.js")
+        src = family_source("ui")
         assert "og.dataset.provider" in src, (
             "populateModelDropdown must set og.dataset.provider from g.provider_id "
             "so _fetchLiveModels can match by exact provider_id"
         )
 
     def test_fetch_live_models_prefers_data_provider_match(self):
-        src = read("static/ui.js")
+        src = family_source("ui")
         # Live model optgroup matching was extracted to _addLiveModelsToSelect (#872)
         m = re.search(r'function _addLiveModelsToSelect\b.*?\n\}', src, re.DOTALL)
         if not m:

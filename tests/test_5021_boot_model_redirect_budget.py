@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_JS = ROOT / "static" / "boot.js"
-UI_JS = ROOT / "static" / "ui.js"
 NODE = shutil.which("node")
 BOOT_MARKER_KEY = "hermes-webui-active-profile-bootstrap-401"
 
@@ -24,8 +25,8 @@ pytestmark = pytest.mark.skipif(
 _DRIVER = r"""
 const fs = require('fs');
 const bootSrc = fs.readFileSync(process.argv[2], 'utf8');
-const uiSrc = fs.readFileSync(process.argv[3], 'utf8');
-const scenario = JSON.parse(process.argv[4] || '{}');
+const uiSrc = fs.readFileSync(0, 'utf8');
+const scenario = JSON.parse(process.argv[3] || '{}');
 globalThis.window = globalThis;
 
 function extractBlock(source, startMarker, endMarker) {
@@ -409,7 +410,13 @@ def driver_path(tmp_path_factory):
 
 def _run(driver_path, scenario):
     process = subprocess.run(
-        [NODE, driver_path, str(BOOT_JS), str(UI_JS), json.dumps(scenario)],
+        [
+            NODE,
+            driver_path,
+            str(BOOT_JS),
+            json.dumps(scenario),
+        ],
+        input=family_source("ui"),
         capture_output=True,
         text=True,
         timeout=60,

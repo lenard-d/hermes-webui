@@ -1,24 +1,20 @@
 """Regression coverage for anomalous recurring cron UI state."""
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
-
-ROOT = Path(__file__).resolve().parent.parent
-PANELS_JS = ROOT / "static" / "panels.js"
-STYLE_CSS = ROOT / "static" / "style.css"
-I18N_JS = ROOT / "static" / "i18n.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 
 def _cron_helper_source() -> str:
-    src = PANELS_JS.read_text(encoding="utf-8")
+    src = family_source("panels")
     start = src.index("function _isRecurringCronJob")
     end = src.index("async function loadCrons", start)
     return src[start:end]
@@ -82,9 +78,9 @@ console.log(JSON.stringify({
 
 
 def test_cron_attention_ui_has_recovery_and_diagnostics_actions():
-    panels = PANELS_JS.read_text(encoding="utf-8")
-    style = STYLE_CSS.read_text(encoding="utf-8")
-    i18n = I18N_JS.read_text(encoding="utf-8")
+    panels = family_source("panels")
+    style = family_source("style")
+    i18n = family_source("i18n")
 
     assert "cron_status_needs_attention" in panels
     assert "resumeCurrentCron()" in panels

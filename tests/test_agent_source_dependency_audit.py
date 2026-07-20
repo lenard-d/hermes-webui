@@ -121,9 +121,9 @@ def test_audit_reports_runtime_agent_execution_imports():
     anchors = _anchors(classes["runtime_agent_execution"])
 
     assert ("api/agent_runtime.py", "run_agent") in anchors
-    assert ("api/routes.py", "tools.skills_tool") in anchors
+    assert ("api/routes_parts/skills.py", "tools.skills_tool") in anchors
     assert ("api/streaming.py", "tools.approval") in anchors
-    assert ("api/routes.py", "cron.jobs") in anchors
+    assert ("api/routes_parts/cron.py", "cron.jobs") in anchors
 
 
 def test_audit_reports_runtime_auxiliary_and_model_metadata_imports():
@@ -185,7 +185,7 @@ def test_audit_keeps_client_package_candidates_visible():
     anchors = _anchors(classes["webui_local_or_client_package"])
 
     assert ("api/streaming.py", "hermes_constants") in anchors
-    assert ("api/routes.py", "agent.skill_utils") in anchors
+    assert ("api/routes_parts/skills.py", "agent.skill_utils") in anchors
     assert ("api/routes.py", "hermes_cli.plugins") in anchors
     assert ("api/providers.py", "agent.credential_pool") in anchors
 

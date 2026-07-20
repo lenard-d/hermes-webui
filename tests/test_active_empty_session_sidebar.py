@@ -1,9 +1,9 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
 def test_active_empty_session_is_injected_into_sidebar_rows():
     assert "function _sessionRowsWithActiveEphemeralSession(rows)" in SESSIONS_JS
     helper_start = SESSIONS_JS.index("function _sessionRowsWithActiveEphemeralSession(rows)")

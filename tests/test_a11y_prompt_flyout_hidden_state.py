@@ -1,11 +1,11 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INDEX = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-STYLE = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
-
-
+MESSAGES_JS = family_source("messages")
+STYLE = family_source("style")
 def _function_body(name: str, *, limit: int = 5000) -> str:
     start = MESSAGES_JS.index(f"function {name}")
     return MESSAGES_JS[start : start + limit]

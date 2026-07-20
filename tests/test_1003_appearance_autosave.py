@@ -6,6 +6,8 @@ Focus:
 - Full-save flow should still include font_size.
 - /api/settings should accept appearance-only payloads and preserve untouched fields.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import urllib.error
@@ -16,11 +18,9 @@ from tests._pytest_port import BASE
 
 
 BOOT_JS = (Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (Path(__file__).parent.parent / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (Path(__file__).parent.parent / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (Path(__file__).parent.parent / "static" / "i18n.js").read_text(encoding="utf-8")
-
-
+I18N_JS = family_source("i18n")
 def _function_block(src: str, name: str) -> str:
     marker = re.search(rf"(^|\n)(?:async\s+)?function\s+{re.escape(name)}\(", src)
     assert marker is not None, f"{name}() not found"

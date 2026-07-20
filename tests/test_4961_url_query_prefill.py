@@ -1,4 +1,6 @@
 """Regression tests for #4961 URL query composer prefill behavior."""
+from tests.frontend_asset_contract import family_source
+
 import json
 import re
 import shutil
@@ -8,10 +10,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-SESSIONS_JS_PATH = REPO_ROOT / "static" / "sessions.js"
 BOOT_JS_PATH = REPO_ROOT / "static" / "boot.js"
 REPRO_PATH = REPO_ROOT / "tests" / "fixtures" / "webui-PR-TARGET-5884-REPRO.md"
-SESSIONS_JS = SESSIONS_JS_PATH.read_text(encoding="utf-8")
+SESSIONS_JS = family_source("sessions")
 BOOT_JS = BOOT_JS_PATH.read_text(encoding="utf-8")
 NODE = shutil.which("node")
 

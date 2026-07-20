@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -125,8 +127,7 @@ def test_project_context_content_is_redacted_in_memory_response(tmp_path, monkey
 
 
 def test_memory_panel_defines_read_only_project_context_section():
-    panels = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-
+    panels = family_source("panels")
     assert "key: 'project_context'" in panels
     assert "readOnly: true" in panels
     assert "project_context_shadowed" in panels
@@ -134,8 +135,7 @@ def test_memory_panel_defines_read_only_project_context_section():
 
 
 def test_memory_panel_references_all_memory_path_fields():
-    panels = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-
+    panels = family_source("panels")
     assert "function _memorySectionPath(key)" in panels
     assert "_memoryData.memory_path" in panels
     assert "_memoryData.user_path" in panels
@@ -146,7 +146,7 @@ def test_memory_panel_references_all_memory_path_fields():
 
 
 def _memory_render_blocks():
-    panels = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     helper_start = panels.index("function _memorySectionContent(key)")
     helper_end = panels.index("function _setMemoryHeaderButtons", helper_start)
     render_start = panels.index("function _renderMemoryDetail(section)")
@@ -225,7 +225,7 @@ console.log(JSON.stringify({memoryHtml, userHtml, soulHtml, projectHtml, memoryM
 
 
 def _memory_button_render_blocks():
-    panels = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+    panels = family_source("panels")
     sections_start = panels.index("const MEMORY_SECTIONS = [")
     sections_end = panels.index("];", sections_start) + 2
     helper_start = panels.index("function _memorySectionPath(key)")

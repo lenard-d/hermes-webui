@@ -11,6 +11,8 @@ These are static regression tests that verify the JS source contains the
 correct guard patterns.
 """
 
+from tests.frontend_asset_contract import family_source
+
 import re
 from pathlib import Path
 
@@ -22,7 +24,7 @@ def _workspace_js() -> str:
 
 
 def _ui_js() -> str:
-    return (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+    return family_source("ui")
 
 
 class TestPWAAuthRedirect:

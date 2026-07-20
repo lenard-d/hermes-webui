@@ -21,6 +21,8 @@ This module verifies BOTH:
      from send() does NOT re-queue when the composer was already cleared, and
      WOULD have re-queued had the composer still held the stale text.
 """
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -30,9 +32,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_JS = ROOT.joinpath("static", "messages.js").read_text(encoding="utf-8")
-
-
+MESSAGES_JS = family_source("messages")
 # ---------------------------------------------------------------------------
 # Static ordering assertions
 # ---------------------------------------------------------------------------

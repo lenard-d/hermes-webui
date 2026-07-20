@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 import shutil
 import subprocess
@@ -41,10 +43,12 @@ process.stdout.write(JSON.stringify(result));
 
 def _equivalent_cases(tmp_path, cases):
     driver = tmp_path / "driver.js"
+    ui_source = tmp_path / "ui-family.js"
     driver.write_text(_DRIVER, encoding="utf-8")
+    ui_source.write_text(family_source("ui"), encoding="utf-8")
     assert NODE is not None
     result = subprocess.run(
-        [NODE, str(driver), str(UI_JS_PATH), json.dumps(cases)],
+        [NODE, str(driver), str(ui_source), json.dumps(cases)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -55,7 +59,7 @@ def _equivalent_cases(tmp_path, cases):
 
 def test_picker_rows_preserve_provider_id_for_equivalence_check():
     """The synthesis loop must compare badge routes against real row providers."""
-    ui = UI_JS_PATH.read_text(encoding="utf-8")
+    ui = family_source("ui")
 
     assert "const providerId=child.dataset&&child.dataset.provider?child.dataset.provider:'';" in ui
     assert "providerId,modelsEndpointError,badge:_getConfiguredModelBadge" in ui

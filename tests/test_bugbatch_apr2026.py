@@ -8,11 +8,13 @@ Covers:
 - #567: docker-compose.yml comment mentions macOS UID mismatch
 - #590: _transcribeBlob already calls setComposerStatus('Transcribing…') — confirmed present
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import re
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
-STYLE_CSS = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+STYLE_CSS = family_source("style")
 BOOT_JS   = (REPO_ROOT / "static" / "boot.js").read_text(encoding="utf-8")
 COMPOSE   = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 

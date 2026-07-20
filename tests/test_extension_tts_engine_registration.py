@@ -9,6 +9,8 @@ Two layers:
 
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import shutil
 import subprocess
 import textwrap
@@ -18,10 +20,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 BOOT_JS = (REPO / "static" / "boot.js").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-PANELS_JS = (REPO / "static" / "panels.js").read_text(encoding="utf-8")
-
-
+UI_JS = family_source("ui")
+PANELS_JS = family_source("panels")
 def test_public_api_present():
     assert "window.registerHermesTtsEngine=function" in BOOT_JS
     assert "window._hermesTtsSynth=function" in BOOT_JS

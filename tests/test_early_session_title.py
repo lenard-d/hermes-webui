@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -162,7 +164,7 @@ def test_prompt_prefix_manual_title_is_not_treated_as_provisional():
 
 
 def test_messages_js_applies_chat_start_title():
-    src = Path("static/messages.js").read_text(encoding="utf-8")
+    src = family_source("messages")
     assert "applySessionTitleUpdate" in src
     assert "startData.title" in src or "provisional_title" in src
     assert "addEventListener('title'" in src

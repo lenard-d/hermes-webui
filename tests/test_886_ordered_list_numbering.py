@@ -9,14 +9,13 @@ at 1, producing "1. 1. 1." instead of "1. 2. 3.".
 Fix: emit value="N" on every <li> so the correct ordinal is preserved even when
 items end up in separate <ol> containers after the paragraph split.
 """
-import os
 import re
 
-UI_JS = os.path.join(os.path.dirname(__file__), '..', 'static', 'ui.js')
+from tests.frontend_asset_contract import family_source
 
 
 def get_ui_js():
-    return open(UI_JS, encoding='utf-8').read()
+    return family_source("ui")
 
 
 class TestOrderedListNumbering:

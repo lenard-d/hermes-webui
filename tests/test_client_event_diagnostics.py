@@ -4,6 +4,8 @@ When an EventSource fails in the browser, the server normally only sees a dead
 socket or follow-up probe. Persisting a small, sanitized client event makes the
 next incident diagnosable without logging prompt text or credentials.
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 from io import BytesIO
 from types import SimpleNamespace
@@ -13,10 +15,8 @@ import api.routes as routes
 
 REPO = Path(__file__).resolve().parents[1]
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
-SESSIONS_JS = (REPO / "static" / "sessions.js").read_text(encoding="utf-8")
-MESSAGES_JS = (REPO / "static" / "messages.js").read_text(encoding="utf-8")
-
-
+SESSIONS_JS = family_source("sessions")
+MESSAGES_JS = family_source("messages")
 def test_client_event_log_sanitizes_and_whitelists_fields():
     payload = {
         "event": "sse_error",

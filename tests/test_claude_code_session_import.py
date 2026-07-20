@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.frontend_asset_contract import family_source
+
 import json
 from pathlib import Path
 
@@ -300,11 +302,11 @@ def test_session_import_cli_queues_generated_title_for_writable_default_cli_titl
 
 
 def test_read_only_source_badge_ui_guards_are_present():
-    sessions_js = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    messages_js = (REPO_ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-    ui_js = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-    panels_js = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-    style_css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    sessions_js = family_source("sessions")
+    messages_js = family_source("messages")
+    ui_js = family_source("ui")
+    panels_js = family_source("panels")
+    style_css = family_source("style")
     routes_py = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
     assert "function _isReadOnlySession" in sessions_js
@@ -327,9 +329,8 @@ def test_messaging_source_badge_not_gated_on_is_cli_session():
     # Messaging sessions (Telegram, WeChat, Discord) populate source_label/source_tag/raw_source
     # but reach the chat pane with is_cli_session=false, so the topbar badge must not be gated on
     # is_cli_session or it never renders for them (#3338).
-    ui_js = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-    panels_js = (REPO_ROOT / "static" / "panels.js").read_text(encoding="utf-8")
-
+    ui_js = family_source("ui")
+    panels_js = family_source("panels")
     assert "S.session.is_cli_session&&(S.session.source_label" not in ui_js
     assert "if (S.session.is_cli_session) sourceLabel" not in panels_js
     assert "S.session.source_label||S.session.source_tag||S.session.raw_source" in ui_js
@@ -341,9 +342,8 @@ def test_messaging_source_badge_not_gated_on_is_cli_session():
 
 
 def test_messaging_source_badge_in_sidebar_not_gated_on_is_cli_session():
-    sessions_js = (REPO_ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-    style_css = (REPO_ROOT / "static" / "style.css").read_text(encoding="utf-8")
-
+    sessions_js = family_source("sessions")
+    style_css = family_source("style")
     assert "function _isMessagingSession" in sessions_js
     assert sessions_js.count("if(s.is_cli_session||_isMessagingSession(s)){") == 2
     assert "if(s.is_cli_session&&sourceLabel) metaBits.push(sourceLabel);" not in sessions_js
@@ -359,9 +359,8 @@ def test_messaging_source_badge_in_sidebar_not_gated_on_is_cli_session():
 
 
 def test_compression_queue_discoverability_ux():
-    ui_js = (REPO_ROOT / "static" / "ui.js").read_text(encoding="utf-8")
-    i18n_js = (REPO_ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-
+    ui_js = family_source("ui")
+    i18n_js = family_source("i18n")
     # Old misleading tooltip key must be gone from the compression branch
     assert "composer_disabled_compression','Waiting for compression to finish'" not in ui_js
 

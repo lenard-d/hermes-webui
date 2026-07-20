@@ -1,5 +1,7 @@
 """Regression coverage for notification clicks reusing an open WebUI tab (#4109)."""
 
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 import pytest
@@ -7,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SW_SRC = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
-MESSAGES_SRC = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
+MESSAGES_SRC = family_source("messages")
 ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
 

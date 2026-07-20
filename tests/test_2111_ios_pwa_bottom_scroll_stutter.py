@@ -1,11 +1,11 @@
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
 INDEX_HTML = (REPO / 'static' / 'index.html').read_text(encoding='utf-8')
-STYLE_CSS = (REPO / 'static' / 'style.css').read_text(encoding='utf-8')
-UI_JS = (REPO / 'static' / 'ui.js').read_text(encoding='utf-8')
-
-
+STYLE_CSS = family_source("style")
+UI_JS = family_source("ui")
 def test_scroll_controls_are_overlays_outside_messages_scroller():
     shell = INDEX_HTML.index('<div class="messages-shell">')
     scroller = INDEX_HTML.index('<div class="messages" id="messages">')

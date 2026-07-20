@@ -8,12 +8,12 @@ override on the active state.
 
 Issue: #1059 (settings picker active state)
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 BOOT_JS = (Path(__file__).parent.parent / "static" / "boot.js").read_text(encoding="utf-8")
-STYLE_CSS = (Path(__file__).parent.parent / "static" / "style.css").read_text(encoding="utf-8")
-
-
+STYLE_CSS = family_source("style")
 class TestSettingsPickerActiveState:
     """The selected picker card must be visually distinct via the .active class."""
 

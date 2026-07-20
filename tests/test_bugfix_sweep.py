@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_asset_paths, family_source
+
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -89,16 +91,19 @@ def test_auth_sessions_have_lock_and_success_can_clear_login_attempts(monkeypatc
 
 
 def _english_i18n_keys():
-    text = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-    match = re.search(r"en:\s*\{([\s\S]*?)\n\s*\},\n\s*[a-z]{2}:", text)
-    assert match, "could not find English locale block"
-    return set(re.findall(r"^\s*([A-Za-z0-9_]+):", match.group(1), re.M))
+    english_path = next(
+        path for path in family_asset_paths("i18n") if path.name == "locale-en.js"
+    )
+    text = english_path.read_text(encoding="utf-8")
+    assert "api.registerLocale('en', {" in text, "could not find English locale block"
+    return set(re.findall(r"^\s*([A-Za-z0-9_]+):", text, re.M))
 
 
 def _literal_i18n_refs():
     refs = set()
-    for path in (ROOT / "static").glob("*.js"):
-        if path.name == "i18n.js":
+    i18n_paths = set(family_asset_paths("i18n"))
+    for path in (ROOT / "static").rglob("*.js"):
+        if path in i18n_paths:
             continue
         text = path.read_text(encoding="utf-8")
         refs.update(re.findall(r"\bt\(\s*['\"]([A-Za-z0-9_]+)['\"]", text))
@@ -115,8 +120,7 @@ def test_static_literal_i18n_keys_exist_in_english_locale():
 def test_critical_boot_storage_access_is_guarded():
     index = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
     boot = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-    i18n = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-
+    i18n = family_source("i18n")
     theme_script = re.search(r"<script>\(function\(\)\{[\s\S]*?hermes-theme[\s\S]*?\}\)\(\)</script>", index)
     font_script = re.search(r"<script>\(function\(\)\{[\s\S]*?hermes-font-size[\s\S]*?\}\)\(\)</script>", index)
     assert theme_script and "try" in theme_script.group(0)
@@ -127,15 +131,13 @@ def test_critical_boot_storage_access_is_guarded():
 
 
 def test_stale_session_recovery_preserves_subpath_mount_root():
-    sessions = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
+    sessions = family_source("sessions")
     assert "history.replaceState(null,'','/')" not in sessions
     assert "_appRootPath" in sessions
 
 
 def test_session_url_builder_strips_legacy_session_query_alias():
-    sessions = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
+    sessions = family_source("sessions")
     helper = sessions[sessions.index("function _sessionUrlForSid"):sessions.index("function _setActiveSessionUrl")]
     assert "current.searchParams.delete('session');" in helper
     assert "current.searchParams.delete('session_id');" in helper
@@ -143,8 +145,7 @@ def test_session_url_builder_strips_legacy_session_query_alias():
 
 def test_cross_profile_session_deep_links_switch_profile_instead_of_self_healing():
     routes = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-    sessions = (ROOT / "static" / "sessions.js").read_text(encoding="utf-8")
-
+    sessions = family_source("sessions")
     assert '"code": "session_profile_mismatch"' in routes
     assert 'if method == "GET" and path == "/api/session":' in routes
     assert "function _sessionProfileMismatchFromError" in sessions

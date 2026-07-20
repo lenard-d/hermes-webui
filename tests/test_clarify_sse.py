@@ -13,6 +13,8 @@ import textwrap
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
+
 # ── Paths ────────────────────────────────────────────────────────────────────
 _ROUTES = os.path.join(os.path.dirname(__file__), "..", "api", "routes.py")
 _CLARIFY = os.path.join(os.path.dirname(__file__), "..", "api", "clarify.py")
@@ -84,7 +86,7 @@ class TestClarifySSEFrontendCode:
 
     @pytest.fixture(autouse=True)
     def _load_js(self):
-        self.js = _read(_MESSAGES)
+        self.js = family_source("messages")
 
     def _clarify_polling_body(self):
         start = self.js.index("function startClarifyPolling(")

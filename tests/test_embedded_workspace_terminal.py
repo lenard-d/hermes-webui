@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import os
 import pathlib
 import io
@@ -34,7 +36,7 @@ def test_terminal_is_opened_by_slash_command_not_permanent_composer_icon():
 
 def test_terminal_surface_uses_composer_flyout_card_pattern():
     html = _read("static/index.html")
-    style_css = _read("static/style.css")
+    style_css = family_source("style")
 
     flyout = html.split('<div class="composer-flyout">', 1)[1].split('<div class="queue-pill-outer">', 1)[0]
     assert 'id="composerTerminalPanel"' in flyout
@@ -56,7 +58,7 @@ def test_terminal_surface_uses_composer_flyout_card_pattern():
 
 def test_terminal_uses_controlled_desktop_resize_handle():
     html = _read("static/index.html")
-    style_css = _read("static/style.css")
+    style_css = family_source("style")
     terminal_js = _read("static/terminal.js")
 
     assert 'class="composer-terminal-resize-handle"' in html
@@ -87,7 +89,7 @@ def test_terminal_resize_path_refits_backend_and_transcript_space():
 
 
 def test_terminal_open_reserves_transcript_space():
-    style_css = _read("static/style.css")
+    style_css = family_source("style")
     terminal_js = _read("static/terminal.js")
 
     assert ".messages.terminal-open{padding-bottom:var(--terminal-card-height" in style_css
@@ -242,7 +244,7 @@ def test_terminal_output_preserves_control_sequences_for_xterm():
 
 def test_terminal_xterm_theme_follows_appearance_tokens():
     terminal_js = _read("static/terminal.js")
-    style_css = _read("static/style.css")
+    style_css = family_source("style")
 
     assert "function _terminalTheme" in terminal_js
     assert "_terminalCssVar('--code-bg'" in terminal_js

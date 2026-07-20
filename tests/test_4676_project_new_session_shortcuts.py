@@ -3,19 +3,13 @@
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.frontend_asset_contract import family_source
 
-ROOT = Path(__file__).resolve().parents[1]
-SESSIONS_JS = ROOT / "static" / "sessions.js"
-STYLE_CSS = ROOT / "static" / "style.css"
+
 NODE = shutil.which("node")
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
 
 
 def _extract_function(source: str, name: str) -> str:
@@ -37,13 +31,13 @@ def _extract_function(source: str, name: str) -> str:
 
 
 def test_new_session_uses_explicit_project_override_before_active_filter():
-    src = _read(SESSIONS_JS)
+    src = family_source("sessions")
     assert "Object.prototype.hasOwnProperty.call(options,'project_id')" in src
     assert "reqBody.project_id=options.project_id" in src
 
 
 def test_quick_create_button_attaches_filter_align_and_request_path():
-    src = _read(SESSIONS_JS)
+    src = family_source("sessions")
     helper = _extract_function(src, "_attachProjectQuickCreateButton")
     assert "project-chip-quick-create" in helper
     assert "_setActiveProjectFilter(project.project_id)" in helper
@@ -59,14 +53,14 @@ def test_quick_create_button_attaches_filter_align_and_request_path():
 def test_quick_create_button_render_is_gated_off_by_default():
     """#4676 quick-create buttons must be opt-in: the chip render site only
     attaches the per-project '+' button when window._projectQuickCreate is set."""
-    src = _read(SESSIONS_JS)
+    src = family_source("sessions")
     assert "if(window._projectQuickCreate) _attachProjectQuickCreateButton(chip,p);" in src
     # The attach call must never run unconditionally at the render site.
     assert "\n      _attachProjectQuickCreateButton(chip,p);" not in src
 
 
 def test_project_quick_create_styles_exist_and_are_discrete_to_pointer_layouts():
-    css = _read(STYLE_CSS)
+    css = family_source("style")
     assert ".project-chip-quick-create" in css
     assert ".project-chip:hover .project-chip-quick-create" in css
     assert ".project-chip:focus-within .project-chip-quick-create" in css
@@ -77,9 +71,9 @@ def test_project_quick_create_styles_exist_and_are_discrete_to_pointer_layouts()
 def _run_new_session_case(options, active_project=None):
     _DRIVER = r"""
 const fs = require('fs');
-const [path, argsJson] = process.argv.slice(-2);
+const argsJson = process.argv.at(-1);
 const args = JSON.parse(argsJson);
-const src = fs.readFileSync(path, 'utf8');
+const src = fs.readFileSync(0, 'utf8');
 
 function extractAsyncFunction(source, name) {
   const marker = `async function ${name}(`;
@@ -171,7 +165,7 @@ eval(newSessionSrc);
   console.error(String(err && err.stack ? err.stack : err));
   process.exit(1);
 });
-"""
+    """
 
     payload = {
         "activeProject": active_project,
@@ -179,7 +173,8 @@ eval(newSessionSrc);
         "session": {"session_id": "session-1"},
     }
     result = subprocess.run(
-        [NODE, "-e", _DRIVER, str(SESSIONS_JS), json.dumps(payload)],
+        [NODE, "-e", _DRIVER, json.dumps(payload)],
+        input=family_source("sessions"),
         capture_output=True,
         text=True,
         timeout=30,
@@ -213,8 +208,8 @@ def test_new_session_falls_back_to_active_project_when_override_missing():
 
 _HELPER = r"""
 const fs = require('fs');
-const [sessionsPath, paramsJson] = process.argv.slice(-2);
-const sessionsSrc = fs.readFileSync(sessionsPath, 'utf8');
+const paramsJson = process.argv.at(-1);
+const sessionsSrc = fs.readFileSync(0, 'utf8');
 const params = JSON.parse(paramsJson);
 
 function extractFunction(source, name) {
@@ -348,7 +343,8 @@ def _run_quick_create_case(
         "toasts": [],
     }
     result = subprocess.run(
-        [NODE, "-e", _HELPER, str(SESSIONS_JS), json.dumps(payload)],
+        [NODE, "-e", _HELPER, json.dumps(payload)],
+        input=family_source("sessions"),
         capture_output=True,
         text=True,
         timeout=30,

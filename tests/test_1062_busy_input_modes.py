@@ -9,6 +9,8 @@ Pins the wiring for the three modes (queue / interrupt / steer):
 
 Issue: #720 (configurable busy-input behaviour)
 """
+from tests.frontend_asset_contract import family_source
+
 from pathlib import Path
 
 from tests.helpers import source_between as _source_between
@@ -18,14 +20,12 @@ CONFIG_PY = (ROOT / "api" / "config_parts" / "settings_persistence.py").read_tex
     encoding="utf-8"
 )
 COMMANDS_JS = (ROOT / "static" / "commands.js").read_text(encoding="utf-8")
-MESSAGES_JS = (ROOT / "static" / "messages.js").read_text(encoding="utf-8")
-UI_JS = (ROOT / "static" / "ui.js").read_text(encoding="utf-8")
+MESSAGES_JS = family_source("messages")
+UI_JS = family_source("ui")
 BOOT_JS = (ROOT / "static" / "boot.js").read_text(encoding="utf-8")
-PANELS_JS = (ROOT / "static" / "panels.js").read_text(encoding="utf-8")
+PANELS_JS = family_source("panels")
 INDEX_HTML = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-I18N_JS = (ROOT / "static" / "i18n.js").read_text(encoding="utf-8")
-
-
+I18N_JS = family_source("i18n")
 # ── Backend: setting registration + enum validation ─────────────────────
 
 class TestBusyInputModeSetting:

@@ -11,6 +11,8 @@ while hidden, #4704/#2476).
 `_initDashboardLinkProbe` refreshes once on `visibilitychange` back to visible.
 Forced calls (settings save, init, the catch-up) still run.
 """
+from tests.frontend_asset_contract import family_source
+
 import pathlib
 import shutil
 import subprocess
@@ -20,7 +22,7 @@ import textwrap
 import pytest
 
 REPO = pathlib.Path(__file__).parent.parent
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
 NODE = shutil.which("node")
 requires_node = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
@@ -78,13 +80,15 @@ _DRIVER = textwrap.dedent(
 
 
 def _run(hidden):
-    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
-        f.write(_DRIVER)
-        driver = f.name
-    out = subprocess.run(
-        [NODE, driver, str(REPO / "static" / "ui.js"), "hidden" if hidden else "visible"],
-        capture_output=True, text=True, timeout=30,
-    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        driver = pathlib.Path(tmp_dir) / "driver.js"
+        ui_source = pathlib.Path(tmp_dir) / "ui-family.js"
+        driver.write_text(_DRIVER, encoding="utf-8")
+        ui_source.write_text(UI_JS, encoding="utf-8")
+        out = subprocess.run(
+            [NODE, driver, ui_source, "hidden" if hidden else "visible"],
+            capture_output=True, text=True, timeout=30,
+        )
     assert out.returncode == 0, out.stderr
     import json
     return json.loads(out.stdout.strip())

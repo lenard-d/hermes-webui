@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import json
 import pathlib
 import shutil
@@ -9,8 +11,8 @@ import pytest
 
 REPO = pathlib.Path(__file__).parent.parent
 INDEX_HTML = (REPO / "static" / "index.html").read_text(encoding="utf-8")
-UI_JS = (REPO / "static" / "ui.js").read_text(encoding="utf-8")
-STYLE_CSS = (REPO / "static" / "style.css").read_text(encoding="utf-8")
+UI_JS = family_source("ui")
+STYLE_CSS = family_source("style")
 UI_PATH = REPO / "static" / "ui.js"
 PANELS_PATH = REPO / "static" / "panels.js"
 NODE = shutil.which("node")
@@ -300,10 +302,14 @@ _DASHBOARD_LINK_DRIVER = textwrap.dedent(
 
 
 def _run_dashboard_link_driver(action: str, mode: str = 'auto', url: str = '') -> dict:
-    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as f:
-        f.write(_DASHBOARD_LINK_DRIVER)
-        driver = f.name
-    try:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = pathlib.Path(tmp_dir)
+        driver = tmp_path / "driver.js"
+        ui_path = tmp_path / "ui-family.js"
+        panels_path = tmp_path / "panels-family.js"
+        driver.write_text(_DASHBOARD_LINK_DRIVER, encoding="utf-8")
+        ui_path.write_text(UI_JS, encoding="utf-8")
+        panels_path.write_text(family_source("panels"), encoding="utf-8")
         result = subprocess.run(
             [
                 NODE,
@@ -311,8 +317,8 @@ def _run_dashboard_link_driver(action: str, mode: str = 'auto', url: str = '') -
                 action,
                 mode,
                 url,
-                str(UI_PATH),
-                str(PANELS_PATH),
+                str(ui_path),
+                str(panels_path),
             ],
             cwd=REPO,
             text=True,
@@ -323,11 +329,6 @@ def _run_dashboard_link_driver(action: str, mode: str = 'auto', url: str = '') -
         if result.returncode != 0:
             raise RuntimeError(f"node harness failed: {result.stderr or result.stdout}")
         return json.loads(result.stdout.strip())
-    finally:
-        try:
-            pathlib.Path(driver).unlink()
-        except OSError:
-            pass
 
 
 def test_dashboard_nav_buttons_are_hidden_by_default_and_subpath_safe():
@@ -590,14 +591,14 @@ def test_extension_rail_actions_are_mirrored_to_mobile_nav():
         }));
         """
     )
-    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as handle:
-        handle.write(driver)
-        path = handle.name
-    try:
-        result = subprocess.run([NODE, path, str(UI_PATH)], text=True, capture_output=True, timeout=15, check=True)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = pathlib.Path(tmp_dir)
+        path = tmp_path / "driver.js"
+        ui_path = tmp_path / "ui-family.js"
+        path.write_text(driver, encoding="utf-8")
+        ui_path.write_text(UI_JS, encoding="utf-8")
+        result = subprocess.run([NODE, path, ui_path], text=True, capture_output=True, timeout=15, check=True)
         out = json.loads(result.stdout)
-    finally:
-        pathlib.Path(path).unlink(missing_ok=True)
     assert out == {
         "observerArmed": True,
         "observerAttributes": True,

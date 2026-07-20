@@ -1,4 +1,6 @@
 """Tests for #835 — refresh button in Tasks / Scheduled Jobs panel."""
+from tests.frontend_asset_contract import family_source
+
 import os
 import re
 
@@ -64,7 +66,7 @@ class TestLoadCronsAnimateFlag:
     the refresh button while fetching."""
 
     def test_load_crons_accepts_animate_param(self):
-        js = _read("static/panels.js")
+        js = family_source("panels")
         assert re.search(r'async function loadCrons\s*\(\s*animate\s*\)', js), (
             "loadCrons must accept an `animate` parameter"
         )
@@ -72,7 +74,7 @@ class TestLoadCronsAnimateFlag:
     def test_load_crons_restores_button_in_finally(self):
         """The opacity/disabled restore MUST be in a finally block so a
         throwing fetch doesn't leave the button stuck at 0.5 / disabled."""
-        js = _read("static/panels.js")
+        js = family_source("panels")
         m = re.search(r'async function loadCrons\(.*?\n\}', js, re.DOTALL)
         assert m, "loadCrons body not found"
         fn = m.group(0)
@@ -91,7 +93,7 @@ class TestCronCreatedEventListener:
     future chat paths can trigger the cron list refresh."""
 
     def test_listener_registered_at_module_scope(self):
-        js = _read("static/panels.js")
+        js = family_source("panels")
         assert re.search(
             r"addEventListener\(\s*['\"]hermes:cron_created['\"]",
             js,
@@ -100,7 +102,7 @@ class TestCronCreatedEventListener:
         )
 
     def test_listener_triggers_load_crons(self):
-        js = _read("static/panels.js")
+        js = family_source("panels")
         m = re.search(
             r"addEventListener\(\s*['\"]hermes:cron_created['\"].*?\}\s*\)",
             js,

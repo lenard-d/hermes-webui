@@ -1,3 +1,5 @@
+from tests.frontend_asset_contract import family_source
+
 import io
 import json
 from pathlib import Path
@@ -418,9 +420,8 @@ def test_recovery_source_metadata_round_trips_through_state_db_sidecar_rebuild(t
 
 
 def test_compression_recovery_ui_wires_card_action_and_send_intercept():
-    ui = (ROOT / "static/ui.js").read_text(encoding="utf-8")
-    messages = (ROOT / "static/messages.js").read_text(encoding="utf-8")
-
+    ui = family_source("ui")
+    messages = family_source("messages")
     assert "function _compressionRecoveryHtml" in ui
     assert "data-compression-recovery-card=\"1\"" in ui
     assert "api('/api/session/compression-recovery/start'" in ui
@@ -432,7 +433,7 @@ def test_compression_recovery_ui_wires_card_action_and_send_intercept():
 
 
 def test_compression_recovery_ui_renders_session_level_recovery_on_terminal_message():
-    ui = (ROOT / "static/ui.js").read_text(encoding="utf-8")
+    ui = family_source("ui")
     start = ui.index("const recoveryPayload=(!isUser&&m._compressionRecovery)")
     end = ui.index("const statusHtml", start)
     body = ui[start:end]
@@ -445,7 +446,7 @@ def test_compression_recovery_ui_renders_session_level_recovery_on_terminal_mess
 
 
 def test_compression_recovery_ui_skips_message_fallback_after_session_clear():
-    ui = (ROOT / "static/ui.js").read_text(encoding="utf-8")
+    ui = family_source("ui")
     start = ui.index("function _activeCompressionRecoveryPayload(){")
     end = ui.index("function isGenericCompressionContinuationIntent", start)
     body = ui[start:end]
@@ -462,7 +463,7 @@ def test_compression_recovery_action_handles_stale_card_409():
     """A 409 (recovery already cleared) must be mapped to a neutral note and the
     stale card retired — not surfaced as a raw 'Compression recovery failed' error.
     """
-    ui = (ROOT / "static/ui.js").read_text(encoding="utf-8")
+    ui = family_source("ui")
     start = ui.index("async function startCompressionRecovery(btn){")
     end = ui.index("\n}", ui.index("finally", start))
     body = ui[start:end]
