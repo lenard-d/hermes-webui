@@ -22,6 +22,13 @@ _PUBLIC = {
     "run_agent_streaming": (".local", "run_agent_streaming"),
     "run_journal_path": (".journal", "run_journal_path"),
     "runtime_adapter_enabled": (".adapter", "runtime_adapter_enabled"),
+    "runtime_last_run_finished_at": (
+        ".runtime_state",
+        "runtime_last_run_finished_at",
+    ),
+    "runtime_transport_count": (".runtime_state", "runtime_transport_count"),
+    "runtime_transport_items": (".runtime_state", "runtime_transport_items"),
+    "runtime_worker_items": (".runtime_state", "runtime_worker_items"),
     "start_local_turn": (".admission", "start_local_turn"),
     "start_session_turn": (".server_turn", "start_session_turn"),
 }

@@ -46,13 +46,23 @@ from .cache import get_session, new_session
 from .external import clear_cli_sessions_cache
 from .pending_recovery import _REPAIR_STALE_PENDING_GRACE_SECONDS
 from .process_wakeup import clear_process_wakeup_pause
-from .projects import title_from
+from .projects import load_projects, title_from
 from .reconciliation import merge_session_messages_append_only
-from .records import SESSION_DIR, Session, is_safe_session_id, model_explicit_pick_signature
+from .records import (
+    SESSION_DIR,
+    Session,
+    is_safe_session_id,
+    model_explicit_pick_signature,
+)
 from .sidebar import all_sessions
-from .state_db import get_session_for_file_ops
+from .state_db import _active_state_db_path, get_session_for_file_ops
 
 REPAIR_STALE_PENDING_GRACE_SECONDS = _REPAIR_STALE_PENDING_GRACE_SECONDS
+
+
+def active_state_db_path():
+    """Return the active profile's Hermes state database path."""
+    return _active_state_db_path()
 
 
 def commit_session_memory(
@@ -97,6 +107,7 @@ __all__ = [
     "SESSION_CHANNELS_LOCK",
     "REPAIR_STALE_PENDING_GRACE_SECONDS",
     "active_stream_id_for_session",
+    "active_state_db_path",
     "admission_write_owner",
     "all_sessions",
     "apply_session_title_rename",
@@ -116,6 +127,7 @@ __all__ = [
     "get_session_for_file_ops",
     "get_session_channel",
     "is_safe_session_id",
+    "load_projects",
     "mark_turn_completed",
     "merge_session_messages_append_only",
     "model_explicit_pick_signature",

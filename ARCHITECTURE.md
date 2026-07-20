@@ -34,8 +34,8 @@ and `static/boot.js` keeps the dataset synchronized with the runtime panel state
 The design philosophy is deliberately minimal. There is no build step, no bundler, no
 frontend framework. The Python server is split into a routing shell (`server.py`) and
 business logic modules (`api/`). Large public backend modules remain compatibility
-facades while cohesive, importable implementations live in semantic `*_parts/`
-packages. The frontend is vanilla JavaScript and CSS loaded directly from
+facades while cohesive, importable implementations live in semantic packages and
+owner modules. The frontend is vanilla JavaScript and CSS loaded directly from
 `static/` in an explicit browser order; most feature files are still classic
 scripts, while bounded ownership seams can use native ES modules without adding
 a build step. This makes the code easy to modify from a terminal or by an agent.
@@ -70,6 +70,14 @@ actions. The topbar remains focused on conversation context and the workspace/fi
         model_settings.py  Advanced/default/auxiliary model settings policy and persistence
         model_cache.py     Model-catalog cache I/O, freshness, provenance, fingerprints, and invalidation
       helpers.py           HTTP helpers: j(), bad(), require(), safe_resolve(), security headers
+      http/                Explicit HTTP composition root and semantic transport owners
+        router.py          Method dispatch across independently importable route groups
+        routes/            Endpoint groups organized by request/domain responsibility
+        observability.py   Logs, insights, runtime diagnostics, and health responses
+        project_os.py      Read-only Project OS dashboard projection
+        project_context.py Memory files and effective project-context projection
+        plugins.py         Sanitized plugin visibility and dashboard enablement
+        shell.py           App shell, manifest, saved prompts, restart, and shutdown controls
       insights.py          Usage aggregation across WebUI index and Hermes state.db
       model_catalog.py     Compatibility exports for config/static_catalog.py
       models.py            Compatibility facade for the session/model public API
@@ -369,7 +377,12 @@ thread. The Handler class subclasses BaseHTTPRequestHandler with two methods:
                       /api/session/delete, /api/chat/start, /api/chat,
                       /api/approval/respond, /api/session/worktree/remove
 
-Routing is a flat if/elif chain inside each method. No routing framework.
+`api.http.router` is the explicit method-level composition root. It delegates to
+independently importable groups under `api.http.routes` and to semantic HTTP
+owners such as `observability`, `project_context`, `project_os`, `plugins`, and
+`shell`. The groups still use straightforward ordered conditionals; no routing
+framework or source-code binding layer is involved. `api.routes` remains a
+temporary compatibility facade for older imports and tests.
 
 Helper functions used by all handlers:
 
@@ -955,6 +968,9 @@ Current backend structure (roles only; use `wc -l` for current sizes):
       api/
         __init__.py
         routes.py             GET + POST dispatch and route compatibility facade
+        http/                 Explicit router, route groups, and semantic HTTP owners
+          {observability,project_os,project_context,plugins,shell}.py
+                              Health/diagnostics, dashboard, context, plugin, and shell owners
         routes_parts/         Cohesive importable chat-run, projection, transport, media,
                               workspace, terminal, login, notes/wiki, TTS, and runtime domains
         config/               Config compatibility entrypoint and cohesive config/model domains

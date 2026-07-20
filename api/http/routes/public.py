@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.shell import render_index_shell_base, serve_manifest, serve_unavailable
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
@@ -12,13 +13,10 @@ def handle_get(handler, parsed, ctx: RouteContext):
     __file__ = ctx["__file__"]
     _html = ctx["_html"]
     _oidc_login_html = ctx["_oidc_login_html"]
-    _render_index_shell_base = ctx["_render_index_shell_base"]
     _request_base_url = ctx["_request_base_url"]
     _resolve_login_locale_key = ctx["_resolve_login_locale_key"]
     _safe_login_redirect_path = ctx["_safe_login_redirect_path"]
     _security_headers = ctx["_security_headers"]
-    _serve_manifest = ctx["_serve_manifest"]
-    _serve_shell_unavailable = ctx["_serve_shell_unavailable"]
     _serve_static = ctx["_serve_static"]
     api_config = ctx["api_config"]
     bad = ctx["bad"]
@@ -43,7 +41,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
     # the manifest, and Firefox falls back to a generated letter icon.
     # See #2226.
     if parsed.path in ("/session/manifest.json", "/session/manifest.webmanifest"):
-        return _serve_manifest(handler)
+        return serve_manifest(handler)
 
     if parsed.path in ("/", "/index.html") or parsed.path.startswith("/session/"):
         try:
@@ -72,7 +70,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             # The disk read + process-constant token substitutions are cached;
             # only the per-session CSRF token and per-request extension tags are
             # applied here (see _render_index_shell_base).
-            html = _render_index_shell_base().replace(
+            html = render_index_shell_base().replace(
                 "__CSRF_TOKEN_JSON__", json.dumps(csrf_token)
             )
             return t(
@@ -81,7 +79,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
                 content_type="text/html; charset=utf-8",
             )
         except Exception as exc:
-            return _serve_shell_unavailable(handler, exc)
+            return serve_unavailable(handler, exc)
 
     if parsed.path == "/share" or parsed.path.startswith("/share/"):
         share_path = (Path(__file__).parent.parent / "static" / "share.html").resolve()
@@ -249,7 +247,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
         )
 
     if parsed.path in ("/manifest.json", "/manifest.webmanifest"):
-        return _serve_manifest(handler)
+        return serve_manifest(handler)
 
     if parsed.path == "/sw.js":
         static_root = api_config.get_static_root()

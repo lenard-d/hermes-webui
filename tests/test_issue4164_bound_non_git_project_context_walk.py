@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import pathlib
 
-import api.routes as routes
+from api.http.project_context import read_active
 
 
 def _ctx(workspace):
-    return routes._read_active_project_context(pathlib.Path(workspace))
+    return read_active(pathlib.Path(workspace))
 
 
 def test_non_git_workspace_does_not_walk_above_workspace(tmp_path):

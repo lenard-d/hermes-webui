@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.observability import handle_health, handle_insights, handle_logs
+from api.http.project_os import handle_dashboard
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
-    _handle_health = ctx["_handle_health"]
-    _handle_insights = ctx["_handle_insights"]
     _handle_llm_wiki_browse = ctx["_handle_llm_wiki_browse"]
     _handle_llm_wiki_page = ctx["_handle_llm_wiki_page"]
     _handle_llm_wiki_status = ctx["_handle_llm_wiki_status"]
-    _handle_logs = ctx["_handle_logs"]
-    _handle_project_os_dashboard = ctx["_handle_project_os_dashboard"]
     _kanban_unknown_endpoint = ctx["_kanban_unknown_endpoint"]
     build_agent_health_payload = ctx["build_agent_health_payload"]
     build_system_health_payload = ctx["build_system_health_payload"]
@@ -20,9 +18,9 @@ def handle_get(handler, parsed, ctx: RouteContext):
     j = ctx["j"]
 
     if parsed.path == "/api/insights":
-        return _handle_insights(handler, parsed)
+        return handle_insights(handler, parsed)
     if parsed.path == "/api/project-os/dashboard":
-        return _handle_project_os_dashboard(handler, parsed)
+        return handle_dashboard(handler, parsed)
 
     if parsed.path.startswith("/api/kanban/"):
         from api.kanban import handle_kanban_get
@@ -41,10 +39,10 @@ def handle_get(handler, parsed, ctx: RouteContext):
     if parsed.path == "/api/wiki/page":
         return _handle_llm_wiki_page(handler, parsed)
     if parsed.path == "/api/logs":
-        return _handle_logs(handler, parsed)
+        return handle_logs(handler, parsed)
 
     if parsed.path == "/health":
-        return _handle_health(handler, parsed)
+        return handle_health(handler, parsed)
 
     if parsed.path == "/api/health/agent":
         payload = build_agent_health_payload()

@@ -6,7 +6,7 @@ import threading
 import types
 
 from api.agent_ops import gateway_control as gateway_restart
-import api.routes as routes
+from api.http import shell
 
 
 class MockPopen:
@@ -66,12 +66,12 @@ def _call_health_restart(monkeypatch, helper_result):
     handler = types.SimpleNamespace()
     responses = []
     monkeypatch.setattr(
-        routes,
+        shell,
         "j",
         lambda handler, payload, **kw: responses.append((payload, kw.get("status", 200))) or True,
     )
-    monkeypatch.setattr(routes, "restart_active_profile_gateway", lambda: dict(helper_result))
-    return routes._handle_health_restart(handler), responses
+    monkeypatch.setattr(shell, "restart_active_profile_gateway", lambda: dict(helper_result))
+    return shell.handle_health_restart(handler), responses
 
 
 def test_restart_active_profile_gateway_success_uses_active_profile_home(monkeypatch):
@@ -181,7 +181,7 @@ def test_restart_active_profile_gateway_accepts_renamed_root_alias(monkeypatch):
     )
     monkeypatch.setattr(
         gateway_restart,
-        "_is_root_profile",
+        "is_root_profile",
         lambda profile: profile in {"default", "rootalias"},
     )
     monkeypatch.setattr(gateway_restart.shutil, "which", lambda cmd: "/mock/bin/hermes")

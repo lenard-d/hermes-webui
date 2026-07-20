@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.project_context import handle_memory_read
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
@@ -23,7 +24,6 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _handle_cron_status = ctx["_handle_cron_status"]
     _handle_mcp_servers_list = ctx["_handle_mcp_servers_list"]
     _handle_mcp_tools_list = ctx["_handle_mcp_tools_list"]
-    _handle_memory_read = ctx["_handle_memory_read"]
     _handle_notes_item = ctx["_handle_notes_item"]
     _handle_notes_search = ctx["_handle_notes_search"]
     _handle_notes_sources_list = ctx["_handle_notes_sources_list"]
@@ -197,7 +197,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
 
     # ── Memory API (GET) ──
     if parsed.path == "/api/memory":
-        return _handle_memory_read(handler, parsed)
+        return handle_memory_read(handler, parsed)
 
     # ── Profile API (GET) ──
     if parsed.path == "/api/profiles":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.shell import load_saved_prompts, save_saved_prompts
 
 
 def handle_post(handler, parsed, body, diag, ctx: RouteContext):
@@ -11,10 +12,8 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
     _build_share_metadata_sidecar = ctx["_build_share_metadata_sidecar"]
     _handle_escape_authorize = ctx["_handle_escape_authorize"]
     _kanban_unknown_endpoint = ctx["_kanban_unknown_endpoint"]
-    _load_saved_prompts = ctx["_load_saved_prompts"]
     _publish_session_list_changed = ctx["_publish_session_list_changed"]
     _resolve_share_session_pair = ctx["_resolve_share_session_pair"]
-    _save_saved_prompts = ctx["_save_saved_prompts"]
     bad = ctx["bad"]
     copy = ctx["copy"]
     create_or_refresh_share = ctx["create_or_refresh_share"]
@@ -156,7 +155,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             return bad(handler, "text is required")
         if len(text) > 8000:
             return bad(handler, "text too long (max 8000 chars)")
-        prompts = _load_saved_prompts()
+        prompts = load_saved_prompts()
         if len(prompts) >= 200:
             return bad(handler, "saved prompts limit reached (max 200)")
         new_prompt = {
@@ -166,7 +165,7 @@ def handle_post(handler, parsed, body, diag, ctx: RouteContext):
             "created_at": time.time(),
         }
         prompts.append(new_prompt)
-        _save_saved_prompts(prompts)
+        save_saved_prompts(prompts)
         return j(handler, {"ok": True, "prompt": new_prompt})
 
     if parsed.path == "/api/share/create":

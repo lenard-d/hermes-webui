@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import api.config as api_config
 import api.routes as routes
+from api.http import shell
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -113,14 +114,14 @@ def test_index_shell_and_static_route_use_selected_root(tmp_path, monkeypatch):
 
     monkeypatch.setattr(api_config, "get_static_root", lambda: static_root)
     monkeypatch.setattr(api_config, "get_index_html_path", lambda: index_path)
-    monkeypatch.setattr(routes, "_INDEX_SHELL_CACHE", {})
+    monkeypatch.setattr(shell, "_INDEX_SHELL_CACHE", {})
     monkeypatch.setattr(routes, "_STATIC_CACHE", {})
 
-    shell = routes._render_index_shell_base()
-    assert "temp" in shell
-    assert "__WEBUI_VERSION__" not in shell
-    assert "__MAX_UPLOAD_BYTES__" not in shell
-    assert "__CSRF_TOKEN_JSON__" in shell
+    rendered_shell = shell.render_index_shell_base()
+    assert "temp" in rendered_shell
+    assert "__WEBUI_VERSION__" not in rendered_shell
+    assert "__MAX_UPLOAD_BYTES__" not in rendered_shell
+    assert "__CSRF_TOKEN_JSON__" in rendered_shell
 
     temp_static = _get("/static/ui.js")
     assert temp_static.status == 200

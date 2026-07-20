@@ -12,6 +12,13 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 HTTP_ROOT = ROOT / "api" / "http"
 ROUTE_ROOT = HTTP_ROOT / "routes"
+OWNER_MODULES = (
+    "api.http.observability",
+    "api.http.plugins",
+    "api.http.project_context",
+    "api.http.project_os",
+    "api.http.shell",
+)
 
 
 def test_route_groups_are_independently_importable_without_legacy_facade():
@@ -33,6 +40,23 @@ def test_route_groups_are_independently_importable_without_legacy_facade():
         capture_output=True,
         text=True,
     )
+
+
+def test_http_owners_do_not_eagerly_load_router_or_legacy_facade():
+    for module in OWNER_MODULES:
+        script = (
+            "import importlib, sys; "
+            f"importlib.import_module({module!r}); "
+            "assert 'api.http.router' not in sys.modules; "
+            "assert 'api.routes' not in sys.modules"
+        )
+        subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def test_http_modules_do_not_use_legacy_binding_or_source_composition():
@@ -98,7 +122,9 @@ def test_admin_reload_fails_closed_for_modular_session_state():
         "_clear_live_models_cache": lambda: None,
         "_handle_sessions_cleanup": lambda *_args, **_kwargs: None,
         "bad": lambda *_args, **_kwargs: None,
-        "j": lambda _handler, payload, status=200: responses.append((status, payload)) or True,
+        "j": lambda _handler, payload, status=200: (
+            responses.append((status, payload)) or True
+        ),
         "remove_provider_key": lambda *_args, **_kwargs: None,
         "set_hermes_default_model": lambda *_args, **_kwargs: None,
         "set_provider_key": lambda *_args, **_kwargs: None,

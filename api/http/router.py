@@ -8,6 +8,12 @@ does not match.
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.shell import (
+    handle_health_restart,
+    handle_shutdown,
+    load_saved_prompts,
+    save_saved_prompts,
+)
 from api.http.routes import (
     automation_mutations,
     automation_queries,
@@ -131,8 +137,8 @@ def handle_post(handler, parsed, ctx: RouteContext) -> bool:
         return proxy_result
 
     early_routes = {
-        "/api/shutdown": lambda: ctx["_handle_shutdown"](handler),
-        "/api/health/restart": lambda: ctx["_handle_health_restart"](handler),
+        "/api/shutdown": lambda: handle_shutdown(handler),
+        "/api/health/restart": lambda: handle_health_restart(handler),
         "/api/upload": lambda: ctx["handle_upload"](handler),
         "/api/upload/extract": lambda: ctx["handle_upload_extract"](handler),
         "/api/workspace/upload": lambda: ctx["handle_workspace_upload"](handler),
@@ -262,11 +268,9 @@ def handle_delete(handler, parsed, ctx: RouteContext) -> bool:
         if not prompt_id:
             return ctx["bad"](handler, "id is required")
         prompts = [
-            prompt
-            for prompt in ctx["_load_saved_prompts"]()
-            if prompt.get("id") != prompt_id
+            prompt for prompt in load_saved_prompts() if prompt.get("id") != prompt_id
         ]
-        ctx["_save_saved_prompts"](prompts)
+        save_saved_prompts(prompts)
         return ctx["j"](handler, {"ok": True})
     if parsed.path.startswith("/api/kanban/"):
         from api.kanban import handle_kanban_delete

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.plugins import dashboard_plugin_enabled
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
-    _dashboard_plugin_enabled = ctx["_dashboard_plugin_enabled"]
-
     if parsed.path.startswith("/plugins/"):
         from api.plugins import _get_plugin_base
 
@@ -48,7 +47,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
             rel_path = parts[3] if len(parts) > 3 else ""
             # Server-side enable-gate: a plugin disabled in Settings must have its
             # entire URL surface shut off, not merely hidden in the UI.
-            if not _dashboard_plugin_enabled(plugin_name):
+            if not dashboard_plugin_enabled(plugin_name):
                 return False  # 404 — disabled plugins serve nothing
             from api.plugins import serve_plugin_static
 
@@ -80,7 +79,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
         tab_path = tab.get("path", f"/{name}")
         if parsed.path == tab_path:
             # Server-side enable-gate (opt-in): a disabled plugin's page 404s.
-            if not _dashboard_plugin_enabled(name):
+            if not dashboard_plugin_enabled(name):
                 return False
             dashboard_dir = _PLUGIN_STATIC_ROOTS.get(name)
             if dashboard_dir:

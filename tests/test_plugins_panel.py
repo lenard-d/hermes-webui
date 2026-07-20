@@ -43,7 +43,7 @@ class _FakePluginManager:
 
 class TestPluginsApi:
     def _capture_plugins_response(self, manager):
-        import api.routes as routes
+        import api.http.plugins as plugins_http
         captured = {}
 
         def fake_j(handler, payload, status=200, extra_headers=None):
@@ -52,9 +52,9 @@ class TestPluginsApi:
             return True
 
         handler = MagicMock()
-        with patch("api.routes.j", side_effect=fake_j), \
-             patch("api.routes._get_plugin_manager_for_visibility", return_value=manager):
-            handled = routes.handle_get(handler, urlparse("/api/plugins"))
+        with patch("api.http.plugins.j", side_effect=fake_j), \
+             patch("api.http.plugins.get_plugin_manager_for_visibility", return_value=manager):
+            handled = plugins_http.handle_plugins(handler, urlparse("/api/plugins"))
 
         assert handled is True
         assert captured.get("status") == 200
@@ -302,7 +302,7 @@ class TestDashboardPluginsSecurity:
         assert "allow-popups" in js
 
     def test_plugins_api_returns_per_plugin_enabled_state(self):
-        import api.routes as routes
+        import api.http.plugins as plugins_http
 
         captured = {}
 
@@ -312,9 +312,9 @@ class TestDashboardPluginsSecurity:
             return True
 
         handler = MagicMock()
-        with patch("api.routes.j", side_effect=fake_j), \
-             patch("api.routes._get_plugin_manager_for_visibility", return_value=_FakePluginManager({})):
-            handled = routes.handle_get(handler, urlparse("/api/plugins"))
+        with patch("api.http.plugins.j", side_effect=fake_j), \
+             patch("api.http.plugins.get_plugin_manager_for_visibility", return_value=_FakePluginManager({})):
+            handled = plugins_http.handle_plugins(handler, urlparse("/api/plugins"))
 
         assert handled is True
         payload = captured["payload"]
@@ -378,16 +378,16 @@ class TestPluginStaticServing:
     def test_plugins_route_restricted_to_plugin_css(self):
         # The /plugins/ shared-asset route must allowlist plugin.css and guard
         # against path traversal (resolve + relative_to).
-        routes = read("api/routes.py")
-        assert '"/plugins/"' in routes
-        assert "plugin.css" in routes
-        assert "relative_to" in routes
+        plugin_routes = read("api/http/routes/plugin_assets.py")
+        assert '"/plugins/"' in plugin_routes
+        assert "plugin.css" in plugin_routes
+        assert "relative_to" in plugin_routes
 
     def test_manifest_label_escaped_in_iife_shell(self):
         # Manifest-supplied label/name/css must be HTML-escaped before being
         # interpolated into the generated IIFE shell page (no injection).
-        routes = read("api/routes.py")
-        assert "html.escape(" in routes
+        plugin_routes = read("api/http/routes/plugin_assets.py")
+        assert "html.escape(" in plugin_routes
 
 
 class TestPluginAssetIsolationHardening:
@@ -395,23 +395,26 @@ class TestPluginAssetIsolationHardening:
 
     def test_dashboard_plugin_disabled_by_default(self):
         # Opt-in: an unknown/unconfigured plugin is NOT enabled.
-        import api.routes as routes
+        from api.http.plugins import dashboard_plugin_enabled
         with patch("api.config.load_settings", return_value={}):
-            assert routes._dashboard_plugin_enabled("anything") is False
+            assert dashboard_plugin_enabled("anything") is False
 
     def test_dashboard_plugin_enable_gate_reads_settings(self):
-        import api.routes as routes
+        from api.http.plugins import dashboard_plugin_enabled
         with patch("api.config.load_settings", return_value={"dashboard_plugins": {"foo": True, "bar": False}}):
-            assert routes._dashboard_plugin_enabled("foo") is True
-            assert routes._dashboard_plugin_enabled("bar") is False
-            assert routes._dashboard_plugin_enabled("missing") is False
+            assert dashboard_plugin_enabled("foo") is True
+            assert dashboard_plugin_enabled("bar") is False
+            assert dashboard_plugin_enabled("missing") is False
 
     def test_asset_route_sends_sandbox_csp_and_nosniff(self):
         # Plugin-controlled assets are served same-origin; the response MUST carry
         # the sandbox CSP (null origin) + nosniff so a plugin .html/.svg can't run
         # privileged same-origin script on direct navigation.
-        routes = read("api/routes.py")
-        seg = routes[routes.find('"/dashboard-plugins/"'):routes.find("# ── Plugin pages")]
+        plugin_routes = read("api/http/routes/plugin_assets.py")
+        seg = plugin_routes[
+            plugin_routes.find('"/dashboard-plugins/"'):
+            plugin_routes.find("# ── Plugin pages")
+        ]
         assert "Content-Security-Policy" in seg
         assert "sandbox allow-scripts" in seg
         assert "X-Content-Type-Options" in seg and "nosniff" in seg
@@ -419,11 +422,14 @@ class TestPluginAssetIsolationHardening:
     def test_both_plugin_routes_enforce_enable_gate_server_side(self):
         # Both the asset route and the page route must 404 a disabled plugin —
         # "disabled" cannot be UI-only.
-        routes = read("api/routes.py")
-        asset_seg = routes[routes.find('"/dashboard-plugins/"'):routes.find("# ── Plugin pages")]
-        page_seg = routes[routes.find("# ── Plugin pages"):routes.find("# ── Plugin pages") + 2000]
-        assert "_dashboard_plugin_enabled" in asset_seg
-        assert "_dashboard_plugin_enabled" in page_seg
+        plugin_routes = read("api/http/routes/plugin_assets.py")
+        page_marker = plugin_routes.find("# ── Plugin pages")
+        asset_seg = plugin_routes[
+            plugin_routes.find('"/dashboard-plugins/"'):page_marker
+        ]
+        page_seg = plugin_routes[page_marker:]
+        assert "dashboard_plugin_enabled" in asset_seg
+        assert "dashboard_plugin_enabled" in page_seg
 
 
 class TestSettingsAllowlistGuard:

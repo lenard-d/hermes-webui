@@ -1,5 +1,5 @@
 from api.config import STREAMS, STREAMS_LOCK, create_stream_channel
-from api.routes import _stream_runtime_diagnostics
+from api.http.observability import stream_runtime_diagnostics
 
 
 def test_stream_channel_exposes_buffer_and_subscriber_counts():
@@ -33,7 +33,7 @@ def test_stream_runtime_diagnostics_summarizes_active_stream_channels():
             STREAMS.clear()
             STREAMS["stream-one"] = channel
         try:
-            payload = _stream_runtime_diagnostics()
+            payload = stream_runtime_diagnostics()
         finally:
             with STREAMS_LOCK:
                 STREAMS.clear()

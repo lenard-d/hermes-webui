@@ -42,18 +42,18 @@ class _FakeHandler:
 
 
 def _call_insights(monkeypatch, tmp_path, entries, days="7", now=None):
-    import api.routes as routes
+    from api.http import observability
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     (session_dir / "_index.json").write_text(json.dumps(entries), encoding="utf-8")
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(observability, "SESSION_DIR", session_dir)
     if now is not None:
         monkeypatch.setattr(time, "time", lambda: now)
 
     handler = _FakeHandler()
     parsed = SimpleNamespace(query=f"days={days}")
-    routes._handle_insights(handler, parsed)
+    observability.handle_insights(handler, parsed)
     assert handler.status == 200
     return handler.json_body()
 
@@ -441,15 +441,14 @@ def test_insights_mobile_models_table_has_contained_overflow():
 
 def _call_insights_with_state_db(monkeypatch, tmp_path, entries, state_rows, days="7", now=None):
     """Like _call_insights but also seeds an agent state.db with `sessions` rows
-    and points _active_state_db_path at it, so the CLI second-pass is exercised."""
+    and points the observability owner at it, so the CLI second-pass is exercised."""
     import sqlite3
-    import api.routes as routes
-    import api.sessions.store as models
+    from api.http import observability
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir()
     (session_dir / "_index.json").write_text(json.dumps(entries), encoding="utf-8")
-    monkeypatch.setattr(routes, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(observability, "SESSION_DIR", session_dir)
     if now is not None:
         monkeypatch.setattr(time, "time", lambda: now)
 
@@ -475,12 +474,11 @@ def _call_insights_with_state_db(monkeypatch, tmp_path, entries, state_rows, day
         )
     conn.commit()
     conn.close()
-    # _handle_insights does `from api.sessions.store import _active_state_db_path`, so patch on the module.
-    monkeypatch.setattr(models, "_active_state_db_path", lambda: db_path)
+    monkeypatch.setattr(observability, "active_state_db_path", lambda: db_path)
 
     handler = _FakeHandler()
     parsed = SimpleNamespace(query=f"days={days}")
-    routes._handle_insights(handler, parsed)
+    observability.handle_insights(handler, parsed)
     assert handler.status == 200
     return handler.json_body()
 

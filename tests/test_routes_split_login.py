@@ -87,10 +87,12 @@ def test_login_part_imports_without_loading_routes_facade():
 
 def test_login_owner_stops_before_logs_domain():
     owner_source = Path(login.__file__).read_text(encoding="utf-8")
-    facade_source = Path(routes.__file__).read_text(encoding="utf-8")
+    observability_source = (REPO / "api" / "http" / "observability.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "_LOG_FILE_WHITELIST" not in owner_source
-    assert "def _handle_logs(" not in owner_source
-    assert "_LOG_FILE_WHITELIST" in facade_source
-    assert "def _handle_logs(" in facade_source
+    assert "def handle_logs(" not in owner_source
+    assert "_LOG_FILE_WHITELIST" in observability_source
+    assert "def handle_logs(" in observability_source
     assert "exec(" not in owner_source

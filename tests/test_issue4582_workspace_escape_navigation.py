@@ -13,7 +13,7 @@ import urllib.parse
 
 import pytest
 
-from api.routes import _project_os_workspace_read
+from api.http.project_os import workspace_read as project_os_workspace_read
 from tests._pytest_port import BASE
 
 
@@ -198,7 +198,7 @@ class TestIssue4582EscapeNavigationLive:
             f"/api/escape/file/raw?session_id={sid}&token={auth['token']}&path=escape/note.txt"
         )
         assert raw == b"outside note"
-        assert _project_os_workspace_read(pathlib.Path(workspace), "escape/note.txt") is None
+        assert project_os_workspace_read(pathlib.Path(workspace), "escape/note.txt") is None
 
     def test_nested_escape_row_stays_display_only_and_non_browsable(self, tmp_path):
         workspace = tmp_path / "workspace"

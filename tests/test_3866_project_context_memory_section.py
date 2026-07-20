@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import api.profiles
-import api.routes as routes
+import api.http.project_context as project_context
 import pytest
 
 
@@ -17,7 +17,7 @@ NODE = shutil.which("node")
 
 
 def project_context_for(workspace):
-    return routes._read_active_project_context(pathlib.Path(workspace))
+    return project_context.read_active(pathlib.Path(workspace))
 
 
 def test_project_context_reads_agents_md_from_active_workspace(tmp_path):
@@ -77,14 +77,14 @@ def test_project_context_workspace_switch_re_resolves_same_session(tmp_path, mon
     def fake_get_session(_sid):
         return SimpleNamespace(workspace=current["workspace"])
 
-    monkeypatch.setattr(routes, "get_session", fake_get_session)
+    monkeypatch.setattr(project_context, "get_session", fake_get_session)
     parsed = SimpleNamespace(query=urlencode({"session_id": "sid"}))
 
-    before = routes._read_active_project_context(routes._memory_project_context_workspace(parsed))
+    before = project_context.read_active(project_context.workspace_for_request(parsed))
     assert "First workspace rules." in before["content"]
 
     current["workspace"] = str(second)
-    after = routes._read_active_project_context(routes._memory_project_context_workspace(parsed))
+    after = project_context.read_active(project_context.workspace_for_request(parsed))
     assert "Second workspace rules." in after["content"]
     assert "First workspace rules." not in after["content"]
     assert after["workspace"] == str(second.resolve())
@@ -115,11 +115,19 @@ def test_project_context_content_is_redacted_in_memory_response(tmp_path, monkey
     )
 
     monkeypatch.setattr(api.profiles, "get_active_hermes_home", lambda: home)
-    monkeypatch.setattr(routes, "_memory_project_context_workspace", lambda _parsed: workspace)
-    monkeypatch.setattr(routes, "_external_notes_sources_enabled", lambda: False)
-    monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+    monkeypatch.setattr(project_context, "workspace_for_request", lambda _parsed: workspace)
+    monkeypatch.setattr(
+        project_context.knowledge,
+        "external_notes_sources_enabled",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        project_context, "j", lambda _handler, payload, **_kwargs: payload
+    )
 
-    payload = routes._handle_memory_read(object(), SimpleNamespace(query=""))
+    payload = project_context.handle_memory_read(
+        object(), SimpleNamespace(query="")
+    )
     dumped = json.dumps(payload)
 
     assert secret not in dumped
@@ -348,10 +356,14 @@ def test_blank_session_workspace_does_not_resolve_to_server_cwd(monkeypatch):
     # Regression for the empty-workspace guard: a session with a blank workspace
     # (freshly-created/draft sessions) must return None rather than letting
     # Path("").resolve() surface the server's own CWD as project context.
-    monkeypatch.setattr(routes, "get_session", lambda _sid: SimpleNamespace(workspace=""))
+    monkeypatch.setattr(
+        project_context,
+        "get_session",
+        lambda _sid: SimpleNamespace(workspace=""),
+    )
     parsed = SimpleNamespace(query="session_id=draft-session")
 
-    assert routes._memory_project_context_workspace(parsed) is None
+    assert project_context.workspace_for_request(parsed) is None
 
 
 def test_project_context_reads_lowercase_agents_md(tmp_path):

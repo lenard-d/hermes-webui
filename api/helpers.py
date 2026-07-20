@@ -46,6 +46,11 @@ def _sanitize_error(e: Exception) -> str:
     return msg
 
 
+def sanitize_error(error: Exception) -> str:
+    """Return an exception message safe for an HTTP response."""
+    return _sanitize_error(error)
+
+
 def safe_resolve(root: Path, requested: str) -> Path:
     """Resolve a relative path inside root, raising ValueError on traversal."""
     resolved = (root / requested).resolve()
@@ -574,6 +579,11 @@ def _redact_text(text: str, *, _enabled: bool | None = None) -> str:
     if not _might_contain_sensitive_text(text):
         return text
     return _redact_fn_cached(text)
+
+
+def redact_text(text: str, *, enabled: bool | None = None) -> str:
+    """Redact sensitive values from text returned by an HTTP interface."""
+    return _redact_text(text, _enabled=enabled)
 
 
 def _redact_value(v, *, _enabled: bool | None = None):

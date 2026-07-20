@@ -595,10 +595,15 @@ def test_trusted_session_rehydrates_bound_profile_cookie(monkeypatch):
     assert auth.verify_profile_cookie_value(profile_value, cookie) == "devops"
 
 
-def test_first_trusted_shell_response_includes_csrf_token(monkeypatch):
+def test_first_trusted_shell_response_includes_csrf_token(monkeypatch, tmp_path):
+    from api.http import shell
+
     _trusted_env(monkeypatch)
     handler = _Handler(headers={"Remote-User": "alice"})
-    monkeypatch.setattr(routes, "_render_index_shell_base", lambda: "csrfToken:__CSRF_TOKEN_JSON__")
+    index_path = tmp_path / "index.html"
+    index_path.write_text("csrfToken:__CSRF_TOKEN_JSON__", encoding="utf-8")
+    monkeypatch.setattr(shell.config, "get_index_html_path", lambda: index_path)
+    monkeypatch.setattr(shell, "_INDEX_SHELL_CACHE", {})
     monkeypatch.setattr("api.extensions.inject_extension_tags", lambda html: html)
 
     assert auth.check_auth(handler, SimpleNamespace(path="/", query="")) is True

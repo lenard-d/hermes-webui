@@ -1624,8 +1624,8 @@ class TestForceUpdateRoute:
 
 class TestHealthRouteContract:
     def test_health_payload_includes_server_started_at(self):
-        src = read('api/routes.py')
-        health_start = src.index('def _handle_health')
+        src = read('api/http/observability.py')
+        health_start = src.index('def handle_health')
         payload_start = src.index('payload = {', health_start)
         payload_end = src.index('if "oldest_run_age_seconds" in run_check:', payload_start)
         payload = src[payload_start:payload_end]

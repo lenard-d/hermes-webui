@@ -5,6 +5,7 @@ The saved-prompts composer affordance is a desktop-only feature: per Nathan
 These tests pin the mobile-hide rule and the core wiring so a future refactor
 can't silently regress either.
 """
+
 from tests.frontend_asset_contract import family_source
 
 import re
@@ -40,7 +41,7 @@ def test_saved_prompts_button_hidden_on_mobile():
                     end = i
                     break
             i += 1
-        block = css[m.end():end]
+        block = css[m.end() : end]
         if re.search(r"#btnSavedPrompts[^{]*\{[^}]*display:\s*none", block):
             found = True
             break
@@ -53,9 +54,9 @@ def test_saved_prompts_button_hidden_on_mobile():
 def test_saved_prompts_backend_caps_present():
     """The POST /api/prompts route must cap text length and total count so
     saved_prompts.json can't grow unbounded."""
-    routes = read("api/routes.py")
-    assert "text too long" in routes, "POST /api/prompts must cap text length"
-    assert re.search(r"len\(prompts\)\s*>=\s*\d+", routes), (
+    owner = read("api/http/routes/platform_mutations.py")
+    assert "text too long" in owner, "POST /api/prompts must cap text length"
+    assert re.search(r"len\(prompts\)\s*>=\s*\d+", owner), (
         "POST /api/prompts must cap the total number of saved prompts"
     )
 
@@ -66,8 +67,12 @@ def test_saved_prompts_core_wiring_present():
     js = family_source("messages")
     assert "toggleSavedPromptsPopup" in js
     assert "insertSavedPromptIntoComposer" in js
-    assert re.search(r"api\('/api/prompts',\s*\{method:'POST'", js), "save wiring (POST) missing"
-    assert re.search(r"api\('/api/prompts',\s*\{method:'DELETE'", js), "delete wiring (DELETE) missing"
+    assert re.search(r"api\('/api/prompts',\s*\{method:'POST'", js), (
+        "save wiring (POST) missing"
+    )
+    assert re.search(r"api\('/api/prompts',\s*\{method:'DELETE'", js), (
+        "delete wiring (DELETE) missing"
+    )
     html = read("static/index.html")
     assert 'id="btnSavedPrompts"' in html
     assert 'id="savedPromptsPopup"' in html

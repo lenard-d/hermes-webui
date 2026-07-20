@@ -32,10 +32,10 @@ def test_server_shutdown_audit_logs_active_stream_context(monkeypatch, caplog):
 
 
 def test_shutdown_route_logs_request_context_without_starting_real_shutdown(monkeypatch, caplog):
-    from api import routes
+    from api.http import shell
 
     responses = []
-    monkeypatch.setattr(routes, "j", lambda handler, payload, **kw: responses.append(payload) or True)
+    monkeypatch.setattr(shell, "j", lambda handler, payload, **kw: responses.append(payload) or True)
 
     started_threads = []
 
@@ -57,7 +57,7 @@ def test_shutdown_route_logs_request_context_without_starting_real_shutdown(monk
     )
 
     caplog.set_level(logging.INFO, logger="api.routes")
-    assert routes._handle_shutdown(handler) is True
+    assert shell.handle_shutdown(handler) is True
 
     logged = "\n".join(record.getMessage() for record in caplog.records)
     assert "[shutdown-request]" in logged

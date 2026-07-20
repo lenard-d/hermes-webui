@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.plugins import handle_plugins
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
     RequestDiagnostics = ctx["RequestDiagnostics"]
     _handle_live_models = ctx["_handle_live_models"]
-    _handle_plugins = ctx["_handle_plugins"]
     _sanitize_error = ctx["_sanitize_error"]
     _serve_static = ctx["_serve_static"]
     bad = ctx["bad"]
@@ -103,7 +103,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
 
     # ── Plugins/hooks visibility (read-only, no callback/source internals) ──
     if parsed.path == "/api/plugins":
-        return _handle_plugins(handler, parsed)
+        return handle_plugins(handler, parsed)
     if parsed.path == "/api/provider/quota":
         query = parse_qs(parsed.query)
         provider_id = query.get("provider", [""])[0] or None

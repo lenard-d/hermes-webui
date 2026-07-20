@@ -20,7 +20,6 @@ MANIFEST = ROOT / "static" / "manifest.json"
 SW = ROOT / "static" / "sw.js"
 PWA_STARTUP = ROOT / "static" / "pwa-startup.js"
 INDEX = ROOT / "static" / "index.html"
-ROUTES = ROOT / "api" / "routes.py"
 AUTH = ROOT / "api" / "auth" / "authorization.py"
 
 
@@ -343,28 +342,21 @@ class TestIndexHtmlIntegration:
         assert "pwaLaunchAction==='new-chat'" in src
         assert "await newSession(true)" in src
 
-    def test_index_route_url_encodes_asset_version(self):
-        src = ROUTES.read_text(encoding="utf-8")
+    def test_index_route_url_encodes_asset_version(self, tmp_path, monkeypatch):
+        from api.http import shell
+
         # #4774 moved the app-shell render (incl. the version-token substitution)
-        # out of the route handler and into the cached `_render_index_shell_base()`
+        # out of the route handler and into the cached `render_index_shell_base()`
         # helper. The security property — the cache-busting version token is
         # URL-encoded before it's injected into script src / SW registration — must
-        # still hold, so assert it in whichever location renders the shell. Check the
-        # shell-render helper first (its current home), then fall back to the route
-        # handler block for older layouts.
-        helper_idx = src.find("def _render_index_shell_base")
-        if helper_idx != -1:
-            block = src[helper_idx:helper_idx + 1200]
-        else:
-            idx = src.find('parsed.path in ("/", "/index.html")')
-            if idx == -1:
-                idx = src.find('parsed.path.startswith("/session/")')
-            assert idx != -1, "routes.py must handle /, /index.html, and /session/<id>"
-            block = src[idx:idx + 800]
-        assert "quote(WEBUI_VERSION, safe=\"\")" in block, (
-            "the app-shell render must URL-encode the cache-busting version token before "
-            "injecting it into script src attributes and service worker registration"
-        )
+        # still hold in the semantic app-shell owner.
+        index_path = tmp_path / "index.html"
+        index_path.write_text("asset?v=__WEBUI_VERSION__", encoding="utf-8")
+        monkeypatch.setattr(shell.config, "get_index_html_path", lambda: index_path)
+        monkeypatch.setattr(shell, "WEBUI_VERSION", "v1 +/?")
+        monkeypatch.setattr(shell, "_INDEX_SHELL_CACHE", {})
+
+        assert shell.render_index_shell_base() == "asset?v=v1%20%2B%2F%3F"
 
     def test_index_sw_registration_uses_relative_path(self):
         """Regression: service worker registration MUST stay relative (no leading slash).

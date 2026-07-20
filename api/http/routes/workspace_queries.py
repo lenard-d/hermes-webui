@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from api.http.context import RouteContext, UNHANDLED
+from api.http.shell import load_saved_prompts
 
 
 def handle_get(handler, parsed, ctx: RouteContext):
@@ -35,7 +36,6 @@ def handle_get(handler, parsed, ctx: RouteContext):
     _handle_sessions_search = ctx["_handle_sessions_search"]
     _handle_sse_stream = ctx["_handle_sse_stream"]
     _handle_terminal_output = ctx["_handle_terminal_output"]
-    _load_saved_prompts = ctx["_load_saved_prompts"]
     _run_journal_status_payload = ctx["_run_journal_status_payload"]
     _session_events_path_session_id = ctx["_session_events_path_session_id"]
     _stream_id_visible_to_request_profile = ctx["_stream_id_visible_to_request_profile"]
@@ -54,7 +54,7 @@ def handle_get(handler, parsed, ctx: RouteContext):
     runtime_stream_alive = ctx["runtime_stream_alive"]
 
     if parsed.path == "/api/prompts":
-        return j(handler, {"prompts": _load_saved_prompts()})
+        return j(handler, {"prompts": load_saved_prompts()})
 
     if parsed.path == "/api/session/export":
         return _handle_session_export(handler, parsed)
