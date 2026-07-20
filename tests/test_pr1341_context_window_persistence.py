@@ -16,12 +16,13 @@ This test verifies that:
 Implementation reference: api/streaming.py around line 2188 (the per-turn
 post-merge save) writes from getattr(agent, 'context_compressor', None).
 """
+import inspect
+import json
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STREAMING = ROOT / "api" / "streaming.py"
-MODELS = ROOT / "api" / "models.py"
 ROUTES = ROOT / "api" / "routes.py"
 
 
@@ -72,46 +73,66 @@ def test_streaming_persists_context_fields_on_session_before_save():
 
 
 def test_session_init_accepts_context_fields():
-    """Session.__init__ must accept the three fields as named kwargs."""
-    src = MODELS.read_text(encoding="utf-8")
-    # The init signature spans many lines — read the full def block
-    init_match = re.search(r"def __init__\(self,(.*?)\):", src, re.DOTALL)
-    assert init_match, "Session.__init__ signature not found"
-    sig = init_match.group(1)
-    assert "context_length" in sig, "Session.__init__ must accept context_length"
-    assert "threshold_tokens" in sig, "Session.__init__ must accept threshold_tokens"
-    assert "last_prompt_tokens" in sig, "Session.__init__ must accept last_prompt_tokens"
+    """Session exposes and applies the three fields as explicit named kwargs."""
+    from api.models import Session
+
+    parameters = inspect.signature(Session).parameters
+    values = {
+        "context_length": 200000,
+        "threshold_tokens": 180000,
+        "last_prompt_tokens": 45123,
+    }
+    for field in values:
+        assert field in parameters, f"Session.__init__ must accept {field}"
+        assert parameters[field].default is None
+
+    session = Session(session_id="context-init", **values)
+    for field, expected in values.items():
+        assert getattr(session, field) == expected
 
 
-def test_session_metadata_fields_includes_context_fields():
-    """Session.save() METADATA_FIELDS must include all three for round-trip persistence."""
-    src = MODELS.read_text(encoding="utf-8")
-    # Locate METADATA_FIELDS list
-    meta_match = re.search(
-        r"METADATA_FIELDS\s*=\s*\[(.*?)\]",
-        src,
-        re.DOTALL,
+def test_session_metadata_fields_include_context_fields(tmp_path, monkeypatch):
+    """Metadata-only loading restores all three persisted context fields."""
+    from api import models
+
+    sessions_dir = tmp_path / "sessions"
+    sessions_dir.mkdir()
+    monkeypatch.setattr(models, "SESSION_DIR", sessions_dir)
+
+    values = {
+        "context_length": 200000,
+        "threshold_tokens": 180000,
+        "last_prompt_tokens": 45123,
+    }
+    session = models.Session(
+        session_id="context-metadata",
+        messages=[{"role": "user", "content": "hello"}],
+        **values,
     )
-    assert meta_match, "METADATA_FIELDS list not found in Session.save"
-    fields = meta_match.group(1)
-    assert "'context_length'" in fields, "METADATA_FIELDS must include 'context_length'"
-    assert "'threshold_tokens'" in fields, "METADATA_FIELDS must include 'threshold_tokens'"
-    assert "'last_prompt_tokens'" in fields, "METADATA_FIELDS must include 'last_prompt_tokens'"
+    session.save(skip_index=True)
+
+    payload = json.loads(session.path.read_text(encoding="utf-8"))
+    for field, expected in values.items():
+        assert payload[field] == expected
+
+    metadata = models.Session.load_metadata_only(session.session_id)
+    assert metadata is not None
+    for field, expected in values.items():
+        assert getattr(metadata, field) == expected
 
 
 def test_session_compact_exposes_context_fields():
-    """Session.compact() must include the three fields in its output dict."""
-    src = MODELS.read_text(encoding="utf-8")
-    # Find compact() method body
-    compact_idx = src.find("def compact(")
-    assert compact_idx != -1, "Session.compact not found"
-    # Look ahead for the next def or 200 lines
-    end = src.find("\n    def ", compact_idx + 1)
-    body = src[compact_idx:end if end != -1 else compact_idx + 4000]
+    """Session.compact() exposes the three context values unchanged."""
+    from api.models import Session
 
-    assert "'context_length':" in body, "compact() must include context_length"
-    assert "'threshold_tokens':" in body, "compact() must include threshold_tokens"
-    assert "'last_prompt_tokens':" in body, "compact() must include last_prompt_tokens"
+    values = {
+        "context_length": 200000,
+        "threshold_tokens": 180000,
+        "last_prompt_tokens": 45123,
+    }
+    compact = Session(session_id="context-compact", **values).compact()
+    for field, expected in values.items():
+        assert compact[field] == expected
 
 
 def test_routes_session_get_returns_context_fields():
