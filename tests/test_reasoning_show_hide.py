@@ -441,21 +441,21 @@ class TestStreamingReasoningWiring:
         )
 
 
-# ── api/routes.py — /api/reasoning endpoints ──────────────────────────────────
+# ── HTTP owner modules — /api/reasoning endpoints ─────────────────────────────
 
 class TestReasoningRoutes:
 
     def test_get_api_reasoning_route_exists(self):
-        src = read('api/routes.py')
+        src = read('api/http/routes/configuration_queries.py')
         assert 'parsed.path == "/api/reasoning"' in src, (
             "GET /api/reasoning route must exist"
         )
         assert 'get_reasoning_status' in src, (
-            "api/routes.py must import and call get_reasoning_status"
+            "the configuration-query owner must call get_reasoning_status"
         )
 
     def test_post_api_reasoning_accepts_display(self):
-        src = read('api/routes.py')
+        src = read('api/http/routes/provider_mutations.py')
         # The POST branch reads 'display' from body and dispatches to
         # set_reasoning_display.
         assert 'set_reasoning_display' in src, (
@@ -464,7 +464,7 @@ class TestReasoningRoutes:
         )
 
     def test_post_api_reasoning_accepts_effort(self):
-        src = read('api/routes.py')
+        src = read('api/http/routes/provider_mutations.py')
         assert 'set_reasoning_effort' in src, (
             "POST /api/reasoning must route effort changes through "
             "set_reasoning_effort"
