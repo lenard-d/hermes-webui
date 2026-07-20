@@ -7,6 +7,7 @@ import time
 
 def test_missing_index_starts_background_rebuild_while_preserving_first_scan(monkeypatch, tmp_path):
     from api.sessions import cache, records, sidebar
+    from api.sessions import session_index
 
     # Hermetic isolation: a prior test in the same worker may have left the
     # background rebuild thread bookkeeping populated. Since #3884 the start
@@ -14,14 +15,14 @@ def test_missing_index_starts_background_rebuild_while_preserving_first_scan(mon
     # alive, so stale globals from another test could suppress the fresh thread
     # this test asserts on. Join any leftover thread and clear both globals so
     # this test only observes the thread IT triggers, regardless of run order.
-    _stale = records._SESSION_INDEX_REBUILD_THREAD
+    _stale = session_index._SESSION_INDEX_REBUILD_THREAD
     if _stale is not None:
         try:
             _stale.join(timeout=5)
         except Exception:
             pass
-    records._SESSION_INDEX_REBUILD_THREAD = None
-    records._SESSION_INDEX_REBUILD_THREAD_TARGET = None
+    session_index._SESSION_INDEX_REBUILD_THREAD = None
+    session_index._SESSION_INDEX_REBUILD_THREAD_TARGET = None
 
     session_dir = tmp_path / "sessions"
     session_dir.mkdir(parents=True)
@@ -48,7 +49,7 @@ def test_missing_index_starts_background_rebuild_while_preserving_first_scan(mon
 
     assert {row["session_id"] for row in rows} == {"issue28630", "issue28631", "issue28632"}
 
-    thread = records._SESSION_INDEX_REBUILD_THREAD
+    thread = session_index._SESSION_INDEX_REBUILD_THREAD
     # Fast runners can complete the background rebuild and clear the global
     # thread slot before this assertion observes it. The invariant is that the
     # first scan remains correct and the index is rebuilt, not that the transient

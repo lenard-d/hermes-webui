@@ -334,6 +334,17 @@ larger migration remains incremental:
   helpers through `api.routes`. Authorization remains transport-owned, while
   sidecar layout, cache freshness, sidebar projection, and recovery continue
   to belong to their existing session owners.
+- `api/sessions/records.py` owns the `Session` record interface and the one
+  ordering-sensitive sidecar serialization transaction: metadata-prefix
+  layout, metadata-only write refusal, shrink backups, atomic replacement,
+  and load-time self-healing stay together. Derived persistence concerns have
+  explicit owners: `session_index.py` coordinates atomic sidebar-index writes
+  and background rebuilds; `tombstones.py` persists deletion and zero-message
+  suppression sets; `sidecar_metadata.py` parses cheap metadata prefixes and
+  guards legacy scene-fingerprint caches against replacement races;
+  `record_recovery.py` owns recovered message/context projections; and
+  `record_projection.py` builds compact sidebar records. These owners receive
+  the active sidecar paths explicitly where profile or test isolation matters.
 - `api/session_sources.py` owns which foreign source-identity fields may enter
   a WebUI sidecar and normalizes the raw-source fallback. Materialization,
   archive, and CLI import paths use this Interface instead of maintaining

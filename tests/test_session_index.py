@@ -25,6 +25,7 @@ import api.sessions.external as session_external
 import api.sessions.pending_recovery as session_pending_recovery
 import api.sessions.projects as session_projects
 import api.sessions.records as session_records
+import api.sessions.session_index as session_index
 import api.sessions.sidebar as session_sidebar
 from api.sessions.records import Session, _write_session_index, prune_session_from_index
 
@@ -56,14 +57,12 @@ def _isolate_session_dir(tmp_path, monkeypatch):
 
     # Clear the in-memory SESSIONS and persisted-id caches to avoid bleed.
     models.SESSIONS.clear()
-    if hasattr(models, "_PERSISTED_SESSION_IDS_CACHE"):
-        models._PERSISTED_SESSION_IDS_CACHE = (None, None, frozenset())
+    session_index._PERSISTED_SESSION_IDS_CACHE = (None, None, frozenset())
 
     yield session_dir, index_file
 
     models.SESSIONS.clear()
-    if hasattr(models, "_PERSISTED_SESSION_IDS_CACHE"):
-        models._PERSISTED_SESSION_IDS_CACHE = (None, None, frozenset())
+    session_index._PERSISTED_SESSION_IDS_CACHE = (None, None, frozenset())
 
 
 def _make_session(session_id, title="Untitled", updated_at=None):
@@ -1648,15 +1647,15 @@ def test_background_index_rebuild_skips_after_session_dir_switch(tmp_path, monke
     new_session_dir.mkdir()
     new_index_file = new_session_dir / "_index.json"
 
-    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD", object())
-    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD_TARGET", (
+    monkeypatch.setattr(session_index, "_SESSION_INDEX_REBUILD_THREAD", object())
+    monkeypatch.setattr(session_index, "_SESSION_INDEX_REBUILD_THREAD_TARGET", (
         original_session_dir,
         original_index_file,
     ))
     monkeypatch.setattr(session_records, "SESSION_DIR", new_session_dir)
     monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", new_index_file)
 
-    models._rebuild_session_index_background(
+    session_index._rebuild_session_index_background(
         original_session_dir,
         original_index_file,
     )
@@ -1667,16 +1666,16 @@ def test_background_index_rebuild_skips_after_session_dir_switch(tmp_path, monke
     session = _make_session("late_switch_sid", "Late switch", updated_at=100.0)
     session.save(skip_index=True)
 
-    original_write_session_index = session_records._write_session_index
+    original_write_session_index = session_index.write_session_index
 
     def _switch_globals_then_write(*args, **kwargs):
         monkeypatch.setattr(session_records, "SESSION_DIR", new_session_dir)
         monkeypatch.setattr(session_records, "SESSION_INDEX_FILE", new_index_file)
         return original_write_session_index(*args, **kwargs)
 
-    monkeypatch.setattr(session_records, "_write_session_index", _switch_globals_then_write)
+    monkeypatch.setattr(session_index, "write_session_index", _switch_globals_then_write)
 
-    models._rebuild_session_index_background(
+    session_index._rebuild_session_index_background(
         original_session_dir,
         original_index_file,
     )
@@ -1698,17 +1697,17 @@ def test_background_rebuild_old_thread_finally_preserves_new_same_target_owner(t
 
     old_thread = object()
     new_thread = object()
-    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD", old_thread)
-    monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
-    monkeypatch.setattr(session_records.threading, "current_thread", lambda: old_thread)
+    monkeypatch.setattr(session_index, "_SESSION_INDEX_REBUILD_THREAD", old_thread)
+    monkeypatch.setattr(session_index, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
+    monkeypatch.setattr(session_index.threading, "current_thread", lambda: old_thread)
 
     def _handoff_then_write(*args, **kwargs):
-        monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD", new_thread)
-        monkeypatch.setattr(session_records, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
+        monkeypatch.setattr(session_index, "_SESSION_INDEX_REBUILD_THREAD", new_thread)
+        monkeypatch.setattr(session_index, "_SESSION_INDEX_REBUILD_THREAD_TARGET", target)
 
-    monkeypatch.setattr(session_records, "_write_session_index", _handoff_then_write)
+    monkeypatch.setattr(session_index, "write_session_index", _handoff_then_write)
 
-    models._rebuild_session_index_background(*target)
+    session_index._rebuild_session_index_background(*target)
 
-    assert session_records._SESSION_INDEX_REBUILD_THREAD is new_thread
-    assert session_records._SESSION_INDEX_REBUILD_THREAD_TARGET == target
+    assert session_index._SESSION_INDEX_REBUILD_THREAD is new_thread
+    assert session_index._SESSION_INDEX_REBUILD_THREAD_TARGET == target
