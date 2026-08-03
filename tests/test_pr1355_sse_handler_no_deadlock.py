@@ -20,6 +20,7 @@ import queue
 import sys
 import threading
 import time
+from types import SimpleNamespace
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
@@ -105,11 +106,11 @@ def test_handler_snapshot_does_not_deadlock_when_queue_has_entry():
         clarify.resolve_clarify(sid, "a")
 
 
-def test_routes_handler_does_not_call_get_pending_under_lock():
-    """Source-level invariant: routes.py must not call get_clarify_pending()
-    inside the `with _clarify_lock:` block — that would re-acquire _lock and
-    deadlock."""
-    src = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+def test_interactive_stream_owner_does_not_call_get_pending_under_lock():
+    """The handler owner must not reacquire clarify's non-reentrant lock."""
+    src = (
+        REPO_ROOT / "api" / "http" / "interactive_streams.py"
+    ).read_text(encoding="utf-8")
     # Find _handle_clarify_sse_stream
     start = src.find("def _handle_clarify_sse_stream(")
     assert start != -1, "_handle_clarify_sse_stream must exist"
@@ -144,3 +145,45 @@ def test_routes_handler_does_not_call_get_pending_under_lock():
     assert "clarify.get_pending(" not in lock_body, (
         "Same — clarify.get_pending() acquires _lock internally."
     )
+
+
+def test_clarify_handler_releases_subscriber_when_header_setup_disconnects():
+    """Once subscribed, every socket failure must release the queue owner."""
+    from api import clarify
+    from api.http import interactive_streams
+
+    sid = f"clarify-header-disconnect-{time.time_ns()}"
+
+    class DisconnectedHandler:
+        def send_response(self, _status):
+            raise BrokenPipeError("client disconnected during headers")
+
+    try:
+        interactive_streams._handle_clarify_sse_stream(
+            DisconnectedHandler(),
+            SimpleNamespace(query=f"session_id={sid}"),
+        )
+        assert sid not in clarify._clarify_sse_subscribers
+    finally:
+        clarify._clarify_sse_subscribers.pop(sid, None)
+
+
+def test_approval_handler_releases_subscriber_when_header_setup_disconnects():
+    """Approval owns the same subscribe-to-header lifecycle as clarify."""
+    from api import route_approvals
+    from api.http import interactive_streams
+
+    sid = f"approval-header-disconnect-{time.time_ns()}"
+
+    class DisconnectedHandler:
+        def send_response(self, _status):
+            raise BrokenPipeError("client disconnected during headers")
+
+    try:
+        interactive_streams._handle_approval_sse_stream(
+            DisconnectedHandler(),
+            SimpleNamespace(query=f"session_id={sid}"),
+        )
+        assert sid not in route_approvals._approval_sse_subscribers
+    finally:
+        route_approvals._approval_sse_subscribers.pop(sid, None)

@@ -16,7 +16,13 @@ import pytest
 from tests.frontend_asset_contract import family_source
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-_ROUTES = os.path.join(os.path.dirname(__file__), "..", "api", "routes.py")
+_INTERACTIVE_STREAMS = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "api",
+    "http",
+    "interactive_streams.py",
+)
 _WORKSPACE_QUERY_ROUTES = os.path.join(
     os.path.dirname(__file__),
     "..",
@@ -70,15 +76,15 @@ class TestClarifySSERoutesCode:
         assert '"/api/clarify/stream"' in src, "Missing /api/clarify/stream route"
 
     def test_handler_function_exists(self):
-        src = _read(_ROUTES)
+        src = _read(_INTERACTIVE_STREAMS)
         assert "def _handle_clarify_sse_stream(" in src
 
     def test_imports_sse_subscribe(self):
-        src = _read(_ROUTES)
+        src = _read(_INTERACTIVE_STREAMS)
         assert "clarify_sse_subscribe" in src
 
     def test_imports_sse_unsubscribe(self):
-        src = _read(_ROUTES)
+        src = _read(_INTERACTIVE_STREAMS)
         assert "clarify_sse_unsubscribe" in src
 
 
