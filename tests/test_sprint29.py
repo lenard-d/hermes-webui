@@ -573,16 +573,30 @@ class TestContentDisposition:
         for mime in dangerous_types:
             assert mime in dangerous_types, f"{mime} should be in dangerous_types set"
 
-    def test_dangerous_mime_types_set_complete(self):
-        """The set of dangerous MIME types must include html, xhtml, and svg."""
-        import ast
-        import pathlib
-        routes_src = pathlib.Path(__file__).parent.parent / "api" / "routes.py"
-        src = routes_src.read_text()
-        assert "text/html" in src
-        assert "application/xhtml+xml" in src
-        assert "image/svg+xml" in src
-        assert "dangerous_types" in src
+    def test_dangerous_mime_types_set_complete(self, monkeypatch):
+        """Dangerous media types default to attachment at the policy owner."""
+        from api.media import preview
+
+        dangerous_types = {
+            "text/html",
+            "application/xhtml+xml",
+            "image/svg+xml",
+        }
+        assert dangerous_types <= preview.DANGEROUS_TYPES
+
+        for mime in dangerous_types:
+            monkeypatch.setattr(preview, "mime_for_path", lambda _path, mime=mime: mime)
+
+            default_policy = preview.preview_policy("untrusted-file", inline_requested=False)
+            forced_download_policy = preview.preview_policy(
+                "untrusted-file",
+                inline_requested=True,
+                force_download=True,
+            )
+
+            assert default_policy.mime == mime
+            assert default_policy.disposition == "attachment"
+            assert forced_download_policy.disposition == "attachment"
 
     def test_unicode_filename_download_header_is_latin1_safe(self, cleanup_test_sessions):
         """Unicode filenames must not crash download responses."""
