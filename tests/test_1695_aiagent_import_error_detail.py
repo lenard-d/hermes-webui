@@ -17,12 +17,14 @@ This test suite locks the diagnostic shape of the new error message:
   - A pip install -e . hint is included.
   - A pointer to docs/troubleshooting.md is included.
 
-Behavioural test for the actual raise path lives in the streaming integration
-suite; this file only exercises the helper.
+The actual local-agent construction path is covered below as well as the
+focused diagnostic formatter.
 """
+import logging
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,16 +33,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _import_helper():
-    """Import _aiagent_import_error_detail without triggering the full streaming
-    module side-effects.
-
-    api/streaming.py imports a lot at top-level (gateway routing, model resolver,
-    session DB, ...). For a focused unit test we just need the helper. Importing
-    the module is fine — it stays cached for the rest of the suite.
-    """
+    """Import the diagnostic helper from its local-run outcome owner."""
     sys.path.insert(0, str(REPO_ROOT))
-    from api import streaming  # noqa: F401
-    return streaming._aiagent_import_error_detail
+    from api.runs.terminal_outcomes import aiagent_import_error_detail
+
+    return aiagent_import_error_detail
 
 
 class TestAIAgentImportErrorDetail:
@@ -144,6 +141,21 @@ class TestAIAgentImportErrorDetail:
             f"diagnostic must have at least 5 lines, got {len(out.splitlines())}"
         )
 
+    def test_local_agent_prepare_raises_detailed_import_error(self):
+        """The local-run owner must surface the formatter's diagnostic."""
+        from api.runs.local_agent_runtime import PreparedLocalAgent
+
+        request = SimpleNamespace(get_ai_agent=lambda: None)
+
+        with pytest.raises(ImportError) as exc_info:
+            PreparedLocalAgent.prepare(request, logger=logging.getLogger(__name__))
+
+        detail = str(exc_info.value)
+        assert detail.splitlines()[0] == (
+            "AIAgent not available -- check that hermes-agent is on sys.path"
+        )
+        assert sys.executable in detail
+
 
 class TestAIAgentImportErrorDocsPresence:
     """Regression: the docs/troubleshooting.md file must exist with the
@@ -152,7 +164,7 @@ class TestAIAgentImportErrorDocsPresence:
 
     def test_troubleshooting_md_exists(self):
         path = REPO_ROOT / "docs" / "troubleshooting.md"
-        assert path.exists(), "docs/troubleshooting.md must exist (referenced by streaming.py)"
+        assert path.exists(), "docs/troubleshooting.md must exist (referenced by local runs)"
 
     def test_troubleshooting_md_has_aiagent_section(self):
         path = REPO_ROOT / "docs" / "troubleshooting.md"

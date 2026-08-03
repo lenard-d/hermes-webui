@@ -252,7 +252,7 @@ def _finalize_cancelled_turn(session, *, ephemeral: bool = False, message: str =
         logger.debug("Failed to persist cancelled turn", exc_info=True)
 
 
-def _aiagent_import_error_detail() -> str:
+def aiagent_import_error_detail() -> str:
     """Return a multi-line diagnostic string for the "AIAgent not available" path.
 
     The bare ImportError ("AIAgent not available -- check that hermes-agent is

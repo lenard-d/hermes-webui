@@ -70,9 +70,9 @@ class PreparedLocalAgent:
     ) -> "PreparedLocalAgent":
         agent_class = request.get_ai_agent()
         if agent_class is None:
-            from .terminal_outcomes import _aiagent_import_error_detail
+            from .terminal_outcomes import aiagent_import_error_detail
 
-            raise ImportError(_aiagent_import_error_detail())
+            raise ImportError(aiagent_import_error_detail())
 
         state_db_path = (
             Path(request.profile_home) / "state.db" if request.profile_home else None
