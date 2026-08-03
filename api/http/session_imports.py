@@ -112,7 +112,8 @@ def _request_wants_all_profiles_import(body) -> bool:
     """Return whether an import request explicitly allows cross-profile lookup."""
     if not isinstance(body, dict):
         return False
-    if body.get("all_profiles") is True:
+    all_profiles = body.get("all_profiles")
+    if all_profiles is True or (type(all_profiles) is int and all_profiles == 1):
         return True
     scope = str(body.get("profile_scope") or "").strip().lower()
     return scope in {"all", "all_profiles"}

@@ -484,7 +484,10 @@ class TestProfileMutationsInIsolatedMode:
 
     def test_cli_import_all_profiles_is_rejected_in_isolated_mode(self, monkeypatch):
         """Direct all_profiles CLI imports must not bypass isolated-profile boundaries."""
-        import api.routes as routes
+        # The route facade re-exports the handler, but the authorization guard
+        # is resolved in its owning HTTP module. Patch and exercise that owner
+        # so this regression remains valid after routes.py compatibility moves.
+        from api.http import session_imports
 
         captured = {}
 
@@ -501,14 +504,14 @@ class TestProfileMutationsInIsolatedMode:
             def end_headers(self):
                 pass
 
-        monkeypatch.setattr(routes, "_is_isolated_profile_mode", lambda: True)
+        monkeypatch.setattr(session_imports, "_is_isolated_profile_mode", lambda: True)
         monkeypatch.setattr(
-            routes,
+            session_imports,
             "bad",
             lambda h, m, c=400: (captured.__setitem__("bad", (m, c)), True)[1],
         )
 
-        routes._handle_session_import_cli(
+        session_imports._handle_session_import_cli(
             _Handler(),
             {"session_id": "foreign-cli-2698", "all_profiles": 1, "profile": "other"},
         )
