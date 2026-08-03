@@ -11,6 +11,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
+STREAM_RENDERING_JS = (
+    ROOT / "static" / "modules" / "messages" / "rendering.js"
+).read_text(encoding="utf-8")
+STREAM_JS = (
+    ROOT / "static" / "modules" / "messages" / "stream.js"
+).read_text(encoding="utf-8")
+ANCHOR_SCENES_JS = (
+    ROOT / "static" / "modules" / "ui" / "anchor-scenes.js"
+).read_text(encoding="utf-8")
 STREAM_ANCHOR_SCENE_JS = (
     ROOT / "static" / "modules" / "messages" / "anchor-scene.js"
 ).read_text(encoding="utf-8")
@@ -1080,9 +1089,9 @@ def test_live_worklog_reason_mirror_is_gated_to_compact_mode():
     ensureLiveWorklogContainer / _syncWorklogReasonFromAnchor) so it actually
     short-circuits in transparent mode rather than running the rail-build first.
     """
-    start = UI_JS.index("function _syncLiveWorklogReasonsForAnchor(anchor, displayTextOverride){")
-    end = UI_JS.index("\nfunction ", start + 1)
-    body = UI_JS[start:end]
+    start = ANCHOR_SCENES_JS.index("function _syncLiveWorklogReasonsForAnchor(anchor, displayTextOverride){")
+    end = ANCHOR_SCENES_JS.index("\nfunction ", start + 1)
+    body = ANCHOR_SCENES_JS[start:end]
 
     # The compact-mode gate exists and short-circuits non-compact (transparent) mode.
     guard = "if(typeof isCompactWorklogMode==='function' && !isCompactWorklogMode()) return;"
@@ -1100,11 +1109,12 @@ def test_live_worklog_reason_mirror_is_gated_to_compact_mode():
         "mode never hides the inline assistant-segment or appends a wl-reason mirror"
     )
 
-    # Both live-render call sites still invoke the (now-gated) helper — the gate
-    # lives in the helper, not at the call sites, so live rendering is unchanged
-    # in compact mode.
-    MESSAGES_JS = family_source("messages")
-    assert MESSAGES_JS.count("_syncLiveWorklogReasonsForAnchor(assistantRow") >= 2
+    # The rendering owner invokes its injected sync callback in both the forced
+    # interim flush and the normal RAF render path. stream.js provides that
+    # callback by routing to the UI owner, so compact mode keeps both call sites
+    # while Transparent Stream short-circuits at the owner boundary.
+    assert STREAM_RENDERING_JS.count("syncWorklogReasons(state.assistantRow,displayText);") >= 2
+    assert "if(typeof _syncLiveWorklogReasonsForAnchor==='function') _syncLiveWorklogReasonsForAnchor(row,text);" in STREAM_JS
 
     # The settled-render worklog-folding gate is also compact-only (regression
     # guard against the symmetric settled-path bug).
