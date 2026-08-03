@@ -78,19 +78,22 @@ def test_show_webhook_sessions_in_bool_keys():
     )
 
 
-# --- api/routes.py string-scan ---
+# --- Sidebar listing owner wiring ---
 
-def test_show_cron_sessions_kwarg_passthrough():
-    src = _read("api/routes.py")
+def test_show_cron_sessions_kwarg_reaches_sidebar_projection():
+    # The route facade now delegates listing to api.sessions.sidebar_listing;
+    # keep the regression on the owner that passes the settings value into the
+    # background-session projection.
+    src = _read("api/sessions/sidebar_listing.py")
     assert "show_cron_sessions=show_cron_sessions" in src, (
-        "show_cron_sessions kwarg must be forwarded at the _dedupe_cli_sidebar_sessions_for_api call site"
+        "show_cron_sessions must be forwarded to the sidebar projection"
     )
 
 
-def test_show_webhook_sessions_kwarg_passthrough():
-    src = _read("api/routes.py")
+def test_show_webhook_sessions_kwarg_reaches_sidebar_projection():
+    src = _read("api/sessions/sidebar_listing.py")
     assert "show_webhook_sessions=show_webhook_sessions" in src, (
-        "show_webhook_sessions kwarg must be forwarded at the _dedupe_cli_sidebar_sessions_for_api call site"
+        "show_webhook_sessions must be forwarded to the sidebar projection"
     )
 
 
