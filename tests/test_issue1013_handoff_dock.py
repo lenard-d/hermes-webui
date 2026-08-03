@@ -875,8 +875,9 @@ def test_persisted_handoff_summary_deduplicates_identical_tail_markers(tmp_path,
 
 def test_persist_handoff_summary_falls_back_when_local_session_file_missing(tmp_path, monkeypatch):
     """Messaging session IDs should still persist to state.db when no local WebUI session exists."""
-    import api.routes as routes
     import api.profiles as profiles
+    import api.routes as routes
+    from api.routes_parts import handoff_summary
 
     sid = "messaging_1013_no_local_file"
     mock_home = tmp_path / "hermes_home"
@@ -886,9 +887,19 @@ def test_persist_handoff_summary_falls_back_when_local_session_file_missing(tmp_
     conn = _new_state_db(mock_home / "state.db")
 
     # Force messaging classification while keeping the local shell absent.
-    monkeypatch.setattr(routes, "_is_messaging_session_id", lambda _sid: True)
+    monkeypatch.setattr(
+        handoff_summary.sidebar_projection,
+        "is_messaging_session",
+        lambda _sid: True,
+    )
     try:
-        routes._persist_handoff_summary(sid, "Persist without local shell", "telegram", 1, True)
+        routes._persist_handoff_summary(
+            sid,
+            "Persist without local shell",
+            "telegram",
+            1,
+            True,
+        )
         rows = conn.execute(
             "SELECT role, content FROM messages WHERE session_id = ? ORDER BY rowid ASC",
             (sid,),

@@ -347,7 +347,7 @@ def test_streaming_cronjob_wrapper_uses_profile_context_only_for_tool_call(tmp_p
     import types
 
     from api import profiles as p
-    from api.streaming import diagnostics as st
+    from api.runs import diagnostics as st
 
     profile_home = tmp_path / "home" / "profiles" / "ops"
     events = []
@@ -430,7 +430,7 @@ def test_streaming_cronjob_wrapper_context_survives_threadpool_context_copy(tmp_
     import types
 
     from api import profiles as p
-    from api.streaming import diagnostics as st
+    from api.runs import diagnostics as st
 
     profile_home = tmp_path / "home" / "profiles" / "ops"
     events = []
@@ -504,7 +504,7 @@ def test_streaming_cronjob_wrapper_leaves_calls_unwrapped_without_streaming_prof
     """CLI/default calls through the registered cronjob handler are unchanged."""
     import types
 
-    from api.streaming import diagnostics as st
+    from api.runs import diagnostics as st
 
     events = []
 
@@ -558,7 +558,7 @@ def test_local_run_environment_avoids_long_lived_cron_context(tmp_path, monkeypa
 
     from api import profiles
     from api.runs import local_environment
-    from api.streaming import diagnostics
+    from api.runs import diagnostics
 
     profile_home = tmp_path / "home" / "profiles" / "ops"
     profile_home.mkdir(parents=True)

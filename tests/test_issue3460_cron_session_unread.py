@@ -423,7 +423,8 @@ function _markSessionCompletionUnread(sid, count) {{ unread.push([sid, count]); 
 function renderSessionListFromCache() {{ renders += 1; }}
 global.window = {{}};
     eval(extractFunc('_markSessionCompletionUnreadIfBackground'));
-    const result = _markSessionCompletionUnreadIfBackground('cron_1');
+    eval(extractFunc('_markSessionCompletionUnreadIfBackgroundAndRender'));
+    const result = _markSessionCompletionUnreadIfBackgroundAndRender('cron_1');
     console.log(JSON.stringify({{result, viewed, unread, renders}}));
 """
     payload = _run_node(script, "sessions")
@@ -465,7 +466,8 @@ function _markSessionCompletionUnread(sid, count) {{ unread.push([sid, count]); 
 function renderSessionListFromCache() {{ renders += 1; }}
 global.window = {{}};
 eval(extractFunc('_markSessionCompletionUnreadIfBackground'));
-const result = _markSessionCompletionUnreadIfBackground('cron_2');
+eval(extractFunc('_markSessionCompletionUnreadIfBackgroundAndRender'));
+const result = _markSessionCompletionUnreadIfBackgroundAndRender('cron_2');
 console.log(JSON.stringify({{result, viewed, unread, renders}}));
 """
     payload = _run_node(script, "sessions")

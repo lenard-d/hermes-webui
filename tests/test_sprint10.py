@@ -71,7 +71,7 @@ def test_api_modules_exist(cleanup_test_sessions):
     """All api/ module files must exist on disk."""
     base = REPO_ROOT / "api"
     for mod in ["__init__.py", "config", "helpers.py", "models.py",
-                "workspace", "upload.py", "streaming.py"]:
+                "workspace", "upload.py", "streaming"]:
         assert (base / mod).exists(), f"Missing api/{mod}"
 
 def test_server_py_under_750_lines(cleanup_test_sessions):
