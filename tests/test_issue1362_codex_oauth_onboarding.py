@@ -550,14 +550,59 @@ def test_anthropic_env_clear_waits_for_chat_env_read_lock(monkeypatch, tmp_path)
     assert "ANTHROPIC_API_KEY" not in os.environ
 
 
-def test_runtime_provider_reads_use_anthropic_env_lock():
-    local_run_src = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
-    chat_routes_src = (
-        REPO / "api" / "routes_parts" / "chat_runs.py"
-    ).read_text(encoding="utf-8")
+def test_runtime_provider_reads_use_anthropic_env_lock(monkeypatch):
+    """The local-turn runtime owner resolves credentials through the lock."""
+    import sys
+    import types
 
-    assert "resolve_runtime_provider_with_anthropic_env_lock" in local_run_src
-    assert "resolve_runtime_provider_with_anthropic_env_lock" in chat_routes_src
+    import api.auth as auth
+    from api.runs import local_agent_runtime
+
+    calls = []
+
+    def _resolve_runtime_provider(**kwargs):
+        calls.append(("resolver", kwargs))
+        return {
+            "provider": "anthropic",
+            "api_key": "resolved-key",
+            "base_url": "https://api.anthropic.test",
+        }
+
+    def _locked_resolver(resolver, *args, **kwargs):
+        calls.append(("lock", kwargs))
+        return resolver(*args, **kwargs)
+
+    fake_hermes_cli = types.ModuleType("hermes_cli")
+    fake_hermes_cli.__path__ = []
+    fake_runtime_provider = types.ModuleType("hermes_cli.runtime_provider")
+    fake_runtime_provider.resolve_runtime_provider = _resolve_runtime_provider
+    monkeypatch.setitem(sys.modules, "hermes_cli", fake_hermes_cli)
+    monkeypatch.setitem(sys.modules, "hermes_cli.runtime_provider", fake_runtime_provider)
+    monkeypatch.setattr(
+        auth,
+        "resolve_runtime_provider_with_anthropic_env_lock",
+        _locked_resolver,
+    )
+
+    runtime, provider, api_key, base_url = local_agent_runtime._resolve_runtime_provider(
+        model="claude-test",
+        provider="anthropic",
+        configured_base_url=None,
+    )
+
+    assert calls == [
+        (
+            "lock",
+            {"requested": "anthropic", "target_model": "claude-test"},
+        ),
+        (
+            "resolver",
+            {"requested": "anthropic", "target_model": "claude-test"},
+        ),
+    ]
+    assert runtime["provider"] == provider == "anthropic"
+    assert api_key == "resolved-key"
+    assert base_url == "https://api.anthropic.test"
 
 
 def test_anthropic_onboarding_setup_allows_linked_oauth_without_api_key(monkeypatch, tmp_path):

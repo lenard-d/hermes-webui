@@ -103,8 +103,8 @@ class TestIssue1500EnvVarAlignment:
         monkeypatch.setattr(ob, "get_active_hermes_home", lambda: tmp_path)
         monkeypatch.setattr(status, "get_active_hermes_home", lambda: tmp_path)
         cfg_path = tmp_path / "config.yaml"
-        monkeypatch.setattr(ob, "_get_config_path", lambda: cfg_path)
-        monkeypatch.setattr(status, "_get_config_path", lambda: cfg_path)
+        monkeypatch.setattr(ob, "get_config_path", lambda: cfg_path)
+        monkeypatch.setattr(status, "get_config_path", lambda: cfg_path)
         monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
         monkeypatch.delenv("HERMES_WEBUI_SKIP_ONBOARDING", raising=False)
         monkeypatch.delenv("LM_API_KEY", raising=False)
