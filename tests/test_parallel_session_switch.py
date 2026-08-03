@@ -461,15 +461,16 @@ class TestMessagePaginationFrontend:
 
     def test_ensure_messages_uses_msg_limit(self):
         """_ensureMessagesLoaded must send msg_limit parameter."""
-        fn_start = TRANSCRIPT_LOADING_JS.find("async function _ensureMessagesLoaded")
+        fn_start = TRANSCRIPT_LOADING_JS.find("function _sessionMessagesUrl")
         fn_end = TRANSCRIPT_LOADING_JS.find("\n}", fn_start) + 2
         fn_body = TRANSCRIPT_LOADING_JS[fn_start:fn_end]
 
         assert "msg_limit=" in fn_body, (
             "_ensureMessagesLoaded should include msg_limit parameter in the API call"
         )
-        assert "INITIAL_MESSAGE_LIMIT" in fn_body, (
-            "_ensureMessagesLoaded should use the transcript-window initial limit"
+        assert "_messageReloadLimitForSession(sid)" in fn_body
+        assert "return INITIAL_MESSAGE_LIMIT" in TRANSCRIPT_LOADING_JS, (
+            "the transcript URL should use the transcript-window initial limit"
         )
 
     def test_truncation_tracking(self):

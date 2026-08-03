@@ -110,6 +110,13 @@ def handle_get(handler, parsed, ctx: RouteContext):
         # (only needs metadata). The full message array is loaded lazily
         # via ?messages=1 when the message panel opens.
         load_messages = query.get("messages", ["1"])[0] != "0"
+        # The metadata request owns live recovery. The immediately-following
+        # transcript request can explicitly skip rebuilding and retransmitting
+        # the same potentially-large runtime journal snapshot while retaining
+        # the small journal status projection.
+        include_runtime_snapshot = (
+            query.get("runtime_snapshot", ["1"])[0] != "0"
+        )
         resolve_model_default = "1" if load_messages else "0"
         resolve_model = query.get("resolve_model", [resolve_model_default])[0] != "0"
         # ?msg_limit=N returns a tail window containing the last N visible
@@ -484,10 +491,14 @@ def handle_get(handler, parsed, ctx: RouteContext):
                         journal,
                         active=journal_active,
                     )
-                    if journal_active and _stream_id_visible_to_request_profile(
-                        handler,
-                        original_stream_id,
-                        emit_error=False,
+                    if (
+                        include_runtime_snapshot
+                        and journal_active
+                        and _stream_id_visible_to_request_profile(
+                            handler,
+                            original_stream_id,
+                            emit_error=False,
+                        )
                     ):
                         try:
                             snapshot = _run_journal_live_snapshot(

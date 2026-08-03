@@ -83,6 +83,28 @@ function _syncToolCallsForLoadedMessages(messages, sessionToolCalls){
   }
 }
 
+function _sessionMessagesUrl(sid){
+  const reloadLimit = _messageReloadLimitForSession(sid);
+  // A reload window above the server ceiling would be clamped and could
+  // silently shrink a transcript that already has a wider window loaded.
+  // Omit the limit in that case so a same-session refresh preserves all rows.
+  const boundedReloadLimit = (reloadLimit && reloadLimit <= transcriptWindowState.msgLimitMax) ? reloadLimit : null;
+  const reloadLimitParam = boundedReloadLimit ? `&msg_limit=${boundedReloadLimit}` : '';
+  // Retained for compatibility with mixed-version deployments; current
+  // servers already count visible transcript rows by default.
+  const expandParam = boundedReloadLimit ? '&expand_renderable=1' : '';
+  return `/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0${reloadLimitParam}${expandParam}&runtime_snapshot=0`;
+}
+
+function _prefetchSessionMessages(sid){
+  // Settle failures into a value: metadata/profile resolution may still be in
+  // flight, so a rejected speculative request must never become unhandled.
+  return api(_sessionMessagesUrl(sid), {timeoutMs:120000}).then(
+    data => ({data}),
+    error => ({error}),
+  );
+}
+
 async function _ensureMessagesLoaded(sid, opts) {
   // `opts` is an explicit named parameter (vs loadSession's arguments[1]
   // pattern) because _ensureMessagesLoaded is a module-private helper: it is
@@ -105,26 +127,15 @@ async function _ensureMessagesLoaded(sid, opts) {
     return;
   }
   // Fetch session messages with a tail window for fast initial load.
-  const reloadLimit = _messageReloadLimitForSession(sid); // defaults to INITIAL_MESSAGE_LIMIT
-  // A reload window above the server's msg_limit ceiling would be clamped by
-  // the backend (returning only the last MESSAGE_LIMIT_FALLBACK rows), which can
-  // silently SHRINK an already-loaded transcript that had more than the ceiling
-  // of rows visible (rows 400–999 replaced by 500–999). When the requested
-  // window exceeds the ceiling, fall back to the bare full-transcript request
-  // (no msg_limit / no expand_renderable) so a same-session refresh never drops
-  // already-loaded older rows (Codex gate #6154, silent row-loss).
-  const boundedReloadLimit = (reloadLimit && reloadLimit <= transcriptWindowState.msgLimitMax) ? reloadLimit : null;
-  const reloadLimitParam = boundedReloadLimit ? `&msg_limit=${boundedReloadLimit}` : '';
-  // Older frontends used expand_renderable=1 to request visible-row expansion.
-  // The server now counts msg_limit by visible transcript rows by default; keep
-  // the flag for compatibility with mixed-version deployments.
-  const expandParam = boundedReloadLimit ? '&expand_renderable=1' : '';
   let data;
   try {
-    data = await api(
-      `/api/session?session_id=${encodeURIComponent(sid)}&messages=1&resolve_model=0${reloadLimitParam}${expandParam}`,
-      {timeoutMs:120000}
-    );
+    if(opts.prefetchedMessages){
+      const prefetched=await opts.prefetchedMessages;
+      if(prefetched&&prefetched.error) throw prefetched.error;
+      data=prefetched&&prefetched.data;
+    }else{
+      data = await api(_sessionMessagesUrl(sid), {timeoutMs:120000});
+    }
   } finally {
     if (_ownsLoad()) _clearSameSessionForceReloadHint(sid);
   }
@@ -207,7 +218,7 @@ async function _ensureMessagesLoaded(sid, opts) {
   }
 }
 
-export const transcriptLoading=Object.freeze({ensureLoaded:_ensureMessagesLoaded,captureReloadHint:_captureSameSessionForceReloadHint,clearReloadHint:_clearSameSessionForceReloadHint,syncToolCalls:_syncToolCallsForLoadedMessages});
+export const transcriptLoading=Object.freeze({ensureLoaded:_ensureMessagesLoaded,prefetch:_prefetchSessionMessages,captureReloadHint:_captureSameSessionForceReloadHint,clearReloadHint:_clearSameSessionForceReloadHint,syncToolCalls:_syncToolCallsForLoadedMessages});
 
 export const _INITIAL_MSG_LIMIT=INITIAL_MESSAGE_LIMIT;
-export { _captureSameSessionForceReloadHint, _clearSameSessionForceReloadHint, _ensureMessagesLoaded, _syncToolCallsForLoadedMessages };
+export { _captureSameSessionForceReloadHint, _clearSameSessionForceReloadHint, _ensureMessagesLoaded, _prefetchSessionMessages, _syncToolCallsForLoadedMessages };

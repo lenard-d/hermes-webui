@@ -139,7 +139,10 @@ def test_loadsession_has_generation_token_and_forwards_to_ensure_messages_loaded
         "_restoreLoadedSession() should check ownership in its INFLIGHT and idle "
         "message-load await/catch paths"
     )
-    ensure_call = _normalise_ws("await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, loadGeneration:_loadGeneration});")
+    ensure_call = _normalise_ws(
+        "await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, "
+        "loadGeneration:_loadGeneration, prefetchedMessages:_prefetchedMessages});"
+    )
     assert ensure_call in restore_norm, (
         "_restoreLoadedSession() must pass generation into "
         "_ensureMessagesLoaded() for stale-owner checks"
@@ -246,6 +249,12 @@ function createEnvironment() {
   };
   globalThis._messageRenderWindowSize = 0;
   globalThis._messageReloadLimitForSession = () => 2;
+  globalThis._prefetchSessionMessages = (sid) => api(
+    buildMessageUrl(sid, 1)
+  ).then(
+    (data) => ({ data }),
+    (error) => ({ error }),
+  );
   // transcript-window-state.js constant used by transcript-loading.js after
   // the response updates the live ceiling. The extracted function keeps the
   // focused owner's dependency explicit in this harness.
@@ -460,7 +469,7 @@ const API_ATLAS_RELOAD_MSGS = {
 function buildMessageUrl(sid, mode, suffix='') {
   const base = `/api/session?session_id=${encodeURIComponent(sid)}&messages=${mode}&resolve_model=0`;
   if (mode === 0) return base;
-  return `${base}&msg_limit=${_messageReloadLimitForSession()}&expand_renderable=1${suffix}`;
+  return `${base}&msg_limit=${_messageReloadLimitForSession()}&expand_renderable=1&runtime_snapshot=0${suffix}`;
 }
 
 function makeCrossSessionCalls(apiHost) {
@@ -487,6 +496,10 @@ function runCrossSessionOrderingBase({seedBeaconInflight, resolveBeaconMsgsBefor
   const first = loadSession('sid-beacon', { force: true });
   return (async () => {
     await waitForQueued(apiHost, calls.beaconMeta.url);
+    await Promise.resolve();
+    const transcriptStartedBeforeMetadata = apiHost.pending.some(
+      (entry) => entry.url === calls.beaconMsgs.url
+    );
     calls.beaconMeta._resolve(API_BEACON_META);
 
     await waitForQueued(apiHost, calls.beaconMsgs.url);
@@ -521,6 +534,7 @@ function runCrossSessionOrderingBase({seedBeaconInflight, resolveBeaconMsgsBefor
       loadingSid: snapshotState().loadingSid,
       loadingGeneration: snapshotState().loadingGeneration,
       rearmCalls: snapshotState().rearmCalls,
+      transcriptStartedBeforeMetadata,
     };
   })();
 }
@@ -654,38 +668,41 @@ def test_loadsession_cross_session_ordering_and_stale_reject_behavior():
     assert cross["apiCalls"][0] == "/api/session?session_id=sid-beacon&messages=0&resolve_model=0", (
         "first API call should target old session's metadata"
     )
-    assert cross["apiCalls"][1] == "/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1", (
+    assert cross["apiCalls"][1] == "/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0", (
         "beacon transcript request should queue before atlas metadata resolves"
     )
     assert cross["apiCalls"][2] == "/api/session?session_id=sid-atlas&messages=0&resolve_model=0", (
         "second API call should target atlas metadata while stale beacon messages are in flight"
     )
-    assert cross["apiCalls"][3] == "/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1", (
+    assert cross["apiCalls"][3] == "/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0", (
         "atlas should still fetch a transcript while beacon was stale"
     )
-    assert cross["apiCalls"].count("/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1") == 1, (
+    assert cross["apiCalls"].count("/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0") == 1, (
         "stale overlap should still issue the Beacon transcript call, but it must not win"
     )
     _assert_atlas_wins(cross, label="cross-session-ordering")
+    assert cross["transcriptStartedBeforeMetadata"] is True, (
+        "target transcript request must start without waiting for metadata"
+    )
 
     # 2) Observed idle-path race with no INFLIGHT: stale Beacon transcript returns
     #    before Atlas metadata, but ownership guard must still force Atlas fetch+swap.
     assert observed["apiCalls"][0] == "/api/session?session_id=sid-beacon&messages=0&resolve_model=0", (
         "idle-path race should start from old Beacon metadata"
     )
-    assert observed["apiCalls"][1] == "/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1", (
+    assert observed["apiCalls"][1] == "/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0", (
         "Beacon transcript call should remain queued before Atlas metadata under observed race"
     )
     assert observed["apiCalls"][2] == "/api/session?session_id=sid-atlas&messages=0&resolve_model=0", (
         "Atlas metadata must start while Beacon continuation returns stale"
     )
-    assert observed["apiCalls"][3] == "/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1", (
+    assert observed["apiCalls"][3] == "/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0", (
         "Atlas transcript request must still issue despite stale Beacon return"
     )
-    assert observed["apiCalls"].count("/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1") == 1, (
+    assert observed["apiCalls"].count("/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0") == 1, (
         "stale Beacon transcript should occur once in observed race"
     )
-    assert observed["apiCalls"].count("/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1") == 1, (
+    assert observed["apiCalls"].count("/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0") == 1, (
         "Atlas transcript must be issued once once stale Beacon is processed first"
     )
     _assert_atlas_wins(observed, label="observed-idle-cross-session-ordering")
@@ -700,7 +717,7 @@ def test_loadsession_cross_session_ordering_and_stale_reject_behavior():
     )
     assert stale["toastCalls"] == [], "stale reject must not surface toast for superseded load"
     assert stale["apiCalls"].count(
-        "/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1"
+        "/api/session?session_id=sid-atlas&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0"
     ) == 2, "both old and active loads should have attempted message fetch"
 
     assert cross["loadingSid"] is None, "load marker should be cleared after successful completion"

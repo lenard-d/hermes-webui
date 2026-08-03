@@ -25,7 +25,7 @@ function _rearmActiveSessionStream(){
 
 
 async function _restoreLoadedSession(ctx){
-  const {sid,_keepStaleUntilLoaded,_loadGeneration,_isCurrentLoad,sameSessionForceReload}=ctx;
+  const {sid,_keepStaleUntilLoaded,_loadGeneration,_isCurrentLoad,sameSessionForceReload,_prefetchedMessages}=ctx;
   let activeStreamId=ctx.activeStreamId;
   function _mergePendingSessionMessage(session,messages){
     if(!Array.isArray(messages)) return false;
@@ -104,7 +104,7 @@ async function _restoreLoadedSession(ctx){
     // this session's INFLIGHT snapshot, not leave prior-session rows in place.
     if(typeof clearLiveToolCards==='function') clearLiveToolCards();
     try {
-      await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, loadGeneration:_loadGeneration});
+      await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, loadGeneration:_loadGeneration, prefetchedMessages:_prefetchedMessages});
     } catch(e) {
       if (!_isCurrentLoad()) {
         _rearmActiveSessionStream();
@@ -210,7 +210,7 @@ async function _restoreLoadedSession(ctx){
     // "messages already populated" early-return inside _ensureMessagesLoaded
     // does NOT skip the swap to the new transcript.
     try {
-      await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, loadGeneration:_loadGeneration});
+      await _ensureMessagesLoaded(sid, {force:_keepStaleUntilLoaded, loadGeneration:_loadGeneration, prefetchedMessages:_prefetchedMessages});
     } catch (e) {
       if (!_isCurrentLoad()) {
         _rearmActiveSessionStream();

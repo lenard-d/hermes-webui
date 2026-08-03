@@ -347,6 +347,71 @@ def test_session_payload_exposes_durable_runtime_journal_for_stale_streams(
     ][0]["payload"] == {"text": "durable partial output"}
 
 
+def test_message_tail_can_skip_duplicate_live_journal_snapshot(monkeypatch):
+    """The transcript fetch keeps journal status but must not rebuild metadata's snapshot."""
+    import api.routes as routes
+    from api.http.routes import session_queries
+    from api.sessions.store import Session
+
+    session_id = "live-session"
+    stream_id = "live-run"
+    session = Session(
+        session_id=session_id,
+        title="Live run",
+        messages=[{"role": "user", "content": "hello"}],
+        context_length=128_000,
+    )
+    session.active_stream_id = stream_id
+    snapshot_calls = []
+
+    monkeypatch.setattr(routes, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(routes, "_clear_stale_stream_state", lambda _session: False)
+    monkeypatch.setattr(routes, "_active_stream_ids", lambda: {stream_id})
+    monkeypatch.setattr(
+        routes,
+        "find_run_summary",
+        lambda _run_id: {
+            "session_id": session_id,
+            "run_id": stream_id,
+            "last_seq": 7,
+            "last_event_id": f"{stream_id}:7",
+            "last_event": "token",
+            "terminal": False,
+        },
+    )
+    monkeypatch.setattr(
+        routes,
+        "_run_journal_live_snapshot",
+        lambda run_id: snapshot_calls.append(run_id) or {"assistant_text": "duplicate"},
+    )
+    monkeypatch.setattr(
+        routes,
+        "_stream_id_visible_to_request_profile",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(routes, "redact_session_data", lambda payload: payload)
+    monkeypatch.setattr(
+        session_queries.session_detail_projection,
+        "metadata_summary",
+        lambda *_args, **_kwargs: {"message_count": 1, "last_message_at": 0},
+    )
+    monkeypatch.setattr(routes, "j", lambda _handler, payload, **_kwargs: payload)
+
+    response = routes.handle_get(
+        object(),
+        urlparse(
+            f"/api/session?session_id={session_id}&messages=1&resolve_model=0"
+            "&runtime_snapshot=0"
+        ),
+    )
+    payload = response["session"]
+
+    assert payload["runtime_journal"]["run_id"] == stream_id
+    assert payload["runtime_journal"]["terminal"] is False
+    assert snapshot_calls == []
+    assert "runtime_journal_snapshot" not in payload
+
+
 def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(monkeypatch):
     monkeypatch.setattr(
         anchor_journal_owner,

@@ -11,7 +11,7 @@ import { _resolveSessionIdFromSidebarLineage } from './session-lineage.js';
 import { _clearEmptyComposerModelOverride } from './new-session.js';
 import { _rearmActiveSessionStream, _restoreLoadedSession } from './session-load-recovery.js';
 import { _sessionProfileMismatchFromError, _switchProfileForSessionLoad } from './session-profile-load.js';
-import { _captureSameSessionForceReloadHint, _clearSameSessionForceReloadHint } from './transcript-loading.js';
+import { _captureSameSessionForceReloadHint, _clearSameSessionForceReloadHint, _prefetchSessionMessages } from './transcript-loading.js';
 import { transcriptWindowState } from './transcript-window-state.js';
 import { _resetYoloState } from '../messages/approvals.js';
 
@@ -193,8 +193,11 @@ async function loadSession(sid){
   // repaired by the deferred resolver after S.session is assigned.
   // Guard against network/server failures to prevent a permanently stuck loading state.
   let data;
+  let _prefetchedMessages;
   try {
-    data = await api(`/api/session?session_id=${encodeURIComponent(sid)}&messages=0&resolve_model=0`);
+    const _metadataRequest=api(`/api/session?session_id=${encodeURIComponent(sid)}&messages=0&resolve_model=0`);
+    _prefetchedMessages=_prefetchSessionMessages(sid);
+    data = await _metadataRequest;
   } catch(e) {
     const profileMismatch=_sessionProfileMismatchFromError(e);
     if(profileMismatch && profileMismatch.profile && !opts.skipProfileResolve){
@@ -407,7 +410,7 @@ async function loadSession(sid){
 
 
   if(!await _restoreLoadedSession({
-    sid,activeStreamId,_keepStaleUntilLoaded,_loadGeneration,_isCurrentLoad,sameSessionForceReload,
+    sid,activeStreamId,_keepStaleUntilLoaded,_loadGeneration,_isCurrentLoad,sameSessionForceReload,_prefetchedMessages,
   })) return;
 
   // Sync context usage indicator from session data
