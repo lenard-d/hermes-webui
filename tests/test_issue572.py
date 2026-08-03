@@ -47,8 +47,8 @@ def _inject_hermes_cli_auth(get_auth_status_return):
 # ---------------------------------------------------------------------------
 
 def _call_provider_api_key_present(provider: str, cfg: dict = None, env_values: dict = None):
-    from api.onboarding import _provider_api_key_present
-    return _provider_api_key_present(provider, cfg or {}, env_values or {})
+    from api.onboarding.persistence import provider_api_key_present
+    return provider_api_key_present(provider, cfg or {}, env_values or {})
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class TestProviderApiKeyPresentFallback:
 
     def test_minimax_cn_logged_in_returns_true(self):
         """minimax-cn: if hermes_cli.auth.get_auth_status returns logged_in, must be True."""
-        with mock.patch("api.onboarding.catalog.SUPPORTED_PROVIDER_SETUPS", {
+        with mock.patch("api.onboarding.persistence.SUPPORTED_PROVIDER_SETUPS", {
             "openrouter": {}, "anthropic": {}, "openai": {}, "custom": {}
         }):
             with _inject_hermes_cli_auth({"logged_in": True}):
@@ -68,7 +68,7 @@ class TestProviderApiKeyPresentFallback:
 
     def test_unsupported_provider_logged_out_returns_false(self):
         """Unsupported provider with no key → False, no crash."""
-        with mock.patch("api.onboarding.catalog.SUPPORTED_PROVIDER_SETUPS", {
+        with mock.patch("api.onboarding.persistence.SUPPORTED_PROVIDER_SETUPS", {
             "openrouter": {}, "anthropic": {}, "openai": {}, "custom": {}
         }):
             with _inject_hermes_cli_auth({"logged_in": False}):
@@ -85,7 +85,7 @@ class TestProviderApiKeyPresentFallback:
                 raise ImportError("hermes_cli not available")
             return real_import(name, *args, **kwargs)
 
-        with mock.patch("api.onboarding.catalog.SUPPORTED_PROVIDER_SETUPS", {
+        with mock.patch("api.onboarding.persistence.SUPPORTED_PROVIDER_SETUPS", {
             "openrouter": {}, "anthropic": {}, "openai": {}, "custom": {}
         }):
             with mock.patch("builtins.__import__", side_effect=_block_hermes_cli):
@@ -94,9 +94,9 @@ class TestProviderApiKeyPresentFallback:
 
     def test_supported_provider_still_works_without_fallback(self):
         """openrouter with env key must still succeed via the original path."""
-        from api.onboarding import _provider_api_key_present
+        from api.onboarding.persistence import provider_api_key_present
         env_values = {"OPENROUTER_API_KEY": "sk-test"}
-        result = _provider_api_key_present("openrouter", {}, env_values)
+        result = provider_api_key_present("openrouter", {}, env_values)
         assert result is True
 
     def test_inline_api_key_in_cfg_still_works(self):
@@ -113,16 +113,16 @@ class TestProviderApiKeyPresentFallback:
 class TestStatusFromRuntimeUnsupportedProvider:
 
     def _run(self, provider: str, model: str, api_key_present: bool, oauth_present: bool = False):
-        from api.onboarding import _status_from_runtime
+        from api.onboarding.status import status_from_runtime
         cfg = {"model": {"provider": provider, "default": model}}
         with (
-            mock.patch("api.onboarding.status._HERMES_FOUND", True),
+            mock.patch("api.onboarding.status.is_hermes_agent_available", return_value=True),
             mock.patch("api.onboarding.status.load_env_file", return_value={}),
             mock.patch("api.onboarding.status.get_active_hermes_home", return_value=pathlib.Path("/tmp")),
             mock.patch("api.onboarding.status.provider_api_key_present", return_value=api_key_present),
             mock.patch("api.onboarding.status.provider_oauth_authenticated", return_value=oauth_present),
         ):
-            return _status_from_runtime(cfg, True)
+            return status_from_runtime(cfg, True)
 
     def test_minimax_cn_with_key_gives_chat_ready(self):
         """minimax-cn + api key present → chat_ready must be True."""
@@ -177,7 +177,7 @@ class TestOnboardingStatusUnsupportedProvider:
             mock.patch.object(mod, "load_workspaces", return_value=[]),
             mock.patch.object(mod, "get_last_workspace", return_value=None),
             mock.patch.object(mod, "get_available_models", return_value=[]),
-            mock.patch.object(mod, "_get_config_path", return_value=fake_config_path),
+            mock.patch.object(mod, "get_config_path", return_value=fake_config_path),
             mock.patch.object(pathlib.Path, "exists", return_value=True),
         ):
             return mod.get_onboarding_status()

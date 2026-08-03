@@ -42,9 +42,9 @@ import pathlib
 import pytest
 
 import api.config as config
-import api.onboarding as onboarding
+import api.model_context as model_context
+import api.onboarding.persistence as onboarding_persistence
 import api.providers as providers
-import api.routes as routes
 
 _REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -64,7 +64,7 @@ def _src(name: str) -> str:
     [
         ("onboarding/persistence.py", 'config.get("providers") or {}'),
         ("providers/__init__.py", _HARDENED),
-        ("routes_parts/session_models.py", _HARDENED),
+        ("model_context.py", _HARDENED),
     ],
 )
 def test_file_hardens_providers_key_read_against_none(filename, hardened):
@@ -109,7 +109,7 @@ def test_file_hardens_providers_key_read_against_none(filename, hardened):
         "onboarding/setup.py",
         "onboarding/status.py",
         "providers/__init__.py",
-        "routes_parts/session_models.py",
+        "model_context.py",
     ],
 )
 def test_target_files_parse(filename):
@@ -134,8 +134,8 @@ def test_onboarding_provider_api_key_present_handles_none_providers():
     empty_cfg = _onboarding_cfg({})
 
     for provider in ("custom", "openai", "anthropic"):
-        got_none = onboarding._provider_api_key_present(provider, none_cfg, {})
-        got_empty = onboarding._provider_api_key_present(provider, empty_cfg, {})
+        got_none = onboarding_persistence.provider_api_key_present(provider, none_cfg, {})
+        got_empty = onboarding_persistence.provider_api_key_present(provider, empty_cfg, {})
         assert got_none == got_empty
         assert got_none is False  # no key configured anywhere
 
@@ -144,7 +144,7 @@ def test_onboarding_none_providers_does_not_mask_configured_key():
     """A provider key set under model.api_key is still found with providers: None."""
     cfg = _onboarding_cfg(None)
     cfg["model"] = {"provider": "custom", "api_key": "sk-xyz", "base_url": "http://x"}
-    assert onboarding._provider_api_key_present("custom", cfg, {}) is True
+    assert onboarding_persistence.provider_api_key_present("custom", cfg, {}) is True
 
 
 # --- behavioural: providers (catalog + key lookup) ------------------------
@@ -192,10 +192,10 @@ def test_routes_context_length_helper_handles_none_providers():
     cfg_empty = dict(cfg_none, providers={})
 
     # Pass cfg explicitly so the helper does not hit real config/disk.
-    out_none = routes._context_length_lookup_inputs_for_model(
+    out_none = model_context._context_length_lookup_inputs_for_model(
         "@custom:my-model", "custom", cfg=cfg_none
     )
-    out_empty = routes._context_length_lookup_inputs_for_model(
+    out_empty = model_context._context_length_lookup_inputs_for_model(
         "@custom:my-model", "custom", cfg=cfg_empty
     )
     # No crash, and the None config produces the same lookup inputs as the
