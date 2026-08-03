@@ -11,12 +11,7 @@ This test asserts the optimized merge produces byte-identical output to a
 reference implementation of the ORIGINAL list-slice semantics, over adversarial
 inputs that force duplicate identities and None keys.
 """
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from api import streaming  # noqa: E402
+from api.runs import transcript
 
 
 def _msg(role, text, **extra):
@@ -50,7 +45,7 @@ def test_backfill_optimization_preserves_duplicate_identity_turns():
     ]
     result_messages = list(previous_context) + [_msg("assistant", "third reply")]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = transcript._merge_display_messages_after_agent_result(
         previous_display, previous_context, result_messages, "Ok"
     )
 
@@ -81,7 +76,7 @@ def test_backfill_optimization_matches_reference_listslice_semantics():
         _deduped_rev = []
         for m in reversed(previous_display):
             if isinstance(m, dict) and m.get("_partial"):
-                key = streaming._message_identity(m)
+                key = transcript._message_identity(m)
                 if key is not None:
                     if key in _partial_seen:
                         continue
@@ -93,19 +88,19 @@ def test_backfill_optimization_matches_reference_listslice_semantics():
         if not result_messages:
             return previous_display
         if previous_display and previous_context:
-            _display_id_set = {streaming._message_identity(m) for m in previous_display}
+            _display_id_set = {transcript._message_identity(m) for m in previous_display}
             _context_id_set = {
-                streaming._message_identity(m)
+                transcript._message_identity(m)
                 for m in previous_context
-                if not streaming._is_context_compression_marker(m)
+                if not transcript._is_context_compression_marker(m)
             }
             if bool(_context_id_set - _display_id_set):
-                context_keys = [streaming._message_identity(m) for m in previous_context]
+                context_keys = [transcript._message_identity(m) for m in previous_context]
                 _backfilled = []
                 _context_inserted = set()
                 _cursor = 0
                 for _di, _dmsg in enumerate(previous_display):
-                    _dkey = streaming._message_identity(_dmsg)
+                    _dkey = transcript._message_identity(_dmsg)
                     if _dkey is not None:
                         _j = _cursor
                         while _j < len(context_keys) and context_keys[_j] != _dkey:
@@ -114,18 +109,18 @@ def test_backfill_optimization_matches_reference_listslice_semantics():
                             for _k in range(_cursor, _j):
                                 _ckey = context_keys[_k]
                                 _cmsg = previous_context[_k]
-                                if _ckey is not None and _ckey not in _context_inserted and _ckey not in _display_id_set and not streaming._is_context_compression_marker(_cmsg):
+                                if _ckey is not None and _ckey not in _context_inserted and _ckey not in _display_id_set and not transcript._is_context_compression_marker(_cmsg):
                                     _backfilled.append(_copy.deepcopy(_cmsg))
                                     _context_inserted.add(_ckey)
                             _cursor = _j + 1
                         elif not any(
-                            streaming._message_identity(_f) in context_keys[_cursor:]
+                            transcript._message_identity(_f) in context_keys[_cursor:]
                             for _f in previous_display[_di + 1:]
                         ):
                             for _k in range(_cursor, len(context_keys)):
                                 _ckey = context_keys[_k]
                                 _cmsg = previous_context[_k]
-                                if _ckey is not None and _ckey not in _context_inserted and _ckey not in _display_id_set and not streaming._is_context_compression_marker(_cmsg):
+                                if _ckey is not None and _ckey not in _context_inserted and _ckey not in _display_id_set and not transcript._is_context_compression_marker(_cmsg):
                                     _backfilled.append(_copy.deepcopy(_cmsg))
                                     _context_inserted.add(_ckey)
                             _cursor = len(context_keys)
@@ -134,7 +129,7 @@ def test_backfill_optimization_matches_reference_listslice_semantics():
                     _ckey = context_keys[_cursor]
                     _cmsg = previous_context[_cursor]
                     _cursor += 1
-                    if _ckey is not None and _ckey not in _context_inserted and _ckey not in _display_id_set and not streaming._is_context_compression_marker(_cmsg):
+                    if _ckey is not None and _ckey not in _context_inserted and _ckey not in _display_id_set and not transcript._is_context_compression_marker(_cmsg):
                         _backfilled.append(_copy.deepcopy(_cmsg))
                         _context_inserted.add(_ckey)
                 if len(_backfilled) > len(previous_display):
@@ -148,7 +143,7 @@ def test_backfill_optimization_matches_reference_listslice_semantics():
     for _ in range(2000):
         pd = [_msg(rng.choice(roles), rng.choice(texts)) for _ in range(rng.randint(0, 5))]
         pc = [_msg(rng.choice(roles), rng.choice(texts)) for _ in range(rng.randint(0, 6))]
-        opt = streaming._merge_display_messages_after_agent_result(
+        opt = transcript._merge_display_messages_after_agent_result(
             [dict(m) for m in pd], [dict(m) for m in pc], [dict(m) for m in pc] + [_msg("assistant", "z")], "Ok"
         )
         ref_backbone = reference_merge([dict(m) for m in pd], [dict(m) for m in pc], [dict(m) for m in pc] + [_msg("assistant", "z")], "Ok")
