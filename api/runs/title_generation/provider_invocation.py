@@ -49,7 +49,7 @@ def _route_rejects_reasoning_extra(provider: str = '', model: str = '', base_url
         host = (urlsplit(str(base_url or '').strip()).hostname or '').lower()
     except Exception:
         host = ''
-    if host == 'openai.com' or host.endswith('.openai.azure.com'):
+    if host == 'api.openai.com' or host.endswith('.openai.azure.com'):
         return True
     # Azure AI Foundry chat-completions hosts (also reject the reasoning param).
     if host.endswith('.services.ai.azure.com') or host.endswith('.cognitiveservices.azure.com'):

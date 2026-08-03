@@ -35,6 +35,8 @@ class TestAuxRejectList:
     def test_hostname_match_not_substring(self):
         # A proxy whose PATH merely contains api.openai.com must NOT be reject-listed.
         assert _route_rejects_reasoning_extra("custom", "qwen3", "https://proxy.example.test/api.openai.com/v1") is False
+        # Nor may a lookalike subdomain be treated as the OpenAI endpoint.
+        assert _route_rejects_reasoning_extra("custom", "qwen3", "https://api.openai.com.example.test/v1") is False
         # but the real OpenAI host is.
         assert _route_rejects_reasoning_extra("custom", "gpt-5", "https://api.openai.com/v1") is True
 
