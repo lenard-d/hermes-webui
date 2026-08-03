@@ -643,7 +643,7 @@ def get_available_models_for_session_visit() -> dict:
             _slow_threshold_ms = 0.0
 
     cache_path = api._get_models_cache_path()
-    cache_age = api._models_cache_file_age_seconds(cache_path, api.time.time())
+    cache_age = api._models_cache_file_age_seconds(cache_path, _time.time())
     _mark(f"disk_age_check:{cache_age}")
     disk_cached = None
     if (
@@ -651,7 +651,7 @@ def get_available_models_for_session_visit() -> dict:
         and cache_age < api.MODEL_CATALOG_STATE.session_visit_models_freshness_seconds
     ):
         _mark("cache_age_within_ttl")
-        now_mono = api.time.monotonic()
+        now_mono = _time.monotonic()
         with api.MODEL_CATALOG_STATE.available_models_cache_lock:
             cached = api._get_fresh_memory_models_cache(now_mono)
             if cached is not None:
@@ -667,7 +667,7 @@ def get_available_models_for_session_visit() -> dict:
         disk_cached = api._load_models_cache_from_disk()
         if disk_cached is not None:
             with api.MODEL_CATALOG_STATE.available_models_cache_lock:
-                cached = api._get_fresh_memory_models_cache(api.time.monotonic())
+                cached = api._get_fresh_memory_models_cache(_time.monotonic())
                 if cached is not None:
                     _mark("disk_then_memory_cache_hit")
                     api._maybe_log_slow_stages(
@@ -678,7 +678,7 @@ def get_available_models_for_session_visit() -> dict:
                     )
                     return cached
                 api.MODEL_CATALOG_STATE.available_models_cache = api.copy.deepcopy(disk_cached)
-                api.MODEL_CATALOG_STATE.available_models_cache_ts = api.time.monotonic()
+                api.MODEL_CATALOG_STATE.available_models_cache_ts = _time.monotonic()
                 api.MODEL_CATALOG_STATE.available_models_cache_source_fingerprint = (
                     api._models_cache_source_fingerprint()
                 )
