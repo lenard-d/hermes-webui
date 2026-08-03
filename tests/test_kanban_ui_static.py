@@ -825,18 +825,23 @@ def test_kanban_review_feedback_static_ui_fixes_exist():
 def test_kanban_task_detail_renderer_executes_with_log_and_formats_feedback():
     import json
     import subprocess
-    script = "const src = " + json.dumps(PANELS) + ";\n" + """
-const fs = require('fs');
-const vm = require('vm');
+    module_url = (ROOT / "static" / "modules" / "panels" / "kanban-boards.js").as_uri()
+    script = """
 function esc(value) {
   return String(value == null ? '' : value).replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
 }
-const context = {
-  console,
-  setInterval(){ return 1; },
-  document: { querySelectorAll(){ return []; }, getElementById(){ return null; }, addEventListener(){} },
-  window: { addEventListener(){} },
-  t(key){
+globalThis.document = {
+  hidden: true,
+  querySelectorAll(){ return []; },
+  getElementById(){ return null; },
+  addEventListener(){},
+  removeEventListener(){}
+};
+globalThis.window = { addEventListener(){}, location: { reload(){} } };
+globalThis.setInterval = () => 1;
+globalThis.clearInterval = () => {};
+globalThis.api = async () => ({});
+globalThis.t = key => {
     const map = {
       kanban_no_description:'No description', kanban_comments_count:'Comments ({0})', kanban_events_count:'Events ({0})',
       kanban_links:'Links', kanban_runs_count:'Runs ({0})', kanban_worker_log:'Worker log', kanban_empty:'Empty',
@@ -846,22 +851,30 @@ const context = {
       kanban_status_blocked:'Blocked', kanban_status_done:'Done', kanban_status_archived:'Archived'
     };
     return map[key] || key;
-  },
-  esc, $(){ return null; }, api(){}, showToast(){}, li(){ return ''; }, S: {}
 };
-vm.createContext(context);
-vm.runInContext(src, context);
-const html = vm.runInContext(`_kanbanRenderTaskDetail({
+globalThis.esc = esc;
+globalThis.$ = () => null;
+globalThis.showToast = () => {};
+globalThis.li = () => '';
+globalThis.S = {};
+
+const { _kanbanRenderTaskDetail } = await import(""" + json.dumps(module_url) + """);
+const html = _kanbanRenderTaskDetail({
   task:{id:'t_1', title:'Demo', status:'ready', body:'Body'},
   comments:[{body:'hello', author:'webui', created_at:1777931496}],
   events:[{kind:'blocked', payload:{reason:'waiting'}, created_at:1777931496}],
   links:{parents:['t_0'], children:[]},
   runs:[],
   log:{content:'worker log'}
-})`, context);
+});
 console.log(JSON.stringify({html}));
 """
-    result = subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     html = json.loads(result.stdout)["html"]
     assert "worker log" in html
     assert "kanban-back-btn" in html
