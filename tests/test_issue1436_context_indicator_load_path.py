@@ -193,10 +193,13 @@ class TestIssue1436BackendFallback:
             "model_provider": "deepseek",
         }
         with patch("api.routes._check_csrf", return_value=True), \
+             patch("api.routes._handle_extension_sidecar_proxy", return_value=False), \
+             patch("api.routes._guard_request_session_visibility", return_value=True), \
              patch("api.routes.read_body", return_value=body), \
-             patch("api.routes.get_session", return_value=s), \
+             patch("api.routes._get_or_materialize_session", return_value=s), \
              patch("api.routes.resolve_trusted_workspace", return_value="/tmp"), \
              patch("api.routes.j", side_effect=fake_j), \
+             patch("api.config.evict_session_agent"), \
              patch.dict("sys.modules", {"agent.model_metadata": fake_module}):
             routes.handle_post(handler, parsed)
 

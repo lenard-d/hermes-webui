@@ -8,6 +8,8 @@ Product decision:
 from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parent.parent
 CONFIG_PY = (REPO / "api" / "config" / "settings.py").read_text(
@@ -83,12 +85,90 @@ def test_live_prompt_estimate_reanchors_to_fresh_exact_prompt_tokens():
 
 
 def test_done_payload_persists_final_tps_when_exact_usage_available():
-    assert "usage['tps']" in STREAMING_PY, "done usage payload should include final exact TPS when available"
-    assert "output_tokens" in STREAMING_PY and "duration_seconds" in STREAMING_PY, (
-        "final TPS should be based on exact completion tokens over measured turn duration"
+    """The settled event and assistant message share the exact TPS value."""
+    from api.runs.local_success import LocalSuccessProjection
+
+    class FakeMeter:
+        def get_ttft_ms(self, _stream_id):
+            return None
+
+        def get_stats(self, _stream_id):
+            return {}
+
+    session = SimpleNamespace(
+        session_id="issue-1617",
+        title="TPS test",
+        messages=[
+            {"role": "user", "content": "hello", "timestamp": 1},
+            {"role": "assistant", "content": "world", "timestamp": 2},
+        ],
+        input_tokens=0,
+        output_tokens=0,
+        estimated_cost=0,
+        cache_read_tokens=0,
+        cache_write_tokens=0,
+        tool_calls=[],
+        gateway_routing=None,
+        gateway_routing_history=[],
+        last_prompt_tokens=0,
+        pending_user_message=None,
+        pending_attachments=[],
+        pending_started_at=None,
+        pending_user_source=None,
+        post_compression_context_tokens_estimate=None,
     )
-    assert "d.usage.tps" in MESSAGES_JS, "done handler should read final TPS from the usage payload"
-    assert "lastAsst._turnTps" in MESSAGES_JS, "done handler should persist final TPS on the last assistant message"
+    agent = SimpleNamespace(
+        session_prompt_tokens=100,
+        session_completion_tokens=20,
+        session_estimated_cost_usd=0.01,
+        session_cache_read_tokens=0,
+        session_cache_write_tokens=0,
+        model="",
+        context_compressor=SimpleNamespace(
+            context_length=128_000,
+            threshold_tokens=100_000,
+            last_prompt_tokens=100,
+        ),
+    )
+    events = []
+
+    with patch("api.runs.local_success.time.time", return_value=105), \
+         patch("api.runs.local_success.meter", return_value=FakeMeter()):
+        projection = LocalSuccessProjection.apply(
+            session,
+            agent=agent,
+            result={},
+            route_model="",
+            resolved_model="",
+            resolved_provider=None,
+            resolved_base_url=None,
+            resolved_api_key=None,
+            config={},
+            previous_messages=[],
+            reasoning_segments={},
+            live_tool_calls={},
+            attachments=[],
+            message_text="hello",
+            turn_started_at=100,
+            stream_id="stream-1617",
+        )
+        projection.publish_terminal(
+            session,
+            session_id=session.session_id,
+            stream_id="stream-1617",
+            agent=agent,
+            publish=lambda event, payload: events.append((event, payload)),
+            payload_builder=lambda _session, **_kwargs: {"session_id": session.session_id},
+            tool_limit_reached=False,
+            maybe_schedule_title_refresh=lambda *_args: None,
+            writeback_timings=[],
+            writeback_started=100,
+            logger=SimpleNamespace(),
+        )
+
+    done_payload = next(payload for event, payload in events if event == "done")
+    assert done_payload["usage"]["tps"] == 4.0
+    assert session.messages[-1]["_turnTps"] == 4.0
 
 
 def test_backend_marks_streaming_metering_availability_explicitly():
