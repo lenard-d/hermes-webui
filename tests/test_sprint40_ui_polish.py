@@ -126,7 +126,7 @@ class TestGatewaySessionNullModel(unittest.TestCase):
     def test_gateway_session_model_uses_none_fallback(self):
         """Both gateway projections preserve a NULL state-db model as None."""
         from api.agent_ops import session_watcher as gateway_watcher
-        from api.sessions import external_sidebar
+        from api.sessions import external_sidebar_projection
 
         row = {
             "id": "gateway-null-model",
@@ -146,20 +146,20 @@ class TestGatewaySessionNullModel(unittest.TestCase):
             state_db.touch()
             with (
                 mock.patch.object(
-                    external_sidebar,
+                    external_sidebar_projection,
                     "read_importable_agent_session_rows",
                     return_value=[row],
                 ),
                 mock.patch.object(
-                    external_sidebar, "get_last_workspace", return_value=root
+                    external_sidebar_projection, "get_last_workspace", return_value=root
                 ),
                 mock.patch.object(
-                    external_sidebar,
+                    external_sidebar_projection,
                     "_state_projection_sidecar_metadata",
                     return_value={},
                 ),
             ):
-                projected = external_sidebar._load_cli_sessions_uncached(
+                projected = external_sidebar_projection._load_cli_sessions_uncached(
                     root,
                     state_db,
                     "default",

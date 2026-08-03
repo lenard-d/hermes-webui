@@ -855,14 +855,62 @@ def test_streaming_restores_prior_reasoning_metadata_after_followup():
 
 
 def test_routes_restores_prior_reasoning_metadata_after_followup():
-    """The non-streaming route path must preserve prior reasoning metadata too."""
-    src = (REPO / 'api' / 'routes_parts' / 'chat_runs.py').read_text(encoding="utf-8")
-    assert "_restore_reasoning_metadata" in src, \
-        "routes.py must import reasoning metadata restoration helper"
-    assert "_next_context_messages" in src and "s.context_messages" in src, \
-        "routes.py must restore prior reasoning metadata into model context"
-    assert 's.messages = _merge_display_messages_after_agent_result(' in src, \
-        "routes.py must merge restored result messages into the visible transcript"
+    """The synchronous fallback preserves prior reasoning across settlement.
+
+    ``chat_runs`` is only the HTTP/admission facade.  The run-domain
+    synchronous owner must restore API-stripped metadata in both the durable
+    model context and the visible transcript before it saves the session.
+    """
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    from api.runs import synchronous
+
+    previous = [
+        {"role": "user", "content": "first question", "timestamp": 1},
+        {
+            "role": "assistant",
+            "content": "first answer",
+            "reasoning": "prior thinking",
+            "timestamp": 2,
+        },
+    ]
+    session = SimpleNamespace(
+        session_id="sync-reasoning-followup",
+        title="Existing conversation",
+        messages=[dict(message) for message in previous],
+        context_messages=[dict(message) for message in previous],
+        pending_user_source=None,
+        save_calls=0,
+    )
+    session.save = lambda: setattr(session, "save_calls", session.save_calls + 1)
+    result = {
+        "messages": [
+            {"role": "user", "content": "first question"},
+            {"role": "assistant", "content": "first answer"},
+            {"role": "user", "content": "follow up"},
+            {"role": "assistant", "content": "second answer"},
+        ]
+    }
+
+    with mock.patch.object(synchronous, "session_agent_lock", return_value=nullcontext()):
+        synchronous._persist_result(
+            session,
+            "follow up",
+            result,
+            [dict(message) for message in previous],
+            [dict(message) for message in previous],
+        )
+
+    assert session.save_calls == 1
+    assert session.context_messages[1]["reasoning"] == "prior thinking"
+    assert session.messages[1]["reasoning"] == "prior thinking"
+    assert [message["content"] for message in session.messages] == [
+        "first question",
+        "first answer",
+        "follow up",
+        "second answer",
+    ]
 
 
 class TestCredentialPoolBackwardCompat(unittest.TestCase):

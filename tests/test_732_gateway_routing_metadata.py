@@ -3,6 +3,8 @@
 from tests.frontend_asset_contract import family_source
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from api.sessions.store import Session
 from api.runs.gateway_routing_metadata import _normalize_gateway_routing_metadata
@@ -130,13 +132,88 @@ def test_session_persists_latest_gateway_routing_and_history_across_reload():
 
 
 def test_streaming_captures_gateway_metadata_into_usage_payload_and_assistant_turn():
-    local_run_py = (
-        REPO / "api" / "runs" / "local.py"
-    ).read_text(encoding="utf-8")
-    assert "_extract_gateway_routing_metadata" in local_run_py
-    assert "usage['gateway_routing']" in local_run_py
-    assert "_dm['_gatewayRouting']" in local_run_py
-    assert "s.gateway_routing_history" in local_run_py
+    """Settlement persists one sanitized routing decision on every projection.
+
+    The local-run facade only orchestrates an admitted turn.  Durable session,
+    assistant-turn, and terminal-usage projections belong to
+    ``LocalSuccessProjection`` and must receive the same normalized value.
+    """
+    from api.runs.local_success import LocalSuccessProjection
+
+    class FakeMeter:
+        def get_ttft_ms(self, _stream_id):
+            return None
+
+    routing_payload = {
+        "used_provider": "provider-b",
+        "used_model": "model-b",
+        "requested_provider": "provider-a",
+        "requested_model": "model-a",
+        "routing": [
+            {"provider": "provider-a", "status": "failed"},
+            {"provider": "provider-b", "status": "selected"},
+        ],
+    }
+    session = SimpleNamespace(
+        session_id="gateway-settlement",
+        title="Gateway",
+        messages=[
+            {"role": "user", "content": "hello", "timestamp": 1},
+            {"role": "assistant", "content": "done", "timestamp": 2},
+        ],
+        input_tokens=0,
+        output_tokens=0,
+        estimated_cost=None,
+        cache_read_tokens=0,
+        cache_write_tokens=0,
+        tool_calls=[],
+        gateway_routing=None,
+        gateway_routing_history=[],
+        last_prompt_tokens=0,
+        pending_user_message=None,
+        pending_attachments=[],
+        pending_started_at=None,
+        pending_user_source=None,
+        post_compression_context_tokens_estimate=None,
+    )
+    agent = SimpleNamespace(
+        session_prompt_tokens=10,
+        session_completion_tokens=5,
+        session_estimated_cost_usd=0.01,
+        session_cache_read_tokens=0,
+        session_cache_write_tokens=0,
+        model="model-a",
+        context_compressor=None,
+    )
+
+    with (
+        patch("api.runs.local_success.time.time", return_value=105),
+        patch("api.runs.local_success.meter", return_value=FakeMeter()),
+    ):
+        projection = LocalSuccessProjection.apply(
+            session,
+            agent=agent,
+            result={"gateway": routing_payload},
+            route_model="model-a",
+            resolved_model="model-a",
+            resolved_provider="provider-a",
+            resolved_base_url=None,
+            resolved_api_key=None,
+            config={},
+            previous_messages=[],
+            reasoning_segments={},
+            live_tool_calls={},
+            attachments=[],
+            message_text="hello",
+            turn_started_at=100,
+            stream_id="gateway-stream",
+        )
+
+    routing = projection.usage["gateway_routing"]
+    assert session.gateway_routing == routing
+    assert session.gateway_routing_history == [routing]
+    assert session.messages[-1]["_gatewayRouting"] == routing
+    assert routing["has_failover"] is True
 
 
 def test_frontend_copies_and_formats_gateway_metadata_without_absent_noise():
