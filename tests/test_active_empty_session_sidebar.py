@@ -1,9 +1,19 @@
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import family_source, module_family_paths
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS = family_source("sessions")
+
+
+def _session_module_source(filename: str) -> str:
+    return next(
+        path.read_text(encoding="utf-8")
+        for path in module_family_paths("sessions")
+        if path.name == filename
+    )
+
+
 def test_active_empty_session_is_injected_into_sidebar_rows():
     assert "function _sessionRowsWithActiveEphemeralSession(rows)" in SESSIONS_JS
     helper_start = SESSIONS_JS.index("function _sessionRowsWithActiveEphemeralSession(rows)")
@@ -22,12 +32,10 @@ def test_new_session_switches_sidebar_back_to_webui_source():
 
 
 def test_sidebar_search_uses_active_ephemeral_rows_before_filtering():
-    render_start = SESSIONS_JS.index("function renderSessionListFromCache()")
-    render_end = SESSIONS_JS.index("function _showProjectPicker", render_start)
-    render_body = SESSIONS_JS[render_start:render_end]
+    render_body = _session_module_source("sidebar-list-orchestrator.js")
 
-    assert "const sidebarRows=_sessionRowsWithActiveEphemeralSession(_allSessions);" in render_body
-    assert "const searchMatches=_sessionSearchMergeMatches(sidebarRows,searchQueryRaw,_contentSearchResults);" in render_body
+    assert "const sidebarRows=_sessionRowsWithActiveEphemeralSession(sidebarStateBindings._allSessions);" in render_body
+    assert "const searchMatches=_sessionSearchMergeMatches(sidebarRows,searchQueryRaw,sessionSearchBindings._contentSearchResults);" in render_body
     assert "const allMatched=_ensureActiveSessionRowPresent(searchMatches,sidebarRows);" in render_body
 
 

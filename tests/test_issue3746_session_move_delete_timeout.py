@@ -281,9 +281,9 @@ SESSIONS_JS = SESSIONS_SOURCE
 def test_new_project_and_move_shortcut_guards_503():
     """The '+ New project and move' shortcut must catch a failed move (e.g. 503
     when the session is streaming) instead of leaving an unhandled rejection (#3746)."""
-    idx = SESSIONS_JS.find("Guard the move so a 503")
-    assert idx > 0, "the new-project-and-move shortcut guard not found"
-    block = SESSIONS_JS[idx:idx + 700]
+    idx = SESSIONS_JS.find("createItem.onclick=async()=>{")
+    assert idx > 0, "the new-project-and-move shortcut not found"
+    block = SESSIONS_JS[idx:idx + 1200]
     assert "try{" in block and "}catch(e){" in block, (
         "the new-project-and-move move call must be wrapped in try/catch (#3746)"
     )
