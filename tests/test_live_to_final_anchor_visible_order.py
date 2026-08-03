@@ -6,8 +6,12 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+
+from api import background_process, streaming
+from api.http import interactive_streams
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,16 +24,12 @@ STREAM_PROGRESS_JS = (
 ).read_text(encoding="utf-8")
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 ANCHOR_ROWS_PY = (
     ROOT / "api" / "sessions" / "anchor_scene" / "rows.py"
 ).read_text(encoding="utf-8")
 ANCHOR_HYDRATION_PY = (
     ROOT / "api" / "sessions" / "anchor_scene" / "hydration.py"
 ).read_text(encoding="utf-8")
-CHAT_RUNS_PY = (ROOT / "api" / "routes_parts" / "chat_runs.py").read_text(
-    encoding="utf-8"
-)
 STYLE_CSS = family_source("style")
 I18N_JS = family_source("i18n")
 NODE = shutil.which("node")
@@ -91,6 +91,20 @@ def _run_node_script(script):
     env["HERMES_TEST_UI_PATHS"] = json.dumps([str(path) for path in family_asset_paths("ui")])
     env["HERMES_TEST_MESSAGE_PATHS"] = json.dumps([str(path) for path in family_asset_paths("messages")])
     result = subprocess.run([NODE, "-e", script], text=True, capture_output=True, check=False, env=env)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def _run_node_module_script(script):
+    """Run a native ESM owner with its real relative-import graph."""
+
+    assert NODE, "node is required for native-module anchor render tests"
+    result = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 
@@ -322,18 +336,65 @@ process.stdout.write(JSON.stringify({{
     assert data["settledCount"] == 0
 
 
+@pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_process_prose_is_an_anchor_scene_row_not_a_dom_mirror():
-    schedule = _function_body(MESSAGES_JS, "_scheduleRender")
-    flush = _function_body(MESSAGES_JS, "_flushPendingSegmentRender")
+    renderer_url = (ROOT / "static" / "modules" / "messages" / "rendering.js").as_uri()
+    anchor_live_url = (ROOT / "static" / "modules" / "messages" / "anchor-live.js").as_uri()
+    script = f"""
+globalThis.setTimeout = () => 0;
+globalThis.document = {{
+  addEventListener: () => {{}}, removeEventListener: () => {{}},
+  querySelector: () => null, querySelectorAll: () => [], getElementById: () => null,
+}};
+globalThis.window = {{
+  addEventListener: () => {{}}, removeEventListener: () => {{}}, dispatchEvent: () => {{}},
+  _showThinking: true,
+  HermesAssistantTurnAnchors: {{
+    createAssistantTurnAnchorRegistry: () => ({{anchor: {{activity_events: []}}}}),
+    applyAssistantTurnAnchorSourceEvent(registry, event) {{
+      registry.anchor.activity_events.push({{...event, payload: {{...event}}}});
+      return {{applied: true}};
+    }},
+    projectAssistantTurnAnchorActivityScene: () => null,
+  }},
+  _renderLiveAnchorActivitySceneForStream: () => true,
+}};
+globalThis.esc = value => String(value ?? '');
+globalThis.renderMd = value => `<p>${{value}}</p>`;
+globalThis.removeThinking = () => {{}};
+const {{ createStreamRenderer }} = await import({json.dumps(renderer_url)});
+const {{ createStreamAnchorLiveRuntime }} = await import({json.dumps(anchor_live_url)});
+const state = {{
+  assistantText: 'first visible prose', liveReasoningText: '', reasoningText: '',
+  assistantBody: {{innerHTML: '', classList: {{remove(){{}}}}}}, assistantRow: null,
+  segmentStart: 0, streamFinalized: false,
+}};
+const anchor = createStreamAnchorLiveRuntime({{
+  sessionId: 'session-1', streamId: 'stream-1', state: {{}},
+  isActiveSession: () => true,
+  readPlacement: () => ({{assistantSegmentSeq: 1, currentActivityBurstId: 4}}),
+}});
+const renderer = createStreamRenderer({{
+  readState: () => state,
+  upsertAnchorProse: anchor.upsertProcessProse,
+}});
+renderer.flushPendingSegment({{force: true}});
+state.assistantText = 'updated visible prose';
+renderer.flushPendingSegment({{force: true}});
+const events = anchor.registry.anchor.activity_events;
+process.stdout.write(JSON.stringify({{
+  rendered: state.assistantBody.innerHTML,
+  eventCount: events.length,
+  event: events[0],
+}}));
+"""
+    result = _run_node_module_script(script)
 
-    assert "_upsertAnchorProcessProse(displayText,{sealed:force})" in flush
-    assert "function _upsertAnchorProcessProse" in MESSAGES_JS
-    assert "source_event_type:sourceEventType" in _function_body(MESSAGES_JS, "_applyToAnchor")
-    assert "let anchorProcessText=displayText" in schedule
-    assert "_upsertAnchorProcessProse(anchorProcessText)" in schedule
-    assert "function _replaceAnchorActivityEventByLocalId" in MESSAGES_JS
-    assert "events[i]=next" in MESSAGES_JS
-    assert "_renderAnchorLiveScene();" in _function_body(MESSAGES_JS, "_upsertAnchorProcessProse")
+    assert result["rendered"] == "<p>updated visible prose</p>"
+    assert result["eventCount"] == 1
+    assert result["event"]["source_event_type"] == "token"
+    assert result["event"]["status"] == "completed"
+    assert result["event"]["payload"]["text"] == "updated visible prose"
 
 
 def test_already_streamed_interim_does_not_duplicate_token_prose_in_anchor():
@@ -506,13 +567,58 @@ def test_server_started_turn_also_creates_processed_anchor_before_stop_button_re
     assert "if (typeof appendThinking === 'function') appendThinking();" in listener
 
 
-def test_server_started_turn_payload_carries_pending_started_at():
-    recovery = ROUTES_PY.split("source\": \"subscribe_recovery\"", 1)[0].rsplit("try:", 1)[-1]
-    assert "recover_session = get_session(sid, metadata_only=True)" in recovery
-    assert "pending_started_at = getattr(recover_session, \"pending_started_at\", None)" in recovery
-    assert '"pending_started_at": pending_started_at' in ROUTES_PY
-    assert '"pending_started_at": getattr(session, "pending_started_at", None)' not in ROUTES_PY
-    assert '"pending_started_at": (resp or {}).get("pending_started_at")' in CHAT_RUNS_PY
+def test_server_started_turn_payload_carries_pending_started_at(monkeypatch):
+    events = []
+
+    class Channel:
+        def __init__(self):
+            self.unsubscribed = []
+
+        def unsubscribe(self, subscriber):
+            self.unsubscribed.append(subscriber)
+
+    class Subscriber:
+        def get(self, timeout):
+            return None
+
+    class Handler:
+        def send_response(self, status):
+            assert status == 200
+
+        def send_header(self, *_args):
+            pass
+
+    channel = Channel()
+    subscriber = Subscriber()
+    monkeypatch.setattr(
+        background_process,
+        "subscribe_to_session_channel",
+        lambda session_id, maxsize: (channel, subscriber),
+    )
+    monkeypatch.setattr(background_process, "active_stream_id_for_session", lambda session_id: "stream-1")
+    monkeypatch.setattr(interactive_streams, "get_session", lambda session_id, metadata_only: SimpleNamespace(pending_started_at=123.5))
+    monkeypatch.setattr(interactive_streams, "end_sse_headers", lambda handler: None)
+    monkeypatch.setattr(interactive_streams, "_sse_set_write_deadline", lambda handler: None)
+    monkeypatch.setattr(streaming, "_sse", lambda handler, event, payload: events.append((event, payload)))
+
+    interactive_streams._handle_session_sse_stream(
+        Handler(), SimpleNamespace(query="session_id=session-1")
+    )
+
+    assert events == [
+        ("initial", {"session_id": "session-1"}),
+        (
+            "server_turn_started",
+            {
+                "session_id": "session-1",
+                "stream_id": "stream-1",
+                "pending_started_at": 123.5,
+                "source": "subscribe_recovery",
+                "recovered": True,
+            },
+        ),
+    ]
+    assert channel.unsubscribed == [subscriber]
 
 
 def test_live_processed_anchor_is_deduped_across_restore_paths():
