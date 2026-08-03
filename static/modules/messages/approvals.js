@@ -72,15 +72,23 @@ export function scheduleComposerAutoResize(){
 //   • Cross-tab: state is SHARED — enabling YOLO in Tab A affects Tab B for
 //     the same session (both poll the same server-side flag).
 //   • Server restart: state is LOST — in-memory only, not persisted to disk.
-//   • Session switch: state resets — loadSession() clears _yoloEnabled and
-//     fetches the new session's state.
+//   • Session switch: state resets through _resetYoloState(), then the new
+//     session's state is fetched.
 let _yoloEnabled = false;
+
+export function _setYoloEnabled(enabled) {
+  _yoloEnabled = !!enabled;
+  _updateYoloPill();
+}
+
+export function _resetYoloState() {
+  _setYoloEnabled(false);
+}
 
 export async function _fetchYoloState(sid) {
   try {
     const data = await api('/api/session/yolo?session_id=' + encodeURIComponent(sid));
-    _yoloEnabled = !!data.yolo_enabled;
-    _updateYoloPill();
+    _setYoloEnabled(data.yolo_enabled);
   } catch (_) { /* ignore */ }
 }
 
@@ -103,8 +111,7 @@ export async function toggleYoloFromApproval() {
       method: 'POST',
       body: JSON.stringify({ session_id: sid, enabled: true }),
     });
-    _yoloEnabled = true;
-    _updateYoloPill();
+    _setYoloEnabled(true);
     hideApprovalCard(true);
     showToast(t('yolo_enabled'));
   } catch (e) { showToast('YOLO: ' + e.message); }

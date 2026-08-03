@@ -13,6 +13,7 @@ import { _rearmActiveSessionStream, _restoreLoadedSession } from './session-load
 import { _sessionProfileMismatchFromError, _switchProfileForSessionLoad } from './session-profile-load.js';
 import { _captureSameSessionForceReloadHint, _clearSameSessionForceReloadHint } from './transcript-loading.js';
 import { transcriptWindowState } from './transcript-window-state.js';
+import { _resetYoloState } from '../messages/approvals.js';
 
 /**
  * Self-heal: clear the stuck session ID from localStorage and URL when a
@@ -99,7 +100,7 @@ async function loadSession(sid){
   }
   stopApprovalPolling();hideApprovalCard(forceReload);
   if(typeof stopSessionStream==='function') stopSessionStream();
-  _yoloEnabled=false;_updateYoloPill();
+  _resetYoloState();
   if(typeof stopClarifyPolling==='function') stopClarifyPolling();
   if(typeof hideClarifyCard==='function') hideClarifyCard(forceReload, forceReload?'external-refresh':'dismissed');
   // Show loading indicator immediately for responsiveness.

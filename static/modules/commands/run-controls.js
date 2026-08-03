@@ -1,3 +1,5 @@
+import { _setYoloEnabled } from '../messages/approvals.js';
+
 async function cmdStop(){
   if(!S.session){showToast(t('no_active_session'));return;}
   if(!S.activeStreamId){showToast(t('no_active_task'));return;}
@@ -462,8 +464,7 @@ async function cmdYolo(){
       method:'POST',
       body:JSON.stringify({session_id:sid,enabled:enable}),
     });
-    _yoloEnabled=enable;
-    _updateYoloPill();
+    _setYoloEnabled(enable);
     showToast(enable?t('yolo_enabled'):t('yolo_disabled'));
     if(enable){
       // Dismiss any visible approval card

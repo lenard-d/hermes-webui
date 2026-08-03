@@ -179,6 +179,25 @@ class TestYoloCommandRegistration:
     def test_cmdYolo_function_exists(self, commands_js):
         assert re.search(r"function\s+cmdYolo\s*\(", commands_js)
 
+    def test_yolo_state_mutations_use_the_messages_owner(self):
+        repo_root = pathlib.Path(__file__).resolve().parents[1]
+        approvals = (
+            repo_root / "static/modules/messages/approvals.js"
+        ).read_text(encoding="utf-8")
+        session_load = (
+            repo_root / "static/modules/sessions/existing-session-load.js"
+        ).read_text(encoding="utf-8")
+        run_controls = (
+            repo_root / "static/modules/commands/run-controls.js"
+        ).read_text(encoding="utf-8")
+
+        assert "export function _setYoloEnabled" in approvals
+        assert "export function _resetYoloState" in approvals
+        assert "_resetYoloState();" in session_load
+        assert "_setYoloEnabled(enable);" in run_controls
+        assert "_yoloEnabled=" not in session_load.replace(" ", "")
+        assert "_yoloEnabled=" not in run_controls.replace(" ", "")
+
     def test_cmdYolo_calls_yolo_endpoint(self, commands_js):
         assert "/api/session/yolo" in commands_js
 

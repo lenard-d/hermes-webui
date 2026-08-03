@@ -257,8 +257,7 @@ function createEnvironment() {
   globalThis.stopApprovalPolling = () => {};
   globalThis.hideApprovalCard = () => {};
   globalThis.stopSessionStream = () => {};
-  globalThis._yoloEnabled = false;
-  globalThis._updateYoloPill = () => {};
+  globalThis._resetYoloState = () => {};
   globalThis.stopClarifyPolling = () => {};
   globalThis.hideClarifyCard = () => {};
   globalThis._saveComposerDraftNow = () => Promise.resolve();
