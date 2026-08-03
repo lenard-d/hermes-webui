@@ -525,17 +525,15 @@ def test_send_uses_session_model_as_authoritative_source(cleanup_test_sessions):
     causing the wrong model to be sent.
     """
     src = family_source("messages")
-    # The model field in the chat/start payload must prefer S.session.model.
-    # PR #1591 (May 2026) added optimistic `upsertActiveSessionForLocalTurn`
-    # comments that mention `/api/chat/start` BEFORE the actual POST call, so
-    # `src.find("/api/chat/start")` may land on a comment occurrence rather
-    # than the `api('/api/chat/start',{...})` POST. Match the call signature
-    # explicitly to land on the payload block.
+    # Model ownership now lives in the shared payload-state helper. The admission
+    # path must consume that state rather than reading the dropdown again.
+    assert "return S.session&&S.session.model||($('modelSelect')&&$('modelSelect').value)||'';" in src
+    assert "const _modelState=_chatPayloadModelState();" in src
     chat_start_idx = src.find("api('/api/chat/start'")
     assert chat_start_idx >= 0, "could not find /api/chat/start POST in messages.js"
     payload_block = src[chat_start_idx:chat_start_idx+400]
-    assert "S.session.model" in payload_block, \
-        "send() must use S.session.model in the chat/start payload"
+    assert "model:_modelState.model" in payload_block, \
+        "send() must use the authoritative model state in the chat/start payload"
 
 
 # ── R15: newSession does not clear live tool cards ────────────────────────────
@@ -596,17 +594,16 @@ def test_queue_card_cross_session_clear_called_before_draft_save(cleanup_test_se
     survive into the destination session.
     """
     src = family_source("sessions")
-    block_pattern = re.compile(
-        r"if \(currentSid && currentSid !== sid\) \{\s*"
-        r"if\(typeof window\._clearPendingSelections==='function'\) window\._clearPendingSelections\(\);\s*"
-        r"if\(typeof _clearQueueCardDisplay==='function'\) _clearQueueCardDisplay\(currentSid\);\s*"
-        r"await _saveComposerDraftNow\(currentSid",
-        re.S,
+    cross_start = src.index("if (currentSid && currentSid !== sid) {")
+    cross_end = src.index("if (currentSid !== sid || forceReload) {", cross_start)
+    block = src[cross_start:cross_end]
+    clear_pos = block.index("_clearQueueCardDisplay(currentSid);")
+    save_pos = block.index("_draftSavePromise=_saveComposerDraftNow(currentSid")
+    assert clear_pos < save_pos, (
+        "cross-session loadSession path must clear the old queue card before "
+        "starting the overlapped draft save"
     )
-    assert block_pattern.search(src), (
-        "cross-session loadSession path must clear queue card display via"
-        " _clearQueueCardDisplay(currentSid) before awaiting _saveComposerDraftNow"
-    )
+    assert "await _draftSavePromise;" in src, "the overlapped draft save must remain awaited before install"
 
 
 def test_queue_card_cross_session_helper_used_only_for_session_change(cleanup_test_sessions):

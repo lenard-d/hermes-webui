@@ -138,7 +138,8 @@ def test_moa_config_is_per_turn_not_persisted():
         "chat-start must re-resolve MoA config server-side instead of trusting the browser payload"
     assert "MoA override is unavailable on gateway-backed sessions" in routes_source
     js_source = family_source("messages")
-    assert "moa_config:_pendingMoaConfig?true:undefined" in js_source
+    assert "_beginChatAdmission({activeSid,msgText,uploaded,moaConfig:_pendingMoaConfig})" in js_source
+    assert "moa_config:moaConfig?true:undefined" in js_source
     assert "_pendingMoaConfig=null" in js_source
 
 

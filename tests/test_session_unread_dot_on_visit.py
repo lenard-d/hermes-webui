@@ -53,6 +53,7 @@ FUNCTION_OWNERS = {
     "_isSessionLocallyStreaming": SESSION_RUN_STATE_JS,
     "_markPollingCompletionUnreadTransitions": SESSION_RUN_STATE_JS,
     "_ensureMessagesLoaded": TRANSCRIPT_LOADING_JS,
+    "_sessionMessagesUrl": TRANSCRIPT_LOADING_JS,
 }
 
 
@@ -344,6 +345,7 @@ def _hidden_completion_script(*, hidden: bool) -> str:
     get_counts = _extract("_getSessionViewedCounts")
     save_counts = _extract("_saveSessionViewedCounts")
     actively_viewed = _extract("_isSessionActivelyViewedForList")
+    session_messages_url = _extract("_sessionMessagesUrl")
 
     visibility = "'hidden'" if hidden else "'visible'"
     has_focus = "false" if hidden else "true"
@@ -402,6 +404,7 @@ async function api(url) {{ _apiCalled = true; return _apiResult; }}
 {mark_unread}
 {set_viewed}
 {actively_viewed}
+{session_messages_url}
 {ensure}
 
 function _hasMarker() {{

@@ -131,8 +131,9 @@ def test_load_session_persists_only_after_metadata_loads():
     """Do not overwrite the last good localStorage sid before /api/session succeeds."""
     src = family_source("sessions")
     load = _block(src, "async function loadSession(sid)", "// Sync context usage indicator")
-    api_pos = load.index("data = await api(`/api/session")
+    api_pos = load.index("const _metadataRequest=api(`/api/session")
+    metadata_pos = load.index("data = await _metadataRequest", api_pos)
     persist_pos = load.index("localStorage.setItem('hermes-webui-session',S.session.session_id)")
 
     assert "_persistActiveSession" not in src
-    assert persist_pos > api_pos
+    assert api_pos < metadata_pos < persist_pos

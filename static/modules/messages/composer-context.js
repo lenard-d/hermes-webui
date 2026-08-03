@@ -2,7 +2,7 @@ import { autoResize } from './approvals.js';
 
 let _selectedTextReplyBtn=null;
 let _selectedTextReplyText='';
-export const _pendingSelections=[];  // [{id, name, text}] — named context blocks
+export let _pendingSelections=[];  // [{id, name, text}] — named context blocks
 let _selectionIdCounter=0;
 let _selectedTextReplyRaf=0;
 const _persistentStateToastSeen=new Set();

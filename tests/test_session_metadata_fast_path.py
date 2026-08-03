@@ -146,10 +146,12 @@ def test_boot_renders_session_list_before_workspace_and_onboarding_settle():
     src = family_source("boot")
     workspace_start = src.index("const _workspaceListReady=loadWorkspaceList();")
     onboarding_start = src.index("const _onboardingReady=_bootSettings.onboarding_completed?Promise.resolve(false):loadOnboardingWizard();")
+    background_start = src.index("const _backgroundBootReady=Promise.allSettled([_workspaceListReady,_onboardingReady])", onboarding_start)
     render_pos = src.index("await renderSessionList();", onboarding_start)
-    workspace_await = src.index("await _workspaceListReady;", render_pos)
-    onboarding_await = src.index("await _onboardingReady;", render_pos)
 
-    assert workspace_start < render_pos < workspace_await
-    assert onboarding_start < render_pos < onboarding_await
+    assert workspace_start < background_start < render_pos
+    assert onboarding_start < background_start < render_pos
+    assert "window._backgroundBootReady=_backgroundBootReady;" in src[background_start:render_pos]
+    assert "await _workspaceListReady;" not in src[onboarding_start:render_pos]
+    assert "await _onboardingReady;" not in src[onboarding_start:render_pos]
     assert "_bootSettings.onboarding_completed" in src

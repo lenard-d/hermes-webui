@@ -162,7 +162,7 @@ def test_ensure_messages_loaded_called_with_keep_stale_flag():
     # cannot skip the swap when stale messages are still in place.
     block = _restore_loaded_session_block()
     # Both INFLIGHT and idle paths.
-    assert block.count("await_ensureMessagesLoaded(sid,{force:_keepStaleUntilLoaded,loadGeneration:_loadGeneration})") == 2
+    assert block.count("await_ensureMessagesLoaded(sid,{force:_keepStaleUntilLoaded,loadGeneration:_loadGeneration,prefetchedMessages:_prefetchedMessages})") == 2
 
 
 def test_ensure_messages_loaded_supports_force_override():
