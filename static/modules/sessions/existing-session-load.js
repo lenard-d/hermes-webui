@@ -108,18 +108,11 @@ async function loadSession(sid){
   // Persist the current composer draft before switching away so it can be
   // restored when the user switches back (#1060). Save to server now so the
   // draft survives page refresh and syncs across clients.
+  let _draftSavePromise=Promise.resolve();
   if (currentSid && currentSid !== sid) {
     if(typeof window._clearPendingSelections==='function') window._clearPendingSelections();
     if(typeof _clearQueueCardDisplay==='function') _clearQueueCardDisplay(currentSid);
-    await _saveComposerDraftNow(currentSid, ($('msg') || {}).value || '', S.pendingFiles ? [...S.pendingFiles] : []);
-    // The awaited draft save above yields the event loop. If another
-    // loadSession() started for a different session while we were waiting
-    // (rapid switch B→C), _loadingSessionId now points at that newer load —
-    // bail out before the destructive state-clearing block below so this stale
-    // continuation can't wipe S.messages / write the loading placeholder /
-    // close streams for the session the user actually landed on (#1060 guard,
-    // extended to cover the new pre-switch await).
-    if (!_isCurrentLoad()) return;
+    _draftSavePromise=_saveComposerDraftNow(currentSid, ($('msg') || {}).value || '', S.pendingFiles ? [...S.pendingFiles] : []);
     // Snapshot the live turn before msgInner is replaced. Preserves the activity
     // timer, partial response, and tool cards so switching back does not rebuild
     // the stream UI from scratch.
@@ -296,6 +289,14 @@ async function loadSession(sid){
         && typeof startSessionStream === 'function') {
       startSessionStream(currentSid);
     }
+    return;
+  }
+  // Draft durability and target loading are independent network operations.
+  // Keep the durability guarantee, but overlap the old-session POST with both
+  // target GETs instead of putting every switch behind an extra round trip.
+  await _draftSavePromise;
+  if (!_isCurrentLoad()) {
+    _rearmActiveSessionStream();
     return;
   }
   // Guard: api() may have redirected (401) and returned undefined; in that case

@@ -92,12 +92,19 @@ def test_restore_helper_validates_candidate_with_session_metadata():
     )
 
 
-def test_session_switch_awaits_immediate_draft_flush_before_loading_target():
+def test_session_switch_overlaps_draft_flush_with_target_loading():
     assert "return api('/api/session/draft'" in SESSIONS_JS, (
         "_saveComposerDraftNow should return its POST promise so switch-away can await it"
     )
-    assert "await _saveComposerDraftNow(currentSid" in SESSIONS_JS, (
-        "loadSession must flush the current draft before fetching the next session"
+    load_start = SESSIONS_JS.find("async function loadSession(")
+    load_end = SESSIONS_JS.find("\nasync function ", load_start + 1)
+    body = SESSIONS_JS[load_start:load_end]
+    draft_idx = body.find("_draftSavePromise=_saveComposerDraftNow(currentSid")
+    metadata_idx = body.find("const _metadataRequest=api(")
+    await_idx = body.find("await _draftSavePromise;")
+    assert -1 not in (draft_idx, metadata_idx, await_idx)
+    assert draft_idx < metadata_idx < await_idx, (
+        "draft durability must remain awaited, but target loading should start in parallel"
     )
 
 
@@ -122,23 +129,18 @@ def test_immediate_empty_draft_flush_clears_locally_known_server_draft():
 
 
 def test_pre_switch_draft_flush_rechecks_stale_loading_guard():
-    """The awaited draft-save in loadSession yields the event loop. On a rapid
-    session switch (B then quickly C) the stale B continuation must bail out
-    before the destructive state-clearing block, or it would wipe the
-    freshly-loaded C state. The guard is `if (!_isCurrentLoad()) return;`
-    placed AFTER the awaited save and BEFORE the `S.messages = []` clear
-    (Codex pre-release CORE catch, #3471)."""
-    body = _load_session_clear_block()
-    await_idx = body.find("await _saveComposerDraftNow(currentSid")
-    guard_idx = body.find("if (!_isCurrentLoad()) return;", await_idx)
-    clear_idx = body.find("S.messages = [];", await_idx)
-    assert await_idx != -1, "pre-switch awaited draft save not found"
+    """A superseded parallel draft/metadata continuation cannot install stale state."""
+    start = SESSIONS_JS.find("async function loadSession(")
+    end = SESSIONS_JS.find("\nasync function ", start + 1)
+    body = SESSIONS_JS[start:end]
+    await_idx = body.find("await _draftSavePromise;")
+    guard_idx = body.find("if (!_isCurrentLoad()) {", await_idx)
+    assign_idx = body.find("S.session=data.session;", await_idx)
+    assert await_idx != -1, "parallel draft save must still be awaited"
     assert guard_idx != -1, "stale-loading guard missing after the awaited draft save"
-    assert clear_idx != -1, "destructive S.messages clear not found"
-    assert await_idx < guard_idx < clear_idx, (
-        "the _loadingSessionId stale-guard must sit between the awaited draft "
-        "save and the destructive state clear so a rapid switch can't blank the "
-        "newer session"
+    assert assign_idx != -1, "target session assignment not found"
+    assert await_idx < guard_idx < assign_idx, (
+        "the ownership guard must reject stale continuations before target state is installed"
     )
 
 

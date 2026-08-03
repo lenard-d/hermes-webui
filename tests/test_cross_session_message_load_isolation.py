@@ -600,11 +600,37 @@ async function runStaleRejectedIdleCatch() {
   };
 }
 
+async function runDraftSaveParallelism() {
+  createEnvironment();
+  const apiHost = makeHarness();
+  globalThis.apiHost = apiHost;
+  globalThis.api = apiHost.api;
+  let releaseDraft;
+  globalThis._saveComposerDraftNow = () => new Promise((resolve) => {
+    releaseDraft = resolve;
+  });
+  const meta = apiHost.enqueue(buildMessageUrl('sid-beacon', 0));
+  const messages = apiHost.enqueue(buildMessageUrl('sid-beacon', 1));
+
+  const load = loadSession('sid-beacon', { force: true });
+  await Promise.resolve();
+  await Promise.resolve();
+  const callsBeforeDraftSaved = apiHost.apiCalls.slice();
+  releaseDraft();
+  await waitForQueued(apiHost, meta.url);
+  meta._resolve(API_BEACON_META);
+  await waitForQueued(apiHost, messages.url);
+  messages._resolve(API_BEACON_MSGS);
+  await load;
+  return { callsBeforeDraftSaved };
+}
+
 async function runAll() {
   return {
     crossSessionOrdering: await runCrossSessionOrdering(),
     observedIdleCrossSessionOrdering: await runObservedIdleCrossSessionOrdering(),
     staleIdleCatch: await runStaleRejectedIdleCatch(),
+    draftSaveParallelism: await runDraftSaveParallelism(),
   };
 }
 
@@ -651,6 +677,7 @@ def test_loadsession_cross_session_ordering_and_stale_reject_behavior():
     cross = body["crossSessionOrdering"]
     stale = body["staleIdleCatch"]
     observed = body["observedIdleCrossSessionOrdering"]
+    draft_parallel = body["draftSaveParallelism"]
 
     def _assert_atlas_wins(session_result, *, label):
         assert session_result["finalSid"] == "sid-atlas", f"{label}: stale overlap should end on Atlas session"
@@ -722,3 +749,7 @@ def test_loadsession_cross_session_ordering_and_stale_reject_behavior():
 
     assert cross["loadingSid"] is None, "load marker should be cleared after successful completion"
     assert stale["loadingSid"] is None, "load marker should be cleared after stale reject + re-owner completion"
+    assert draft_parallel["callsBeforeDraftSaved"] == [
+        "/api/session?session_id=sid-beacon&messages=0&resolve_model=0",
+        "/api/session?session_id=sid-beacon&messages=1&resolve_model=0&msg_limit=2&expand_renderable=1&runtime_snapshot=0",
+    ], "target metadata and transcript must not wait behind the previous session's draft POST"
