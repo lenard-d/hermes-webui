@@ -29,6 +29,7 @@ from tests.frontend_asset_contract import family_source
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 MESSAGES_JS = family_source("messages")
@@ -192,23 +193,24 @@ def test_explicit_cancel_call_sites_pass_a_reason():
 
 # ── Backend invariant that the front-end fix depends on ─────────────────────
 
-def test_clarify_pending_never_404s():
+def test_clarify_pending_never_404s(monkeypatch):
     """The whole Part-1 fix rests on /api/clarify/pending returning 200 (with
     {"pending": None}) for any session — a 404 from that path is ALWAYS either a
-    missing route or an unrelated error. Lock the handler shape."""
-    routes = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-    m = re.search(
-        r"def _handle_clarify_pending\(handler, parsed\):(.*?)\ndef ",
-        routes,
-        re.DOTALL,
+    missing route or an unrelated error. Exercise the extracted HTTP owner."""
+    from api.http import interactive_streams
+
+    captured = {}
+
+    def capture_json(_handler, payload, status=200, extra_headers=None):
+        captured["payload"] = payload
+        captured["status"] = status
+        return payload
+
+    monkeypatch.setattr(interactive_streams, "get_clarify_pending", lambda _sid: None)
+    monkeypatch.setattr(interactive_streams, "j", capture_json)
+    interactive_streams._handle_clarify_pending(
+        object(),
+        SimpleNamespace(query="session_id=unknown-session"),
     )
-    assert m, "_handle_clarify_pending not found"
-    handler_src = m.group(1)
-    assert "404" not in handler_src, (
-        "_handle_clarify_pending must never return 404 — it returns 200 with "
-        "{'pending': None} for unknown sessions. If this changes, the front-end "
-        "clarify toast logic in messages.js must be revisited."
-    )
-    assert '{"pending": None}' in handler_src or "{'pending': None}" in handler_src, (
-        "_handle_clarify_pending should return {'pending': None} for no pending clarify"
-    )
+
+    assert captured == {"payload": {"pending": None}, "status": 200}

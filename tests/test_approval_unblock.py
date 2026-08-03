@@ -6,7 +6,10 @@ need to prevent the UI getting stuck in "Thinking…" during dangerous commands.
 """
 
 import json
+import logging
+import sys
 import threading
+import types
 import uuid
 import urllib.request
 import urllib.error
@@ -38,7 +41,7 @@ try:
 except ImportError:
     APPROVAL_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(
+approval_required = pytest.mark.skipif(
     not APPROVAL_AVAILABLE,
     reason="tools.approval not available in this environment"
 )
@@ -47,7 +50,6 @@ from tests._pytest_port import BASE
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LOCAL_RUN_SRC = (REPO_ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 LOCAL_EVENTS_SRC = (
     REPO_ROOT / "api" / "runs" / "local_events.py"
 ).read_text(encoding="utf-8")
@@ -73,6 +75,7 @@ def post(path, body=None):
 
 # ── Unit tests (in-process, no HTTP server needed) ──────────────────────────
 
+@approval_required
 class TestGatewayApprovalUnblocking:
     """Unit tests for the gateway queue unblocking mechanism."""
 
@@ -204,21 +207,25 @@ class TestGatewayApprovalUnblocking:
 class TestApprovalModuleExports:
     """Verify the module exports all symbols the local run and route owners need."""
 
+    @approval_required
     def test_register_gateway_notify_exported(self):
         import tools.approval as ap
         assert hasattr(ap, "register_gateway_notify"), \
             "tools.approval must export register_gateway_notify"
 
+    @approval_required
     def test_unregister_gateway_notify_exported(self):
         import tools.approval as ap
         assert hasattr(ap, "unregister_gateway_notify"), \
             "tools.approval must export unregister_gateway_notify"
 
+    @approval_required
     def test_resolve_gateway_approval_exported(self):
         import tools.approval as ap
         assert hasattr(ap, "resolve_gateway_approval"), \
             "tools.approval must export resolve_gateway_approval"
 
+    @approval_required
     def test_approval_entry_exported(self):
         import tools.approval as ap
         assert hasattr(ap, "_ApprovalEntry"), \
@@ -230,19 +237,54 @@ class TestApprovalModuleExports:
         assert "has_pending" not in LOCAL_EVENTS_SRC, \
             "local event polling must not import removed has_pending"
 
-    def test_notify_callback_mirrors_polling_state_before_sse(self):
-        cb_start = LOCAL_RUN_SRC.find("def _approval_notify_cb(approval_data):")
-        assert cb_start != -1, "_approval_notify_cb must exist"
-        cb_end = LOCAL_RUN_SRC.find("_reg_notify(session_id, _approval_notify_cb)", cb_start)
-        cb_body = LOCAL_RUN_SRC[cb_start:cb_end]
-        assert "_submit_pending_for_polling(session_id, approval_data)" in cb_body, \
-            "approval notify callback must mirror approval data into polling state"
-        assert "put('approval', approval_data)" in cb_body, \
-            "approval notify callback must still push the SSE event"
+    def test_notify_callback_mirrors_polling_state_before_sse(self, monkeypatch):
+        """The local bridge mirrors polling state before publishing the SSE event.
+
+        ``LocalInteractionBridge`` owns the callback after the local-run split.
+        Use a tiny agent-module double so this stays executable when Hermes Agent
+        is not installed, then assert the observable callback ordering.
+        """
+        from api import route_approvals
+        from api.runs.local_interactions import LocalInteractionBridge
+
+        sid = f"local-bridge-{uuid.uuid4().hex[:8]}"
+        callbacks = {}
+        calls = []
+        fake_approval = types.ModuleType("tools.approval")
+        fake_approval.register_gateway_notify = lambda key, callback: callbacks.setdefault(key, callback)
+        fake_approval.unregister_gateway_notify = lambda key: callbacks.pop(key, None)
+        fake_tools = types.ModuleType("tools")
+        fake_tools.approval = fake_approval
+
+        monkeypatch.setitem(sys.modules, "tools", fake_tools)
+        monkeypatch.setitem(sys.modules, "tools.approval", fake_approval)
+        monkeypatch.setattr(
+            route_approvals,
+            "submit_gateway_pending_mirror",
+            lambda key, approval: calls.append(("poll", key, approval)),
+        )
+
+        bridge = LocalInteractionBridge(
+            session_id=sid,
+            cancel_event=threading.Event(),
+            publish=lambda event, approval: calls.append(("sse", event, approval)),
+            logger=logging.getLogger(__name__),
+        )
+        bridge.open()
+        approval = {"command": "rm -rf /tmp/example"}
+        callbacks[sid](approval)
+
+        assert calls == [
+            ("poll", sid, approval),
+            ("sse", "approval", approval),
+        ]
+        bridge.close()
+        assert sid not in callbacks
 
 
 # ── HTTP regression tests (test server, port 8788) ───────────────────────────
 
+@approval_required
 class TestApprovalHTTPEndpoints:
     """
     Regression tests for /api/approval/respond against the live test server.
