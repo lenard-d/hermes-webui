@@ -11,78 +11,150 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 
 from api.config.static_catalog import FALLBACK_MODELS, PROVIDER_MODELS
+from api.runs.local_failures import LocalFailureContext, LocalFailureOwner
+from api.runs.provider_errors import _classify_provider_error
 from tests.frontend_asset_contract import family_source
 
 REPO = pathlib.Path(__file__).parent.parent
-STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 CONFIG_PY    = (REPO / "api" / "config" / "static_catalog.py").read_text(encoding="utf-8")
 LIVE_MODELS_PY = (REPO / "api" / "routes_parts" / "live_models.py").read_text(encoding="utf-8")
-MESSAGES_JS  = family_source("messages")
 UI_JS        = family_source("ui")
 
 
 # ── Issue #373: Silent error detection ──────────────────────────────────────
 
 class TestSilentErrorDetection:
-    """streaming.py must emit apperror when agent returns no assistant reply."""
+    """A local turn without a final answer must settle as a visible error."""
 
-    def test_streaming_detects_no_assistant_reply(self):
-        """streaming.py must check if any assistant message was produced."""
-        assert "_assistant_added" in STREAMING_PY, (
-            "streaming.py must check whether an assistant message was produced (#373)"
+    @staticmethod
+    def _failure_owner(*, pending_message="Please respond"):
+        events = []
+        session = SimpleNamespace(
+            session_id="silent-turn",
+            messages=[],
+            context_messages=[],
+            tool_calls=[],
+            active_stream_id="silent-stream",
+            pending_user_message=pending_message,
+            pending_attachments=[],
+            pending_started_at=123,
+            pending_user_source="webui",
+            save=lambda: None,
+        )
+        context = LocalFailureContext(
+            session=session,
+            session_id=session.session_id,
+            stream_id="silent-stream",
+            message_text=pending_message,
+            pending_source="webui",
+            route_model="test-model",
+            route_provider="test-provider",
+            ephemeral=True,
+            cancel_event=SimpleNamespace(is_set=lambda: False),
+            checkpoint=SimpleNamespace(close=lambda: None),
+            session_lock=None,
+            publish=lambda event, payload: events.append((event, payload)),
+            classify=_classify_provider_error,
+            session_payload=lambda *_args, **_kwargs: {},
+            credential_self_heal=lambda *_args, **_kwargs: None,
+            prepared_agent=SimpleNamespace(
+                provider="test-provider", base_url=None, api_key=None
+            ),
+            conversation=None,
+            event_translator=SimpleNamespace(token_sent=False),
+            previous_messages=[],
+            previous_context_messages=[],
+            logger=SimpleNamespace(debug=lambda *_args, **_kwargs: None),
+        )
+        return LocalFailureOwner(context), session, events
+
+    @staticmethod
+    def _inspect(owner, result, *, agent_error=None):
+        return owner.inspect_terminal_result(
+            result,
+            agent=SimpleNamespace(_last_error=agent_error),
+            tool_limit_reached=False,
+            captured_terminal_error=[None],
+            compression_origin_id="silent-turn",
+            compression_continuation_id=None,
         )
 
-    def test_streaming_emits_apperror_on_no_response(self):
-        """streaming.py must emit apperror event when agent produced no reply."""
-        assert "no_response" in STREAMING_PY, (
-            "streaming.py must emit apperror with type='no_response' for silent failures (#373)"
+    def test_no_final_answer_is_handled_as_terminal_failure(self):
+        """A result that merely echoes the prompt cannot complete the turn."""
+        owner, _session, _events = self._failure_owner()
+
+        outcome = self._inspect(
+            owner, {"messages": [{"role": "user", "content": "Please respond"}]}
         )
 
-    def test_streaming_returns_early_after_apperror(self):
-        """streaming.py must return after emitting apperror (not also emit done)."""
-        # The return statement must come after the put('apperror') for no_response
-        no_resp_pos = STREAMING_PY.find("'no_response'")
-        # Comment updated: "apperror already closes the stream on the client side"
-        return_pos = STREAMING_PY.find("return  # apperror already closes the stream", no_resp_pos)
-        assert no_resp_pos != -1, "no_response type not found in streaming.py"
-        assert return_pos != -1, (
-            "streaming.py must return after emitting apperror to prevent also emitting done (#373)"
-        )
-        assert return_pos > no_resp_pos
+        assert outcome.handled is True
 
-    def test_streaming_detects_auth_error_in_result(self):
-        """streaming.py must detect auth errors from the result object."""
-        assert "_is_auth" in STREAMING_PY, (
-            "streaming.py must detect auth errors in silent failures (#373)"
-        )
-        assert "auth_mismatch" in STREAMING_PY, (
-            "streaming.py must emit auth_mismatch type for auth failures (#373)"
-        )
+    def test_silent_terminal_failure_emits_no_response_event(self):
+        """A provider result with no final content reports the specific terminal state."""
+        owner, _session, events = self._failure_owner()
 
-    def test_messages_js_done_handler_detects_no_reply(self):
-        """messages.js done handler must show an error if no assistant reply arrived."""
-        # Check for either the variable name or the inlined check pattern
-        has_no_reply_guard = (
-            "hasAssistantReply" in MESSAGES_JS
-            or ("role==='assistant'" in MESSAGES_JS and "No response received" in MESSAGES_JS)
-        )
-        assert has_no_reply_guard, (
-            "messages.js done handler must detect zero assistant replies (#373)"
-        )
-        assert "No response received" in MESSAGES_JS, (
-            "messages.js must show 'No response received' inline message (#373)"
-        )
+        self._inspect(owner, {"messages": []})
 
-    def test_messages_js_handles_no_response_apperror_type(self):
-        """messages.js apperror handler must recognise the no_response type."""
-        assert "isNoResponse" in MESSAGES_JS or "no_response" in MESSAGES_JS, (
-            "messages.js apperror handler must handle type='no_response' (#373)"
+        assert [event for event, _payload in events] == ["apperror"]
+        payload = events[0][1]
+        assert payload["type"] == "no_response"
+        assert payload["hint"]
+        assert payload["session_id"] == "silent-turn"
+
+    def test_silent_terminal_failure_never_emits_normal_completion(self):
+        """The failure owner exposes only an error event, never a done event."""
+        owner, _session, events = self._failure_owner()
+
+        self._inspect(owner, {"messages": []})
+
+        assert [event for event, _payload in events] == ["apperror"]
+
+    def test_auth_error_takes_precedence_over_no_final_answer(self):
+        """Structured provider auth failures retain their actionable classification."""
+        owner, _session, events = self._failure_owner()
+
+        outcome = self._inspect(
+            owner,
+            {
+                "messages": [],
+                "error": {
+                    "type": "authentication_error",
+                    "status_code": 401,
+                    "message": "Invalid API key",
+                },
+            },
         )
 
-    def test_messages_js_no_response_label(self):
-        """messages.js must show a distinct label for no_response errors."""
-        assert "No response received" in MESSAGES_JS, (
-            "messages.js must display 'No response received' label for no_response errors (#373)"
+        assert outcome.handled is True
+        assert events[-1][1]["type"] == "auth_mismatch"
+
+    def test_silent_failure_persists_visible_error_turn(self):
+        """The durable transcript contains an error turn instead of swallowing the prompt."""
+        owner, session, _events = self._failure_owner()
+
+        self._inspect(owner, {"messages": []})
+
+        assert session.messages[-1]["role"] == "assistant"
+        assert session.messages[-1]["_error"] is True
+
+    def test_silent_failure_materializes_the_pending_prompt_before_error(self):
+        """Reloading a failed turn retains the user's prompt before its error marker."""
+        owner, session, _events = self._failure_owner(pending_message="Keep this prompt")
+
+        self._inspect(owner, {"messages": []})
+
+        assert [message["role"] for message in session.messages] == ["user", "assistant"]
+        assert session.messages[0]["content"] == "Keep this prompt"
+        assert session.messages[0]["_recovered"] is True
+
+    def test_silent_failure_error_turn_has_a_distinct_no_response_label(self):
+        """The persisted terminal message gives users a clear no-response explanation."""
+        owner, session, _events = self._failure_owner()
+
+        self._inspect(owner, {"messages": []})
+
+        assert session.messages[-1]["content"].startswith(
+            "**No response from provider:**"
         )
 
 
