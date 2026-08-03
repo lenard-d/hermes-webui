@@ -3,178 +3,970 @@
   "description": "Exact legacy exceptions for the dependency architecture guard.",
   "allowed_violations": [
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config",
-      "target": "api.profiles",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.cron.completions",
+      "target": "api.sessions.store._active_state_db_path",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config_parts.config_io",
-      "target": "api.profiles",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.cron.manual_runs",
+      "target": "api.sessions.title_publication._publish_session_list_changed",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config_parts.model_catalog",
-      "target": "api.profiles",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.interactive_streams",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config_parts.model_catalog",
-      "target": "api.providers._provider_has_key",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.interactive_streams",
+      "target": "api.streaming._sse",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config_parts.models_cache",
-      "target": "api.profiles",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.interactive_streams",
+      "target": "api.streaming.transport",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config_parts.models_cache",
-      "target": "api.profiles._is_root_profile",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.interactive_streams",
+      "target": "api.streaming.transport._sse",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "config-foundation-depends-upward",
-      "source": "api.config_parts.models_cache",
-      "target": "api.providers",
-      "reason": "Legacy config facade reads profile/provider state; remove in the config-stack migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.interactive_streams",
+      "target": "api.streaming.transport._sse_set_write_deadline",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "domain-depends-on-http",
-      "source": "api.background_process_parts.deferred_wakeups",
-      "target": "api.routes",
-      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.routes.session_mutations",
+      "target": "api.streaming.live_controls._handle_chat_steer",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "domain-depends-on-http",
-      "source": "api.streaming_parts.local_run",
-      "target": "api.routes._context_length_lookup_inputs_for_model",
-      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_export_search",
+      "target": "api.profiles._profiles_match",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "domain-depends-on-http",
-      "source": "api.streaming_parts.local_run",
-      "target": "api.routes._should_accept_session_context_length_refresh",
-      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_export_search",
+      "target": "api.sessions.export",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "domain-depends-on-http",
-      "source": "api.streaming_parts.runtime_resolution",
-      "target": "api.routes._normalize_provider_id",
-      "reason": "Legacy domain owner reaches the route facade; remove in the owning run/transport migration."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_export_search",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.background_process_parts.bindings",
-      "target": "bind_background_process_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.profiles._is_isolated_profile_mode",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.config",
-      "target": "bind_config_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.profiles._profiles_match",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.config",
-      "target": "sys.modules[__name__]",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.sessions.events",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.config_parts._binding",
-      "target": "_bind_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.sessions.repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.config_parts._binding",
-      "target": "install_config_part",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.config_parts.facade",
-      "target": "bind_config_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.sessions.store._profile_has_user_projects",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.extensions",
-      "target": "bind_extensions_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_imports",
+      "target": "api.sessions.title_publication._queue_generated_title_for_imported_session",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.extensions",
-      "target": "sys.modules[__name__]",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_visibility",
+      "target": "api.profiles._is_isolated_profile_mode",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.extensions_parts.facade",
-      "target": "bind_extensions_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_visibility",
+      "target": "api.profiles._profiles_match",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.profiles",
-      "target": "bind_profile_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_visibility",
+      "target": "api.runs.journal",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.profiles",
-      "target": "bind_profiles_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.session_visibility",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.profiles",
-      "target": "sys.modules[__name__]",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.share_sessions",
+      "target": "api.sessions.repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.profiles_parts.facade",
-      "target": "bind_profile_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.share_sessions",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.profiles_parts.facade",
-      "target": "bind_profiles_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.workspace_navigation",
+      "target": "api.routes_parts.media_files._serve_file_bytes",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.provider_parts._binding",
-      "target": "_bind_class",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.workspace_navigation",
+      "target": "api.routes_parts.media_files._serve_inline_html_preview",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.provider_parts._binding",
-      "target": "_bind_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.workspace_navigation",
+      "target": "api.routes_parts.security._check_csrf",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.provider_parts._binding",
-      "target": "install_provider_part",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.workspace_navigation",
+      "target": "api.routes_parts.security._csrf_rejection_error",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.providers",
-      "target": "install_provider_part",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "cross-package-private-import",
+      "source": "api.http.workspace_navigation",
+      "target": "api.routes_parts.security._safe_content_length",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.http.workspace_navigation",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_controls",
+      "target": "api.runs.adapter",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_runs",
+      "target": "api.runs.background",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_runs",
+      "target": "api.runs.process_wakeup",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_runs",
+      "target": "api.runs.server_turn",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_runs",
+      "target": "api.runs.turn_start",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_turns",
+      "target": "api.runs.synchronous",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_turns",
+      "target": "api.runs.turn_input",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.chat_turns",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.cron",
+      "target": "api.cron.completions",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.cron",
+      "target": "api.cron.jobs",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.cron",
+      "target": "api.cron.manual_runs",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.cron",
+      "target": "api.cron.output_history",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.cron",
+      "target": "api.cron.profiles",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.git",
+      "target": "api.runs.agent_runtime",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.git",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.handoff_summary",
+      "target": "api.runs.agent_runtime",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.handoff_summary",
+      "target": "api.sessions.repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.handoff_summary",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.interactive_responses",
+      "target": "api.runs.adapter",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.interactive_responses",
+      "target": "api.sessions.events",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.interactive_responses",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.llm_wiki",
+      "target": "api.knowledge.wiki_index",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.llm_wiki",
+      "target": "api.knowledge.wiki_read",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.login",
+      "target": "api.auth._is_secure_context",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.manual_compression",
+      "target": "api.runs.agent_runtime",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.manual_compression",
+      "target": "api.runs.message_sanitization._sanitize_messages_for_api",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.manual_compression",
+      "target": "api.runs.transcript._stamp_missing_message_timestamps",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.manual_compression",
+      "target": "api.sessions.operations._truncation_watermark_for",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.manual_compression",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.mcp_inventory",
+      "target": "api.config._get_config_path",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.mcp_inventory",
+      "target": "api.config._save_yaml_config_file",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.media_files",
+      "target": "api.media.delivery",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.media_files",
+      "target": "api.media.preview",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.media_uploads",
+      "target": "api.media.multipart",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.media_uploads",
+      "target": "api.media.uploads",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.notes_sources",
+      "target": "api.knowledge.adapters",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.notes_sources",
+      "target": "api.knowledge.joplin",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.notes_sources",
+      "target": "api.knowledge.parsing",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.notes_sources",
+      "target": "api.knowledge.sources",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.security",
+      "target": "api.auth._ip_in_networks",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.security",
+      "target": "api.auth._raw_peer_is_trusted_proxy",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.security",
+      "target": "api.auth._request_client_ip",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.security",
+      "target": "api.auth._trusted_proxy_networks",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.custom_model_identity._ordered_custom_provider_model_ids",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.custom_model_identity._repair_bare_custom_provider_model",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_compatibility._moa_fast_path_model_state",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_compatibility._resolve_compatible_session_model_state",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._catalog_group_owns_exact_model",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._catalog_has_provider",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._catalog_model_id_matches",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._catalog_provider_id_sets",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._model_matches_active_provider_family",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._normalize_provider_id",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._repair_foreign_session_model_provider",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._should_attach_codex_provider_context",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.model_identity._starts_token",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._PROFILE_CONFIG_CACHE",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._PROFILE_CONFIG_CACHE_LOCK",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._PROFILE_CONFIG_CACHE_TTL_SECONDS",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._load_profile_config_dict",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._read_profile_config_cached",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._read_profile_model_config",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.profile_model_config._worktree_default_from_config",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_context._rescale_threshold_tokens_for_context_window",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_context._resolve_context_length_for_session_model",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_context._session_context_length_lookup_state",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_context._session_model_identity_matches",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_state._normalize_session_model_in_place",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_state._resolve_compatible_session_model",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_state._resolve_effective_session_model_for_display",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_state._resolve_effective_session_model_provider_for_display",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.session_models",
+      "target": "api.sessions.session_model_state._session_model_state_from_request",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.skills",
+      "target": "api.config._cfg_lock",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.skills",
+      "target": "api.config._save_yaml_config_file",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.skills",
+      "target": "api.profiles._SKILLS_STATS_CACHE",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.skills",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.stream_transport",
+      "target": "api.runs.adapter",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.stream_transport",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.stream_transport",
+      "target": "api.streaming.transport",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.tts",
+      "target": "api.speech.transport",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.tts",
+      "target": "api.speech.validation",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.workspace_files",
+      "target": "api.media.delivery",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.workspace_management",
+      "target": "api.workspace._home_path",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.workspace_management",
+      "target": "api.workspace._is_blocked_system_path",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.workspace_management",
+      "target": "api.workspace._is_within",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.routes_parts.workspace_management",
+      "target": "api.workspace._strip_surrounding_quotes",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.agent_cache",
+      "target": "api.sessions.lifecycle",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.agent_cache",
+      "target": "api.sessions.pending_recovery.sidecar_recovery._apply_core_sync_or_error_marker",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.agent_cache",
+      "target": "api.sessions.process_wakeup._get_profile_home",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.attachments",
+      "target": "api.media.uploads",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.background",
+      "target": "api.sessions.store",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local",
+      "target": "api.sessions.process_wakeup",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local",
+      "target": "api.sessions.session_cache_repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_agent_cache",
+      "target": "api.sessions.lifecycle",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_compression",
+      "target": "api.sessions.session_cache_eviction._evict_sessions_over_cap",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_conversation",
+      "target": "api.sessions.reconciliation_projection",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_conversation",
+      "target": "api.sessions.state_db_messages",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_entrypoint",
+      "target": "api.sessions.session_cache_repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_failures",
+      "target": "api.sessions.process_wakeup",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.local_success",
+      "target": "api.sessions.projects",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.post_compression_context",
+      "target": "api.sessions.records._is_empty_partial_activity_message",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.process_wakeup",
+      "target": "api.sessions.process_wakeup",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.title_generation.lifecycle",
+      "target": "api.sessions.operations",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.title_generation.lifecycle",
+      "target": "api.sessions.repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.title_generation.lifecycle",
+      "target": "api.sessions.session_cache_repository",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.runs.title_generation.policy",
+      "target": "api.sessions.projects",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.anchor_scene.journal_projection",
+      "target": "api.streaming._compact_for_echo_compare",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.anchor_scene.journal_projection",
+      "target": "api.streaming._strip_compact_echo_suffix",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.continuation_lookup",
+      "target": "api.profiles._profiles_match",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.materialization",
+      "target": "api.profiles._profiles_match",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.model_compatibility",
+      "target": "api.config._provider_is_known_or_configured",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.repository",
+      "target": "api.media.cleanup",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.runtime_recovery",
+      "target": "api.runs.transcript._materialize_pending_user_turn_before_error",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.sidebar_listing",
+      "target": "api.profiles._is_isolated_profile_mode",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.sidebar_listing",
+      "target": "api.profiles._profiles_match",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.sessions.title_publication",
+      "target": "api.runs.title_generation",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming",
+      "target": "api.runs.payloads._compact_for_echo_compare",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming",
+      "target": "api.runs.payloads._strip_compact_echo_suffix",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming",
+      "target": "api.runs.title_generation",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming",
+      "target": "api.runs.transcript._materialize_pending_user_turn_before_error",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.agent_cache._cached_agent_matches_session",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.agent_cache._cached_agent_session_identity",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.agent_cache._close_cached_agent_entry_at_session_boundary",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.payloads._cancel_event_payload",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.payloads._redacted_session_payload_with_full_messages",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.terminal_copy._preferred_agent_display_name_for_session",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.terminal_outcomes._cancelled_turn_content",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.terminal_outcomes._session_has_cancel_marker",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.tool_events._partial_marker_already_present",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.transcript._build_partial_message",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
+    },
+    {
+      "rule": "cross-package-private-import",
+      "source": "api.streaming.live_controls",
+      "target": "api.runs.turn_context._stream_writeback_is_current",
+      "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
     {
       "rule": "facade-binder-debt",
@@ -189,64 +981,244 @@
       "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_policy",
-      "target": "facade_attr",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.agent_ops",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_repository",
-      "target": "facade_attr",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.auth",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_runtime",
-      "target": "bind_update_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.auth",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_runtime",
-      "target": "bind_updates_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.auth",
+      "target": "api.providers",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_runtime",
-      "target": "facade_attr",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.background_process",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_transaction",
-      "target": "bind_update_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.background_process",
+      "target": "api.runs",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.update_transaction",
-      "target": "facade_attr",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.background_process",
+      "target": "api.sessions",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.updates",
-      "target": "bind_update_function",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.config",
+      "target": "api.auth",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.updates",
-      "target": "bind_updates_api",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.media",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
-      "rule": "facade-binder-debt",
-      "source": "api.updates",
-      "target": "sys.modules[__name__]",
-      "reason": "Compatibility facade binding; remove when this owner exposes a direct package interface."
+      "rule": "package-cycle",
+      "source": "api.media",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.media",
+      "target": "api.sessions",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.media",
+      "target": "api.workspace",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.profiles",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.profiles",
+      "target": "api.sessions",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.providers",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.providers",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.auth",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.background_process",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.media",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.providers",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.sessions",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.runs",
+      "target": "api.workspace",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.agent_ops",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.background_process",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.media",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.runs",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.streaming",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.terminal",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.sessions",
+      "target": "api.workspace",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.streaming",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.streaming",
+      "target": "api.runs",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.streaming",
+      "target": "api.sessions",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.terminal",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.terminal",
+      "target": "api.workspace",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.workspace",
+      "target": "api.config",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
+    },
+    {
+      "rule": "package-cycle",
+      "source": "api.workspace",
+      "target": "api.profiles",
+      "reason": "Legacy cyclic package edge; remove during the owning package migration."
     },
     {
       "rule": "parts-package-debt",
@@ -257,18 +1229,6 @@
     {
       "rule": "parts-package-debt",
       "source": "api/config_parts",
-      "target": "package-pattern",
-      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
-    },
-    {
-      "rule": "parts-package-debt",
-      "source": "api/extensions_parts",
-      "target": "package-pattern",
-      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
-    },
-    {
-      "rule": "parts-package-debt",
-      "source": "api/models_parts",
       "target": "package-pattern",
       "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
     },
@@ -292,12 +1252,6 @@
     },
     {
       "rule": "parts-package-debt",
-      "source": "api/streaming_parts",
-      "target": "package-pattern",
-      "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
-    },
-    {
-      "rule": "parts-package-debt",
       "source": "api/workspace_git_parts",
       "target": "package-pattern",
       "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
@@ -307,12 +1261,6 @@
       "source": "api/workspace_parts",
       "target": "package-pattern",
       "reason": "Legacy foo.py plus foo_parts layout; replace in this domain's atomic package migration."
-    },
-    {
-      "rule": "persistence-depends-on-transport",
-      "source": "api.provider_parts.credential_store",
-      "target": "api.streaming._ENV_LOCK",
-      "reason": "Legacy persistence owner reaches streaming state; move that state to a lower-level owner."
     }
   ]
 }

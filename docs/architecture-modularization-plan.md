@@ -2,6 +2,7 @@
 
 - **Status:** In progress
 - **Created:** 2026-07-20
+- **Last updated:** 2026-08-03
 - **Scope:** Repository structure, module ownership, dependency direction,
   compatibility seams, frontend module loading, and architecture verification
 
@@ -401,11 +402,13 @@ are required to preserve the moved interface.
 
 ### Phase 0: establish guardrails
 
-**Status: Implemented, baseline refresh pending.** The repository now has an
-AST-based architecture checker and a reviewed legacy baseline. Package
-migrations have removed many baseline findings and exposed new public-interface
-and cycle findings; those must be resolved or narrowly re-baselined before this
-phase is considered current again.
+**Status: Implemented; baseline refreshed 2026-08-03.** The repository now has
+an AST-based architecture checker and an exact reviewed legacy baseline. The
+post-integration inventory contains 210 known findings: 161 cross-package
+private imports, 40 cyclic package edges, 7 remaining `*_parts` package shapes,
+and 2 compatibility binders. The guard rejects any additional finding and also
+rejects stale exceptions; the baseline is a migration inventory, not a claim
+that these dependencies are acceptable as a final architecture.
 
 - record the package and domain vocabulary from this plan
 - inventory current package dependencies and cycles
@@ -459,7 +462,8 @@ invalidation, and credential scoping remain behaviorally verified.
 
 ### Phase 3: runs and sessions
 
-**Status: Package conversion implemented; deepening in progress.** Run and
+**Status: Package conversion and the 2026-08-03 owner-deepening wave
+implemented; interface cleanup remains.** Run and
 session ownership now lives under `api/runs/` and `api/sessions/`. Run
 execution, terminal outcomes, transcript handling, local-agent caching, and
 provider error handling have semantic owners under `api/runs/`. The session
@@ -468,8 +472,11 @@ records, external projections, recovery, reconciliation, cache, cleanup, and
 state-db behavior have semantic owners. Session model/provider compatibility,
 profile-scoped configuration caching, persisted repair, display projection,
 and context-window refresh policy now live in explicit `api.sessions` owners.
-Remaining work is concentrated in route-owned session orchestration and the
-largest cohesive run and session implementations.
+Chat turn input, admission, wakeup, synchronous execution, persistence,
+recovery, cache, reconciliation, and external-sidebar projection now have
+explicit owners. Remaining work is concentrated in public package interfaces,
+the 1,025-line sidebar-listing implementation, and the 908-line local-run
+composition module.
 
 - group the existing run owners under `api/runs/`
 - group session persistence, recovery, projection, sources, and events under
@@ -485,10 +492,12 @@ packages without entering the HTTP router.
 ### Phase 4: HTTP router and routes
 
 **Status: In progress.** Dispatch and several domain route groups have moved to
-`api/http/`, but `api/routes.py` and large modules under `api/routes_parts/`
-still contain domain orchestration. Current work extracts cohesive HTTP owners
-and moves session projection and anchor-scene behavior behind session-domain
-interfaces. The former 1,223-line session-model route part is now a temporary
+`api/http/`. `api/routes.py` is 1,666 lines after falling from the original
+26,578-line audit snapshot, while chat-run and Cron route adapters are now 369
+and 231 lines respectively. The remaining route facade still composes legacy
+exports and imports private domain implementations, so the next work is to
+route those calls through package interfaces rather than splitting the file for
+size alone. The former 1,223-line session-model route part is now a temporary
 compatibility Adapter over session-owned Modules rather than a domain owner.
 
 - introduce the HTTP router and per-domain route adapters
@@ -520,14 +529,17 @@ changing run admission, execution, journaling, or session persistence.
 
 ### Phase 6: frontend modules
 
-**Status: Native module graph implemented; deepening in progress.** Boot,
+**Status: Native module graph and the 2026-08-03 state/lifecycle deepening wave
+implemented; presentation owners remain.** Boot,
 commands, sessions, messages, panels, and UI now load as native ES-module
 graphs with a narrow compatibility surface and transitive service-worker asset
 inventory. The sessions graph now has explicit lifecycle, transcript, discovery,
 sidebar-rendering, action, project, and management owners behind small public
-facades; leaf ports keep its owner graph acyclic. Large orchestration modules
-are being reviewed for real semantic seams; coherent locale data remains
-intentionally unsplit.
+facades; leaf ports keep its owner graph acyclic. `ui/state.js` and
+`sessions/lifecycle.js` are now 40 and 27 lines, with state, navigation,
+virtualization, transcript loading, sidebar interaction, and session management
+behind semantic modules. Large presentation modules are being reviewed for real
+seams; coherent locale data remains intentionally unsplit.
 
 - choose one native ES-module loading pattern
 - migrate one bounded domain first, retaining a narrow compatibility adapter
@@ -611,15 +623,19 @@ The architecture program is complete when:
 
 ## Immediate next step
 
-Finish the current owner-deepening and integration wave:
+Close the verification and interface-cleanup work exposed by the completed
+owner-deepening wave:
 
-1. complete session projection and reduce `api/routes.py` to HTTP translation
-   plus a temporary compatibility interface
-2. deepen the remaining large run, session, update, and frontend orchestration
-   modules along state and lifecycle seams
-3. remove the remaining reverse edges in the config/profile/provider stack
-   without breaking mutable-state identity or profile scoping
-4. migrate remaining compatibility-facade tests only after their product
-   owners are final
-5. refresh the architecture baseline, run the complete repository suite, and
-   update `ARCHITECTURE.md` after all module commits have been integrated
+1. migrate the remaining historical tests away from removed route, streaming,
+   onboarding, and concatenated-frontend seams; use shared owner fixtures rather
+   than restoring private facade exports
+2. rerun the complete repository suite; the 2026-08-03 integration sweep passed
+   1,181 affected tests but the first full run still exposed a broad legacy-test
+   migration backlog
+3. replace cross-package private imports with deliberate package interfaces,
+   beginning with the HTTP-to-session/run calls that account for many of the
+   161 recorded findings
+4. remove package cycles by resolved domain snapshots and one-way event seams,
+   not by moving imports into functions
+5. review the remaining 28 source files at or above 800 lines for depth and
+   locality; keep cohesive implementations such as catalog assembly intact
