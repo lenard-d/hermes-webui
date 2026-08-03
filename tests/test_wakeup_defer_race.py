@@ -8,8 +8,8 @@ Root cause (proven by source, not speculation):
     this fix it only logged + left a bare PENDING_BG_TASK_COMPLETIONS session
     flag; the wakeup_prompt was DISCARDED.
   - The only consumer of that bare flag was the PR #2279 next-turn drain
-    (api/streaming._drain_webui_process_notifications, called at
-    streaming.py:3445 inside the turn pipeline). It reads completion_queue —
+    (api.runs.process_notifications._drain_webui_process_notifications,
+    called from local_conversation inside the turn pipeline). It reads completion_queue —
     which the Option Z drain thread already emptied — and is gated by
     BG_TASK_COMPLETE_EVENTS_SEEN / registry _completion_consumed (both set in
     _process_one BEFORE the defer). So even a user turn could not recover it.
@@ -274,7 +274,7 @@ def test_next_user_turn_drain_and_teardown_hook_dont_double_fire(monkeypatch):
     teardown idle-hook then delivers it exactly once. Total deliveries == 1.
     """
     from api import background_process as bp, config as cfg
-    from api import streaming as st
+    from api.runs import process_notifications as notifications_owner
 
     fake = _FakeProcessRegistry()
     fake.register("proc-shared-1", "sess-shared")
@@ -300,7 +300,7 @@ def test_next_user_turn_drain_and_teardown_hook_dont_double_fire(monkeypatch):
         # event were re-queued (kill_process race), the SEEN + consumed gate
         # makes it a no-op — it must NOT deliver the deferred wakeup.
         fake.completion_queue.put(_completion_evt("proc-shared-1", sid))
-        notifications = st._drain_webui_process_notifications(sid)
+        notifications = notifications_owner._drain_webui_process_notifications(sid)
         assert notifications == [], (
             "next-turn drain double-delivered a completion the defer path owns"
         )

@@ -61,7 +61,7 @@ def test_b_sse_first_then_a_drain_skips_same_process_id(monkeypatch):
     _reset_cfg_state()
 
     from api import background_process as bp
-    from api import streaming as st
+    from api.runs import process_notifications as notifications_owner
     from api import config as _cfg
 
     # Map session_key -> WebUI session_id
@@ -86,7 +86,7 @@ def test_b_sse_first_then_a_drain_skips_same_process_id(monkeypatch):
     # same process_id (e.g. a kill_process race). A must skip because B already
     # delivered.
     fake.completion_queue.put(evt)
-    notifications = st._drain_webui_process_notifications("sess-1")
+    notifications = notifications_owner._drain_webui_process_notifications("sess-1")
     assert notifications == [], "A must NOT re-fire when B already woke the agent for p1"
 
 
@@ -108,7 +108,7 @@ def test_a_drain_first_marks_seen_so_b_would_skip(monkeypatch):
     _reset_cfg_state()
 
     from api import background_process as bp
-    from api import streaming as st
+    from api.runs import process_notifications as notifications_owner
     from api import config as _cfg
 
     bp.register_process_session("sess-2", "sess-2")
@@ -123,7 +123,7 @@ def test_a_drain_first_marks_seen_so_b_would_skip(monkeypatch):
     }
     # A path: queue carried over from a closed-tab session, drain at next turn
     fake.completion_queue.put(evt)
-    notifications = st._drain_webui_process_notifications("sess-2")
+    notifications = notifications_owner._drain_webui_process_notifications("sess-2")
     assert len(notifications) == 1
     assert "Background process p2 completed" in notifications[0]
 

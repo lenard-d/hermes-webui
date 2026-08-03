@@ -25,7 +25,8 @@ The coordinator:
        the closed-tab case works exactly like CLI / Telegram / gateway
        self-wake. When a turn is already active the wakeup is NOT started here;
        the ``PENDING_BG_TASK_COMPLETIONS`` marker is left for PR #2279's
-       next-turn drain (``api/streaming._drain_webui_process_notifications``).
+       next-turn drain
+       (``api.runs.process_notifications._drain_webui_process_notifications``).
 
 The marker is *not* required for delivery — it's a telemetry-style flag the
 turn handler can read to know "this stream is a process_complete wakeup, not a
@@ -519,7 +520,8 @@ def process_one(
         return
     # ── Idempotency vs the REAL merged upstream #2279 (shared dedupe key) ──
     # The real merged #2279 next-turn drain
-    # (api/streaming._drain_webui_process_notifications) dedupes ONLY via
+    # (api.runs.process_notifications._drain_webui_process_notifications)
+    # dedupes ONLY via
     # process_registry.is_completion_consumed() / _completion_consumed — it
     # does NOT populate BG_TASK_COMPLETE_EVENTS_SEEN (that set is ours-original
     # and private to this module). So the cross-A/B shared dedupe contract is
@@ -553,8 +555,9 @@ def process_one(
     PENDING_BG_TASK_COMPLETIONS.add(session_id)
     # Mark the event consumed in the agent's process registry so the REAL
     # merged PR #2279's next-turn drain
-    # (api/streaming._drain_webui_process_notifications) treats this process_id
-    # as already-delivered and does not re-fire a wakeup (B-first order).
+    # (api.runs.process_notifications._drain_webui_process_notifications)
+    # treats this process_id as already-delivered and does not re-fire a wakeup
+    # (B-first order).
     # This is the SHARED upstream dedupe key (see _mark_registry_completion_
     # consumed for the coupling contract + why a future rename now fails loud).
     if process_id:
@@ -572,9 +575,9 @@ def process_one(
     #
     #   - turn ACTIVE → do NOT start a turn. Leave the PENDING_PROCESS_
     #     COMPLETIONS marker so PR #2279's next-turn drain
-    #     (api/streaming._drain_webui_process_notifications) injects the wakeup
-    #     when the active turn ends. (That path already works when a turn is
-    #     active — it was never the gap.)
+    #     (api.runs.process_notifications._drain_webui_process_notifications)
+    #     injects the wakeup when the active turn ends. (That path already
+    #     works when a turn is active — it was never the gap.)
     #   - turn IDLE → start a new server-side turn directly with wakeup_prompt
     #     as the user message (the real gap Option Z closes).
     #
