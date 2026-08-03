@@ -23,12 +23,6 @@
     {
       "rule": "cross-package-private-import",
       "source": "api.http.interactive_streams",
-      "target": "api.streaming._sse",
-      "reason": "Legacy cross-package implementation import; route through the target package interface."
-    },
-    {
-      "rule": "cross-package-private-import",
-      "source": "api.http.interactive_streams",
       "target": "api.streaming.transport",
       "reason": "Legacy cross-package implementation import; route through the target package interface."
     },
