@@ -11,6 +11,8 @@ import json
 import shutil
 import subprocess
 
+import pytest
+
 import api.routes as routes
 
 
