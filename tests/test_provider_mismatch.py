@@ -996,7 +996,11 @@ def test_issue1734_chat_start_persists_repaired_codex_provider(monkeypatch):
             pass
 
     session = DummySession()
-    monkeypatch.setattr(routes, "get_session", lambda sid: session)
+    monkeypatch.setattr(
+        routes,
+        "_get_or_materialize_session",
+        lambda sid, **_kwargs: session,
+    )
     monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda value: value)
     monkeypatch.setattr(routes, "_get_session_agent_lock", lambda sid: contextlib.nullcontext())
     monkeypatch.setattr(routes, "set_last_workspace", lambda workspace: None)
