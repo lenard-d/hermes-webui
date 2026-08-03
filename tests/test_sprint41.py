@@ -9,8 +9,9 @@ Covers:
 """
 from tests.frontend_asset_contract import family_source
 import pathlib
-import re
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from api.runs.thinking_content import _sanitize_generated_title
 
@@ -20,9 +21,6 @@ HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 MESSAGES_JS = family_source("messages")
 TITLE_PROVIDER_PY = (
     REPO_ROOT / "api" / "runs" / "title_generation" / "provider_invocation.py"
-).read_text(encoding="utf-8")
-LOCAL_RUN_PY = (
-    REPO_ROOT / "api" / "runs" / "local.py"
 ).read_text(encoding="utf-8")
 TITLE_LIFECYCLE_PY = (
     REPO_ROOT / "api" / "runs" / "title_generation" / "lifecycle.py"
@@ -35,38 +33,102 @@ TITLE_POLICY_PY = (
 # ── streaming.py: title auto-generation condition ─────────────────────────
 
 class TestTitleAutoGenerationCondition(unittest.TestCase):
-    """Verify the guarded condition in streaming.py covers all default title cases."""
+    """Default session titles are replaced by the opening user prompt."""
 
-    def _titles_that_trigger(self):
-        """Extract the condition from the source so tests stay in sync with code."""
-        # Find the if-condition that calls title_from
-        m = re.search(
-            r'if\s+(s\.title\s*==.*?):\s*\n\s*s\.title\s*=\s*title_from',
-            LOCAL_RUN_PY,
-            re.DOTALL,
+    @staticmethod
+    def _settled_title(initial_title):
+        from api.runs.local_success import LocalSuccessProjection
+
+        class FakeMeter:
+            def get_ttft_ms(self, _stream_id):
+                return None
+
+        messages = [
+            {
+                "role": "user",
+                "content": "Give this conversation a useful title",
+                "timestamp": 1,
+            },
+            {"role": "assistant", "content": "Here is the answer", "timestamp": 2},
+        ]
+        session = SimpleNamespace(
+            session_id="sprint-41",
+            title=initial_title,
+            messages=[dict(message) for message in messages],
+            input_tokens=0,
+            output_tokens=0,
+            estimated_cost=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            tool_calls=[],
+            gateway_routing=None,
+            gateway_routing_history=[],
+            last_prompt_tokens=0,
+            pending_user_message=None,
+            pending_attachments=[],
+            pending_started_at=None,
+            pending_user_source=None,
+            post_compression_context_tokens_estimate=None,
         )
-        self.assertIsNotNone(m, "Could not find title auto-generation condition in streaming.py")
-        return m.group(1)
+        agent = SimpleNamespace(
+            session_prompt_tokens=0,
+            session_completion_tokens=0,
+            session_estimated_cost_usd=None,
+            session_cache_read_tokens=0,
+            session_cache_write_tokens=0,
+            context_compressor=None,
+            model="",
+        )
+        with patch("api.runs.local_success.meter", return_value=FakeMeter()):
+            LocalSuccessProjection.apply(
+                session,
+                agent=agent,
+                result={},
+                route_model="",
+                resolved_model="",
+                resolved_provider=None,
+                resolved_base_url=None,
+                resolved_api_key=None,
+                config={},
+                previous_messages=[],
+                reasoning_segments={},
+                live_tool_calls={},
+                attachments=[],
+                message_text="Give this conversation a useful title",
+                turn_started_at=0,
+                stream_id="stream-sprint-41",
+            )
+        return session.title
 
     def test_untitled_in_condition(self):
-        cond = self._titles_that_trigger()
-        self.assertIn("'Untitled'", cond, "Original 'Untitled' guard must be present")
+        self.assertEqual(
+            self._settled_title("Untitled"),
+            "Give this conversation a useful title",
+        )
 
     def test_new_chat_in_condition(self):
-        cond = self._titles_that_trigger()
-        self.assertIn("'New Chat'", cond, "'New Chat' guard must be present (PR #333)")
+        self.assertEqual(
+            self._settled_title("New Chat"),
+            "Give this conversation a useful title",
+        )
 
     def test_empty_title_guard_in_condition(self):
-        cond = self._titles_that_trigger()
-        self.assertIn("not s.title", cond, "Empty/falsy title guard must be present (PR #333)")
+        for initial_title in (None, ""):
+            with self.subTest(initial_title=initial_title):
+                self.assertEqual(
+                    self._settled_title(initial_title),
+                    "Give this conversation a useful title",
+                )
 
     def test_condition_logic_covers_all_defaults(self):
-        """The condition uses OR so any one default title triggers generation."""
-        cond = self._titles_that_trigger()
-        # All three guards must be joined by 'or'
-        parts = re.split(r'\bor\b', cond)
-        self.assertGreaterEqual(len(parts), 3,
-            "Expected at least 3 OR-joined sub-conditions (Untitled, New Chat, not s.title)")
+        """Every product-default title is refreshed; custom titles are preserved."""
+        for initial_title in (None, "", "Untitled", "New Chat"):
+            with self.subTest(initial_title=initial_title):
+                self.assertEqual(
+                    self._settled_title(initial_title),
+                    "Give this conversation a useful title",
+                )
+        self.assertEqual(self._settled_title("My custom title"), "My custom title")
 
 
 
