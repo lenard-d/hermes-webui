@@ -12,6 +12,9 @@ plus pure-function tests for the SessionChannel class and reaper logic.
 from __future__ import annotations
 from tests.frontend_asset_contract import family_source
 
+import json
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +23,20 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+NODE = shutil.which("node")
+
+
+def _run_node_module_script(script: str) -> dict:
+    """Execute a native ESM owner through its real import graph."""
+    assert NODE, "node is required for native-module session SSE tests"
+    result = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
 
 
 def _js_function_decl(src: str, name: str) -> str:
@@ -449,6 +466,7 @@ def test_frontend_opens_session_stream():
     assert "stopSessionStream" in js
 
 
+@pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_session_stream_pauses_while_chat_stream_is_active():
     """The active turn's chat SSE already carries live events for that session.
 
@@ -456,31 +474,73 @@ def test_session_stream_pauses_while_chat_stream_is_active():
     Chrome same-origin connection slot and can starve ordinary /api/session
     fetches on HTTP/1.1.
     """
-    js = family_source("messages")
-    assert "function _chatStreamActiveForSession(sid)" in js
-    assert "function _suspendSessionStreamForLiveChat(sid)" in js
-    assert "function _resumeSessionStreamAfterLiveChat(sid)" in js
+    session_events_url = (REPO_ROOT / "static/modules/messages/session-events.js").as_uri()
+    script = f"""
+globalThis.document = {{
+  hidden: false,
+  baseURI: 'http://hermes.test/',
+  addEventListener() {{}},
+  getElementById() {{ return null; }},
+}};
+globalThis.window = {{addEventListener() {{}}, removeEventListener() {{}}}};
+globalThis.location = {{href: 'http://hermes.test/'}};
+globalThis.S = {{
+  session: {{session_id: 'session-1', message_count: 0}},
+  activeStreamId: 'chat-stream-1',
+}};
+class FakeEventSource {{
+  static instances = [];
+  constructor(url) {{
+    this.url = url;
+    this.readyState = 1;
+    this.closeCount = 0;
+    FakeEventSource.instances.push(this);
+  }}
+  addEventListener() {{}}
+  close() {{ this.readyState = 2; this.closeCount += 1; }}
+}}
+globalThis.EventSource = FakeEventSource;
 
-    start_src = _js_function_decl(js, "startSessionStream")
-    assert "if (_chatStreamActiveForSession(sid))" in start_src
-    assert "_sessionStreamHiddenSid = sid;" in start_src
-    assert "return;" in start_src
-    assert start_src.index("if (_chatStreamActiveForSession(sid))") < start_src.index("new EventSource(")
+const {{
+  _resumeSessionStreamAfterLiveChat,
+  _suspendSessionStreamForLiveChat,
+  startSessionStream,
+  stopSessionStream,
+}} = await import({json.dumps(session_events_url)});
 
-    attach_ix = js.index("function attachLiveStream")
-    attach_src = js[attach_ix:js.index("function transcript()", attach_ix)]
-    assert "_suspendSessionStreamForLiveChat(activeSid);" in attach_src
-    assert attach_src.index("_suspendSessionStreamForLiveChat(activeSid);") < attach_src.index("new EventSource(")
+startSessionStream('session-1');
+const blockedWhileChatActive = FakeEventSource.instances.length;
+S.activeStreamId = null;
+startSessionStream('session-1');
+const firstSessionSource = FakeEventSource.instances[0];
+_suspendSessionStreamForLiveChat('session-1');
+S.activeStreamId = 'chat-stream-2';
+startSessionStream('session-1');
+const blockedAfterSuspend = FakeEventSource.instances.length;
+S.activeStreamId = null;
+_resumeSessionStreamAfterLiveChat('session-1');
+await new Promise(resolve => setTimeout(resolve, 0));
+const resumedSource = FakeEventSource.instances[1];
+stopSessionStream();
+process.stdout.write(JSON.stringify({{
+  blockedWhileChatActive,
+  firstUrl: firstSessionSource && firstSessionSource.url,
+  firstCloseCount: firstSessionSource && firstSessionSource.closeCount,
+  blockedAfterSuspend,
+  sourceCountAfterResume: FakeEventSource.instances.length,
+  resumedUrl: resumedSource && resumedSource.url,
+  resumedCloseCount: resumedSource && resumedSource.closeCount,
+}}));
+"""
+    result = _run_node_module_script(script)
 
-    resume_src = _js_function_decl(js, "_resumeSessionStreamAfterLiveChat")
-    assert "S.session.session_id !== sid" in resume_src
-    assert "if (_chatStreamActiveForSession(sid)) return;" in resume_src
-    assert "_sessionStreamHiddenSid = null;" in resume_src
-    assert "startSessionStream(sid);" in resume_src
-
-    suspend_src = _js_function_decl(js, "_suspendSessionStreamForLiveChat")
-    assert "if (_sessionStreamSessionId !== sid) return;" in suspend_src
-    assert "stopSessionStream();" in suspend_src
+    assert result["blockedWhileChatActive"] == 0
+    assert result["firstUrl"] == "http://hermes.test/api/session/stream?session_id=session-1&known_count=0"
+    assert result["firstCloseCount"] == 1
+    assert result["blockedAfterSuspend"] == 1
+    assert result["sourceCountAfterResume"] == 2
+    assert result["resumedUrl"] == result["firstUrl"]
+    assert result["resumedCloseCount"] == 1
 
 
 def test_session_stream_resume_rearms_when_live_stream_registry_clears():

@@ -3,13 +3,32 @@
 from __future__ import annotations
 from tests.frontend_asset_contract import family_source
 
+import json
 import pathlib
 import re
+import shutil
+import subprocess
+
+import pytest
 
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 MESSAGES = family_source("messages")
 UI = family_source("ui")
+NODE = shutil.which("node")
+
+
+def _run_node_module_script(script: str) -> dict:
+    """Execute a native ESM owner through its real import graph."""
+    assert NODE, "node is required for native-module live-event tests"
+    result = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
 
 
 def _interim_listener_body() -> str:
@@ -36,23 +55,73 @@ def test_interim_reasoning_echo_cleans_live_and_anchor_thinking():
     assert "_writeReasoning({" in MESSAGES
 
 
+@pytest.mark.skipif(NODE is None, reason="node not on PATH")
 def test_interim_anchor_render_runs_after_legacy_segment_flush_without_duplicate_process_row():
-    body = _interim_listener_body()
+    """The content-event owner flushes the DOM before applying one anchor row."""
+    rendering_url = (REPO / "static/modules/messages/rendering.js").as_uri()
+    content_events_url = (REPO / "static/modules/messages/content-events.js").as_uri()
+    script = f"""
+globalThis.document = {{
+  addEventListener() {{}}, removeEventListener() {{}},
+  querySelector() {{ return null; }}, querySelectorAll() {{ return []; }},
+  getElementById() {{ return null; }},
+}};
+globalThis.window = {{addEventListener() {{}}, removeEventListener() {{}}, _showThinking: true}};
+globalThis.renderMd = value => `<p>${{value}}</p>`;
+globalThis.esc = value => String(value ?? '');
+globalThis.removeThinking = () => {{}};
+globalThis.setTimeout = () => 0;
+globalThis.requestAnimationFrame = () => 0;
 
-    flush_idx = body.index("renderer.flushPendingSegment({force:true,skipAnchorProcessProse:true});")
-    anchor_idx = body.index("anchor.apply('interim_assistant',data,event);")
-    flush_fn_start = MESSAGES.index("function _flushPendingSegmentRender")
-    flush_fn = MESSAGES[flush_fn_start : MESSAGES.index("function _resetAssistantSegment", flush_fn_start)]
+const {{ createStreamRenderer }} = await import({json.dumps(rendering_url)});
+const {{ createStreamContentEventOwner }} = await import({json.dumps(content_events_url)});
+const order = [];
+const state = {{
+  assistantText: '', liveReasoningText: '', reasoningText: '', segmentStart: 0,
+  streamFinalized: false,
+  assistantRow: {{setAttribute() {{}}, parentElement: null}},
+  assistantBody: {{innerHTML: '', classList: {{remove() {{}}}}}},
+}};
+const renderer = createStreamRenderer({{
+  readState: () => state,
+  upsertAnchorProse: () => order.push('duplicate-process-prose'),
+  syncWorklogReasons: () => order.push('legacy-segment-flushed'),
+}});
+const streamRenderer = {{
+  ...renderer,
+  ensureAssistantRow: () => state.assistantRow,
+}};
+const turn = {{
+  isTerminal: () => false,
+  setLiveReasoningText: () => {{}},
+  appendInterimAssistantText: value => {{ state.assistantText = value; }},
+  pushInterimSnippet: () => {{}},
+  syncInflight: () => {{}},
+  assistantRow: () => state.assistantRow,
+  interimSnippetCount: () => 1,
+  recordActivityBoundary: () => {{}},
+}};
+const anchor = {{apply: () => order.push('anchor-interim-applied')}};
+const listeners = new Map();
+const source = {{
+  addEventListener(name, listener) {{ listeners.set(name, listener); }},
+}};
+const owner = createStreamContentEventOwner({{
+  sessionId: 'session-1', streamId: 'stream-1',
+  state: {{session: {{session_id: 'session-1'}}}},
+  turn, renderer: streamRenderer, anchor,
+}});
+owner.attach(source);
+listeners.get('interim_assistant')({{data: JSON.stringify({{text: 'interim prose'}})}});
+process.stdout.write(JSON.stringify({{
+  rendered: state.assistantBody.innerHTML,
+  order,
+}}));
+"""
+    result = _run_node_module_script(script)
 
-    assert "const skipAnchorProcessProse=!!(options&&options.skipAnchorProcessProse);" in flush_fn
-    assert "if(!skipAnchorProcessProse) _upsertAnchorProcessProse(displayText,{sealed:force});" in flush_fn
-    assert flush_idx < anchor_idx, (
-        "Anchor live scene must render after the legacy interim segment is flushed, "
-        "so renderLiveAnchorActivityScene can hide that source segment immediately."
-    )
-    assert "renderer.flushPendingSegment({force:true});" in body, (
-        "already_streamed interim updates must still flush the token-owned prose row."
-    )
+    assert result["rendered"] == "<p>interim prose</p>"
+    assert result["order"] == ["legacy-segment-flushed", "anchor-interim-applied"]
 
 
 def test_live_anchor_scene_hides_legacy_live_assistant_sources():
