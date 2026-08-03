@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import api.profiles as profiles
 import api.routes as routes
 import pytest
+from api.sessions import sidebar_cache, sidebar_listing, session_sidebar_projection
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -120,9 +121,9 @@ def _run_node(script):
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    routes._session_list_cache_clear()
+    sidebar_cache._session_list_cache_clear()
     yield
-    routes._session_list_cache_clear()
+    sidebar_cache._session_list_cache_clear()
 
 
 def _install_common_monkeypatches(monkeypatch, rows):
@@ -257,7 +258,7 @@ def test_sidebar_source_preserves_archived_counts(monkeypatch):
 
 
 def test_sidebar_source_varies_cache_key():
-    key_webui = routes._session_list_cache_key(
+    key_webui = sidebar_listing._session_list_cache_key(
         active_profile="default",
         all_profiles=False,
         show_cli_sessions=True,
@@ -266,7 +267,7 @@ def test_sidebar_source_varies_cache_key():
         include_archived=False,
         sidebar_source="webui",
     )
-    key_cli = routes._session_list_cache_key(
+    key_cli = sidebar_listing._session_list_cache_key(
         active_profile="default",
         all_profiles=False,
         show_cli_sessions=True,
@@ -275,7 +276,7 @@ def test_sidebar_source_varies_cache_key():
         include_archived=False,
         sidebar_source="cli",
     )
-    key_omitted = routes._session_list_cache_key(
+    key_omitted = sidebar_listing._session_list_cache_key(
         active_profile="default",
         all_profiles=False,
         show_cli_sessions=True,
@@ -632,7 +633,7 @@ console.log(JSON.stringify({{
 
 def test_session_list_response_omits_bucket_counts_when_missing(monkeypatch):
     monkeypatch.setattr(routes, "_session_list_cache_overlay_runtime_rows", lambda rows: rows)
-    monkeypatch.setattr(routes, "_sidebar_session_response_item", lambda row, *, redact_enabled=None: row)
+    monkeypatch.setattr(session_sidebar_projection, "response_item", lambda row, *, redact_enabled=None: row)
 
     body = routes._session_list_payload_to_response(
         {

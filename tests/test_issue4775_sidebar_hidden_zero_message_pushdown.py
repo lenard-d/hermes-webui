@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import api.profiles as profiles
 import api.routes as routes
 import pytest
+from api.sessions import sidebar_cache, sidebar_listing, session_sidebar_projection
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,9 +174,9 @@ def _run_node(script):
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    routes._session_list_cache_clear()
+    sidebar_cache._session_list_cache_clear()
     yield
-    routes._session_list_cache_clear()
+    sidebar_cache._session_list_cache_clear()
 
 
 def _install_common_monkeypatches(monkeypatch, rows):
@@ -184,7 +185,7 @@ def _install_common_monkeypatches(monkeypatch, rows):
     monkeypatch.setattr(routes, "_reconcile_stale_stream_state_for_session_rows", lambda _rows: False)
     monkeypatch.setattr(routes, "_enrich_sidebar_lineage_metadata", lambda _rows: None)
     monkeypatch.setattr(
-        routes,
+        session_sidebar_projection,
         "_session_attention_summary",
         lambda session_id: {"kind": "clarify", "count": 1}
         if str(session_id) == "attention-row"
@@ -316,7 +317,7 @@ console.log(JSON.stringify({{
 
 
 def test_cache_key_varies_for_exclude_hidden_and_visible_only():
-    key_without_filters = routes._session_list_cache_key(
+    key_without_filters = sidebar_listing._session_list_cache_key(
         active_profile="default",
         all_profiles=False,
         show_cli_sessions=True,
@@ -325,7 +326,7 @@ def test_cache_key_varies_for_exclude_hidden_and_visible_only():
         include_archived=False,
         sidebar_source="webui",
     )
-    key_exclude_hidden = routes._session_list_cache_key(
+    key_exclude_hidden = sidebar_listing._session_list_cache_key(
         active_profile="default",
         all_profiles=False,
         show_cli_sessions=True,
@@ -335,7 +336,7 @@ def test_cache_key_varies_for_exclude_hidden_and_visible_only():
         exclude_hidden=True,
         sidebar_source="webui",
     )
-    key_visible_only = routes._session_list_cache_key(
+    key_visible_only = sidebar_listing._session_list_cache_key(
         active_profile="default",
         all_profiles=False,
         show_cli_sessions=True,
