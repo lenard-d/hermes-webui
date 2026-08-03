@@ -201,9 +201,14 @@ def test_audit_keeps_client_package_candidates_visible():
     classes = _class_by_id(_run_audit())
     anchors = _anchors(classes["webui_local_or_client_package"])
 
-    assert ("api/streaming/webui_prefill.py", "hermes_constants") in anchors
-    assert ("api/routes_parts/skills.py", "agent.skill_utils") in anchors
-    assert ("api/http/plugins.py", "hermes_cli.plugins") in anchors
+    # The WebUI package owns the import locations and can move them as modules
+    # are reorganized. The audit contract is that these client-package
+    # candidates remain reported, not that they retain particular module paths.
+    assert {
+        "hermes_constants",
+        "agent.skill_utils",
+        "hermes_cli.plugins",
+    } <= {anchor for _, anchor in anchors}
 
 
 def test_markdown_output_is_utf8_safe_on_windows_stdout():
