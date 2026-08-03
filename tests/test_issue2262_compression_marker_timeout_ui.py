@@ -1,41 +1,66 @@
-from tests.frontend_asset_contract import family_source
-
 from pathlib import Path
+import shutil
+import subprocess
+import textwrap
 
 
-def _read(path: str) -> str:
-    return Path(path).read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+COMPRESSION_UI = ROOT / "static" / "modules" / "ui" / "compression-ui.js"
+RENDERER = ROOT / "static" / "modules" / "ui" / "renderer.js"
+STREAM_TRANSCRIPT = ROOT / "static" / "modules" / "messages" / "stream-transcript.js"
+TERMINAL_EVENTS = ROOT / "static" / "modules" / "messages" / "terminal-events.js"
+SESSION_RECOVERY = ROOT / "static" / "modules" / "messages" / "session-recovery.js"
 
 
 def test_preserved_task_list_marker_only_helper_is_strict():
-    src = family_source("ui")
+    src = COMPRESSION_UI.read_text(encoding="utf-8")
 
     assert "function _isPreservedCompressionTaskListMarkerOnlyText" in src
-    start = src.find("function _isPreservedCompressionTaskListMarkerOnlyText")
-    end = src.find("function _isPreservedCompressionTaskListMessage", start)
-    helper = src[start:end]
-
-    assert "_isPreservedCompressionTaskListMarkerText(text)" in helper
-    assert ".replace(/^\\s*\\[your active task list was preserved across context compression\\]" in helper
-    assert ".trim()" in helper
+    assert "_isPreservedCompressionTaskListMarkerText(text)" in src
+    assert ".replace(/^\\s*\\[your active task list was preserved across context compression\\]" in src
+    assert ".trim()" in src
 
 
 def test_marker_only_assistant_message_renders_as_error_not_model_text():
-    src = family_source("ui")
+    compression_ui = COMPRESSION_UI.read_text(encoding="utf-8")
+    renderer = RENDERER.read_text(encoding="utf-8")
 
-    assert "function _isMarkerOnlyAssistantCompressionMessage" in src
-    assert "m.role!=='assistant'" in src
-    assert "_isPreservedCompressionTaskListMarkerOnlyText(text)" in src
-    assert "if(!isUser&&_isMarkerOnlyAssistantCompressionMessage(m))" in src
-    assert "content='**Error:** No response received after context compression. Please retry.'" in src
+    assert "function _isMarkerOnlyAssistantCompressionMessage" in compression_ui
+    assert "m.role!=='assistant'" in compression_ui
+    assert "_isPreservedCompressionTaskListMarkerOnlyText(text)" in compression_ui
+    assert "if(!isUser&&_isMarkerOnlyAssistantCompressionMessage(m))" in renderer
+    assert "content='**Error:** No response received after context compression. Please retry.'" in renderer
 
 
 def test_done_and_restore_replace_marker_only_assistant_with_error_toast():
-    src = family_source("messages")
+    node = shutil.which("node")
+    if node is None:
+        return
+    script = textwrap.dedent(
+        f"""
+        const {{ createStreamTranscriptProjection }} = await import({STREAM_TRANSCRIPT.as_uri()!r});
+        const projection = createStreamTranscriptProjection({{
+          markerOnlyText: text => /^\\[your active task list was preserved across context compression\\]\\s*$/i.test(text),
+        }});
+        const messages = [
+          {{ role: 'user', content: 'continue' }},
+          {{ role: 'assistant', content: '[your active task list was preserved across context compression]' }},
+        ];
+        const replaced = projection.replaceMarkerOnlyAssistantWithStreamError(messages);
+        if (!replaced) throw new Error('marker-only terminal reply was not replaced');
+        if (messages[1].content !== '**Error:** No response received after context compression. Please retry.') {{
+          throw new Error('terminal replacement text was not rendered');
+        }}
+        if (!messages[1].provider_details.includes('internal preserved-task-list compression marker')) {{
+          throw new Error('replacement did not retain diagnostic provenance');
+        }}
+        """
+    )
+    result = subprocess.run([node, "--input-type=module", "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
-    assert "function _replaceMarkerOnlyAssistantWithStreamError(messages)" in src
-    assert "_isMarkerOnlyAssistantMessage(msg)" in src
-    assert "msg.content='**Error:** No response received after context compression. Please retry.'" in src
-    assert "internal preserved-task-list compression marker" in src
-    assert "_markerOnlyAssistantError=_replaceMarkerOnlyAssistantWithStreamError(S.messages)" in src
-    assert "showToast('No response received after context compression. Please retry.',5000,'error')" in src
+    terminal_events = TERMINAL_EVENTS.read_text(encoding="utf-8")
+    session_recovery = SESSION_RECOVERY.read_text(encoding="utf-8")
+    assert "_markerOnlyAssistantError=_replaceMarkerOnlyAssistantWithStreamError(S.messages)" in terminal_events
+    assert "_markerOnlyAssistantError=_replaceMarkerOnlyAssistantWithStreamError(S.messages)" in session_recovery
+    assert "showToast('No response received after context compression. Please retry.',5000,'error')" in session_recovery

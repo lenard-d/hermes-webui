@@ -6,9 +6,10 @@ Covers:
   3. Backend parity — frontend reason map covers all backend fallback codes
   4. Recovery DOM — _showSteerRecovery creates correct structure; dismiss removes it
 """
-from tests.frontend_asset_contract import family_asset_paths, family_source
+from tests.frontend_asset_contract import family_asset_paths
 
 import re
+import json
 import subprocess
 import sys
 import textwrap
@@ -16,7 +17,7 @@ from pathlib import Path
 
 REPO = Path(__file__).parent.parent
 I18N_JS = REPO / "static" / "i18n.js"
-COMMANDS_JS = family_source("commands")
+COMMAND_RUN_CONTROLS_JS = REPO / "static" / "modules" / "commands" / "run-controls.js"
 LIVE_CONTROLS_PY = REPO / "api" / "streaming" / "live_controls.py"
 
 EXPECTED_I18N_KEYS = [
@@ -63,7 +64,7 @@ def test_reason_map_contract():
     """_steerFailureMessageKey maps each known code to the correct key."""
     node = _find_node()
     script = textwrap.dedent("""
-        const LOCALES = { en: {
+        globalThis.LOCALES = { en: {
             steer_fail_no_cached_agent: 'x',
             steer_fail_agent_lacks_steer: 'x',
             steer_fail_session_not_found: 'x',
@@ -73,13 +74,7 @@ def test_reason_map_contract():
             steer_fail_network_error: 'x',
             steer_fail_unknown: 'x',
         }};
-
-        function _steerFailureMessageKey(fallback) {
-            if (fallback === 'gateway_steer_queued') return 'steer_fail_no_cached_agent';
-            const key = 'steer_fail_' + (fallback || 'unknown');
-            return (typeof LOCALES !== 'undefined' && LOCALES.en && LOCALES.en[key])
-                ? key : 'steer_fail_unknown';
-        }
+        const { _steerFailureMessageKey } = await import(__MODULE_URL__);
 
         const codes = [
             'no_cached_agent', 'agent_lacks_steer', 'session_not_found',
@@ -117,8 +112,8 @@ def test_reason_map_contract():
             ok = false;
         }
         process.exit(ok ? 0 : 1);
-    """)
-    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    """).replace("__MODULE_URL__", json.dumps(COMMAND_RUN_CONTROLS_JS.as_uri()))
+    result = subprocess.run([node, "--input-type=module", "-e", script], capture_output=True, text=True)
     assert result.returncode == 0, (
         f"_steerFailureMessageKey contract failed:\n{result.stdout}\n{result.stderr}"
     )
@@ -126,11 +121,9 @@ def test_reason_map_contract():
 
 def test_backend_parity():
     """Frontend reason map covers all backend fallback codes from _handle_chat_steer."""
-    from api.streaming import _handle_chat_steer
-    from api.streaming.live_controls import _handle_chat_steer as owner
+    from api.streaming.live_controls import _handle_chat_steer
 
-    assert _handle_chat_steer is owner
-
+    assert callable(_handle_chat_steer)
     controls_text = LIVE_CONTROLS_PY.read_text(encoding="utf-8")
     # Extract fallback codes from the actual handle_chat_steer owner only.
     fn_match = re.search(r"def _handle_chat_steer\b.*?(?=\ndef |\Z)", controls_text, re.DOTALL)
@@ -148,7 +141,7 @@ def test_backend_parity():
         f"  Expected: {sorted(BACKEND_CODES | HANDLED_NON_RECOVERY_CODES)}"
     )
     # Also confirm frontend adds network_error
-    commands_text = COMMANDS_JS
+    commands_text = COMMAND_RUN_CONTROLS_JS.read_text(encoding="utf-8")
     assert FRONTEND_NETWORK_CODE in commands_text, (
         "network_error not found in commands.js"
     )
@@ -188,49 +181,18 @@ def test_recovery_dom_structure():
         }
         const inner = createElement('div');
         inner.querySelector = (sel) => null; // no existing recovery bar
-        const document = {
+        globalThis.document = {
             getElementById(id) { return id === 'msgInner' ? inner : null; },
             createElement,
         };
-        function t(key) { return key; }
-        function _steerFailureMessageKey(fallback) {
-            const key = 'steer_fail_' + (fallback || 'unknown');
-            const LOCALES = { en: {
+        globalThis.t = key => key;
+        globalThis.LOCALES = { en: {
                 steer_fail_not_running: 'Agent is not currently running',
                 steer_fail_unknown: 'Steer unavailable',
                 steer_recovery_retry: 'Retry',
                 steer_recovery_dismiss: 'Dismiss',
-            }};
-            return (LOCALES.en && LOCALES.en[key]) ? key : 'steer_fail_unknown';
-        }
-        function _trySteer() {}  // stub for retry handler
-
-        function _showSteerRecovery(msg, explicitSteer, fallback) {
-            const inner = document.getElementById('msgInner');
-            if (!inner) return;
-            const old = inner.querySelector('.steer-recovery');
-            if (old) old.remove();
-            const el = document.createElement('div');
-            el.className = 'steer-recovery';
-            const label = document.createElement('span');
-            label.className = 'steer-recovery-label';
-            label.textContent = t(_steerFailureMessageKey(fallback));
-            el.appendChild(label);
-            const retryBtn = document.createElement('button');
-            retryBtn.className = 'steer-recovery-retry';
-            retryBtn.textContent = t('steer_recovery_retry');
-            retryBtn.addEventListener('click', () => {
-                el.remove();
-                _trySteer(msg, explicitSteer);
-            });
-            el.appendChild(retryBtn);
-            const dismissBtn = document.createElement('button');
-            dismissBtn.className = 'steer-recovery-dismiss';
-            dismissBtn.textContent = t('steer_recovery_dismiss');
-            dismissBtn.addEventListener('click', () => el.remove());
-            el.appendChild(dismissBtn);
-            inner.appendChild(el);
-        }
+        }};
+        const { _showSteerRecovery } = await import(__MODULE_URL__);
 
         _showSteerRecovery('hello', false, 'not_running');
 
@@ -261,8 +223,8 @@ def test_recovery_dom_structure():
             ok = false;
         }
         process.exit(ok ? 0 : 1);
-    """)
-    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    """).replace("__MODULE_URL__", json.dumps(COMMAND_RUN_CONTROLS_JS.as_uri()))
+    result = subprocess.run([node, "--input-type=module", "-e", script], capture_output=True, text=True)
     assert result.returncode == 0, (
         f"Recovery DOM structure test failed:\n{result.stdout}\n{result.stderr}"
     )

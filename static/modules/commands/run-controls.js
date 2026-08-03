@@ -472,4 +472,4 @@ async function cmdYolo(){
   }catch(e){showToast('YOLO: '+e.message);}
 }
 
-export {cmdGoal,cmdInterrupt,cmdQueue,cmdSteer,cmdStop,cmdYolo,_trySteer};
+export {cmdGoal,cmdInterrupt,cmdQueue,cmdSteer,cmdStop,cmdYolo,_trySteer,_steerFailureMessageKey,_showSteerRecovery};

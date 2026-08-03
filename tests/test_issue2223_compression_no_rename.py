@@ -10,126 +10,80 @@ The fix preserves old_sid.json and creates new_sid.json as a fresh file, setting
 parent_session_id to link the lineage.
 """
 import json
-import pathlib
 
 import pytest
 
-STREAMING = (
-    pathlib.Path(__file__).resolve().parents[1]
-    / "api"
-    / "runs"
-    / "local.py"
-)
-streaming_src = STREAMING.read_text(encoding="utf-8")
 
+@pytest.fixture
+def isolated_session_dir(tmp_path, monkeypatch):
+    """Isolate both disk and the shared in-process session cache."""
+    from api.sessions import records
 
-# ── Structural checks ────────────────────────────────────────────────────────
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    cached_sessions = records.SESSIONS.copy()
+    monkeypatch.setattr(records, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
+    records.SESSIONS.clear()
+    try:
+        yield session_dir
+    finally:
+        records.SESSIONS.clear()
+        records.SESSIONS.update(cached_sessions)
 
 
 class TestNoRenameDuringCompression:
-    """The destructive old_path.rename(new_path) call must be removed."""
+    """Compression rotation preserves an archived parent and a live child."""
 
-    def test_rename_call_removed(self):
-        """old_path.rename(new_path) must not appear in the compression rotation block."""
-        # The old code had: if old_path.exists() and not new_path.exists(): old_path.rename(new_path)
-        # That line must be gone.
-        assert "old_path.rename(new_path)" not in streaming_src, (
-            "old_path.rename(new_path) still present — compression rotation "
-            "still destroys session history (#2223)"
-        )
+    def test_rotation_preserves_parent_snapshot_and_relinks_fork_continuation(
+        self, isolated_session_dir, monkeypatch
+    ):
+        """A rotation leaves old history intact and makes the child point to it.
 
-    def test_parent_session_id_stamped_on_continuation(self):
-        """The continuation session must carry parent_session_id linking to old_sid."""
-        assert "s.parent_session_id = old_sid" in streaming_src, (
-            "parent_session_id not stamped on continuation session (#2223)"
-        )
-
-    def test_old_session_preservation_logic_exists(self):
-        """The public streaming interface exposes the snapshot-preservation owner."""
-        from api.streaming import _preserve_pre_compression_snapshot
-        from api.streaming.compression_snapshot import (
-            _preserve_pre_compression_snapshot as owner,
-        )
-
-        assert _preserve_pre_compression_snapshot is owner
-
-
-    def test_parent_session_id_stamped_unconditionally(self):
-        """Stage-353 Opus SHOULD-FIX: the continuation session's parent_session_id
-        must be stamped UNCONDITIONALLY to old_sid (the immediate predecessor).
-
-        The previous `if not s.parent_session_id` guard skipped the stamp on
-        fork-of-fork compressions (i.e. when the session already had a
-        parent_session_id from a prior /branch operation), so the continuation
-        would jump back to the original fork instead of the just-preserved
-        snapshot, losing access to the recoverable history in old_sid.json.
-
-        The fix removes the guard: continuation ALWAYS points to the preserved
-        snapshot. Traversal then walks new → old → old.parent → ... root.
+        In particular, a forked source must not retain its older fork parent as
+        the active continuation parent.  The immediate pre-compression snapshot
+        is the authoritative lineage hop.
         """
-        # The guarded form is the bug; the unconditional form is the fix.
-        assert "if not s.parent_session_id:\n                        s.parent_session_id = old_sid" not in streaming_src, (
-            "Guarded parent_session_id stamping resurfaced — breaks fork-of-fork "
-            "lineage traversal after compression"
-        )
-
-    def test_old_session_parent_preserved_during_archive_save(self):
-        """Stage-353 Opus SHOULD-FIX: when preserving old_sid.json to disk, the
-        OLD session's parent_session_id must NOT be cleared.
-
-        Previous bug: code did `s.parent_session_id = None; s.save(); s.parent_session_id = _old_parent`.
-        The save persisted parent=None to disk; in-memory restoration didn't help.
-        Result: fork lineage badge ("Forked from X") disappeared on the old snapshot.
-        """
-        # The clearing pattern must be gone.
-        assert "s.parent_session_id = None" not in streaming_src, (
-            "Clearing parent_session_id before preservation save resurfaced — "
-            "breaks fork lineage on the old snapshot"
-        )
-
-    def test_preservation_helper_marks_snapshot_without_marking_continuation(self, tmp_path, monkeypatch):
-        """The rotation preservation path marks only old_sid as a sidebar-hidden snapshot."""
-        from api.sessions import records
-        import api.streaming as streaming
         from api.sessions.records import Session
+        from api.runs import local_compression
+        from api.runs.local_compression import LocalCompressionOwner
 
-        session_dir = tmp_path / "sessions"
-        session_dir.mkdir()
-        monkeypatch.setattr(records, "SESSION_DIR", session_dir)
-        monkeypatch.setattr(records, "SESSION_INDEX_FILE", session_dir / "_index.json")
-        monkeypatch.setattr(streaming, "SESSION_DIR", session_dir)
-        records.SESSIONS.clear()
+        monkeypatch.setattr(local_compression, "alias_session_agent_lock", lambda *_args: None)
+        monkeypatch.setattr(LocalCompressionOwner, "_migrate_agent_cache", lambda *_args: None)
 
-        old = Session(
+        session = Session(
             session_id="old_sid",
             title="Forked Long Chat",
             parent_session_id="fork_parent",
             messages=[{"role": "user", "content": "before"}],
         )
-        old.save()
-        continuation = Session(
-            session_id="new_sid",
-            title="Forked Long Chat",
-            parent_session_id="fork_parent",
-            messages=[
-                {"role": "user", "content": "before"},
-                {"role": "assistant", "content": "after"},
-            ],
+        session.save()
+        session.messages.append({"role": "assistant", "content": "after"})
+
+        owner = LocalCompressionOwner(
+            original_session_id="old_sid",
+            profile_name=None,
+            agent=type("Agent", (), {"session_id": "new_sid"})(),
+            session_lock=object(),
+            logger=local_compression.logging.getLogger(__name__),
         )
+        owner.rotate_if_needed(session)
+        session.save()
 
-        streaming._preserve_pre_compression_snapshot(continuation, "old_sid")
-
-        old_payload = json.loads((session_dir / "old_sid.json").read_text(encoding="utf-8"))
+        old_payload = json.loads((isolated_session_dir / "old_sid.json").read_text(encoding="utf-8"))
+        new_payload = json.loads((isolated_session_dir / "new_sid.json").read_text(encoding="utf-8"))
         assert old_payload["pre_compression_snapshot"] is True
         assert old_payload["parent_session_id"] == "fork_parent"
         assert len(old_payload["messages"]) == 2
-        index = json.loads((session_dir / "_index.json").read_text(encoding="utf-8"))
+        assert new_payload["parent_session_id"] == "old_sid"
+        assert len(new_payload["messages"]) == 2
+        index = json.loads((isolated_session_dir / "_index.json").read_text(encoding="utf-8"))
         index_by_id = {entry["session_id"]: entry for entry in index}
         assert index_by_id["old_sid"]["pre_compression_snapshot"] is True
-        assert "new_sid" not in index_by_id
-        assert continuation.session_id == "new_sid"
-        assert continuation.parent_session_id == "fork_parent"
-        assert not continuation.pre_compression_snapshot
+        assert index_by_id["new_sid"]["parent_session_id"] == "old_sid"
+        assert session.session_id == "new_sid"
+        assert session.parent_session_id == "old_sid"
+        assert not session.pre_compression_snapshot
 
 
 class TestMergePreservesHistory:
@@ -138,7 +92,8 @@ class TestMergePreservesHistory:
 
     @pytest.fixture
     def merge(self):
-        from api.streaming import _merge_display_messages_after_agent_result
+        from api.runs.transcript import _merge_display_messages_after_agent_result
+
         return _merge_display_messages_after_agent_result
 
     def test_marker_only_preserves_all_previous(self, merge):
