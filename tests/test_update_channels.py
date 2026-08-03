@@ -286,7 +286,10 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
         return {'ok': True, 'target': target, 'channel': channel}
 
     monkeypatch.setattr(transaction, '_apply_update_inner', fake_inner)
-    monkeypatch.setitem(updates._update_cache, 'checked_at', 99)
+    # apply_clear_lock belongs to transaction.py, whose cache owner is
+    # transaction_state.  The package facade can be re-imported by unrelated
+    # tests, so its module-global compatibility cache is not authoritative.
+    monkeypatch.setitem(transaction_state._status_cache, 'checked_at', 99)
     result = updates.apply_clear_lock('webui')
     assert inventory_calls == [tmp_path]
     assert seen.get('channel') == 'experimental', (
@@ -294,7 +297,7 @@ def test_clear_lock_retry_preserves_experimental_channel(tmp_path, monkeypatch):
     )
     assert result['ok'] is True
     assert result['lock_recovery']['action'] == 'no-lock-found'
-    assert updates._update_cache['checked_at'] == 0
+    assert transaction_state._status_cache['checked_at'] == 0
 
 
 # ── Stable-tagged install opting into Experimental (#5862) ───────────────────

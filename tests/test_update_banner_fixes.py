@@ -730,7 +730,8 @@ class TestSuccessfulUpdateReturnsRestartScheduled:
         monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
         monkeypatch.setattr(
-            'api.updates.restart._default_restart_gateway',
+            restart,
+            '_default_restart_gateway',
             lambda **kwargs: {'status': 'completed', 'message': 'Gateway service restarted successfully'},
         )
 
@@ -1417,7 +1418,7 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
         monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
-        monkeypatch.setattr('api.updates.restart._default_restart_gateway', fake_gateway_restart)
+        monkeypatch.setattr(restart, '_default_restart_gateway', fake_gateway_restart)
 
         result = upd.apply_update('agent')
         assert result['ok'] is True
@@ -1467,7 +1468,7 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
         monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
-        monkeypatch.setattr('api.updates.restart._default_restart_gateway', fake_gateway_restart)
+        monkeypatch.setattr(restart, '_default_restart_gateway', fake_gateway_restart)
 
         result = upd.apply_update('agent')
         assert result['ok'] is True
@@ -1502,7 +1503,7 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
         monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
-        monkeypatch.setattr('api.updates.restart._default_restart_gateway', lambda **kwargs: (
+        monkeypatch.setattr(restart, '_default_restart_gateway', lambda **kwargs: (
             restart_calls.append(kwargs.get('profile')),
             {'status': 'busy', 'message': 'Restart already in progress. Please wait a moment and try again.'},
         )[1])
@@ -1537,7 +1538,7 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch.setattr(transaction_state, 'REPO_ROOT', tmp_path)
         monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: None)
-        monkeypatch.setattr('api.updates.restart._default_restart_gateway', lambda **kwargs: {'status': 'completed', 'message': 'Gateway service restarted successfully'})
+        monkeypatch.setattr(restart, '_default_restart_gateway', lambda **kwargs: {'status': 'completed', 'message': 'Gateway service restarted successfully'})
 
         result = upd.apply_force_update('agent')
         assert result['ok'] is True
@@ -1566,7 +1567,8 @@ class TestAgentUpdateRequiresGatewayRestart:
         monkeypatch.setattr(transaction_state, '_AGENT_DIR', tmp_path)
         monkeypatch.setattr(restart, 'schedule_restart', lambda delay=2.0: (_ for _ in ()).throw(AssertionError('must not restart')))
         monkeypatch.setattr(
-            'api.updates.restart._default_restart_gateway',
+            restart,
+            '_default_restart_gateway',
             lambda **kwargs: {'status': 'busy', 'message': 'Restart already in progress. Please wait a moment and try again.'},
         )
 
@@ -1581,7 +1583,8 @@ class TestAgentUpdateRequiresGatewayRestart:
 
         (tmp_path / '.git').mkdir()
         monkeypatch.setattr(
-            'api.updates.restart._default_restart_gateway',
+            restart,
+            '_default_restart_gateway',
             lambda: (_ for _ in ()).throw(AssertionError('helper must not run for webui updates')),
         )
 

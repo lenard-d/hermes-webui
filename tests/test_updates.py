@@ -153,7 +153,9 @@ def test_published_release_check_uses_policy_tag_provider(monkeypatch):
 def test_updates_package_preserves_public_import_and_owner_exports():
     """The package keeps the historical import path while owners stay direct."""
     imported = importlib.import_module('api.updates')
-    assert imported is updates
+    from api import updates as public_updates
+
+    assert imported is public_updates
     assert imported._check_repo is policy._check_repo
     assert imported._run_git is repository._run_git
     assert imported.apply_update is transaction.apply_update
