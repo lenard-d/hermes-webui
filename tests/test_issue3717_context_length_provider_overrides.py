@@ -182,17 +182,59 @@ def test_global_context_length_remains_default_model_only(monkeypatch):
     assert calls[-1]["base_url"] == "https://openai.example/v1"
 
 
-def test_streaming_fallbacks_use_shared_provider_context_helper():
-    local_run_py = (
-        REPO / "api" / "runs" / "local.py"
-    ).read_text(encoding="utf-8")
-    assert local_run_py.count("_context_length_lookup_inputs_for_model(") >= 2
-    assert "_cfg_base_url = getattr(agent, 'base_url', '') or resolved_base_url or ''" in local_run_py
-    assert "base_url=_cfg_base_url" in local_run_py
-    assert "config_context_length=_cfg_ctx_len" in local_run_py
-    assert "provider=_cfg_provider" in local_run_py
-    assert "custom_providers=_cfg_custom_providers" in local_run_py
-    assert "_cfg_base_url" in local_run_py
+def test_streaming_fallbacks_use_shared_provider_context_helper(monkeypatch):
+    """Live SSE and terminal projection keep one provider-aware lookup policy."""
+    from types import SimpleNamespace
+
+    from api.runs import local_context_window, local_usage
+
+    lookup_calls = []
+
+    def lookup(model, provider, **kwargs):
+        lookup_calls.append((model, provider, kwargs))
+        return SimpleNamespace(
+            base_url="https://provider.example/v1",
+            api_key="context-key",
+            config_context_length=777000,
+            provider="openrouter",
+            custom_providers=[{"name": "unused"}],
+        )
+
+    monkeypatch.setattr(
+        local_context_window, "_context_length_lookup_inputs_for_model", lookup
+    )
+    monkeypatch.setattr(
+        local_usage, "_context_length_lookup_inputs_for_model", lookup
+    )
+    _install_fake_context_resolver(monkeypatch)
+
+    agent = SimpleNamespace(
+        model="provider-model",
+        provider="openrouter",
+        base_url="",
+        api_key="",
+        context_compressor=SimpleNamespace(context_length=0),
+    )
+    projection = local_context_window.ContextWindowProjection.from_agent(
+        agent,
+        resolved_model="provider-model",
+        resolved_provider="openrouter",
+        resolved_base_url="",
+        resolved_api_key="",
+        config={},
+    )
+    tracker = local_usage.LocalUsageTracker(
+        session_id="issue-3717",
+        session_getter=lambda: SimpleNamespace(profile=None),
+        agent_getter=lambda: agent,
+    )
+
+    assert projection.context_length == 777000
+    assert tracker._resolved_context_length(agent.context_compressor, tracker._session()) == 777000
+    assert [provider for _model, provider, _kwargs in lookup_calls] == [
+        "openrouter",
+        "openrouter",
+    ]
 
 
 def test_route_helper_keeps_all_context_length_sources_aligned():

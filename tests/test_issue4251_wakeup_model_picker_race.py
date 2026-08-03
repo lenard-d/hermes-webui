@@ -249,7 +249,14 @@ def test_dispatch_stamp_snapshots_provider_under_agent_lock(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(local_entrypoint, "_get_session_agent_lock", lambda _session_id: PickerUpdateLock())
+    # The entrypoint composes LocalRunDependencies at invocation time. Inject
+    # the lock through that public composition seam instead of restoring the
+    # removed private forwarding global.
+    monkeypatch.setattr(
+        local_entrypoint,
+        "session_agent_lock",
+        lambda _session_id: PickerUpdateLock(),
+    )
 
     _run_streaming_turn(
         monkeypatch,

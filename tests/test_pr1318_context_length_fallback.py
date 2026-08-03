@@ -1,114 +1,127 @@
-"""Regression test for #1318 fallback (#1344 follow-up).
+"""Regression coverage for #1318/#1344 context-window metadata fallback.
 
-PR #1318 / #1341 / a5c10d5 (in v0.50.246) persisted context_length to the
-session when agent.context_compressor was present. But for fresh agents or
-interrupted streams, context_compressor may be absent or report 0 — leaving
-the context-ring indicator showing 0% even with the writer in place.
-
-This follow-up adds a fallback to agent.model_metadata.get_model_context_length()
-that resolves the model's static context window when the compressor didn't.
-
-Sourced from @jasonjcwu's PR #1344, extracted into a focused follow-up.
-
-Tests:
-1. Writer block contains the fallback after the compressor block
-2. Fallback gates on s.context_length being 0/falsy
-3. Fallback uses agent.model + agent.base_url
-4. Fallback exception is silently swallowed (older agent builds)
-5. Fallback runs before s.save() so the value is persisted
+The terminal projection owns the fallback now: it resolves metadata only when
+the agent compressor has no context window, then projects that answer onto the
+durable session and terminal usage payload. These checks deliberately exercise
+that owner instead of the former monolithic streaming implementation.
 """
-import re
-from pathlib import Path
 
-STREAMING = (
-    Path(__file__).resolve().parent.parent
-    / "api"
-    / "runs"
-    / "local.py"
-)
+import sys
+import types
 
 
-def _persistence_block():
-    """Return the source range covering the post-merge per-turn save block."""
-    src = STREAMING.read_text(encoding="utf-8")
-    start = src.find("Persist reasoning trace in the session")
-    assert start != -1, "Reasoning trace marker not found in the local-run owner"
-    save_match = re.search(r"\n[ \t]+s\.save\(\)", src[start:])
-    assert save_match is not None, "s.save() not found after the reasoning trace marker"
-    end = start + save_match.start()
-    # Include the s.save() line so we can verify ordering
-    end = src.find("\n", end + 1)
-    return src[start:end]
+def _install_metadata_resolver(monkeypatch, resolver):
+    module = types.ModuleType("agent.model_metadata")
+    module.get_model_context_length = resolver
+    package = sys.modules.get("agent")
+    if package is None:
+        package = types.ModuleType("agent")
+        package.__path__ = []
+        monkeypatch.setitem(sys.modules, "agent", package)
+    monkeypatch.setitem(sys.modules, "agent.model_metadata", module)
 
 
-def test_fallback_uses_model_metadata():
-    """Block must import and call get_model_context_length on missing compressor data."""
-    block = _persistence_block()
-    assert "from agent.model_metadata import get_model_context_length" in block, (
-        "Fallback must import get_model_context_length from agent.model_metadata"
-    )
-    assert "get_model_context_length(" in block, (
-        "Fallback must call get_model_context_length()"
-    )
+def _project(*, compressor_length=0, resolver_config=None, base_url="https://api.example/v1"):
+    from api.runs.local_context_window import ContextWindowProjection
 
-
-def test_fallback_gates_on_falsy_context_length():
-    """Fallback runs when the compressor didn't populate s.context_length.
-
-    The gate must still check s.context_length being falsy — if the compressor
-    set context_length but it was 0, we want the fallback to fire. (#3256/#3263
-    widened the gate to ALSO fire on `_skip_cc_cl` — a non-default model whose
-    compressor carried the stale global cap — so the gate is now
-    `(not getattr(s, 'context_length', 0)) or _skip_cc_cl`. The falsy-check
-    remains; this test asserts that invariant is intact, not the exact spelling.)
-    """
-    block = _persistence_block()
-    # The conditional must still reference s.context_length being falsy.
-    assert (
-        "not getattr(s, 'context_length'" in block
-        or "not s.context_length" in block
-    ), "Fallback must still gate on s.context_length being falsy"
-
-
-def test_fallback_passes_model_and_base_url():
-    """Fallback must source the model and base_url from the agent itself."""
-    block = _persistence_block()
-    # Must reference both agent.model and agent.base_url in the call
-    assert "agent, 'model'" in block, "Fallback must read agent.model"
-    assert "agent, 'base_url'" in block, "Fallback must read agent.base_url"
-
-
-def test_fallback_exception_is_swallowed():
-    """If get_model_context_length raises (older agent build, network error,
-    bad provider config), the fallback must not break s.save()."""
-    block = _persistence_block()
-    # Must wrap the import + call in try/except
-    fallback_section = block[block.find("Fallback"):]
-    assert "try:" in fallback_section, "Fallback must use try/except"
-    # except Exception: pass-style — old agent builds may not have this helper at all
-    assert "except Exception:" in fallback_section, (
-        "Fallback must catch broad Exception (older agent builds may not have the helper)"
+    return ContextWindowProjection.from_agent(
+        types.SimpleNamespace(
+            model="fallback-model",
+            base_url=base_url,
+            api_key="",
+            context_compressor=types.SimpleNamespace(
+                context_length=compressor_length,
+                threshold_tokens=6000,
+                last_prompt_tokens=1234,
+            ),
+        ),
+        resolved_model="fallback-model",
+        resolved_provider="openrouter",
+        resolved_base_url="",
+        resolved_api_key="",
+        config=resolver_config or {},
     )
 
 
-def test_fallback_runs_before_save():
-    """The fallback must mutate s.context_length BEFORE s.save() so the value lands on disk."""
-    block = _persistence_block()
-    fallback_idx = block.find("get_model_context_length")
-    save_idx = block.rfind("s.save()")
-    assert fallback_idx != -1 and save_idx != -1
-    assert fallback_idx < save_idx, (
-        "Fallback must run BEFORE s.save() — otherwise the resolved context_length "
-        "is not persisted to the session JSON."
-    )
+def test_fallback_uses_model_metadata_when_compressor_has_no_window(monkeypatch):
+    calls = []
+
+    def resolver(model, base_url, **kwargs):
+        calls.append((model, base_url, kwargs))
+        return 1_000_000
+
+    _install_metadata_resolver(monkeypatch, resolver)
+    projection = _project()
+
+    assert projection.context_length == 1_000_000
+    assert len(calls) == 1
+    assert calls[0][:2] == ("fallback-model", "https://api.example/v1")
 
 
-def test_fallback_assigns_context_length_when_resolved():
-    """The fallback must assign s.context_length when get_model_context_length returns a non-zero value."""
-    block = _persistence_block()
-    fallback_section = block[block.find("Fallback"):]
-    # Must have an `if _resolved_cl:` guard followed by `s.context_length = _resolved_cl`
-    assert "_resolved_cl" in fallback_section, "Fallback must capture the result"
-    assert "s.context_length = _resolved_cl" in fallback_section, (
-        "Fallback must assign the resolved value to s.context_length"
+def test_model_metadata_refresh_replaces_a_stale_compressor_window(monkeypatch):
+    calls = []
+    _install_metadata_resolver(
+        monkeypatch,
+        lambda *_args, **_kwargs: calls.append(True) or 1_000_000,
     )
+
+    projection = _project(compressor_length=200_000)
+
+    assert projection.context_length == 1_000_000
+    assert projection.threshold_tokens == 30_000
+    assert calls == [True]
+
+
+def test_fallback_passes_agent_model_and_base_url(monkeypatch):
+    seen = {}
+
+    def resolver(model, base_url, **kwargs):
+        seen.update(model=model, base_url=base_url, kwargs=kwargs)
+        return 400_000
+
+    _install_metadata_resolver(monkeypatch, resolver)
+    assert _project(base_url="https://custom.example/v1").context_length == 400_000
+    assert seen["model"] == "fallback-model"
+    assert seen["base_url"] == "https://custom.example/v1"
+
+
+def test_fallback_exception_is_non_fatal(monkeypatch):
+    _install_metadata_resolver(
+        monkeypatch,
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("metadata unavailable")),
+    )
+
+    assert _project().context_length == 0
+
+
+def test_fallback_retries_legacy_metadata_signature(monkeypatch):
+    calls = []
+
+    def legacy_resolver(model, base_url, **kwargs):
+        calls.append((model, base_url, kwargs))
+        if kwargs:
+            raise TypeError("old agent signature")
+        return 256_000
+
+    _install_metadata_resolver(monkeypatch, legacy_resolver)
+
+    assert _project().context_length == 256_000
+    assert len(calls) == 2
+    assert calls[0][2]
+    assert calls[1][2] == {}
+
+
+def test_fallback_projection_persists_the_resolved_context_window(monkeypatch):
+    _install_metadata_resolver(monkeypatch, lambda *_args, **_kwargs: 512_000)
+    projection = _project()
+    session = types.SimpleNamespace(
+        context_length=0,
+        threshold_tokens=0,
+        last_prompt_tokens=0,
+    )
+
+    projection.persist_on(session)
+
+    assert session.context_length == 512_000
+    assert session.threshold_tokens == 6000
+    assert session.last_prompt_tokens == 1234

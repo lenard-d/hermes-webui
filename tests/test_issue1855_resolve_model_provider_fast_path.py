@@ -308,8 +308,10 @@ class TestChatStartHandlerStillStagesResolveModelProvider:
     """
 
     def test_chat_start_emits_resolve_model_provider_stage(self):
-        src = _read("api/routes_parts/chat_runs.py")
-        # /api/chat/start handler — locate by the resolve_model_provider diag.stage call.
+        # The route facade delegates to the browser chat-start owner. Keep this
+        # assertion on that owner rather than requiring the facade to re-export
+        # an implementation detail after the routes split.
+        src = _read("api/routes_parts/chat_turns.py")
         assert 'diag.stage("resolve_model_provider")' in src, (
             "/api/chat/start handler must emit a 'resolve_model_provider' "
             "diagnostic stage so production slow-request alerts (PR #1911) "

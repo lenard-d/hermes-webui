@@ -18,60 +18,51 @@ post-merge save) writes from getattr(agent, 'context_compressor', None).
 """
 import inspect
 import json
-import re
-from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlparse
 
 from api.sessions import session_detail_projection
 
-ROOT = Path(__file__).resolve().parent.parent
-STREAMING = ROOT / "api" / "runs" / "local.py"
+def test_terminal_projection_persists_context_fields_on_session(monkeypatch):
+    """The terminal owner projects all three compressor fields before save."""
+    from types import SimpleNamespace
 
+    from api.runs import local_context_window
 
-def test_streaming_persists_context_fields_on_session_before_save():
-    """The post-merge per-turn save block must write the three fields to the
-    session BEFORE calling s.save(), otherwise the values never reach disk."""
-    src = STREAMING.read_text(encoding="utf-8")
-
-    # Find the post-merge save block — anchored on the unique reasoning trace
-    # marker right above the persistence block.
-    block_start = src.find("Persist reasoning trace in the session")
-    assert block_start != -1, "Reasoning-trace marker not found in streaming.py"
-
-    # Save call follows shortly after
-    save_match = re.search(r"\n[ \t]+s\.save\(\)", src[block_start:])
-    assert save_match is not None, "s.save() not found after the post-merge marker"
-    save_call = block_start + save_match.start()
-    # Limit bumped to 16000 by #3455 (server-side <think> split added to the
-    # pre-save reasoning-persist block, + the anchor moved to the comment marker
-    # which sits a few lines above the former `if` anchor). The pre-save block
-    # legitimately grew here. NOTE: this byte-distance assertion is itself brittle
-    # (it must be bumped whenever a legitimate pre-save mutation block is added) — a
-    # structural check (presence of s.save() shortly after the post-merge marker)
-    # would be more durable; left as a follow-up. Earlier limits: 9000 (cancellation
-    # guards) → 13000 (#3263 v1) → 15000 (#3256/#3263 dual-gate).
-    assert save_call - block_start < 18000, (
-        "s.save() should be close to the post-merge marker — block expanded unexpectedly. "
-        "If you've added a new pre-save mutation block here, bump this limit."
+    monkeypatch.setattr(
+        local_context_window,
+        "_resolve_model_context_length",
+        lambda *_args, **_kwargs: 0,
+    )
+    projection = local_context_window.ContextWindowProjection.from_agent(
+        SimpleNamespace(
+            model="context-model",
+            base_url="",
+            api_key="",
+            context_compressor=SimpleNamespace(
+                context_length=200_000,
+                threshold_tokens=180_000,
+                last_prompt_tokens=45_123,
+            ),
+        ),
+        resolved_model="context-model",
+        resolved_provider="openrouter",
+        resolved_base_url="",
+        resolved_api_key="",
+        config={},
+    )
+    session = SimpleNamespace(
+        context_length=0,
+        threshold_tokens=0,
+        last_prompt_tokens=0,
     )
 
-    block = src[block_start:save_call]
+    projection.persist_on(session)
 
-    # The three fields must all be assigned on s within this block
-    assert "s.context_length" in block, (
-        "s.context_length must be written before s.save() in the post-merge block"
-    )
-    assert "s.threshold_tokens" in block, (
-        "s.threshold_tokens must be written before s.save() in the post-merge block"
-    )
-    assert "s.last_prompt_tokens" in block, (
-        "s.last_prompt_tokens must be written before s.save() in the post-merge block"
-    )
-
-    # The values must come from the agent's context_compressor
-    assert "context_compressor" in block, (
-        "Values must be sourced from agent.context_compressor"
+    assert (session.context_length, session.threshold_tokens, session.last_prompt_tokens) == (
+        200_000,
+        180_000,
+        45_123,
     )
 
 

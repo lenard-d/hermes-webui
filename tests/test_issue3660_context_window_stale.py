@@ -57,7 +57,10 @@ def test_session_load_prefers_positive_last_usage_context_over_stale_snapshot():
 def test_deferred_model_resolve_does_not_zero_out_existing_context_window():
     block_start = SESSIONS_JS.find("function _resolveSessionModelForDisplaySoon")
     assert block_start != -1, "deferred model resolver not found"
-    block_end = SESSIONS_JS.find("// Tracks whether the current session has older messages", block_start)
+    # The resolver now lives in the session post-load module. Bound the test at
+    # the next exported transcript-loading seam, not an unrelated comment that
+    # belonged to the former monolithic sessions asset.
+    block_end = SESSIONS_JS.find("const _INITIAL_MSG_LIMIT", block_start)
     assert block_end != -1, "deferred model resolver end marker not found"
     block = SESSIONS_JS[block_start:block_end]
 

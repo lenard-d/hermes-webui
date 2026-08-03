@@ -1,9 +1,10 @@
 """Regression checks for #1896 — context-length fallback ignores config overrides.
 
-The two `get_model_context_length()` fallback callsites in `api/streaming.py`
-(one for session persistence around line ~2950, one for the SSE usage payload
-around line ~3050) were calling the resolver with only `model + base_url`,
-omitting `config_context_length`, `provider`, and `custom_providers`.
+The former session-persistence and terminal-SSE fallback callsites are now one
+``ContextWindowProjection`` owner. It resolves the window once, then projects
+that same answer into durable session metadata and the terminal usage payload.
+Its metadata lookup must still carry `config_context_length`, `provider`, and
+`custom_providers` and must still support older Hermes-agent signatures.
 
 When the agent's `context_compressor` reports 0 (fresh / cached / transitioning
 agent), context-length resolution falls all the way through to
@@ -20,13 +21,12 @@ These tests pin the call shape so future refactors can't silently drop the
 config-override args again.
 """
 
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-STREAMING_PY = (REPO / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 SESSION_MODELS_PY = (
     (REPO / "api" / "sessions" / "session_model_context.py").read_text(
         encoding="utf-8"
@@ -35,118 +35,105 @@ SESSION_MODELS_PY = (
 )
 
 
-# Both fallback callsites must pass these kwargs into get_model_context_length.
-_REQUIRED_KWARGS = (
-    "config_context_length=_cfg_ctx_len",
-    "provider=_cfg_provider",
-    "custom_providers=_cfg_custom_providers",
-)
+def _install_context_length_resolver(monkeypatch, resolver):
+    module = types.ModuleType("agent.model_metadata")
+    module.get_model_context_length = resolver
+    if "agent" not in sys.modules:
+        package = types.ModuleType("agent")
+        package.__path__ = []
+        monkeypatch.setitem(sys.modules, "agent", package)
+    monkeypatch.setitem(sys.modules, "agent.model_metadata", module)
 
 
-def _both_callsites():
-    """Return the two PRIMARY `get_model_context_length(...)` callsites.
+def _projection(
+    *,
+    config,
+    model="configured-model",
+    provider="openrouter",
+    base_url="",
+    api_key="runtime-key",
+):
+    from api.runs.local_context_window import ContextWindowProjection
 
-    Yields the literal text of each primary callsite. The two intentional
-    legacy 2-arg fallback callsites (gated under `except TypeError:`) are
-    excluded because they exist precisely to support older hermes-agent
-    builds where the new kwargs aren't accepted yet.
-    """
-    out = []
-    src = STREAMING_PY
-    cursor = 0
-    while True:
-        # Match either `_get_cl(` or `get_model_context_length(` (renamed alias).
-        idx_open = src.find("_resolved_cl = get_model_context_length(", cursor)
-        idx_fb = src.find("_fb_cl = _get_cl(", cursor)
-        idx_legacy = src.find("_resolved_cl = _legacy_cl(", cursor)
-        # Walk to whichever callsite comes first.
-        candidates = [i for i in (idx_open, idx_fb, idx_legacy) if i != -1]
-        if not candidates:
-            break
-        idx = min(candidates)
-        # Walk balanced parens.
-        depth = 0
-        end = idx
-        while end < len(src):
-            c = src[end]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    end += 1
-                    break
-            end += 1
-        block = src[idx:end]
-        cursor = end
-        # Skip legacy fallbacks (gated under `except TypeError:` for older builds).
-        # These are intentionally 2-arg.
-        # Look back ~200 chars for the legacy marker.
-        lookback = src[max(0, idx - 400):idx]
-        is_legacy_fallback = (
-            "except TypeError:" in lookback
-            and "_legacy_cl" in block + lookback
-        ) or "_legacy_cl(" in block
-        # Also exclude any callsite where the immediately preceding line
-        # is part of a TypeError fallback block (the second callsite shape:
-        # bare `_fb_cl = _get_cl(` re-call inside `except TypeError:`).
-        if "except TypeError:" in lookback and "_get_cl(" in block:
-            # Check whether this is the legacy retry by seeing if there's
-            # NO `config_context_length=` in the block AND a `try:` follows
-            # `except TypeError:` in lookback. Simpler heuristic: legacy
-            # fallback blocks are always WITHOUT kwargs and always inside
-            # an `except TypeError:` arm. Skip them.
-            if "config_context_length=" not in block:
-                is_legacy_fallback = True
-        if not is_legacy_fallback:
-            out.append(block)
-    return out
-
-
-def test_two_fallback_callsites_present():
-    """Sanity: two fallback callsites still exist (one for session save, one
-    for SSE usage payload). If a refactor collapsed them, this test alerts
-    so the consolidated callsite can be re-checked for correctness."""
-    blocks = _both_callsites()
-    assert len(blocks) >= 2, (
-        f"Expected at least 2 get_model_context_length() fallback callsites "
-        f"in api/streaming.py; found {len(blocks)}. If they were intentionally "
-        f"consolidated into one helper, update this test to point at the helper."
+    agent = types.SimpleNamespace(
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        context_compressor=types.SimpleNamespace(
+            context_length=0,
+            threshold_tokens=0,
+            last_prompt_tokens=321,
+        ),
+    )
+    return ContextWindowProjection.from_agent(
+        agent,
+        resolved_model=model,
+        resolved_provider=provider,
+        resolved_base_url="",
+        resolved_api_key="",
+        config=config,
     )
 
 
-def test_both_callsites_pass_config_context_length():
-    """Both callsites must pass `config_context_length=_cfg_ctx_len`."""
-    blocks = _both_callsites()
-    for i, block in enumerate(blocks):
-        assert "config_context_length=_cfg_ctx_len" in block, (
-            f"Callsite #{i+1} is missing `config_context_length=_cfg_ctx_len`. "
-            f"Without it, users who set `model.context_length: 1048576` in "
-            f"config.yaml get 256K from the default fallback. See #1896.\n\n"
-            f"Block:\n{block}"
-        )
+def test_context_projection_resolves_once_and_projects_to_session_and_usage(monkeypatch):
+    """The consolidated owner gives persistence and terminal SSE one answer."""
+    calls = []
+
+    def resolver(model, base_url, **kwargs):
+        calls.append((model, base_url, kwargs))
+        return kwargs["config_context_length"]
+
+    _install_context_length_resolver(monkeypatch, resolver)
+    projection = _projection(
+        config={
+            "model": {"default": "configured-model", "context_length": 1_048_576},
+            "custom_providers": [],
+        }
+    )
+    session = types.SimpleNamespace(
+        context_length=0,
+        threshold_tokens=0,
+        last_prompt_tokens=0,
+    )
+    usage = {}
+    projection.persist_on(session)
+    projection.enrich_usage(usage, session=session)
+
+    assert len(calls) == 1
+    assert projection.context_length == 1_048_576
+    assert session.context_length == 1_048_576
+    assert usage["context_length"] == 1_048_576
+    assert usage["last_prompt_tokens"] == 321
 
 
-def test_both_callsites_pass_provider():
-    """Both callsites must pass the effective provider into the resolver."""
-    blocks = _both_callsites()
-    for i, block in enumerate(blocks):
-        assert "provider=_cfg_provider" in block, (
-            f"Callsite #{i+1} is missing `provider=_cfg_provider`. "
-            f"Provider is needed for the registry lookup step (models.dev "
-            f"provider-aware lookup). See #1896.\n\nBlock:\n{block}"
-        )
+def test_context_projection_passes_provider_and_custom_provider_config(monkeypatch):
+    """The metadata resolver receives the active provider and custom catalog."""
+    calls = []
 
+    def resolver(model, base_url, **kwargs):
+        calls.append((model, base_url, kwargs))
+        return kwargs["config_context_length"]
 
-def test_both_callsites_pass_custom_providers():
-    """Both callsites must pass `custom_providers=_cfg_custom_providers`."""
-    blocks = _both_callsites()
-    for i, block in enumerate(blocks):
-        assert "custom_providers=_cfg_custom_providers" in block, (
-            f"Callsite #{i+1} is missing `custom_providers=_cfg_custom_providers`. "
-            f"This is needed for the `custom_providers` per-model context_length "
-            f"override path. See #1896.\n\nBlock:\n{block}"
-        )
+    custom_providers = [
+        {
+            "name": "llm-proxy",
+            "base_url": "https://proxy.example/v1",
+            "models": {"custom-model": {"context_length": 777_000}},
+        }
+    ]
+    _install_context_length_resolver(monkeypatch, resolver)
+    projection = _projection(
+        model="custom-model",
+        provider="custom:llm-proxy",
+        config={"custom_providers": custom_providers},
+    )
+
+    _model, base_url, kwargs = calls[-1]
+    assert projection.context_length == 777_000
+    assert base_url == "https://proxy.example/v1"
+    assert kwargs["provider"] == "custom:llm-proxy"
+    assert kwargs["custom_providers"] is custom_providers
+    assert kwargs["config_context_length"] == 777_000
 
 
 def test_config_context_length_parsed_safely():
@@ -164,23 +151,35 @@ def test_legacy_signature_fallback_present():
     """Older hermes-agent builds may not yet have config_context_length on
     get_model_context_length(). The fix must catch TypeError and retry with
     the legacy 2-arg form so the indicator still resolves *something*."""
-    # The except TypeError clause should mention the legacy retry comment OR
-    # contain a 2-arg fallback call.
-    assert "except TypeError:" in STREAMING_PY, (
-        "Both callsites must catch TypeError to support older hermes-agent "
-        "builds whose get_model_context_length signature pre-dates the new "
-        "kwargs. Without this fallback, an older agent build would crash "
-        "the save/SSE path instead of degrading to a 2-arg call."
-    )
+    calls = []
+
+    def legacy_resolver(model, base_url, **kwargs):
+        calls.append((model, base_url, kwargs))
+        if kwargs:
+            raise TypeError("old agent signature")
+        return 512_000
+
+    from pytest import MonkeyPatch
+
+    monkeypatch = MonkeyPatch()
+    try:
+        _install_context_length_resolver(monkeypatch, legacy_resolver)
+        projection = _projection(config={"custom_providers": []})
+    finally:
+        monkeypatch.undo()
+
+    assert projection.context_length == 512_000
+    assert len(calls) == 2
+    assert calls[0][2]
+    assert calls[1][2] == {}
 
 
 def test_cfg_custom_providers_resolved_from_cfg_dict():
     """The kwargs source must be the per-profile config (`_cfg`), not a
     module-level snapshot — otherwise profile switches with different
     custom_providers wouldn't take effect."""
-    # The parsing now lives in the shared route helper so session-load,
-    # session-save, and SSE fallbacks cannot drift.
-    assert "_context_length_lookup_inputs_for_model(" in STREAMING_PY
+    # The parsing lives in the shared model-context owner so session load,
+    # terminal projection, and live SSE cannot drift.
     assert 'cfg.get("custom_providers")' in SESSION_MODELS_PY, (
         "_cfg_custom_providers must be sourced from `cfg.get('custom_providers')` "
         "(per-profile config) so profile-scoped custom_providers entries work."
@@ -415,12 +414,30 @@ def test_routes_session_model_resolver_passes_custom_provider_api_key(monkeypatc
     assert seen["kwargs"]["api_key"] == "sk-test-route"
 
 
-def test_streaming_context_length_fallbacks_pass_api_key():
-    """#4059: both streaming fallback probes must pass the resolved api_key."""
-    blocks = _both_callsites()
-    for i, block in enumerate(blocks):
-        assert "api_key=" in block, (
-            f"Callsite #{i+1} is missing api_key=. Authenticated custom "
-            f"provider /v1/models probes then fail and fall back to 256K. "
-            f"See #4059.\n\nBlock:\n{block}"
-        )
+def test_terminal_context_projection_passes_custom_provider_api_key(monkeypatch):
+    """#4059: the terminal projection probes custom-provider metadata with auth."""
+    calls = []
+
+    def resolver(model, base_url, **kwargs):
+        calls.append((model, base_url, kwargs))
+        return 500_000 if kwargs.get("api_key") == "sk-test-terminal" else 256_000
+
+    _install_context_length_resolver(monkeypatch, resolver)
+    projection = _projection(
+        model="custom-model-id",
+        provider="custom:llm-proxy",
+        api_key="",
+        config={
+            "custom_providers": [
+                {
+                    "name": "llm-proxy",
+                    "base_url": "https://llm.example.test/v1",
+                    "api_key": "sk-test-terminal",
+                    "model": "custom-model-id",
+                }
+            ]
+        },
+    )
+
+    assert projection.context_length == 500_000
+    assert calls[-1][2]["api_key"] == "sk-test-terminal"
