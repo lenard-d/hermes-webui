@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+UI_STATE_JS = ROOT / "static" / "modules" / "ui" / "state.js"
 
 
 def read(path: str) -> str:
@@ -21,9 +22,9 @@ def test_workspace_api_401_redirect_uses_relative_login_path():
 
 
 def test_ui_401_redirect_helper_uses_relative_login_path():
-    src = family_source("ui")
+    src = UI_STATE_JS.read_text(encoding="utf-8")
     assert "function _redirectIfUnauth" in src
-    assert "window.location.href='login?next='" in src, (
+    assert "'login?next='+" in src, (
         "UI auth-expiry redirect must stay under the current subpath mount."
     )
     assert "window.location.href='/login?next='" not in src

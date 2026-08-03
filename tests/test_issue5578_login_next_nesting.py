@@ -20,6 +20,7 @@ from api.routes import _safe_login_redirect_path as guard
 ROOT = Path(__file__).resolve().parents[1]
 LOGIN_JS = (ROOT / "static" / "login.js").read_text(encoding="utf-8")
 WORKSPACE_JS = (ROOT / "static" / "workspace.js").read_text(encoding="utf-8")
+UI_STATE_JS = (ROOT / "static" / "modules" / "ui" / "state.js").read_text(encoding="utf-8")
 
 
 # ── server guard: the self-nesting cases the bug exploited ──────────────────
@@ -109,10 +110,10 @@ class TestClientGuardsWired:
         # #5578 Codex round-2: workspace.js was fixed but two more client 401
         # redirect helpers (ui.js _redirectIfUnauth, boot.js redirectToLogin)
         # also nested the login URL. All three must carry the on-login guard.
-        UI_JS = family_source("ui")
+        UI_JS = UI_STATE_JS
         BOOT_JS = family_source("boot")
-        assert "login$/.test(_p)" in UI_JS, "ui.js _redirectIfUnauth must guard the login page"
-        assert "login$/.test(_p)" in BOOT_JS, "boot.js redirectToLogin must guard the login page"
+        assert "login$/.test(" in UI_JS, "ui.js _redirectIfUnauth must guard the login page"
+        assert "login$/.test(" in BOOT_JS, "boot.js redirectToLogin must guard the login page"
 
 
 class TestServerCheckAuthGuard:
