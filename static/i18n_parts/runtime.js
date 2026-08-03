@@ -1,5 +1,36 @@
-// Active locale — defaults to English; overridden by loadLocale() at boot.
+var SUPPORTED_LOCALES = Object.freeze([
+  { code: 'en', label: 'English', asset: 'en' },
+  { code: 'it', label: 'Italiano', asset: 'it' },
+  { code: 'ja', label: '日本語', asset: 'ja' },
+  { code: 'ru', label: 'Русский', asset: 'ru' },
+  { code: 'es', label: 'Español', asset: 'es' },
+  { code: 'de', label: 'Deutsch', asset: 'de' },
+  { code: 'zh', label: '简体中文', asset: 'zh' },
+  { code: 'zh-Hant', label: '繁體中文', asset: 'zh_hant' },
+  { code: 'pt', label: 'Português', asset: 'pt' },
+  { code: 'ko', label: '한국어', asset: 'ko' },
+  { code: 'fr', label: 'Français', asset: 'fr' },
+  { code: 'cs', label: 'Čeština', asset: 'cs' },
+  { code: 'tr', label: 'Türkçe', asset: 'tr' },
+  { code: 'pl', label: 'Polski', asset: 'pl' },
+  { code: 'vi', label: 'Tiếng Việt', asset: 'vi' },
+]);
+const _SUPPORTED_LOCALE_SLUGS = Object.freeze(Object.fromEntries(
+  SUPPORTED_LOCALES.map(({code, asset}) => [code, asset])
+));
+const _localeLoadPromises = new Map();
+const _localeRuntimeAssetUrl = (() => {
+  try {
+    return document.currentScript?.src || '';
+  } catch (_) {
+    return '';
+  }
+})();
+
+// Active locale — English is the only eager bundle; loadLocale() requests any
+// saved non-English bundle without putting every translation on the cold path.
 let _locale = LOCALES.en;
+let _requestedLocale = 'en';
 
 /**
  * Resolve an incoming locale tag to a known LOCALES key.
@@ -12,26 +43,66 @@ function resolveLocale(lang) {
   if (typeof lang !== 'string') return null;
   const raw = lang.trim();
   if (!raw) return null;
-  if (LOCALES[raw]) return raw;
+  if (_SUPPORTED_LOCALE_SLUGS[raw]) return raw;
 
   const lower = raw.toLowerCase().replace(/_/g, '-');
 
   // Case-insensitive direct match first.
-  const direct = Object.keys(LOCALES).find((k) => k.toLowerCase() === lower);
+  const supportedLocales = Object.keys(_SUPPORTED_LOCALE_SLUGS);
+  const direct = supportedLocales.find((k) => k.toLowerCase() === lower);
   if (direct) return direct;
 
   // Common Chinese variants.
   if (lower === 'zh' || lower.startsWith('zh-cn') || lower.startsWith('zh-sg') || lower.startsWith('zh-hans')) {
-    return LOCALES.zh ? 'zh' : null;
+    return 'zh';
   }
   if (lower.startsWith('zh-tw') || lower.startsWith('zh-hk') || lower.startsWith('zh-mo') || lower.startsWith('zh-hant')) {
-    return LOCALES['zh-Hant'] ? 'zh-Hant' : null;
+    return 'zh-Hant';
   }
 
   // Fallback to base language subtag (e.g. en-US -> en).
   const base = lower.split('-')[0];
-  const baseMatch = Object.keys(LOCALES).find((k) => k.toLowerCase() === base);
+  const baseMatch = supportedLocales.find((k) => k.toLowerCase() === base);
   return baseMatch || null;
+}
+
+function _localeAssetUrl(resolved) {
+  const filename = `locale-${_SUPPORTED_LOCALE_SLUGS[resolved]}.js`;
+  if (_localeRuntimeAssetUrl) {
+    const runtimeUrl = new URL(_localeRuntimeAssetUrl);
+    const localeUrl = new URL(filename, runtimeUrl);
+    localeUrl.search = runtimeUrl.search;
+    return localeUrl.href;
+  }
+  return new URL(`static/i18n_parts/${filename}`, document.baseURI).href;
+}
+
+function _loadLocaleBundle(resolved) {
+  if (LOCALES[resolved]) return Promise.resolve(LOCALES[resolved]);
+  const pending = _localeLoadPromises.get(resolved);
+  if (pending) return pending;
+
+  const promise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = _localeAssetUrl(resolved);
+    script.async = true;
+    script.onload = () => {
+      if (LOCALES[resolved]) resolve(LOCALES[resolved]);
+      else reject(new Error(`Locale bundle did not register: ${resolved}`));
+    };
+    script.onerror = () => reject(new Error(`Failed to load locale bundle: ${resolved}`));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    _localeLoadPromises.delete(resolved);
+    throw error;
+  });
+  _localeLoadPromises.set(resolved, promise);
+  return promise;
+}
+
+function _activateLocale(resolved) {
+  _locale = LOCALES[resolved] || LOCALES.en;
+  document.documentElement.lang = _locale._speech || resolved;
 }
 
 /**
@@ -71,12 +142,30 @@ function t(key, ...args) {
  * Switch locale by language code (e.g. 'en', 'zh').
  * Persists to localStorage and updates the <html lang> attribute.
  * @param {string} lang
+ * @returns {Promise<string>} active canonical locale after loading
  */
 function setLocale(lang) {
   const resolved = resolveLocale(lang) || 'en';
-  _locale = LOCALES[resolved];
+  _requestedLocale = resolved;
   try { localStorage.setItem('hermes-lang', resolved); } catch (_) {}
-  document.documentElement.lang = _locale._speech || resolved;
+  if (LOCALES[resolved]) {
+    _activateLocale(resolved);
+    return Promise.resolve(resolved);
+  }
+
+  return _loadLocaleBundle(resolved).then(() => {
+    if (_requestedLocale !== resolved) return _requestedLocale;
+    _activateLocale(resolved);
+    applyLocaleToDOM();
+    return resolved;
+  }).catch((error) => {
+    console.warn('[hermes] Locale load failed; falling back to English:', error);
+    if (_requestedLocale === resolved) {
+      _activateLocale('en');
+      applyLocaleToDOM();
+    }
+    return 'en';
+  });
 }
 
 /**
@@ -133,6 +222,7 @@ function applyLocaleToDOM() {
 loadLocale();
 
 Object.assign(HermesI18n, {
+  supportedLocales: SUPPORTED_LOCALES,
   resolveLocale,
   resolvePreferredLocale,
   t,

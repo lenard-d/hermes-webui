@@ -449,14 +449,15 @@ export function _loadSettingsPreferences(settings, resolvedLanguage){
   // Send key preference
   const sendKeySel=$('settingsSendKey');
   if(sendKeySel){sendKeySel.value=settings.send_key||'enter';sendKeySel.addEventListener('change',_schedulePreferencesAutosave,{once:false});}
-  // Language preference — populate from LOCALES bundle
+  // Language preference — list every supported locale without eagerly loading
+  // every translation bundle onto the initial page path.
   const langSel=$('settingsLanguage');
   if(langSel){
     langSel.innerHTML='';
-    if(typeof LOCALES!=='undefined'){
-      for(const [code,bundle] of Object.entries(LOCALES)){
+    if(typeof SUPPORTED_LOCALES!=='undefined'){
+      for(const {code,label} of SUPPORTED_LOCALES){
         const opt=document.createElement('option');
-        opt.value=code;opt.textContent=bundle._label||code;
+        opt.value=code;opt.textContent=label||code;
         langSel.appendChild(opt);
       }
     }

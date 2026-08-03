@@ -293,20 +293,6 @@ const SHELL_ASSETS = [
   './static/i18n.js' + VQ,
   './static/i18n_parts/helpers.js' + VQ,
   './static/i18n_parts/locale-en.js' + VQ,
-  './static/i18n_parts/locale-it.js' + VQ,
-  './static/i18n_parts/locale-ja.js' + VQ,
-  './static/i18n_parts/locale-ru.js' + VQ,
-  './static/i18n_parts/locale-es.js' + VQ,
-  './static/i18n_parts/locale-de.js' + VQ,
-  './static/i18n_parts/locale-zh.js' + VQ,
-  './static/i18n_parts/locale-zh_hant.js' + VQ,
-  './static/i18n_parts/locale-pt.js' + VQ,
-  './static/i18n_parts/locale-ko.js' + VQ,
-  './static/i18n_parts/locale-fr.js' + VQ,
-  './static/i18n_parts/locale-cs.js' + VQ,
-  './static/i18n_parts/locale-tr.js' + VQ,
-  './static/i18n_parts/locale-pl.js' + VQ,
-  './static/i18n_parts/locale-vi.js' + VQ,
   './static/i18n_parts/runtime.js' + VQ,
   './static/workspace.js' + VQ,
   './static/workspace_parts/001-navigation.js' + VQ,
@@ -391,6 +377,25 @@ self.addEventListener('fetch', (event) => {
     url.pathname.includes('/health')
   ) {
     return; // let browser handle normally
+  }
+
+  // Translation bundles other than English are loaded only when selected.
+  // Cache each requested bundle after first use without downloading every
+  // language during service-worker installation.
+  if (/\/static\/i18n_parts\/locale-[a-z_]+\.js$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(new Request(event.request, { cache: 'no-store' })).then((response) => {
+        if (event.request.method === 'GET' && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request).then((cached) => cached || new Response('Offline', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      })))
+    );
+    return;
   }
 
   // Page navigations must be network-first. A stale cached './' response can

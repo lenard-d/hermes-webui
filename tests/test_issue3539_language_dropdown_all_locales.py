@@ -1,4 +1,4 @@
-"""Regression: the Settings language dropdown must list ALL locales in LOCALES.
+"""Regression: the Settings language dropdown must list every supported locale.
 
 #3539 (zh localization) briefly added an `allowed=['en','zh']` filter to the
 language `<select>` population in loadSettingsPanel(). Because saveSettings()
@@ -24,9 +24,10 @@ def _language_dropdown_block() -> str:
 
 def test_language_dropdown_lists_all_locales_no_allowlist():
     block = _language_dropdown_block()
-    # It must iterate every LOCALES entry...
-    assert "Object.entries(LOCALES)" in block, (
-        "the language dropdown must enumerate all LOCALES entries"
+    # It must iterate the complete lightweight metadata registry, not only the
+    # translation bundles that happen to have loaded already.
+    assert "SUPPORTED_LOCALES" in block, (
+        "the language dropdown must enumerate every supported locale"
     )
     # ...with NO hardcoded allow-list filter that drops existing locales.
     assert "allowed=[" not in block.replace(" ", "") and "allowed = [" not in block, (

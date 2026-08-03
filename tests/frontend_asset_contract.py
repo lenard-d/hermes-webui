@@ -402,7 +402,7 @@ def _numbered_parts(directory: str, suffix: str) -> tuple[Path, ...]:
 
 
 def family_asset_paths(family: str) -> tuple[Path, ...]:
-    """Return one family's required direct-load order without reading a manifest."""
+    """Return one family's complete implementation inventory."""
 
     if family == "style":
         return (STATIC_DIR / "style.css", *_numbered_parts("style_parts", ".css"))
@@ -507,6 +507,13 @@ def family_direct_asset_paths(family: str) -> tuple[Path, ...]:
     """Return browser entrypoints; native-module dependencies load by import."""
 
     entrypoint = family_entrypoint_path(family)
+    if family == "i18n":
+        return (
+            STATIC_DIR / "i18n.js",
+            STATIC_DIR / "i18n_parts" / "helpers.js",
+            STATIC_DIR / "i18n_parts" / "locale-en.js",
+            STATIC_DIR / "i18n_parts" / "runtime.js",
+        )
     if family in {"boot", "messages", "panels", "sessions", "ui"}:
         assert entrypoint is not None
         return (entrypoint,)
