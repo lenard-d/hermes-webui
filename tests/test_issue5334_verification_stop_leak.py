@@ -18,7 +18,11 @@ These tests pin the contract that a marker-flagged synthetic turn is dropped
 from the merged display transcript while a normal user message is preserved.
 """
 
-from api import streaming
+from api.runs.terminal_outcomes import (
+    _drop_synthetic_control_messages,
+    _is_synthetic_control_message,
+)
+from api.runs.transcript import _merge_display_messages_after_agent_result
 
 
 VERIFICATION_STOP_NUDGE = (
@@ -39,7 +43,7 @@ def test_verification_stop_synthetic_message_is_classified_as_control():
         "content": VERIFICATION_STOP_NUDGE,
         "_verification_stop_synthetic": True,
     }
-    assert streaming._is_synthetic_control_message(msg) is True
+    assert _is_synthetic_control_message(msg) is True
 
 
 def test_pre_verify_synthetic_message_is_classified_as_control():
@@ -48,19 +52,19 @@ def test_pre_verify_synthetic_message_is_classified_as_control():
         "content": "[System: run tests]",
         "_pre_verify_synthetic": True,
     }
-    assert streaming._is_synthetic_control_message(msg) is True
+    assert _is_synthetic_control_message(msg) is True
 
 
 def test_normal_user_message_is_not_classified_as_control():
-    assert streaming._is_synthetic_control_message(
+    assert _is_synthetic_control_message(
         {"role": "user", "content": "Please refactor the parser."}
     ) is False
     # A message that merely quotes the nudge text but lacks the marker is a real
     # message and must NOT be dropped (marker-based, not string-based, filter).
-    assert streaming._is_synthetic_control_message(
+    assert _is_synthetic_control_message(
         {"role": "user", "content": VERIFICATION_STOP_NUDGE}
     ) is False
-    assert streaming._is_synthetic_control_message("not a dict") is False
+    assert _is_synthetic_control_message("not a dict") is False
 
 
 def test_drop_synthetic_control_messages_filters_only_flagged_rows():
@@ -70,7 +74,7 @@ def test_drop_synthetic_control_messages_filters_only_flagged_rows():
         {"role": "user", "content": VERIFICATION_STOP_NUDGE, "_verification_stop_synthetic": True},
         {"role": "assistant", "content": "Fixed and verified."},
     ]
-    cleaned = streaming._drop_synthetic_control_messages(messages)
+    cleaned = _drop_synthetic_control_messages(messages)
     contents = [m.get("content") for m in cleaned]
     assert contents == ["Fix the bug.", "Fixed and verified."]
     assert all(
@@ -93,7 +97,7 @@ def test_verification_stop_nudge_never_appears_in_rendered_transcript():
         {"role": "assistant", "content": "Ran tests; all green. Fixed."},
     ]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = _merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
         result_messages,
@@ -103,7 +107,7 @@ def test_verification_stop_nudge_never_appears_in_rendered_transcript():
     # The internal nudge text must never reach the rendered transcript.
     assert all(VERIFICATION_STOP_NUDGE not in str(m.get("content") or "") for m in merged)
     # No leftover synthetic scaffolding rows.
-    assert all(not streaming._is_synthetic_control_message(m) for m in merged)
+    assert all(not _is_synthetic_control_message(m) for m in merged)
     # The real turn is preserved end to end.
     contents = [m.get("content") for m in merged]
     assert contents == ["Fix the bug.", "Ran tests; all green. Fixed."]
@@ -119,14 +123,14 @@ def test_pre_verify_nudge_never_appears_in_rendered_transcript():
         {"role": "assistant", "content": "Verified and clean."},
     ]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = _merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
         result_messages,
         "Ship the feature.",
     )
 
-    assert all(not streaming._is_synthetic_control_message(m) for m in merged)
+    assert all(not _is_synthetic_control_message(m) for m in merged)
     contents = [m.get("content") for m in merged]
     assert contents == ["Ship the feature.", "Verified and clean."]
 
@@ -148,7 +152,7 @@ def test_normal_user_message_is_not_excluded_from_transcript():
         {"role": "assistant", "content": "Second answer."},
     ]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = _merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
         result_messages,
@@ -183,7 +187,7 @@ def test_leaked_nudge_in_prior_display_is_scrubbed_on_next_settlement():
         {"role": "assistant", "content": "Test added."},
     ]
 
-    merged = streaming._merge_display_messages_after_agent_result(
+    merged = _merge_display_messages_after_agent_result(
         previous_display,
         previous_context,
         result_messages,
@@ -191,4 +195,4 @@ def test_leaked_nudge_in_prior_display_is_scrubbed_on_next_settlement():
     )
 
     assert all(VERIFICATION_STOP_NUDGE not in str(m.get("content") or "") for m in merged)
-    assert all(not streaming._is_synthetic_control_message(m) for m in merged)
+    assert all(not _is_synthetic_control_message(m) for m in merged)
