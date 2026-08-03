@@ -9,7 +9,6 @@ import api.streaming as streaming
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS = family_source("sessions")
 I18N_JS = family_source("i18n")
-ROUTES_PY = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 SESSION_MUTATIONS_PY = (
     ROOT / "api" / "http" / "routes" / "session_mutations.py"
 ).read_text(encoding="utf-8")
@@ -111,15 +110,41 @@ def test_regenerate_helper_persists_generated_title_and_publishes_sidebar_refres
     )]
 
 
-def test_regenerate_endpoint_syncs_title_to_state_db_when_enabled():
-    helper_idx = ROUTES_PY.index("def _sync_session_title_to_insights")
-    next_helper_idx = ROUTES_PY.index("\ndef ", helper_idx + 1)
-    helper_block = ROUTES_PY[helper_idx:next_helper_idx]
-    assert 'load_settings().get("sync_to_insights")' in helper_block
-    assert "sync_session_usage" in helper_block
-    assert "title=session.title" in helper_block
-    assert "message_count=len(messages)" in helper_block
-    assert "profile=getattr(session, \"profile\", None)" in helper_block
+def test_regenerate_endpoint_syncs_title_to_state_db_when_enabled(monkeypatch):
+    """The title-publication owner mirrors the generated title to insights."""
+    from api.sessions import title_publication
+    from api import state_sync
+
+    session = MagicMock(
+        session_id="regenerated-title",
+        title="A durable generated title",
+        messages=[{"role": "user", "content": "name this session"}],
+        input_tokens=12,
+        output_tokens=34,
+        estimated_cost=0.56,
+        model="test-model",
+        profile="work",
+        cache_read_tokens=7,
+        cache_write_tokens=8,
+    )
+    mirrored = []
+    monkeypatch.setattr(title_publication, "load_settings", lambda: {"sync_to_insights": True})
+    monkeypatch.setattr(state_sync, "sync_session_usage", lambda **kwargs: mirrored.append(kwargs))
+
+    title_publication._sync_session_title_to_insights(session)
+
+    assert mirrored == [{
+        "session_id": "regenerated-title",
+        "input_tokens": 12,
+        "output_tokens": 34,
+        "estimated_cost": 0.56,
+        "model": "test-model",
+        "title": "A durable generated title",
+        "message_count": 1,
+        "profile": "work",
+        "cache_read_tokens": 7,
+        "cache_write_tokens": 8,
+    }]
 
 
 def test_streaming_helper_generates_title_from_persisted_transcript(monkeypatch):
