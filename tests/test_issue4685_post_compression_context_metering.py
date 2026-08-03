@@ -22,6 +22,20 @@ def _install_model_metadata(monkeypatch, **estimators):
     return model_metadata
 
 
+def _install_compressor_budget_counter(monkeypatch, counter):
+    agent_package = sys.modules.get("agent")
+    if agent_package is None:
+        agent_package = types.ModuleType("agent")
+        agent_package.__path__ = []
+        monkeypatch.setitem(sys.modules, "agent", agent_package)
+
+    context_compressor = types.ModuleType("agent.context_compressor")
+    context_compressor._estimate_msg_budget_tokens = counter
+    agent_package.context_compressor = context_compressor
+    monkeypatch.setitem(sys.modules, "agent.context_compressor", context_compressor)
+    return context_compressor
+
+
 def _run_context_indicator(usage):
     source = family_source("ui")
     start = source.index("function _syncCtxIndicator")
@@ -106,14 +120,8 @@ def test_post_compression_estimate_falls_back_when_request_estimator_is_unavaila
 
 
 def test_post_compression_estimate_uses_compressor_budget_counter_without_metadata_estimators(monkeypatch):
-    import pytest
-
     from api.runs.post_compression_context import _estimate_post_compression_context_tokens
 
-    context_compressor = pytest.importorskip("agent.context_compressor")
-
-    monkeypatch.delattr("agent.model_metadata.estimate_request_tokens_rough", raising=False)
-    monkeypatch.delattr("agent.model_metadata.estimate_messages_tokens_rough", raising=False)
     pruned = [{"role": "assistant", "content": "summary"}]
     agent = type("Agent", (), {"tools": [{"name": "read_file"}]})()
     expected_messages = [
@@ -121,11 +129,21 @@ def test_post_compression_estimate_uses_compressor_budget_counter_without_metada
         {"role": "system", "content": "workspace"},
         {"role": "system", "content": str(agent.tools)},
     ]
+    calls = []
 
-    assert _estimate_post_compression_context_tokens(agent, pruned, "workspace") == sum(
-        context_compressor._estimate_msg_budget_tokens(message)
-        for message in expected_messages
-    )
+    def budget_counter(message):
+        calls.append(message)
+        return {
+            ("assistant", "summary"): 101,
+            ("system", "workspace"): 17,
+            ("system", str(agent.tools)): 53,
+        }[(message["role"], message["content"])]
+
+    _install_model_metadata(monkeypatch)
+    _install_compressor_budget_counter(monkeypatch, budget_counter)
+
+    assert _estimate_post_compression_context_tokens(agent, pruned, "workspace") == 171
+    assert calls == expected_messages
 
 
 def test_chat_start_clears_expired_post_compression_estimate(tmp_path, monkeypatch):
