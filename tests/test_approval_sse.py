@@ -25,28 +25,25 @@ import uuid
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
-ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 WORKSPACE_QUERY_ROUTES_SRC = (
     REPO_ROOT / "api" / "http" / "routes" / "workspace_queries.py"
 ).read_text(encoding="utf-8")
-STREAM_TRANSPORT_SRC = (
-    REPO_ROOT / "api" / "routes_parts" / "stream_transport.py"
+INTERACTIVE_STREAMS_SRC = (
+    REPO_ROOT / "api" / "http" / "interactive_streams.py"
 ).read_text(encoding="utf-8")
-LOCAL_RUN_SRC = (
-    REPO_ROOT / "api" / "runs" / "local.py"
+LOCAL_INTERACTIONS_SRC = (
+    REPO_ROOT / "api" / "runs" / "local_interactions.py"
 ).read_text(encoding="utf-8")
-# Approval SSE state and helpers live in route_approvals after the #1907
-# extraction; combine both files so structural assertions below still pass.
-_ROUTE_APPROVALS = REPO_ROOT / "api" / "route_approvals.py"
-APPROVAL_SRC = _ROUTE_APPROVALS.read_text(encoding="utf-8") if _ROUTE_APPROVALS.exists() else ""
-ROUTES_SRC_FULL = ROUTES_SRC + APPROVAL_SRC
+ROUTE_APPROVALS_SRC = (REPO_ROOT / "api" / "route_approvals.py").read_text(
+    encoding="utf-8"
+)
 MESSAGES_JS = family_source("messages")
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. Static-analysis tests (no server needed)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestSSEStaticAnalysis:
-    """Verify the SSE infrastructure exists and is wired correctly in routes.py."""
+    """Verify each approval SSE concern through its current owner module."""
 
     def test_sse_route_registered(self):
         """The /api/approval/stream route must be registered."""
@@ -55,52 +52,52 @@ class TestSSEStaticAnalysis:
 
     def test_sse_handler_function_exists(self):
         """_handle_approval_sse_stream handler must exist."""
-        assert "def _handle_approval_sse_stream(" in ROUTES_SRC, \
+        assert "def _handle_approval_sse_stream(" in INTERACTIVE_STREAMS_SRC, \
             "_handle_approval_sse_stream handler function must exist"
 
     def test_subscribe_function_exists(self):
         """_approval_sse_subscribe must exist and use a Queue."""
-        assert "def _approval_sse_subscribe(" in ROUTES_SRC_FULL, \
+        assert "def _approval_sse_subscribe(" in ROUTE_APPROVALS_SRC, \
             "_approval_sse_subscribe must be defined"
 
     def test_unsubscribe_function_exists(self):
         """_approval_sse_unsubscribe must exist and clean up empty lists."""
-        assert "def _approval_sse_unsubscribe(" in ROUTES_SRC_FULL, \
+        assert "def _approval_sse_unsubscribe(" in ROUTE_APPROVALS_SRC, \
             "_approval_sse_unsubscribe must be defined"
 
     def test_notify_function_exists(self):
         """_approval_sse_notify must exist and push to subscriber queues."""
-        assert "def _approval_sse_notify(" in ROUTES_SRC_FULL, \
+        assert "def _approval_sse_notify(" in ROUTE_APPROVALS_SRC, \
             "_approval_sse_notify must be defined"
 
     def test_sse_subscribers_dict_exists(self):
         """Module-level _approval_sse_subscribers dict must exist."""
-        assert "_approval_sse_subscribers" in ROUTES_SRC, \
+        assert "_approval_sse_subscribers" in ROUTE_APPROVALS_SRC, \
             "_approval_sse_subscribers module-level dict must exist"
 
     def test_sse_content_type(self):
         """SSE handler must set text/event-stream content type."""
-        assert "text/event-stream" in ROUTES_SRC, \
+        assert "text/event-stream" in INTERACTIVE_STREAMS_SRC, \
             "SSE handler must set Content-Type to text/event-stream"
 
     def test_sse_keepalive(self):
         """SSE handler must send keepalive comments to prevent proxy timeout."""
-        assert "keepalive" in ROUTES_SRC, \
+        assert "keepalive" in INTERACTIVE_STREAMS_SRC, \
             "SSE handler must send keepalive comments"
 
     def test_sse_cache_control(self):
         """SSE handler must set Cache-Control: no-cache."""
-        assert "no-cache" in ROUTES_SRC, \
+        assert "no-cache" in INTERACTIVE_STREAMS_SRC, \
             "SSE handler must set Cache-Control: no-cache"
 
     def test_sse_initial_snapshot(self):
         """SSE handler must send initial snapshot on connect."""
-        assert "'initial'" in ROUTES_SRC, \
+        assert "'initial'" in INTERACTIVE_STREAMS_SRC, \
             "SSE handler must send an 'initial' event with snapshot data"
 
     def test_sse_approval_event(self):
         """SSE handler must send 'approval' events on push."""
-        assert "'approval'" in ROUTES_SRC, \
+        assert "'approval'" in INTERACTIVE_STREAMS_SRC, \
             "SSE handler must send 'approval' events when pushing notifications"
 
     def test_notify_called_from_submit_pending(self):
@@ -109,64 +106,63 @@ class TestSSEStaticAnalysis:
         # block as the queue mutation so two parallel submit_pending calls can't
         # deliver out-of-order with stale pending_count. Tracks the v0.50.248
         # MUST-FIX A fix.
-        assert "_approval_sse_notify_locked(session_key, head, total)" in ROUTES_SRC_FULL, \
+        assert "_approval_sse_notify_locked(session_key, head, total)" in ROUTE_APPROVALS_SRC, \
             ("submit_pending() must call _approval_sse_notify_locked(session_key, head, total) "
              "from inside the `with _lock:` block — not the unlocked _approval_sse_notify wrapper, "
              "and head must be queue_list[0] (the head, not the just-appended entry).")
 
     def test_streaming_notify_callback_mirrors_pending_before_sse_push(self):
         """Gateway notify callback must repopulate polling state before relying on SSE."""
-        stream_start = STREAM_TRANSPORT_SRC.find("def _handle_sse_stream(")
-        assert stream_start != -1, "_handle_sse_stream must exist"
-        cb_start = LOCAL_RUN_SRC.find("def _approval_notify_cb(approval_data):")
-        cb_end = LOCAL_RUN_SRC.find(
-            "_reg_notify(session_id, _approval_notify_cb)", cb_start
+        cb_start = LOCAL_INTERACTIONS_SRC.find("def notify(approval_data) -> None:")
+        cb_end = LOCAL_INTERACTIONS_SRC.find(
+            "register_gateway_notify(self._session_id, notify)", cb_start
         )
-        cb_body = LOCAL_RUN_SRC[cb_start:cb_end]
-        assert "_submit_pending_for_polling(session_id, approval_data)" in cb_body, \
-            "_approval_notify_cb must mirror approval data into polling state before SSE"
-        assert "put('approval', approval_data)" in cb_body, \
-            "_approval_notify_cb must still emit the approval SSE event"
+        assert cb_start != -1 and cb_end != -1, \
+            "LocalInteractionBridge must register its approval callback"
+        cb_body = LOCAL_INTERACTIONS_SRC[cb_start:cb_end]
+        assert "submit_pending(self._session_id, approval_data)" in cb_body, \
+            "The gateway callback must mirror approval data into polling state before SSE"
+        assert 'self._publish("approval", approval_data)' in cb_body, \
+            "The gateway callback must still emit the approval SSE event"
 
     def test_unsubscribe_in_finally(self):
         """SSE handler must unsubscribe in a finally block."""
         # Find the finally block that calls _approval_sse_unsubscribe
-        assert re.search(r"finally:.*\n.*_approval_sse_unsubscribe\(", ROUTES_SRC, re.DOTALL), \
+        assert re.search(r"finally:.*\n.*_approval_sse_unsubscribe\(", INTERACTIVE_STREAMS_SRC, re.DOTALL), \
             "SSE handler must call _approval_sse_unsubscribe in a finally block"
 
     def test_client_disconnect_handled(self):
         """SSE handler must catch client disconnect errors."""
-        assert "_CLIENT_DISCONNECT_ERRORS" in ROUTES_SRC, \
+        assert "_CLIENT_DISCONNECT_ERRORS" in INTERACTIVE_STREAMS_SRC, \
             "SSE handler must catch client disconnect errors"
 
     def test_subscriber_queue_maxsize(self):
         """Subscriber queues must have a bounded maxsize to prevent memory leaks."""
-        assert "queue.Queue(maxsize=" in ROUTES_SRC, \
+        assert "queue.Queue(maxsize=" in INTERACTIVE_STREAMS_SRC, \
             "Subscriber queues must have maxsize set to prevent unbounded memory growth"
 
     def test_notify_drops_on_full(self):
         """_approval_sse_notify must silently drop events when subscriber is slow."""
         # The queue.Full exception handler
-        assert "queue.Full" in ROUTES_SRC_FULL, \
+        assert "queue.Full" in ROUTE_APPROVALS_SRC, \
             "_approval_sse_notify must handle queue.Full to drop events for slow subscribers"
 
     def test_subscribe_uses_shared_lock(self):
         """subscribe/unsubscribe/notify must all use the same _lock."""
-        # All three functions must use _lock; search the combined corpus since the
-        # helpers live in api.route_approvals after the #1907 extraction.
+        # All three functions share the approval-state lock.
         for func in ["_approval_sse_subscribe", "_approval_sse_unsubscribe", "_approval_sse_notify"]:
             # Find the function and verify it uses "with _lock"
-            func_start = ROUTES_SRC_FULL.find(f"def {func}(")
+            func_start = ROUTE_APPROVALS_SRC.find(f"def {func}(")
             assert func_start != -1, f"{func} must exist"
             # Find the next function definition after this one
-            next_func = ROUTES_SRC_FULL.find("\ndef ", func_start + 1)
-            func_body = ROUTES_SRC_FULL[func_start:next_func] if next_func != -1 else ROUTES_SRC_FULL[func_start:]
+            next_func = ROUTE_APPROVALS_SRC.find("\ndef ", func_start + 1)
+            func_body = ROUTE_APPROVALS_SRC[func_start:next_func] if next_func != -1 else ROUTE_APPROVALS_SRC[func_start:]
             assert "with _lock:" in func_body, \
                 f"{func} must use 'with _lock:' for thread safety"
 
     def test_unsubscribe_cleans_empty_session(self):
         """Unsubscribe must remove empty session keys from the dict."""
-        assert "_approval_sse_subscribers.pop(session_id, None)" in ROUTES_SRC_FULL, \
+        assert "_approval_sse_subscribers.pop(session_id, None)" in ROUTE_APPROVALS_SRC, \
             "_approval_sse_unsubscribe must pop session_id when subscriber list is empty"
 
 

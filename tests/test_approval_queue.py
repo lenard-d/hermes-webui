@@ -14,12 +14,12 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
-ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-# Approval helpers moved to api.route_approvals after the #1907 extraction;
-# combine both files so static-analysis assertions still pass.
-_ROUTE_APPROVALS = REPO_ROOT / "api" / "route_approvals.py"
-ROUTE_APPROVALS_SRC = _ROUTE_APPROVALS.read_text(encoding="utf-8") if _ROUTE_APPROVALS.exists() else ""
-ROUTES_SRC_FULL = ROUTES_SRC + ROUTE_APPROVALS_SRC
+ROUTE_APPROVALS_SRC = (REPO_ROOT / "api" / "route_approvals.py").read_text(
+    encoding="utf-8"
+)
+INTERACTIVE_STREAMS_SRC = (REPO_ROOT / "api" / "http" / "interactive_streams.py").read_text(
+    encoding="utf-8"
+)
 INTERACTIVE_RESPONSES_SRC = (
     REPO_ROOT / "api" / "routes_parts" / "interactive_responses.py"
 ).read_text(encoding="utf-8")
@@ -34,7 +34,7 @@ INDEX_HTML = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 def test_submit_pending_appends_to_list():
     """submit_pending() must append to a list, not overwrite."""
     # The new wrapper must contain a queue append (list mutation pattern)
-    assert "queue_list.append(entry)" in ROUTES_SRC_FULL or "queue.append(entry)" in ROUTES_SRC_FULL, \
+    assert "queue_list.append(entry)" in ROUTE_APPROVALS_SRC or "queue.append(entry)" in ROUTE_APPROVALS_SRC, \
         "submit_pending() must append entry to a list queue, not overwrite _pending[sid]"
 
 
@@ -46,7 +46,7 @@ def test_submit_pending_adds_approval_id():
 
 def test_handle_approval_pending_returns_count():
     """_handle_approval_pending must return pending_count in its response."""
-    assert '"pending_count"' in ROUTES_SRC, \
+    assert '"pending_count"' in INTERACTIVE_STREAMS_SRC, \
         "_handle_approval_pending must include pending_count in the JSON response"
 
 

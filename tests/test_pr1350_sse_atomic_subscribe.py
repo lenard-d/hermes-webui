@@ -19,7 +19,9 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
-ROUTES_SRC = (REPO_ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+INTERACTIVE_STREAMS_SRC = (REPO_ROOT / "api" / "http" / "interactive_streams.py").read_text(
+    encoding="utf-8"
+)
 
 
 def _extract_lock_block(body: str) -> str:
@@ -59,10 +61,10 @@ def _extract_lock_block(body: str) -> str:
 
 
 def _handler_body() -> str:
-    start = ROUTES_SRC.find("def _handle_approval_sse_stream(")
+    start = INTERACTIVE_STREAMS_SRC.find("def _handle_approval_sse_stream(")
     assert start != -1, "_handle_approval_sse_stream must exist"
-    end = ROUTES_SRC.find("\ndef ", start + 1)
-    return ROUTES_SRC[start:end if end != -1 else len(ROUTES_SRC)]
+    end = INTERACTIVE_STREAMS_SRC.find("\ndef ", start + 1)
+    return INTERACTIVE_STREAMS_SRC[start:end if end != -1 else len(INTERACTIVE_STREAMS_SRC)]
 
 
 def test_snapshot_taken_under_lock():
