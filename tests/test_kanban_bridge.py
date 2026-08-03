@@ -11,13 +11,23 @@ requiring the external package.
 
 from __future__ import annotations
 
-import importlib
 import sys
 import time
 import types
 from collections import defaultdict
 from dataclasses import dataclass
 from types import SimpleNamespace
+
+from api.kanban import (
+    boards,
+    config,
+    http,
+    integration,
+    queries,
+    streaming,
+    tasks,
+    validation,
+)
 
 
 @dataclass
@@ -99,7 +109,7 @@ class FakeConn:
             *values, task_id = params
             task = next((task for task in self.tasks if task.id == task_id), None)
             if task:
-                for field, value in zip(fields, values):
+                for field, value in zip(fields, values, strict=False):
                     setattr(task, field, value)
             return SimpleNamespace(fetchall=lambda: [], fetchone=lambda: None)
         raise AssertionError(f"unexpected SQL: {sql}")
@@ -358,15 +368,13 @@ class FakeKanbanDB:
         return dict(boards.get(slug, {"slug": slug, "name": slug, "archived": False}))
 
 
-def _load_bridge(monkeypatch):
+def _install_fake_kanban(monkeypatch):
     fake_kanban = FakeKanbanDB()
     fake_hermes_cli = types.ModuleType("hermes_cli")
     fake_hermes_cli.kanban_db = fake_kanban
     monkeypatch.setitem(sys.modules, "hermes_cli", fake_hermes_cli)
     monkeypatch.setitem(sys.modules, "hermes_cli.kanban_db", fake_kanban)
-    import api.kanban_bridge as bridge
-
-    return importlib.reload(bridge)
+    return fake_kanban
 
 
 def _parsed(path="/api/kanban/board", query=""):
@@ -374,9 +382,9 @@ def _parsed(path="/api/kanban/board", query=""):
 
 
 def test_kanban_board_payload_exposes_read_only_board(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    data = bridge._board_payload(_parsed())
+    data = queries._board_payload(_parsed())
 
     assert "columns" in data
     assert "latest_event_id" in data
@@ -391,15 +399,14 @@ def test_kanban_board_payload_exposes_read_only_board(monkeypatch):
 
 
 def test_board_pointer_drift_falls_back_to_default(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
-    fake_kanban = sys.modules["hermes_cli.kanban_db"]
+    fake_kanban = _install_fake_kanban(monkeypatch)
     fake_kanban.boards = {
         "default": {"slug": "default", "name": "Default board", "archived": False},
         "active": {"slug": "active", "name": "Active board", "archived": False},
     }
     fake_kanban.set_current_board("ghost")
 
-    data = bridge._list_boards_payload(_parsed(path="/api/kanban/boards"))
+    data = boards._list_boards_payload(_parsed(path="/api/kanban/boards"))
 
     assert data["current"] == "default"
     assert fake_kanban.get_current_board() == "default"
@@ -407,9 +414,9 @@ def test_board_pointer_drift_falls_back_to_default(monkeypatch):
 
 
 def test_kanban_task_detail_payload_exposes_comments_events_links_and_runs(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    data = bridge._task_detail_payload("t_1")
+    data = queries._task_detail_payload("t_1")
 
     assert data["task"]["id"] == "t_1"
     assert data["task"]["title"] == "Read-only board target"
@@ -423,9 +430,9 @@ def test_kanban_task_detail_payload_exposes_comments_events_links_and_runs(monke
 
 
 def test_kanban_create_task_payload_writes_to_agent_kanban(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    data = bridge._create_task_payload({
+    data = tasks._create_task_payload({
         "title": "Write API target",
         "body": "Created from WebUI",
         "assignee": "webui-test",
@@ -441,13 +448,13 @@ def test_kanban_create_task_payload_writes_to_agent_kanban(monkeypatch):
 
 
 def test_kanban_patch_task_payload_updates_status_title_and_comment(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    created = bridge._create_task_payload({"title": "Patch target"})
+    created = tasks._create_task_payload({"title": "Patch target"})
     task_id = created["task"]["id"]
-    patched = bridge._patch_task_payload(task_id, {"title": "Patched target", "status": "done"})
-    comment = bridge._comment_payload(task_id, {"author": "webui", "body": "Looks done"})
-    detail = bridge._task_detail_payload(task_id)
+    patched = tasks._patch_task_payload(task_id, {"title": "Patched target", "status": "done"})
+    comment = tasks._comment_payload(task_id, {"author": "webui", "body": "Looks done"})
+    detail = queries._task_detail_payload(task_id)
 
     assert patched["read_only"] is False
     assert patched["task"]["title"] == "Patched target"
@@ -457,28 +464,28 @@ def test_kanban_patch_task_payload_updates_status_title_and_comment(monkeypatch)
 
 
 def test_kanban_link_payload_adds_parent_child_relationship(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    parent = bridge._create_task_payload({"title": "Parent"})["task"]["id"]
-    child = bridge._create_task_payload({"title": "Child"})["task"]["id"]
-    linked = bridge._link_tasks_payload({"parent_id": parent, "child_id": child})
-    detail = bridge._task_detail_payload(child)
+    parent = tasks._create_task_payload({"title": "Parent"})["task"]["id"]
+    child = tasks._create_task_payload({"title": "Child"})["task"]["id"]
+    linked = tasks._link_tasks_payload({"parent_id": parent, "child_id": child})
+    detail = queries._task_detail_payload(child)
 
     assert linked == {"ok": True, "parent_id": parent, "child_id": child, "read_only": False}
     assert detail["links"]["parents"] == [parent]
 
 def test_kanban_board_since_returns_lightweight_unchanged_payload(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    unchanged = bridge._board_payload(_parsed(query="since=7"))
+    unchanged = queries._board_payload(_parsed(query="since=7"))
 
     assert unchanged == {"changed": False, "latest_event_id": 7, "read_only": False}
 
 
 def test_kanban_events_payload_matches_polling_shape(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    events = bridge._events_payload(_parsed(path="/api/kanban/events", query="since=0"))
+    events = queries._events_payload(_parsed(path="/api/kanban/events", query="since=0"))
 
     assert events["cursor"] == 7
     assert events["latest_event_id"] == 7
@@ -539,43 +546,32 @@ def test_http_owner_dispatches_api_kanban_post_to_package(monkeypatch):
     assert seen == [(handler, "/api/kanban/tasks", body)]
 
 
-def test_legacy_bridge_reexports_package_handlers_without_owning_dispatch():
-    import api.kanban as kanban
-    import api.kanban_bridge as legacy
-
-    assert legacy.handle_kanban_get is kanban.handle_kanban_get
-    assert legacy.handle_kanban_post is kanban.handle_kanban_post
-    assert legacy.handle_kanban_patch is kanban.handle_kanban_patch
-    assert legacy.handle_kanban_delete is kanban.handle_kanban_delete
-
-
-
 def test_kanban_dashboard_core_api_exposes_stats_assignees_config_and_logs(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
 
-    stats = bridge._stats_payload()
-    assignees = bridge._assignees_payload()
-    config = bridge._config_payload()
-    log = bridge._task_log_payload(_parsed(path="/api/kanban/tasks/t_1/log", query="tail=64"), "t_1")
+    stats = queries._stats_payload()
+    assignees = queries._assignees_payload()
+    payload = config._config_payload()
+    log = queries._task_log_payload(_parsed(path="/api/kanban/tasks/t_1/log", query="tail=64"), "t_1")
 
     assert stats["by_status"]["ready"] == 1
     assert "webui-test" in assignees["assignees"]
-    assert config["columns"]
-    assert {"default_tenant", "lane_by_profile", "include_archived_by_default", "render_markdown", "assignees"} <= set(config)
+    assert payload["columns"]
+    assert {"default_tenant", "lane_by_profile", "include_archived_by_default", "render_markdown", "assignees"} <= set(payload)
     assert log["task_id"] == "t_1"
     assert log["content"] == "worker log for t_1"
 
 
 def test_kanban_only_mine_bulk_dispatch_and_block_unblock(monkeypatch):
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     monkeypatch.setattr("api.profiles.get_active_profile_name", lambda: "webui-test", raising=False)
 
-    mine = bridge._board_payload(_parsed(query="only_mine=1"))
+    mine = queries._board_payload(_parsed(query="only_mine=1"))
     visible_ids = [task["id"] for col in mine["columns"] for task in col["tasks"]]
-    bulk = bridge._bulk_tasks_payload({"ids": ["t_1", "t_2"], "status": "done", "priority": 3})
-    blocked = bridge._task_action_payload("t_1", {"reason": "waiting"}, "block")
-    unblocked = bridge._task_action_payload("t_1", {}, "unblock")
-    dispatch = bridge._dispatch_payload(_parsed(path="/api/kanban/dispatch", query="dry_run=1&max=2"))
+    bulk = tasks._bulk_tasks_payload({"ids": ["t_1", "t_2"], "status": "done", "priority": 3})
+    blocked = tasks._task_action_payload("t_1", {"reason": "waiting"}, "block")
+    unblocked = tasks._task_action_payload("t_1", {}, "unblock")
+    dispatch = tasks._dispatch_payload(_parsed(path="/api/kanban/dispatch", query="dry_run=1&max=2"))
 
     assert visible_ids == ["t_1"]
     assert [row["ok"] for row in bulk["results"]] == [True, True]
@@ -639,11 +635,10 @@ def test_patch_status_running_is_rejected_to_protect_dispatcher_contract(monkeyp
     plugins/kanban/dashboard/plugin_api.py update_task — both surfaces must
     reject this transition.
     """
-    bridge = _load_bridge(monkeypatch)
-    bridge._OAUTH_FLOWS = getattr(bridge, '_OAUTH_FLOWS', {})  # no-op safe
+    _install_fake_kanban(monkeypatch)
     # The fake board includes t_1 (ready) — try to PATCH it to 'running'
     try:
-        bridge._patch_task_payload("t_1", {"status": "running"})
+        tasks._patch_task_payload("t_1", {"status": "running"})
     except ValueError as exc:
         assert "running" in str(exc).lower()
         return
@@ -652,10 +647,10 @@ def test_patch_status_running_is_rejected_to_protect_dispatcher_contract(monkeyp
 
 def test_patch_status_done_to_running_is_rejected(monkeypatch):
     """A completed task must not be resurrected to 'running' via PATCH."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     # The fake board includes t_2 (blocked); we'll PATCH any task to 'running'
     try:
-        bridge._patch_task_payload("t_2", {"status": "running"})
+        tasks._patch_task_payload("t_2", {"status": "running"})
     except ValueError as exc:
         assert "running" in str(exc).lower()
         return
@@ -670,9 +665,9 @@ def test_patch_status_blocked_to_ready_routes_through_unblock_task(monkeypatch):
     that event firing, so live event polling and worker dispatchers wouldn't
     see the transition.
     """
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     # Hook into the shared FakeKanbanDB instance
-    kb = bridge._kb()
+    kb = integration._kb()
     kb.unblock_calls = []
     original_unblock = kb.unblock_task
 
@@ -682,7 +677,7 @@ def test_patch_status_blocked_to_ready_routes_through_unblock_task(monkeypatch):
 
     monkeypatch.setattr(kb, "unblock_task", fake_unblock, raising=False)
     # t_2 is blocked in the fake fixture
-    bridge._patch_task_payload("t_2", {"status": "ready"})
+    tasks._patch_task_payload("t_2", {"status": "ready"})
     assert kb.unblock_calls == ["t_2"], (
         f"blocked → ready transition must call kb.unblock_task; saw: {kb.unblock_calls}"
     )
@@ -694,11 +689,10 @@ def test_handle_kanban_get_returns_503_when_hermes_cli_missing(monkeypatch):
     that bubbles up to the user. The frontend's existing try/catch surfaces
     the toast cleanly only when the bridge gives a structured error.
     """
-    bridge = _load_bridge(monkeypatch)
-    from api.kanban import queries as kanban_queries
+    _install_fake_kanban(monkeypatch)
     # Force _kb() to raise ImportError as if hermes_cli was uninstalled
     monkeypatch.setattr(
-        kanban_queries, "_kb",
+        queries, "_kb",
         lambda: (_ for _ in ()).throw(ImportError("No module named 'hermes_cli'")),
     )
 
@@ -719,7 +713,7 @@ def test_handle_kanban_get_returns_503_when_hermes_cli_missing(monkeypatch):
 
     monkeypatch.setattr("api.kanban.http.bad", fake_bad)
     parsed = _parsed(path="/api/kanban/board")
-    result = bridge.handle_kanban_get(h, parsed)
+    result = http.handle_kanban_get(h, parsed)
     assert result is True
     assert captured["status"] == 503
     assert "kanban unavailable" in captured["msg"]
@@ -727,10 +721,9 @@ def test_handle_kanban_get_returns_503_when_hermes_cli_missing(monkeypatch):
 
 def test_handle_kanban_post_returns_503_when_hermes_cli_missing(monkeypatch):
     """Same fallback contract for POST verb."""
-    bridge = _load_bridge(monkeypatch)
-    from api.kanban import tasks as kanban_tasks
+    _install_fake_kanban(monkeypatch)
     monkeypatch.setattr(
-        kanban_tasks, "_kb",
+        tasks, "_kb",
         lambda: (_ for _ in ()).throw(ImportError("hermes_cli missing")),
     )
     captured = {}
@@ -746,17 +739,16 @@ def test_handle_kanban_post_returns_503_when_hermes_cli_missing(monkeypatch):
         pass
 
     parsed = _parsed(path="/api/kanban/tasks")
-    result = bridge.handle_kanban_post(FakeHandler(), parsed, {"title": "x"})
+    result = http.handle_kanban_post(FakeHandler(), parsed, {"title": "x"})
     assert result is True
     assert captured["status"] == 503
 
 
 def test_handle_kanban_patch_returns_503_when_hermes_cli_missing(monkeypatch):
     """Same fallback contract for PATCH verb."""
-    bridge = _load_bridge(monkeypatch)
-    from api.kanban import tasks as kanban_tasks
+    _install_fake_kanban(monkeypatch)
     monkeypatch.setattr(
-        kanban_tasks, "_kb",
+        tasks, "_kb",
         lambda: (_ for _ in ()).throw(ImportError("hermes_cli missing")),
     )
     captured = {}
@@ -772,7 +764,7 @@ def test_handle_kanban_patch_returns_503_when_hermes_cli_missing(monkeypatch):
         pass
 
     parsed = _parsed(path="/api/kanban/tasks/t_1")
-    result = bridge.handle_kanban_patch(FakeHandler(), parsed, {"title": "x"})
+    result = http.handle_kanban_patch(FakeHandler(), parsed, {"title": "x"})
     assert result is True
     assert captured["status"] == 503
 
@@ -788,8 +780,8 @@ def test_handle_kanban_patch_returns_503_when_hermes_cli_missing(monkeypatch):
 def test_list_boards_includes_default_when_only_default_exists(monkeypatch):
     """A fresh deploy with no extra boards must still surface the default
     board in /boards so the UI can render the switcher consistently."""
-    bridge = _load_bridge(monkeypatch)
-    payload = bridge._list_boards_payload(_parsed())
+    _install_fake_kanban(monkeypatch)
+    payload = boards._list_boards_payload(_parsed())
     assert payload["current"] == "default"
     assert payload["read_only"] is False
     slugs = [b["slug"] for b in payload["boards"]]
@@ -812,10 +804,7 @@ def test_board_counts_returns_empty_for_nonexistent_board(monkeypatch):
     fake_hermes_cli.kanban_db = fake_kanban
     monkeypatch.setitem(sys.modules, "hermes_cli", fake_hermes_cli)
     monkeypatch.setitem(sys.modules, "hermes_cli.kanban_db", fake_kanban)
-    import api.kanban_bridge as bridge
-    bridge = importlib.reload(bridge)
-
-    counts = bridge._board_counts_for_slug("no-such-board")
+    counts = boards._board_counts_for_slug("no-such-board")
     assert counts == {}
     # connect must NOT have been called — early-out via board_exists
     assert connect_calls == []
@@ -830,9 +819,6 @@ def test_board_counts_returns_real_counts_for_populated_board(monkeypatch):
     fake_hermes_cli.kanban_db = fake_kanban
     monkeypatch.setitem(sys.modules, "hermes_cli", fake_hermes_cli)
     monkeypatch.setitem(sys.modules, "hermes_cli.kanban_db", fake_kanban)
-    import api.kanban_bridge as bridge
-    bridge = importlib.reload(bridge)
-
     # Patch FakeConn.execute to handle the board-counts SQL:
     #   SELECT status, COUNT(*) AS n FROM tasks WHERE status != 'archived' GROUP BY status
     orig_execute = FakeConn.execute
@@ -851,7 +837,7 @@ def test_board_counts_returns_real_counts_for_populated_board(monkeypatch):
     FakeConn.execute = patched_execute
 
     try:
-        counts = bridge._board_counts_for_slug("default")
+        counts = boards._board_counts_for_slug("default")
         # Default fake has t_1=ready, t_2=blocked
         assert counts.get("ready") == 1
         assert counts.get("blocked") == 1
@@ -862,8 +848,8 @@ def test_board_counts_returns_real_counts_for_populated_board(monkeypatch):
 def test_create_board_payload_creates_and_optionally_switches(monkeypatch):
     """POST /boards must create a board and, when ``switch=true``, also set
     it as the active board so subsequent requests resolve to it."""
-    bridge = _load_bridge(monkeypatch)
-    payload = bridge._create_board_payload({
+    _install_fake_kanban(monkeypatch)
+    payload = boards._create_board_payload({
         "slug": "experiments",
         "name": "Experiments",
         "description": "Research backlog",
@@ -878,9 +864,9 @@ def test_create_board_payload_creates_and_optionally_switches(monkeypatch):
 
 def test_create_board_payload_rejects_empty_slug(monkeypatch):
     """Empty/missing slug must surface a 400-shape ValueError, not a 500."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     try:
-        bridge._create_board_payload({"slug": "", "name": "x"})
+        boards._create_board_payload({"slug": "", "name": "x"})
     except ValueError as exc:
         assert "slug" in str(exc).lower()
         return
@@ -891,9 +877,9 @@ def test_update_board_payload_renames_metadata_only(monkeypatch):
     """PATCH /boards/<slug> updates display metadata. The slug itself is
     immutable — renaming the slug would mean moving the on-disk directory
     and re-pointing every saved active-board pointer."""
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "experiments", "name": "Experiments"})
-    res = bridge._update_board_payload("experiments", {
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "experiments", "name": "Experiments"})
+    res = boards._update_board_payload("experiments", {
         "name": "R&D Experiments",
         "description": "All ongoing research",
         "icon": "🔬",
@@ -906,9 +892,9 @@ def test_update_board_payload_renames_metadata_only(monkeypatch):
 
 def test_update_board_payload_rejects_unknown_slug(monkeypatch):
     """Renaming a board that doesn't exist is a 404, not a silent no-op."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     try:
-        bridge._update_board_payload("does-not-exist", {"name": "x"})
+        boards._update_board_payload("does-not-exist", {"name": "x"})
     except LookupError as exc:
         assert "does not exist" in str(exc)
         return
@@ -918,9 +904,9 @@ def test_update_board_payload_rejects_unknown_slug(monkeypatch):
 def test_delete_board_payload_archives_by_default(monkeypatch):
     """DELETE without ?delete=1 archives, preserving on-disk data so the
     board is recoverable from kanban/boards/_archived/."""
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "experiments", "name": "Experiments"})
-    res = bridge._delete_board_payload("experiments", _parsed())
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "experiments", "name": "Experiments"})
+    res = boards._delete_board_payload("experiments", _parsed())
     # Result either has a result dict with `archived` action OR explicit archive flag
     # The test fake's remove_board sets archived=True; library's returns action='archived'
     assert "result" in res
@@ -930,9 +916,9 @@ def test_delete_board_payload_archives_by_default(monkeypatch):
 def test_delete_board_payload_refuses_to_delete_default(monkeypatch):
     """The default board cannot be removed — that would leave the system
     without a fallback active board on the next CLI / dashboard call."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     try:
-        bridge._delete_board_payload("default", _parsed())
+        boards._delete_board_payload("default", _parsed())
     except ValueError as exc:
         assert "default" in str(exc).lower()
         return
@@ -942,19 +928,19 @@ def test_delete_board_payload_refuses_to_delete_default(monkeypatch):
 def test_switch_board_payload_updates_active_pointer(monkeypatch):
     """POST /boards/<slug>/switch sets the active-board pointer that's
     shared by CLI, dashboard, and WebUI."""
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "experiments", "name": "Experiments"})
-    res = bridge._switch_board_payload("experiments")
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "experiments", "name": "Experiments"})
+    res = boards._switch_board_payload("experiments")
     assert res["current"] == "experiments"
     # And reading the active pointer back must reflect the switch
-    assert bridge._kb().get_current_board() == "experiments"
+    assert integration._kb().get_current_board() == "experiments"
 
 
 def test_switch_board_payload_rejects_unknown_slug(monkeypatch):
     """Switching to a non-existent board is a 404, not a silent set."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     try:
-        bridge._switch_board_payload("not-a-real-board")
+        boards._switch_board_payload("not-a-real-board")
     except LookupError as exc:
         assert "does not exist" in str(exc)
         return
@@ -965,21 +951,21 @@ def test_resolve_board_query_param_normalises_and_validates(monkeypatch):
     """The ?board=<slug> query param feeds every endpoint that's board-scoped.
     Empty/missing should resolve to None (use active board); a bad slug
     should raise ValueError; a non-existent slug should raise LookupError."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     # Empty / missing → None (caller falls through to active board)
-    assert bridge._resolve_board(_parsed(query="")) is None
-    assert bridge._resolve_board(_parsed(query="board=")) is None
+    assert validation._resolve_board(_parsed(query="")) is None
+    assert validation._resolve_board(_parsed(query="board=")) is None
     # default board is always allowed (even before materialisation)
-    assert bridge._resolve_board(_parsed(query="board=default")) == "default"
+    assert validation._resolve_board(_parsed(query="board=default")) == "default"
     # Path-traversal / malformed slugs raise ValueError
     try:
-        bridge._resolve_board(_parsed(query="board=../etc/passwd"))
+        validation._resolve_board(_parsed(query="board=../etc/passwd"))
         raise AssertionError("path-traversal slug must raise ValueError")
     except ValueError:
         pass
     # Non-existent slug raises LookupError
     try:
-        bridge._resolve_board(_parsed(query="board=ghost-board"))
+        validation._resolve_board(_parsed(query="board=ghost-board"))
         raise AssertionError("non-existent slug must raise LookupError")
     except LookupError:
         pass
@@ -989,14 +975,14 @@ def test_resolve_board_from_body_mirrors_query_contract(monkeypatch):
     """POST/PATCH/DELETE handlers receive a parsed JSON body, not a URL,
     so they read the board slug from the body. The validation contract
     must match _resolve_board exactly."""
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "experiments", "name": "x"})
-    assert bridge._resolve_board_from_body({}) is None
-    assert bridge._resolve_board_from_body({"board": ""}) is None
-    assert bridge._resolve_board_from_body({"board": "default"}) == "default"
-    assert bridge._resolve_board_from_body({"board": "experiments"}) == "experiments"
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "experiments", "name": "x"})
+    assert validation._resolve_board_from_body({}) is None
+    assert validation._resolve_board_from_body({"board": ""}) is None
+    assert validation._resolve_board_from_body({"board": "default"}) == "default"
+    assert validation._resolve_board_from_body({"board": "experiments"}) == "experiments"
     try:
-        bridge._resolve_board_from_body({"board": "ghost"})
+        validation._resolve_board_from_body({"board": "ghost"})
         raise AssertionError("unknown slug must raise LookupError")
     except LookupError:
         pass
@@ -1005,7 +991,7 @@ def test_resolve_board_from_body_mirrors_query_contract(monkeypatch):
 def test_handle_kanban_get_routes_boards_endpoint(monkeypatch):
     """The dispatcher must surface the new /boards endpoint without
     accidentally matching the singular /board endpoint (which is task-list)."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     captured = {}
 
     class FakeHandler:
@@ -1017,7 +1003,7 @@ def test_handle_kanban_get_routes_boards_endpoint(monkeypatch):
 
     monkeypatch.setattr("api.kanban.http.j", fake_j)
     parsed = _parsed(path="/api/kanban/boards")
-    result = bridge.handle_kanban_get(FakeHandler(), parsed)
+    result = http.handle_kanban_get(FakeHandler(), parsed)
     assert result is True
     assert "boards" in captured["payload"]
     assert "current" in captured["payload"]
@@ -1025,7 +1011,7 @@ def test_handle_kanban_get_routes_boards_endpoint(monkeypatch):
 
 def test_handle_kanban_post_routes_create_board_and_switch(monkeypatch):
     """POST /boards creates, POST /boards/<slug>/switch activates."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     captured = []
 
     class FakeHandler:
@@ -1037,13 +1023,13 @@ def test_handle_kanban_post_routes_create_board_and_switch(monkeypatch):
 
     monkeypatch.setattr("api.kanban.http.j", fake_j)
     # Create
-    bridge.handle_kanban_post(
+    http.handle_kanban_post(
         FakeHandler(), _parsed(path="/api/kanban/boards"),
         {"slug": "experiments", "name": "Experiments"},
     )
     assert "board" in captured[0]
     # Switch
-    bridge.handle_kanban_post(
+    http.handle_kanban_post(
         FakeHandler(), _parsed(path="/api/kanban/boards/experiments/switch"),
         {},
     )
@@ -1052,7 +1038,7 @@ def test_handle_kanban_post_routes_create_board_and_switch(monkeypatch):
 
 def test_handle_kanban_delete_routes_archive_board(monkeypatch):
     """DELETE /boards/<slug> archives by default, hard-deletes with ?delete=1."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     captured = []
 
     class FakeHandler:
@@ -1063,8 +1049,8 @@ def test_handle_kanban_delete_routes_archive_board(monkeypatch):
         return True
 
     monkeypatch.setattr("api.kanban.http.j", fake_j)
-    bridge._create_board_payload({"slug": "experiments", "name": "x"})
-    bridge.handle_kanban_delete(
+    boards._create_board_payload({"slug": "experiments", "name": "x"})
+    http.handle_kanban_delete(
         FakeHandler(), _parsed(path="/api/kanban/boards/experiments"), {}
     )
     assert len(captured) == 1
@@ -1073,7 +1059,7 @@ def test_handle_kanban_delete_routes_archive_board(monkeypatch):
 
 def test_handle_kanban_patch_routes_update_board(monkeypatch):
     """PATCH /boards/<slug> updates display metadata."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     captured = []
 
     class FakeHandler:
@@ -1084,8 +1070,8 @@ def test_handle_kanban_patch_routes_update_board(monkeypatch):
         return True
 
     monkeypatch.setattr("api.kanban.http.j", fake_j)
-    bridge._create_board_payload({"slug": "experiments", "name": "x"})
-    bridge.handle_kanban_patch(
+    boards._create_board_payload({"slug": "experiments", "name": "x"})
+    http.handle_kanban_patch(
         FakeHandler(), _parsed(path="/api/kanban/boards/experiments"),
         {"name": "Renamed"},
     )
@@ -1097,12 +1083,12 @@ def test_board_param_isolates_task_writes_between_boards(monkeypatch):
     This is the core multi-board guarantee — without it the whole feature
     is just cosmetic. The fake's per-board isolation is simulated by
     spying on the connect() call and verifying it received the right slug."""
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "board-a", "name": "A"})
-    bridge._create_board_payload({"slug": "board-b", "name": "B"})
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "board-a", "name": "A"})
+    boards._create_board_payload({"slug": "board-b", "name": "B"})
 
     seen_boards = []
-    kb = bridge._kb()
+    kb = integration._kb()
     original_connect = kb.connect
 
     def spying_connect(*args, **kwargs):
@@ -1112,8 +1098,8 @@ def test_board_param_isolates_task_writes_between_boards(monkeypatch):
     monkeypatch.setattr(kb, "connect", spying_connect)
 
     # Create on board-a and board-b — each call should pin connect(board=...)
-    bridge._create_task_payload({"title": "task on A"}, board="board-a")
-    bridge._create_task_payload({"title": "task on B"}, board="board-b")
+    tasks._create_task_payload({"title": "task on A"}, board="board-a")
+    tasks._create_task_payload({"title": "task on B"}, board="board-b")
     assert "board-a" in seen_boards
     assert "board-b" in seen_boards
 
@@ -1125,14 +1111,14 @@ def test_sse_fetch_new_returns_advanced_cursor_and_events(monkeypatch):
     """The SSE inner loop reads task_events with id > cursor and returns
     the new cursor + decoded events. Best-effort — must not raise on
     empty result."""
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     # Default fake fixture has 1 event with id=7
-    new_cursor, events = bridge._kanban_sse_fetch_new(None, 0)
+    new_cursor, events = streaming._kanban_sse_fetch_new(None, 0)
     assert new_cursor == 7
     assert len(events) == 1
     assert events[0]["id"] == 7
     # No new events past the cursor → empty list, cursor unchanged
-    new_cursor2, events2 = bridge._kanban_sse_fetch_new(None, 7)
+    new_cursor2, events2 = streaming._kanban_sse_fetch_new(None, 7)
     assert new_cursor2 == 7
     assert events2 == []
 
@@ -1141,14 +1127,14 @@ def test_sse_fetch_new_self_heals_on_db_error(monkeypatch):
     """A transient DB error inside the SSE loop must NOT drop the client —
     the loop should return the input cursor + empty list and let the
     caller continue polling."""
-    bridge = _load_bridge(monkeypatch)
-    kb = bridge._kb()
+    _install_fake_kanban(monkeypatch)
+    kb = integration._kb()
 
     def raising_connect(*args, **kwargs):
         raise RuntimeError("simulated transient sqlite contention")
 
     monkeypatch.setattr(kb, "connect", raising_connect)
-    new_cursor, events = bridge._kanban_sse_fetch_new(None, 5)
+    new_cursor, events = streaming._kanban_sse_fetch_new(None, 5)
     assert new_cursor == 5  # cursor preserved
     assert events == []  # empty, not exception
 
@@ -1163,7 +1149,7 @@ def test_sse_handler_runs_in_thread_and_streams_event(monkeypatch):
     import io
     import threading
 
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     # Speed up the SSE poll cycle and heartbeat for the test
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
@@ -1200,7 +1186,7 @@ def test_sse_handler_runs_in_thread_and_streams_event(monkeypatch):
 
     def runner():
         try:
-            bridge._handle_events_sse_stream(handler, _parsed(query="since=0"))
+            streaming._handle_events_sse_stream(handler, _parsed(query="since=0"))
         except Exception as exc:  # noqa: BLE001
             error_holder.append(exc)
         finally:
@@ -1238,8 +1224,8 @@ def test_handle_kanban_patch_routes_boards_slug_before_board_query_param(monkeyp
     take their slug from the URL path; a stray ?board= query param on a
     /boards/<slug> path is meaningless and must be ignored.
     """
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "experiments", "name": "Exp"})
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "experiments", "name": "Exp"})
     captured = []
 
     class FakeHandler:
@@ -1252,7 +1238,7 @@ def test_handle_kanban_patch_routes_boards_slug_before_board_query_param(monkeyp
     monkeypatch.setattr("api.kanban.http.j", fake_j)
     # Ghost board does NOT exist; query param should be ignored on a /boards path.
     parsed = _parsed(path="/api/kanban/boards/experiments", query="board=ghost")
-    result = bridge.handle_kanban_patch(FakeHandler(), parsed, {"name": "Renamed"})
+    result = http.handle_kanban_patch(FakeHandler(), parsed, {"name": "Renamed"})
     assert result is True
     assert captured, "PATCH /boards/<slug> must succeed even with stray ?board="
     assert captured[0]["board"]["slug"] == "experiments"
@@ -1261,8 +1247,8 @@ def test_handle_kanban_patch_routes_boards_slug_before_board_query_param(monkeyp
 
 def test_handle_kanban_delete_routes_boards_slug_before_board_query_param(monkeypatch):
     """Opus advisor SHOULD-FIX #1: same routing-order guarantee for DELETE."""
-    bridge = _load_bridge(monkeypatch)
-    bridge._create_board_payload({"slug": "experiments", "name": "Exp"})
+    _install_fake_kanban(monkeypatch)
+    boards._create_board_payload({"slug": "experiments", "name": "Exp"})
     captured = []
 
     class FakeHandler:
@@ -1274,7 +1260,7 @@ def test_handle_kanban_delete_routes_boards_slug_before_board_query_param(monkey
 
     monkeypatch.setattr("api.kanban.http.j", fake_j)
     parsed = _parsed(path="/api/kanban/boards/experiments", query="board=ghost")
-    result = bridge.handle_kanban_delete(FakeHandler(), parsed, {})
+    result = http.handle_kanban_delete(FakeHandler(), parsed, {})
     assert result is True
     assert captured, "DELETE /boards/<slug> must succeed even with stray ?board="
 
@@ -1288,7 +1274,7 @@ def test_sse_emits_id_lines_so_browser_can_resume_via_last_event_id(monkeypatch)
     import io
     import threading
 
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
 
@@ -1307,7 +1293,7 @@ def test_sse_emits_id_lines_so_browser_can_resume_via_last_event_id(monkeypatch)
 
     def runner():
         try:
-            bridge._handle_events_sse_stream(handler, _parsed(query="since=0"))
+            streaming._handle_events_sse_stream(handler, _parsed(query="since=0"))
         finally:
             done.set()
 
@@ -1336,7 +1322,7 @@ def test_sse_honours_last_event_id_header_when_since_absent(monkeypatch):
     import io
     import threading
 
-    bridge = _load_bridge(monkeypatch)
+    _install_fake_kanban(monkeypatch)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_POLL_SECONDS", 0.05)
     monkeypatch.setattr("api.kanban.streaming._KANBAN_SSE_HEARTBEAT_SECONDS", 0.1)
 
@@ -1365,7 +1351,7 @@ def test_sse_honours_last_event_id_header_when_since_absent(monkeypatch):
         try:
             # No ?since= in query; the handler should pick up "42" from
             # the Last-Event-ID header.
-            bridge._handle_events_sse_stream(handler, _parsed(query=""))
+            streaming._handle_events_sse_stream(handler, _parsed(query=""))
         finally:
             done.set()
 
@@ -1386,15 +1372,14 @@ def test_board_payload_includes_unassigned_ready_tasks_without_assignee_filter(m
     when no assignee filter is active. If the API omits them, the frontend has no
     data to build an Unassigned lane from — the bug Brett hit on Dynasty board.
     """
-    bridge = _load_bridge(monkeypatch)
-    fake_kanban = sys.modules["hermes_cli.kanban_db"]
+    fake_kanban = _install_fake_kanban(monkeypatch)
 
     # Seed an unassigned ready task alongside the existing assigned one.
     unassigned_task = FakeTask("t_unassigned_ready", "Unassigned ready task", "ready", None)
     fake_kanban.tasks.append(unassigned_task)
 
     # Request board without any assignee filter.
-    data = bridge._board_payload(_parsed())
+    data = queries._board_payload(_parsed())
 
     assert "columns" in data
     ready_col = next((c for c in data["columns"] if c["name"] == "ready"), None)
