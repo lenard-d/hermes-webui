@@ -64,8 +64,18 @@ def test_http_modules_do_not_use_legacy_binding_or_source_composition():
     for path in HTTP_ROOT.rglob("*.py"):
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
-        assert "import api.routes" not in source
-        assert "from api.routes" not in source
+        legacy_imports = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                legacy_imports.update(
+                    name.name
+                    for name in node.names
+                    if name.name == "api.routes" or name.name.startswith("api.routes.")
+                )
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                if node.module == "api.routes" or node.module.startswith("api.routes."):
+                    legacy_imports.add(node.module)
+        assert not legacy_imports, path
         assert "sys.modules" not in source
         loaded_names = {
             node.id

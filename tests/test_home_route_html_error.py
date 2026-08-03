@@ -46,10 +46,11 @@ class _BrokenIndexPath:
 
 def test_home_route_internal_error_returns_html_503_not_json(monkeypatch):
     from api import config as api_config
+    from api.http import shell
     from api import routes
 
     monkeypatch.setattr(api_config, "get_index_html_path", lambda: _BrokenIndexPath())
-    monkeypatch.setattr(routes, "_INDEX_SHELL_CACHE", {})
+    monkeypatch.setattr(shell, "_INDEX_SHELL_CACHE", {})
 
     handler = _FakeHandler()
     assert routes.handle_get(handler, urlparse("http://example.com/")) is True
