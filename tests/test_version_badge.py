@@ -2,23 +2,29 @@
 Tests for the dynamic version badge (issue: stale hardcoded version strings).
 
 Covers:
-  1. api/updates.py: _detect_webui_version() resolution chain
-  2. api/updates.py: _detect_agent_version() detection fallback
+  1. api/updates/policy.py: _detect_webui_version() resolution chain
+  2. api/updates/policy.py: _detect_agent_version() detection fallback
   3. api/updates.py: WEBUI_VERSION module constant is set and non-empty
-  4. api/routes.py: GET /api/settings includes webui_version and agent_version keys
+  4. api/http/routes/configuration_queries.py: GET /api/settings includes
+     webui_version and agent_version keys
   5. static/index.html: two version badges are present
-  6. static/panels.js: loadSettingsPanel() populates both version badges from settings
+  6. static/modules/panels/settings-preferences.js: real badge DOM updates
   7. server.py: server_version is not the old hardcoded string
 """
-from tests.frontend_asset_contract import family_source
-import importlib
+import json
+import os
+import shutil
 import subprocess
-import sys
-import types
+import textwrap
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 REPO_ROOT = Path(__file__).parent.parent
+NODE = shutil.which("node")
+
+node_test = pytest.mark.skipif(NODE is None, reason="node not on PATH")
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +35,7 @@ class TestDetectWebUIVersion:
 
     def _fresh_detect(self, mock_run_git=None, version_file_content=None, tmp_path=None):
         """Call _detect_webui_version() with controlled dependencies."""
-        import api.updates as upd
+        from api.updates import policy
 
         fake_root = tmp_path or Path('/nonexistent-path')
 
@@ -43,9 +49,9 @@ class TestDetectWebUIVersion:
                 return mock_run_git(args, cwd, timeout)
             return ('', False)
 
-        with patch.object(upd, '_run_git', side_effect=_run_git_side_effect), \
-             patch.object(upd, 'REPO_ROOT', fake_root):
-            return upd._detect_webui_version()
+        with patch.object(policy, '_git', side_effect=_run_git_side_effect), \
+             patch.object(policy, '_repo_root', return_value=fake_root):
+            return policy._detect_webui_version()
 
     def test_git_success_returns_tag(self, tmp_path):
         """When git describe succeeds, returns the tag string directly."""
@@ -157,7 +163,7 @@ class TestDetectWebUIVersion:
 
     def test_dirty_suffix_changes_when_tracked_diff_changes(self, tmp_path):
         """Real git diff hashing should produce a new suffix for each tracked edit."""
-        import api.updates as upd
+        from api.updates import policy
 
         def git(*args):
             subprocess.run(['git', *args], cwd=tmp_path, check=True, capture_output=True, text=True)
@@ -171,9 +177,9 @@ class TestDetectWebUIVersion:
         git('commit', '-m', 'base')
 
         tracked.write_text('edit one\n', encoding='utf-8')
-        first = upd._dirty_suffix(tmp_path)
+        first = policy._dirty_suffix(tmp_path)
         tracked.write_text('edit two\n', encoding='utf-8')
-        second = upd._dirty_suffix(tmp_path)
+        second = policy._dirty_suffix(tmp_path)
 
         assert first.startswith('-dirty-')
         assert second.startswith('-dirty-')
@@ -200,7 +206,7 @@ class TestDetectAgentVersion:
 
     def _fresh_detect(self, mock_run_git=None, version_file_content=None, tmp_path=None):
         """Call _detect_agent_version() with controlled dependencies."""
-        import api.updates as upd
+        from api.updates import policy
 
         fake_root = tmp_path or Path('/nonexistent-agent-path')
 
@@ -213,9 +219,10 @@ class TestDetectAgentVersion:
                 return mock_run_git(args, cwd, timeout)
             return ('', False)
 
-        with patch.object(upd, '_run_git', side_effect=_run_git_side_effect), \
-             patch.object(upd, '_AGENT_DIR', fake_root):
-            return upd._detect_agent_version()
+        with patch.object(policy, '_git', side_effect=_run_git_side_effect), \
+             patch.object(policy, '_agent_dir', return_value=fake_root), \
+             patch.object(policy, '_detect_agent_version_from_gateway_health', return_value=None):
+            return policy._detect_agent_version()
 
     def test_version_file_is_preferred(self, tmp_path):
         """Agent VERSION file should be read before git fallback."""
@@ -237,9 +244,11 @@ class TestDetectAgentVersion:
 
     def test_missing_agent_returns_not_detected(self):
         """When no agent checkout is available, detect function returns 'not detected'."""
-        import api.updates as upd
-        with patch.object(upd, '_AGENT_DIR', None):
-            assert upd._detect_agent_version() == 'not detected'
+        from api.updates import policy
+
+        with patch.object(policy, '_agent_dir', return_value=None), \
+             patch.object(policy, '_detect_agent_version_from_gateway_health', return_value=None):
+            assert policy._detect_agent_version() == 'not detected'
 
     def test_agent_detect_returns_not_detected_on_fail(self, tmp_path):
         """Git fallback failure should remain user-friendly and not raise."""
@@ -258,16 +267,17 @@ class TestWebUIVersionConstant:
 
     def test_webui_version_is_set(self):
         """WEBUI_VERSION is a non-empty string exported from api.updates."""
-        import api.updates as upd
-        assert hasattr(upd, 'WEBUI_VERSION'), 'WEBUI_VERSION not exported from api.updates'
-        assert isinstance(upd.WEBUI_VERSION, str)
-        assert upd.WEBUI_VERSION, 'WEBUI_VERSION must not be empty string'
+        from api.updates import WEBUI_VERSION
+
+        assert isinstance(WEBUI_VERSION, str)
+        assert WEBUI_VERSION, 'WEBUI_VERSION must not be empty string'
 
     def test_webui_version_is_not_old_hardcoded(self):
         """WEBUI_VERSION must not be the old stale value from server.py."""
-        import api.updates as upd
+        from api.updates import WEBUI_VERSION
+
         # These were the two stale hardcoded strings before this fix
-        assert upd.WEBUI_VERSION not in ('0.50.38', 'HermesWebUI/0.50.38'), (
+        assert WEBUI_VERSION not in ('0.50.38', 'HermesWebUI/0.50.38'), (
             'WEBUI_VERSION still holds the old hardcoded server.py value'
         )
 
@@ -278,76 +288,76 @@ class TestWebUIVersionConstant:
 
 class TestSettingsEndpointVersion:
 
-    def test_api_settings_includes_webui_version(self):
-        """GET /api/settings response dict must include webui_version key."""
-        import api.routes as routes
-        import api.updates as upd
+    @staticmethod
+    def _settings_context(load_settings, captured):
+        """Build only the dependencies owned by configuration_queries.handle_get."""
+        from urllib.parse import parse_qs
 
-        # Patch load_settings to return a minimal dict (no disk I/O)
-        minimal_settings = {'send_key': 'enter', 'theme': 'dark'}
-
-        handler = MagicMock()
-        from urllib.parse import urlparse
-        parsed = urlparse('/api/settings')
-
-        captured = {}
-
-        def fake_j(h, data, status=200):
+        def capture_json(_handler, data, status=200):
             captured['data'] = data
 
-        with patch('api.routes.load_settings', return_value=dict(minimal_settings)), \
-             patch('api.routes.j', side_effect=fake_j):
-            routes.handle_get(handler, parsed)
+        return {
+            'RequestDiagnostics': MagicMock(),
+            '_handle_live_models': MagicMock(),
+            '_sanitize_error': MagicMock(),
+            '_serve_static': MagicMock(),
+            'bad': MagicMock(),
+            'get_available_models': MagicMock(),
+            'get_available_models_for_session_visit': MagicMock(),
+            'get_onboarding_status': MagicMock(),
+            'get_provider_cost_history': MagicMock(),
+            'get_provider_quota': MagicMock(),
+            'get_providers': MagicMock(),
+            'get_reasoning_status': MagicMock(),
+            'get_session': MagicMock(),
+            'handle_transcribe_capability': MagicMock(),
+            'j': capture_json,
+            'load_settings': load_settings,
+            'logger': MagicMock(),
+            'os': os,
+            'parse_qs': parse_qs,
+            'persisted_speech_settings_keys': lambda: [],
+        }
 
-        assert 'webui_version' in captured.get('data', {}), (
+    def _get_settings(self, settings):
+        from api.http.routes import configuration_queries
+        from urllib.parse import urlparse
+
+        captured = {}
+        ctx = self._settings_context(lambda: dict(settings), captured)
+        with patch('api.auth.is_auth_enabled', return_value=False), \
+             patch('api.auth.get_password_hash', return_value=None):
+            configuration_queries.handle_get(MagicMock(), urlparse('/api/settings'), ctx)
+        return captured['data']
+
+    def test_api_settings_includes_webui_version(self):
+        """GET /api/settings response dict must include webui_version key."""
+        from api.updates import AGENT_VERSION, WEBUI_VERSION
+
+        captured = self._get_settings({'send_key': 'enter', 'theme': 'dark'})
+
+        assert 'webui_version' in captured, (
             '/api/settings response must contain webui_version key'
         )
-        assert captured['data']['webui_version'] == upd.WEBUI_VERSION
-        assert 'agent_version' in captured.get('data', {}), (
+        assert captured['webui_version'] == WEBUI_VERSION
+        assert 'agent_version' in captured, (
             '/api/settings response must contain agent_version key'
         )
-        assert captured['data']['agent_version'] == upd.AGENT_VERSION
+        assert captured['agent_version'] == AGENT_VERSION
 
     def test_api_settings_webui_version_not_empty(self):
         """webui_version and agent_version in /api/settings must be non-empty strings."""
-        import api.routes as routes
-
-        handler = MagicMock()
-        from urllib.parse import urlparse
-        parsed = urlparse('/api/settings')
-
-        captured = {}
-
-        def fake_j(h, data, status=200):
-            captured['data'] = data
-
-        with patch('api.routes.load_settings', return_value={}), \
-             patch('api.routes.j', side_effect=fake_j):
-            routes.handle_get(handler, parsed)
-
-        version = captured.get('data', {}).get('webui_version', '')
+        captured = self._get_settings({})
+        version = captured.get('webui_version', '')
         assert version, 'webui_version in /api/settings must not be empty'
-        agent_version = captured.get('data', {}).get('agent_version', '')
+        agent_version = captured.get('agent_version', '')
         assert agent_version, 'agent_version in /api/settings must not be empty'
 
     def test_api_settings_no_password_hash(self):
         """password_hash must still be stripped even with version injection."""
-        import api.routes as routes
+        captured = self._get_settings({'password_hash': 'secret123'})
 
-        handler = MagicMock()
-        from urllib.parse import urlparse
-        parsed = urlparse('/api/settings')
-
-        captured = {}
-
-        def fake_j(h, data, status=200):
-            captured['data'] = data
-
-        with patch('api.routes.load_settings', return_value={'password_hash': 'secret123'}), \
-             patch('api.routes.j', side_effect=fake_j):
-            routes.handle_get(handler, parsed)
-
-        assert 'password_hash' not in captured.get('data', {}), (
+        assert 'password_hash' not in captured, (
             'password_hash must still be stripped from /api/settings'
         )
 
@@ -381,34 +391,82 @@ class TestIndexHTMLBadge:
 
 
 # ---------------------------------------------------------------------------
-# 6. static/panels.js — badge population from settings
+# 6. settings-preferences module — badge population from settings
 # ---------------------------------------------------------------------------
 
-class TestPanelsJSVersionBadge:
+class TestSettingsPreferencesVersionBadge:
 
-    def _read_js(self):
-        return family_source("panels")
+    @staticmethod
+    def _render_badges(settings):
+        """Run the real ESM owner against minimal in-memory badge elements."""
+        script = textwrap.dedent(
+            """
+            const settings = JSON.parse(process.argv[1]);
+            const badges = new Map([
+              'settings-webui-version-badge',
+              'settings-agent-version-badge',
+            ].map((id) => [id, { textContent: '' }]));
+            globalThis.$ = (id) => badges.get(id) || null;
+            globalThis.window = { addEventListener: () => {} };
+            globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+            globalThis.sessionStorage = { getItem: () => null, setItem: () => {} };
+            globalThis.document = {
+              addEventListener: () => {},
+              getElementById: (id) => badges.get(id) || null,
+              querySelector: () => null,
+              querySelectorAll: () => [],
+              documentElement: { dataset: {} },
+            };
+            globalThis.setInterval = () => 0;
 
-    def test_panels_js_reads_webui_version(self):
-        """loadSettingsPanel must reference settings.webui_version to populate the badge."""
-        src = self._read_js()
-        assert 'webui_version' in src, (
-            'panels.js loadSettingsPanel() must read settings.webui_version '
-            'to populate the badge dynamically'
+            const { _loadSettingsAppearance } = await import(
+              './static/modules/panels/settings-preferences.js'
+            );
+            _loadSettingsAppearance(settings);
+            process.stdout.write(JSON.stringify({
+              webui: badges.get('settings-webui-version-badge').textContent,
+              agent: badges.get('settings-agent-version-badge').textContent,
+            }));
+            """
         )
+        result = subprocess.run(
+            [NODE, '--input-type=module', '-e', script, json.dumps(settings)],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr or result.stdout
+        return json.loads(result.stdout)
 
-    def test_panels_js_targets_version_badges(self):
-        """loadSettingsPanel must target the two version badge elements."""
-        src = self._read_js()
-        assert 'settings-webui-version-badge' in src, (
-            'panels.js must query #settings-webui-version-badge to update the WebUI text'
-        )
-        assert 'settings-agent-version-badge' in src, (
-            'panels.js must query #settings-agent-version-badge to update the Agent text'
-        )
-        assert 'agent_version' in src, (
-            'loadSettingsPanel must read settings.agent_version to populate the agent badge'
-        )
+    @node_test
+    def test_experimental_badge_uses_channel_version_and_trimmed_agent_version(self):
+        """The rendered settings badges prefer display channel version and trim Agent output."""
+        badges = self._render_badges({
+            'webui_version': 'v0.52.1',
+            'update_channel_version': 'exp-v0.52.2',
+            'update_channel': 'experimental',
+            'agent_version': ' v0.52.2 ',
+        })
+
+        assert badges == {
+            'webui': 'WebUI: exp-v0.52.2 · Experimental',
+            'agent': 'Agent: v0.52.2',
+        }
+
+    @node_test
+    def test_stable_badge_falls_back_to_runtime_version_and_not_detected_agent(self):
+        """Stable settings omit channel chrome and preserve user-friendly fallbacks."""
+        badges = self._render_badges({
+            'webui_version': 'v0.52.1',
+            'agent_version': '   ',
+        })
+
+        assert badges == {
+            'webui': 'WebUI: v0.52.1',
+            'agent': 'Agent: not detected',
+        }
 
 
 # ---------------------------------------------------------------------------
