@@ -85,6 +85,41 @@ function _runOptionalPostStartUiStep(label, fn){
   }
 }
 
+function _beginChatAdmission({activeSid,msgText,uploaded,moaConfig}){
+  const _modelState=_chatPayloadModelState();
+  const _pendingPick=(typeof _readPendingSessionModel==='function')
+    ? _readPendingSessionModel(activeSid)
+    : null;
+  const _pendingPickMatch=_pendingPick
+    && _pendingPick.model===_modelState.model
+    && String(_pendingPick.model_provider||'')===String(_modelState.model_provider||'');
+  const _defaultModel=(typeof window!=='undefined'&&window._defaultModel)||'';
+  const _activeProvider=(typeof window!=='undefined'&&window._activeProvider)||null;
+  const _isCrossProviderPick=_modelState.model
+    && _modelState.model_provider
+    && _defaultModel
+    && _activeProvider
+    && _modelState.model!==_defaultModel
+    && String(_modelState.model_provider||'')!==String(_activeProvider||'');
+  const _explicitPick=_pendingPickMatch||_isCrossProviderPick;
+  if(_pendingPickMatch&&typeof _clearPendingSessionModel==='function') _clearPendingSessionModel(activeSid);
+  return {
+    modelState:_modelState,
+    explicitPick:_explicitPick,
+    promise:api('/api/chat/start',{method:'POST',body:JSON.stringify({
+      session_id:activeSid,
+      message:msgText,
+      model:_modelState.model,
+      workspace:S.session.workspace,
+      model_provider:_modelState.model_provider,
+      profile:S.activeProfile||S.session.profile||'default',
+      explicit_model_pick:_explicitPick||undefined,
+      attachments:uploaded.length?uploaded:undefined,
+      moa_config:moaConfig?true:undefined,
+    })}),
+  };
+}
+
 function _sessionTitleLooksDefaultOrProvisional(titleText, provisionalText){
   const title=String(titleText||'').replace(/\s+/g,' ').trim();
   if(!title||title==='Untitled'||title==='New Chat')return true;
@@ -546,20 +581,31 @@ export async function send(){
   S.toolCalls=[];  // clear tool calls from previous turn
   clearLiveToolCards();  // clear any leftover live cards from last turn
   let optimisticMessages;
+  let _chatAdmission=null;
+  let _chatAdmissionError=null;
   try{
-    S.messages.push(userMsg);renderMessages();setBusy(true);
+    S.messages.push(userMsg);
     if(S.session&&!S.session.pending_started_at) S.session.pending_started_at=Date.now()/1000;
+    optimisticMessages=[...S.messages];
+    INFLIGHT[activeSid]={messages:optimisticMessages,uploaded:uploadedNames,toolCalls:[]};
+    // Establish the in-memory recovery owner first, then begin admission before
+    // full transcript rendering, localStorage compaction, sidebar work, or
+    // polling. Those synchronous UI tasks now overlap the network request.
+    try{
+      _chatAdmission=_beginChatAdmission({activeSid,msgText,uploaded,moaConfig:_pendingMoaConfig});
+    }catch(admissionError){
+      _chatAdmissionError=admissionError;
+    }
+    renderMessages();setBusy(true);
     if(typeof ensureLiveWorklogShell==='function') ensureLiveWorklogShell();
     else appendThinking('',{pending:true});
-    // First optimistic pass: make the local user turn visible before /api/chat/start
-    // can save pending state on the server.
+    // First optimistic pass: make the local user turn visible while
+    // /api/chat/start persists pending state on the server.
     _runOptionalPreStartUiStep('upsertActiveSessionForLocalTurn.initial', ()=>{
       if(typeof upsertActiveSessionForLocalTurn==='function'){
         upsertActiveSessionForLocalTurn({title:displayText.slice(0,64),messageCount:S.messages.length,timestampMs:Date.now()});
       }
     });
-    optimisticMessages=[...S.messages];
-    INFLIGHT[activeSid]={messages:optimisticMessages,uploaded:uploadedNames,toolCalls:[]};
     if(typeof saveInflightState==='function'){
       saveInflightState(activeSid,{streamId:null,messages:INFLIGHT[activeSid].messages,uploaded:uploadedNames,toolCalls:[]});
     }
@@ -620,47 +666,13 @@ export async function send(){
   let modelStateForPostStart;
   let explicitPickForPostStart;
   try{
-    const _modelState=_chatPayloadModelState();
-    modelStateForPostStart=_modelState;
-    const _pendingPick=(typeof _readPendingSessionModel==='function')
-      ? _readPendingSessionModel(activeSid)
-      : null;
-    const _pendingPickMatch=_pendingPick
-      && _pendingPick.model===_modelState.model
-      && String(_pendingPick.model_provider||'')===String(_modelState.model_provider||'');
-    // ── Persisted cross-provider pick (#3737 follow-up) ──
-    // The onchange marker is consumed after the first send, so subsequent sends
-    // lose explicit_model_pick and the server "repairs" the model back to the
-    // profile default.  When the session has a non-default model from a different
-    // provider than the profile's active provider, treat every send as explicit
-    // so the server honors the user's choice across the entire conversation.
-    const _defaultModel=(typeof window!=='undefined' && window._defaultModel)||'';
-    const _activeProvider=(typeof window!=='undefined' && window._activeProvider)||null;
-    const _isCrossProviderPick = _modelState.model
-      && _modelState.model_provider
-      && _defaultModel
-      && _activeProvider
-      && _modelState.model !== _defaultModel
-      && String(_modelState.model_provider||'') !== String(_activeProvider||'');
-    const _explicitPick = _pendingPickMatch || _isCrossProviderPick;
-    // Consume the pending explicit-pick marker for THIS send only. The marker is
-    // recorded on modelSelect.onchange and intentionally kept (not cleared on
-    // session-update) so it survives the normal pick→update→send flow; clear it here
-    // once read so a later send of an unchanged dropdown isn't treated as an explicit
-    // pick. (#3739/#3737, Codex catch)
-    if(_pendingPickMatch && typeof _clearPendingSessionModel==='function') _clearPendingSessionModel(activeSid);
-    explicitPickForPostStart=_explicitPick;
-    const startData=await api('/api/chat/start',{method:'POST',body:JSON.stringify({
-      session_id:activeSid,message:msgText,
-      // S.session.model remains authoritative; the helper only resolves a
-      // matching provider fallback for the same outgoing model.
-      model:_modelState.model,workspace:S.session.workspace,
-      model_provider:_modelState.model_provider,
-      profile:S.activeProfile||S.session.profile||'default',
-      explicit_model_pick:_explicitPick||undefined,
-      attachments:uploaded.length?uploaded:undefined,
-      moa_config:_pendingMoaConfig?true:undefined
-    })});
+    if(_chatAdmissionError) throw _chatAdmissionError;
+    if(!_chatAdmission){
+      _chatAdmission=_beginChatAdmission({activeSid,msgText,uploaded,moaConfig:_pendingMoaConfig});
+    }
+    modelStateForPostStart=_chatAdmission.modelState;
+    explicitPickForPostStart=_chatAdmission.explicitPick;
+    const startData=await _chatAdmission.promise;
     _pendingMoaConfig=null;
     postStartData = startData;
   }catch(e){

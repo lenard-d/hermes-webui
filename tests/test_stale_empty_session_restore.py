@@ -70,7 +70,7 @@ def _load_session_404_block() -> str:
 
 def _send_catch_block() -> str:
     """The catch(e) body of send() after POST /api/chat/start."""
-    start = MESSAGES_JS.find("const startData=await api('/api/chat/start'")
+    start = MESSAGES_JS.find("const startData=await _chatAdmission.promise")
     assert start > 0, "send() /api/chat/start call not found"
     catch_idx = MESSAGES_JS.find("}catch(e){", start)
     assert catch_idx > start, "send() catch block not found"

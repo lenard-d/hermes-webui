@@ -253,7 +253,7 @@ class TestBusySendButton:
         send_end = MESSAGES_JS.find("const LIVE_STREAMS={}", send_start)
         assert send_end > send_start, "could not find end of send() body"
         send_body = MESSAGES_JS[send_start:send_end]
-        api_idx = send_body.find("const startData=await api('/api/chat/start'")
+        api_idx = send_body.find("const startData=await _chatAdmission.promise")
         assert api_idx >= 0, "send() should issue /api/chat/start"
         catch_idx = send_body.find("}catch(e){", api_idx)
         assert catch_idx >= 0, "send() should have API error catch after /api/chat/start"

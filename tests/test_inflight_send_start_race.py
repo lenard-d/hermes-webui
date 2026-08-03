@@ -28,7 +28,7 @@ def test_send_preserves_optimistic_messages_across_chat_start_await():
     body = _function_body(MESSAGES_JS, "send")
     setup_idx = body.index("optimisticMessages=[...S.messages];")
     inflight_idx = body.index("INFLIGHT[activeSid]={messages:optimisticMessages")
-    await_idx = body.index("const startData=await api('/api/chat/start'")
+    await_idx = body.index("const startData=await _chatAdmission.promise")
     save_idx = body.index("saveInflightState(activeSid,{streamId", await_idx)
 
     assert setup_idx < inflight_idx < await_idx < save_idx
@@ -93,7 +93,7 @@ def test_send_clears_stale_busy_state_before_queue_branch():
     )
     reconcile_idx = body.index("_clearStaleBusyStateBeforeSend")
     busy_branch_idx = body.index("if(S.busy||compressionRunning)")
-    chat_start_idx = body.index("api('/api/chat/start'")
+    chat_start_idx = body.index("_beginChatAdmission({")
     assert reconcile_idx < busy_branch_idx < chat_start_idx, (
         "stale busy reconciliation must run before the queue branch and before /api/chat/start"
     )
@@ -104,8 +104,8 @@ def test_pre_start_optimistic_ui_helpers_cannot_block_chat_start():
     body = _function_body(MESSAGES_JS, "send")
     helper_body = _function_body(MESSAGES_JS, "_runOptionalPreStartUiStep")
 
-    optimistic_idx = body.index("S.messages.push(userMsg);renderMessages();setBusy(true);")
-    chat_start_idx = body.index("api('/api/chat/start'")
+    optimistic_idx = body.index("renderMessages();setBusy(true);")
+    chat_start_idx = body.index("const startData=await _chatAdmission.promise")
     pre_start = body[optimistic_idx:chat_start_idx]
 
     assert "try" in helper_body and "catch" in helper_body, (
@@ -124,11 +124,25 @@ def test_pre_start_optimistic_ui_helpers_cannot_block_chat_start():
     assert "upsertActiveSessionForLocalTurn" in pre_start and "applySessionTitleUpdate" in pre_start
 
 
+def test_chat_start_begins_after_inflight_owner_but_before_optional_ui_work():
+    """Slow rendering/storage/sidebar work must overlap the admission request."""
+    body = _function_body(MESSAGES_JS, "send")
+    inflight_idx = body.index("INFLIGHT[activeSid]={messages:optimisticMessages")
+    begin_idx = body.index("_beginChatAdmission({", inflight_idx)
+    render_idx = body.index("renderMessages()", inflight_idx)
+    storage_idx = body.index("saveInflightState(activeSid", inflight_idx)
+    sidebar_idx = body.index("renderSessionListFromCache", inflight_idx)
+
+    assert inflight_idx < begin_idx < render_idx
+    assert begin_idx < storage_idx
+    assert begin_idx < sidebar_idx
+
+
 def test_pre_start_optimistic_block_cannot_prevent_chat_start():
     """Any pre-start UI/storage exception must still fall through to /api/chat/start."""
     body = _function_body(MESSAGES_JS, "send")
-    optimistic_idx = body.index("S.messages.push(userMsg);renderMessages();setBusy(true);")
-    chat_start_idx = body.index("api('/api/chat/start'")
+    optimistic_idx = body.index("renderMessages();setBusy(true);")
+    chat_start_idx = body.index("const startData=await _chatAdmission.promise")
     pre_start = body[optimistic_idx:chat_start_idx]
 
     assert "}catch(preStartError){" in pre_start, (
@@ -150,7 +164,7 @@ def test_post_start_bookkeeping_errors_cannot_block_live_attach():
         "post-start optional helper failures should stay in warning logs, not user-facing error bubbles"
     )
 
-    chat_start_idx = body.index("const startData=await api('/api/chat/start'")
+    chat_start_idx = body.index("const startData=await _chatAdmission.promise")
     catch_idx = body.index("}catch(e){", chat_start_idx)
     optional_idx = body.index("_runOptionalPostStartUiStep('post-start ui/bookkeeping'", catch_idx)
     stream_id_idx = body.index("streamId = postStartData ? postStartData.stream_id : null;", catch_idx)

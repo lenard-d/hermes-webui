@@ -17,9 +17,9 @@ class TestSidebarFirstTurnVisibility:
             "send() must optimistically upsert the active session into the sidebar "
             "as soon as the local user message is pushed."
         )
-        push_idx = src.index("S.messages.push(userMsg);renderMessages();setBusy(true);")
+        push_idx = src.index("S.messages.push(userMsg);")
         helper_idx = src.index("upsertActiveSessionForLocalTurn", push_idx)
-        start_idx = src.index("api('/api/chat/start'", push_idx)
+        start_idx = src.index("const startData=await _chatAdmission.promise", push_idx)
         assert helper_idx < start_idx, (
             "The sidebar row must be rendered before /api/chat/start returns so "
             "tool calls are reachable while the first agent turn is still running."
@@ -35,7 +35,7 @@ class TestSidebarFirstTurnVisibility:
         ui = family_source("ui")
         send_start = messages.index("async function send()")
         push_idx = messages.index("appendThinking('',{pending:true})", send_start)
-        start_idx = messages.index("api('/api/chat/start'", send_start)
+        start_idx = messages.index("const startData=await _chatAdmission.promise", send_start)
         assert push_idx < start_idx, (
             "send() should render an assistant-side pending placeholder before "
             "/api/chat/start or the first SSE event returns."
@@ -68,13 +68,13 @@ class TestSidebarFirstTurnVisibility:
 
     def test_messages_comments_document_why_each_optimistic_upsert_stays_separate(self):
         src = family_source("messages")
-        assert "First optimistic pass" in src and "before /api/chat/start" in src
+        assert "First optimistic pass" in src and "persists pending state" in src
         assert "Second optimistic pass" in src and "provisional title" in src
         assert "Third optimistic pass" in src and "stream_id is now known" in src
 
     def test_chat_start_failure_clears_optimistic_streaming_state(self):
         messages = family_source("messages")
-        catch_start = messages.index("}catch(e){", messages.index("api('/api/chat/start'"))
+        catch_start = messages.index("}catch(e){", messages.index("const startData=await _chatAdmission.promise"))
         failure_start = messages.index("S.messages.push({role:'assistant',content:`**Error:** ${errMsg}`});", catch_start)
         catch_body = messages[failure_start:messages.index("return;", failure_start)]
         assert "setBusy(false)" in catch_body, "chat/start failure must leave the active pane idle"
