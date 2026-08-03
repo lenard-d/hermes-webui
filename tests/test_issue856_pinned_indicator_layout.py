@@ -1,10 +1,15 @@
 """Regression checks for #856 pinned-star layout in the session list."""
 
 from tests.frontend_asset_contract import family_source
+from pathlib import Path
 
 
 SESSIONS_JS = family_source("sessions")
 STYLE_CSS = family_source("style")
+TERMINAL_EVENTS_JS = (
+    Path(__file__).resolve().parents[1]
+    / "static/modules/messages/terminal-events.js"
+).read_text(encoding="utf-8")
 
 
 def test_pinned_indicator_renders_inside_title_row():
@@ -158,12 +163,11 @@ def test_date_group_caret_expanded_down_collapsed_right():
 def test_apperror_path_calls_render_session_list():
     """apperror handler must call renderSessionList() to clear the streaming indicator
     immediately rather than waiting for the streaming poll interval."""
-    messages_js = family_source("messages")
-    apperror_idx = messages_js.find("source.addEventListener('apperror'")
-    assert apperror_idx != -1, "apperror handler not found in messages.js"
-    next_handler_idx = messages_js.find("source.addEventListener('error'", apperror_idx)
-    assert next_handler_idx != -1, "network error handler not found after apperror handler"
-    apperror_block = messages_js[apperror_idx:next_handler_idx]
+    apperror_idx = TERMINAL_EVENTS_JS.find("source.addEventListener('apperror'")
+    assert apperror_idx != -1, "apperror handler not found in terminal-events owner"
+    next_handler_idx = TERMINAL_EVENTS_JS.find("source.addEventListener('cancel'", apperror_idx)
+    assert next_handler_idx != -1, "cancel handler not found after apperror handler"
+    apperror_block = TERMINAL_EVENTS_JS[apperror_idx:next_handler_idx]
     assert "renderSessionList()" in apperror_block, (
         "apperror handler must call renderSessionList() so the streaming indicator "
         "clears immediately on server errors, not after the polling fallback delay"
