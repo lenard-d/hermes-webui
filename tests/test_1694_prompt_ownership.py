@@ -11,7 +11,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
 MESSAGES_JS = family_source("messages")
-SESSIONS_JS = family_source("sessions")
+EXISTING_SESSION_LOAD_JS = (
+    REPO_ROOT / "static" / "modules" / "sessions" / "existing-session-load.js"
+).read_text(encoding="utf-8")
+
+
 def _body_from_brace(src: str, brace: int, label: str) -> str:
     assert brace >= 0, f"body opening brace not found for: {label}"
     depth = 1
@@ -96,8 +100,12 @@ def test_polling_empty_state_clears_only_the_owner_prompt():
 
 
 def test_load_session_rerenders_cached_prompt_for_new_active_session():
-    body = _function_body(SESSIONS_JS, "loadSession")
+    """The lifecycle owner restores owner-cached prompts after a session load."""
+    body = _function_body(EXISTING_SESSION_LOAD_JS, "loadSession")
     assert "_renderPendingPromptsForActiveSession();" in body
+    assert body.index("S.session=data.session;") < body.index(
+        "_renderPendingPromptsForActiveSession();"
+    )
 
 
 def test_prompt_rerender_hides_previous_session_cards_without_clearing_cache():
