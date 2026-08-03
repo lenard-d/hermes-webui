@@ -22,6 +22,15 @@ Covers:
 from tests.frontend_asset_contract import family_source
 
 import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+NODE = shutil.which("node")
 
 
 def _locale_count(src: str) -> int:
@@ -141,55 +150,103 @@ class TestCancelStreamErrorPath:
         )
 
 
-# ── 6. SSE cancel handler still present ──────────────────────────────────────
+# ── 6. SSE cancel terminal-owner behavior ───────────────────────────────────
 
-def test_sse_cancel_handler_still_present():
-    """The SSE 'cancel' event handler must still exist in messages.js.
+@pytest.mark.skipif(NODE is None, reason="node is required to execute message runtime tests")
+def test_sse_cancel_terminal_owner_idles_the_pane():
+    """A cancel SSE frame finalizes its owner and invokes the pane-idle transition."""
+    script = r"""
+globalThis.document={
+  addEventListener(){},
+  getElementById(){return null;},
+  baseURI:'http://localhost/',
+};
+globalThis.window=globalThis;
+globalThis.window.addEventListener=()=>{};
+globalThis.location={href:'http://localhost/'};
+globalThis.renderSessionList=()=>{};
+globalThis.clearLiveToolCards=()=>{};
+globalThis.removeThinking=()=>{};
+globalThis.renderMessages=()=>{};
+globalThis._setSessionViewedCount=()=>{};
+globalThis._isMessagePaneNearBottom=()=>true;
+globalThis._isMessageReaderUnpinned=()=>false;
 
-    The new cancelStream() cleanup is not a replacement — the SSE handler
-    provides additional cleanup (removes 'Task cancelled.' message, clears
-    tool cards, etc.) when the connection is still alive.
-    """
-    src = family_source("messages")
-    assert "addEventListener('cancel'" in src or 'addEventListener("cancel"' in src, (
-        "SSE cancel event handler missing from messages.js — "
-        "live cancellation cleanup path is broken"
+const {createStreamTerminalEventOwner}=await import('./static/modules/messages/terminal-events.js');
+
+class FakeSource {
+  constructor(){this.listeners=new Map();this.readyState=1;this.closed=false;}
+  addEventListener(name,handler){this.listeners.set(name,handler);}
+  close(){this.closed=true;this.readyState=2;}
+  emit(name,payload){
+    const handler=this.listeners.get(name);
+    if(!handler) throw new Error(`missing ${name} handler`);
+    handler({data:JSON.stringify(payload)});
+  }
+}
+
+const source=new FakeSource();
+const calls=[];
+const terminalState={streamFinalized:false,terminalStateReached:false};
+const state={
+  session:{session_id:'sid-cancel',message_count:0},
+  messages:[],
+  activeStreamId:'stream-cancel',
+};
+globalThis.S=state;
+const owner=createStreamTerminalEventOwner({
+  sessionId:'sid-cancel',
+  streamId:'stream-cancel',
+  state,
+  terminalState,
+  turn:{assistantText:()=>''},
+  lifecycle:{
+    clearStreamEndRecovery:()=>calls.push('clearRecovery'),
+    bailOutOfStaleTerminal:()=>false,
+    cancelPersist:()=>calls.push('cancelPersist'),
+    cancelSnapshot:()=>calls.push('cancelSnapshot'),
+    clearOwnerInflight:()=>calls.push('clearInflight'),
+    clearApproval:()=>calls.push('clearApproval'),
+    clearClarify:()=>calls.push('clearClarify'),
+    setActivePaneIdle:()=>calls.push('idlePane'),
+  },
+  renderer:{
+    clearAnchorProseIncrementalNode:()=>calls.push('clearAnchorProse'),
+    cancelPendingRender:()=>calls.push('cancelRender'),
+    cleanupReduceMotion:()=>calls.push('cleanupMotion'),
+    endParser:()=>calls.push('endParser'),
+  },
+  anchor:{
+    attachProjectedScene:()=>calls.push('attachProjectedScene'),
+    flushReasoning:()=>calls.push('flushReasoning'),
+    apply:()=>calls.push('applyCancel'),
+    scheduleCleanup:()=>calls.push('scheduleCleanup'),
+  },
+  transcript:{
+    carryForward:(_previous,next)=>next,
+    filterRecoveryControls:messages=>messages,
+  },
+});
+owner.attach(source);
+source.emit('cancel',{session:{session_id:'sid-cancel',message_count:0,messages:[]}});
+await new Promise(resolve=>setTimeout(resolve,0));
+
+if(!source.closed) throw new Error('cancel did not close the owner source');
+if(!terminalState.streamFinalized||!terminalState.terminalStateReached){
+  throw new Error('cancel did not finalize terminal state');
+}
+if(state.activeStreamId!==null) throw new Error('cancel did not clear active stream id');
+if(calls.at(-1)!=='idlePane') throw new Error(`cancel did not idle pane: ${calls.join(',')}`);
+"""
+    result = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
     )
-
-
-def test_sse_cancel_handler_calls_set_busy():
-    """The SSE cancel handler must still call setBusy(false)."""
-    src = family_source("messages")
-    idx = src.find("addEventListener('cancel'")
-    if idx == -1:
-        idx = src.find('addEventListener("cancel"')
-    assert idx != -1
-    # Find the closing of this handler block (next top-level addEventListener)
-    next_handler = src.find("source.addEventListener(", idx + 50)
-    block = src[idx:next_handler] if next_handler != -1 else src[idx:idx + 3000]
-    assert (
-        "setBusy(false)" in block
-        or "_setActivePaneIdleIfOwner()" in block
-    ), (
-        "SSE cancel handler no longer idles the owning active pane"
-    )
-    if "_setActivePaneIdleIfOwner()" in block:
-        helper_idx = src.find("function _setActivePaneIdleIfOwner")
-        assert helper_idx != -1
-        next_function = src.find("\n  function ", helper_idx + 1)
-        helper = src[helper_idx:next_function if next_function != -1 else helper_idx + 800]
-        assert "setBusy(false)" in helper
-        # The helper MUST preserve the v0.51.12 (#1753) 3-way OR guard so
-        # idling the active pane on a background completion is gated on the
-        # permissive-fallback disjunct ("no other inflight on the active pane")
-        # in addition to "is active" / "no session". Without this, a user
-        # viewing pane A (idle) while pane B completes in the background
-        # would not get pane A's composer state cleared. Catches the exact
-        # regression v0.51.14's auto-fix repaired in PR #1761.
-        assert "!INFLIGHT[S.session.session_id]" in helper, (
-            "_setActivePaneIdleIfOwner must preserve the !INFLIGHT[...] "
-            "permissive-fallback disjunct from PR #1753 (v0.51.12)."
-        )
+    assert result.returncode == 0, result.stderr
 
 
 # ── 7. i18n key preserved ─────────────────────────────────────────────────────
