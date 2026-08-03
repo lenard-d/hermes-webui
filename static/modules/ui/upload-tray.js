@@ -13,7 +13,7 @@ function renderTray(){
   S.pendingFiles.forEach((f,i)=>{
     const chip=document.createElement('div');chip.className='attach-chip';
     const mediaKind=_mediaKindForName(f.name);
-    if(_IMAGE_EXTS.test(f.name)||mediaKind==='audio'||mediaKind==='video'){
+    if(_IMAGE_EXTS.test(f.name)||_SVG_EXTS.test(f.name)||mediaKind==='audio'||mediaKind==='video'){
       const blobUrl=URL.createObjectURL(f);
       chip.className='attach-chip attach-chip--media attach-chip--'+mediaKind;
       chip.dataset.blobUrl=blobUrl;
