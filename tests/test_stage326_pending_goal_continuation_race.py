@@ -1,34 +1,23 @@
 """Stage-326 integration test for #1951's PENDING_GOAL_CONTINUATION chain.
 
 Opus advisor flagged a critical race during stage-326 review: the original
-#1951 PR placed a `PENDING_GOAL_CONTINUATION.discard(session_id)` in the
-streaming worker's `finally` block. Because `goal_continue` sets the marker
-inside the SAME function call (line ~3328) that the `finally` then discards
-it (line ~3553), the marker would be erased before the frontend could
-receive the SSE event, post the next /chat/start, and trigger the
-consumer-side `if session_id in PENDING_GOAL_CONTINUATION` check in
-routes.py.
+#1951 PR placed a `PENDING_GOAL_CONTINUATION.discard(session_id)` in the local
+run owner's `finally` block. Because `goal_continue` sets the marker inside
+the SAME lifecycle that the `finally` then discarded it, the marker would be
+erased before the frontend could receive the SSE event, post the next
+/chat/start, and trigger the consumer-side continuation check in turn
+admission.
 
-The fix removes the discard from streaming.py's finally and relies on the
-consumer in routes.py to discard atomically when the marker is read.
+The fix leaves the marker owned by local-success publication and relies on
+turn admission to consume it atomically after admission succeeds.
 
 These tests exercise the full chain to guard against the regression:
 1. The streaming finally must NOT discard the marker
 2. Setting the marker survives the streaming finally
 3. routes.py consumer discards atomically on read
 """
-import re
-from pathlib import Path
-
-
-def _read_streaming():
-    return Path(__file__).parents[1].joinpath(
-        "api", "runs", "local.py"
-    ).read_text(encoding="utf-8")
-
-
-def _read_routes():
-    return Path(__file__).parents[1].joinpath("api", "routes.py").read_text(encoding="utf-8")
+import logging
+from types import SimpleNamespace
 
 
 def test_streaming_finally_does_not_discard_pending_goal_continuation():
@@ -160,24 +149,44 @@ def test_stream_goal_related_pop_keyed_by_stream_id():
         config.finish_runtime_run("other-stream")
 
 
-def test_goal_continue_set_marker_before_emitting_event():
-    """Source-code ordering check: PENDING_GOAL_CONTINUATION.add must
-    happen BEFORE the goal_continue SSE event is put on the queue, so the
-    marker is observable by the time the frontend reacts."""
-    src = _read_streaming()
-    add_idx = src.find("PENDING_GOAL_CONTINUATION.add(session_id)")
-    if add_idx == -1:
-        # Tolerate slight phrasing variations.
-        m = re.search(r"PENDING_GOAL_CONTINUATION\.add\([^)]*\)", src)
-        assert m is not None, "PENDING_GOAL_CONTINUATION.add not found"
-        add_idx = m.start()
+def test_goal_continue_sets_marker_before_publishing_event(monkeypatch):
+    """The marker must already be observable when goal_continue is published."""
+    from api import goals
+    from api.runs import local_success
 
-    # Find the next goal_continue SSE event AFTER the add.
-    after_add = src[add_idx:]
-    event_idx = after_add.find("goal_continue")
-    assert event_idx != -1, "no goal_continue emission after marker add"
-    # Must be within ~500 chars (close to the add).
-    assert event_idx < 500, (
-        "PENDING_GOAL_CONTINUATION.add must immediately precede the "
-        "goal_continue SSE emission"
+    session_id = "goal-publication-order"
+    marker_was_visible = []
+    published = []
+
+    monkeypatch.setattr(goals, "has_active_goal", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        goals,
+        "evaluate_goal_after_turn",
+        lambda *_args, **_kwargs: {
+            "should_continue": True,
+            "continuation_prompt": "continue the goal",
+        },
     )
+
+    def publish(event, payload):
+        published.append((event, payload))
+        if event == "goal_continue":
+            marker_was_visible.append(
+                session_id in local_success.PENDING_GOAL_CONTINUATION
+            )
+
+    try:
+        local_success._publish_goal_continuation(
+            SimpleNamespace(messages=[{"role": "assistant", "content": "working"}]),
+            session_id=session_id,
+            profile_home="/tmp/profile",
+            goal_related=True,
+            publish=publish,
+            logger=logging.getLogger(__name__),
+        )
+
+        assert [event for event, _payload in published] == ["goal", "goal_continue"]
+        assert marker_was_visible == [True]
+        assert session_id in local_success.PENDING_GOAL_CONTINUATION
+    finally:
+        local_success.PENDING_GOAL_CONTINUATION.discard(session_id)

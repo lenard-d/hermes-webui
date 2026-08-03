@@ -134,17 +134,17 @@ def test_turn_admission_marks_continuation_and_explicit_goal_streams(
 
 
 # ---------------------------------------------------------------------------
-# Test 8: _run_agent_streaming accepts and uses goal_related
+# Test 8: the local run entrypoint accepts and uses goal_related
 # ---------------------------------------------------------------------------
 
 def test_run_agent_streaming_uses_goal_related():
-    """_run_agent_streaming must accept goal_related kwarg and use it to
+    """The run-owned entrypoint accepts goal_related and forwards it to
     gate the goal evaluation hook."""
     import inspect
 
-    from api.streaming import _run_agent_streaming
+    from api.runs import run_agent_streaming
 
-    signature = inspect.signature(_run_agent_streaming)
+    signature = inspect.signature(run_agent_streaming)
     assert "goal_related" in signature.parameters
     assert signature.parameters["goal_related"].default is False
 
