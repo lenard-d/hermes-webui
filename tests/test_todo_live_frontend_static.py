@@ -1,6 +1,4 @@
 from __future__ import annotations
-from tests.frontend_asset_contract import family_asset_paths, family_source
-
 import json
 import shutil
 import subprocess
@@ -13,50 +11,39 @@ REPO_ROOT = Path(__file__).parent.parent
 STREAM_PROGRESS_JS = (
     REPO_ROOT / "static" / "modules" / "messages" / "stream-progress.js"
 ).read_text(encoding="utf-8")
-
-
-def _read_static(path: str) -> str:
-    family = {
-        "static/ui.js": "ui",
-        "static/messages.js": "messages",
-    }.get(path)
-    if family:
-        return family_source(family)
-    return (REPO_ROOT / path).read_text(encoding="utf-8")
+STATE_JS = (REPO_ROOT / "static" / "modules" / "ui" / "state.js").read_text(encoding="utf-8")
+INFLIGHT_STATE_JS = (REPO_ROOT / "static" / "modules" / "ui" / "inflight-state.js").read_text(encoding="utf-8")
+TODO_STATE_JS = (REPO_ROOT / "static" / "modules" / "ui" / "todo-state.js").read_text(encoding="utf-8")
+STREAM_JS = (REPO_ROOT / "static" / "modules" / "messages" / "stream.js").read_text(encoding="utf-8")
+CONTENT_EVENTS_JS = (REPO_ROOT / "static" / "modules" / "messages" / "content-events.js").read_text(encoding="utf-8")
 
 
 def test_frontend_state_and_inflight_storage_include_todo_snapshot():
-    ui = _read_static("static/ui.js")
-    messages = _read_static("static/messages.js")
-
-    assert "todos:[],todoStateMeta:null" in ui
-    assert "const todos=Array.isArray(state.todos)?state.todos:null" in ui
-    assert "todoStateMeta" in ui[ui.find("function _compactInflightState"):ui.find("function _writeInflightStateMap")]
-    assert "getTodos:()=>S.todos" in messages
-    assert "getTodoStateMeta:()=>S.todoStateMeta" in messages
+    assert "todos:[],todoStateMeta:null" in STATE_JS
+    assert "const todos=Array.isArray(state.todos)?state.todos:null" in INFLIGHT_STATE_JS
+    assert "todoStateMeta" in INFLIGHT_STATE_JS[INFLIGHT_STATE_JS.find("function _compactInflightState"):INFLIGHT_STATE_JS.find("function _writeInflightStateMap")]
+    assert "getTodos:()=>S.todos" in STREAM_JS
+    assert "getTodoStateMeta:()=>S.todoStateMeta" in STREAM_JS
     assert "todos:Array.isArray(inflight.todos)?inflight.todos:getTodos()" in STREAM_PROGRESS_JS
     assert "todoStateMeta:inflight.todoStateMeta||getTodoStateMeta()||null" in STREAM_PROGRESS_JS
 
 
 def test_frontend_todo_state_listener_is_registered_and_journaled():
-    messages = _read_static("static/messages.js")
-
-    assert "source.addEventListener('todo_state'" in messages
-    assert "if(d.session_id&&d.session_id!==activeSid) return;" in messages
-    assert "if(!S.session||S.session.session_id!==activeSid) return;" in messages
-    assert "if(incomingTs&&currentTs&&incomingTs<currentTs) return;" in messages
-    assert "inflight.todos=S.todos" in messages
-    assert "'todo_state','approval'" in messages
+    assert "source.addEventListener('todo_state'" in CONTENT_EVENTS_JS
+    assert "if(data.session_id&&data.session_id!==activeSid) return;" in CONTENT_EVENTS_JS
+    assert "if(!S.session||S.session.session_id!==activeSid) return;" in CONTENT_EVENTS_JS
+    assert "if(incomingTimestamp&&currentTimestamp&&incomingTimestamp<currentTimestamp) return;" in CONTENT_EVENTS_JS
+    assert "inflight.todos=S.todos" in CONTENT_EVENTS_JS
+    assert "'todo_state','approval'" in STREAM_JS
 
 
 def test_hydrate_todos_from_session_reconciles_cold_and_inflight_snapshots():
-    ui = _read_static("static/ui.js")
-    start = ui.find("function _hydrateTodosFromSession(session)")
-    end = ui.find("function snapshotLiveTurnHtmlForSession")
+    start = TODO_STATE_JS.find("function _hydrateTodosFromSession(session)")
+    end = TODO_STATE_JS.find("export {")
 
     assert start != -1
     assert end != -1
-    block = ui[start:end]
+    block = TODO_STATE_JS[start:end]
     assert "const cold=session&&session.todo_state;" in block
     assert "const streamActive=!!(session&&session.active_stream_id);" in block
     assert "const coldWins=(coldTs===0)?(!streamActive):(coldTs>inflightTs);" in block
@@ -103,7 +90,7 @@ assert(inactive.workspace === 1, 'workspace helper remains responsible for works
     script_path = tmp_path / "todo_scheduler_test.js"
     script_path.write_text(script, encoding="utf-8")
     result = subprocess.run(
-        ["node", str(script_path), json.dumps([str(path) for path in family_asset_paths("ui")])],
+        ["node", str(script_path), json.dumps([str(REPO_ROOT / "static" / "modules" / "ui" / "todo-state.js")])],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -153,7 +140,7 @@ assert(run({panelHidden:true}) === 0, 'hidden workspace Todos panel must not ref
     script_path = tmp_path / "workspace_todos_gate_test.js"
     script_path.write_text(script, encoding="utf-8")
     result = subprocess.run(
-        ["node", str(script_path), json.dumps([str(path) for path in family_asset_paths("workspace")])],
+        ["node", str(script_path), json.dumps([str(REPO_ROOT / "static" / "workspace_parts" / "001-navigation.js")])],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -167,7 +154,7 @@ assert(run({panelHidden:true}) === 0, 'hidden workspace Todos panel must not ref
 def test_todo_state_listener_replaces_snapshot_filters_session_and_rejects_older_ts(tmp_path):
     script = r'''
 const fs = require('fs');
-const src = JSON.parse(process.argv[2]).map((path)=>fs.readFileSync(path, 'utf8')).join('');
+const src = fs.readFileSync(process.argv[2], 'utf8');
 function extractTodoStateHandler(source) {
   const start = source.indexOf("source.addEventListener('todo_state'");
   if (start < 0) throw new Error('todo_state listener not found');
@@ -192,7 +179,7 @@ let persistCalls = 0;
 function persistInflightState(){ persistCalls++; }
 let refreshCalls = 0;
 function scheduleTodosRefresh(){ refreshCalls++; }
-const handler = new Function('e','S','INFLIGHT','activeSid','persistInflightState','scheduleTodosRefresh', body);
+const handler = new Function('event','S','INFLIGHT','activeSid','persistInflight','scheduleTodosRefresh', body);
 function fire(payload){ handler({data: JSON.stringify(payload)}, S, INFLIGHT, activeSid, persistInflightState, scheduleTodosRefresh); }
 function assert(cond, msg){ if(!cond) throw new Error(msg); }
 
@@ -217,7 +204,7 @@ assert(S.todos[0].id === 'a', 'malformed event must be swallowed');
     script_path = tmp_path / "todo_listener_test.js"
     script_path.write_text(script, encoding="utf-8")
     result = subprocess.run(
-        ["node", str(script_path), json.dumps([str(path) for path in family_asset_paths("messages")])],
+        ["node", str(script_path), str(REPO_ROOT / "static" / "modules" / "messages" / "content-events.js")],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

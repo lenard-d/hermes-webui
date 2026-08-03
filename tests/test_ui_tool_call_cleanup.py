@@ -21,6 +21,21 @@ STREAM_RENDERER_JS = (
 STREAM_JS = (REPO / "static" / "modules" / "messages" / "stream.js").read_text(
     encoding="utf-8"
 )
+CONTENT_EVENTS_JS = (
+    REPO / "static" / "modules" / "messages" / "content-events.js"
+).read_text(encoding="utf-8")
+THINKING_LIFECYCLE_JS = (
+    REPO / "static" / "modules" / "ui" / "thinking-lifecycle.js"
+).read_text(encoding="utf-8")
+LIVE_TOOL_WORKLOG_JS = (
+    REPO / "static" / "modules" / "ui" / "live-tool-worklog.js"
+).read_text(encoding="utf-8")
+ANCHOR_SCENES_JS = (
+    REPO / "static" / "modules" / "ui" / "anchor-scenes.js"
+).read_text(encoding="utf-8")
+LIVE_RUN_STATUS_JS = (
+    REPO / "static" / "modules" / "ui" / "live-run-status.js"
+).read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -513,12 +528,12 @@ class TestToolCallGroupingStatic:
         assert "return true;" in helper
 
     def test_live_thinking_does_not_rewrite_visible_interim_echoes(self):
-        interim_match = re.search(r"source\.addEventListener\('interim_assistant',e=>\{(.*?)\n\s*\}\);", MESSAGES_JS, re.S)
+        interim_match = re.search(r"source\.addEventListener\('interim_assistant',event=>\{(.*?)\n\s*\}\);", CONTENT_EVENTS_JS, re.S)
         assert interim_match, "interim_assistant listener not found"
         interim_fn = interim_match.group(1)
-        live_thinking_fn = _function_body(MESSAGES_JS, "_liveThinkingText")
+        live_thinking_fn = _function_body(STREAM_JS, "_liveThinkingText")
 
-        assert "visibleInterimSnippets.push(visible)" in interim_fn, (
+        assert "turn.pushInterimSnippet(visible)" in interim_fn, (
             "Visible interim commentary should remain available for process-prose boundaries."
         )
         assert "_stripLiveVisibleAssistantEchoFromThinking" not in live_thinking_fn, (
@@ -622,9 +637,9 @@ class TestToolCallGroupingStatic:
         )
 
     def test_live_visible_interim_text_preserves_timeline_boundary(self):
-        live_thinking_fn = _function_body(UI_JS, "appendThinking")
-        live_tool_fn = _function_body(UI_JS, "appendLiveToolCard")
-        helper = _function_body(UI_JS, "ensureActivityGroup")
+        live_thinking_fn = _function_body(THINKING_LIFECYCLE_JS, "appendThinking")
+        live_tool_fn = _function_body(LIVE_TOOL_WORKLOG_JS, "appendLiveToolCard")
+        helper = _function_body(ANCHOR_SCENES_JS, "ensureActivityGroup")
         assert "_worklogReasonNodeFromText(thinkingText" not in live_thinking_fn, (
             "Provider reasoning should not render as live Worklog process prose."
         )
@@ -646,7 +661,7 @@ class TestToolCallGroupingStatic:
         assert "querySelector" in live_tool_fn and "data-live-tid" in live_tool_fn, (
             "tool_complete must still update its current live Activity burst by tool id."
         )
-        finalize_fn = _function_body(UI_JS, "finalizeThinkingCard")
+        finalize_fn = _function_body(THINKING_LIFECYCLE_JS, "finalizeThinkingCard")
         assert "turn.querySelector('.wl-reason[data-worklog-reason-active=\"1\"]')" in finalize_fn, (
             "Finalization should still clean up any legacy active reasoning marker."
         )
@@ -660,73 +675,73 @@ class TestToolCallGroupingStatic:
         reset_owner = STREAM_JS[reset_owner_start:reset_owner_end]
         assert "assistantRow=null" in reset_owner and "assistantBody=null" in reset_owner
         assert "segmentStart=assistantText.length" in reset_owner and "_freshSegment=true" in reset_owner
-        assert "function closeCurrentLiveActivityGroup()" in UI_JS, (
+        assert "function closeCurrentLiveActivityGroup()" in LIVE_RUN_STATUS_JS, (
             "Visible interim assistant progress needs a shared helper to close the current Activity burst."
         )
-        interim_match = re.search(r"source\.addEventListener\('interim_assistant',e=>\{(.*?)\n\s*\}\);", MESSAGES_JS, re.S)
+        interim_match = re.search(r"source\.addEventListener\('interim_assistant',event=>\{(.*?)\n\s*\}\);", CONTENT_EVENTS_JS, re.S)
         assert interim_match and "closeCurrentLiveActivityGroup()" in interim_match.group(1), (
             "Visible interim assistant progress is timeline content and must split the current Activity burst."
         )
-        assert interim_match and "ensureAssistantRow(true)" in interim_match.group(1), (
+        assert interim_match and "renderer.ensureAssistantRow(true)" in interim_match.group(1), (
             "Visible interim assistant progress must create a visible assistant timeline segment."
         )
-        assert interim_match and "_flushPendingSegmentRender({force:true})" in interim_match.group(1), (
+        assert interim_match and "renderer.flushPendingSegment({force:true,skipAnchorProcessProse:true})" in interim_match.group(1), (
             "Visible interim assistant progress must be synchronously rendered before the segment reset."
         )
         timer_fn = _function_body(UI_JS, "_updateActiveActivityElapsedTimer")
         assert "data-live-activity-current" in timer_fn, (
             "Elapsed timers should clear once an Activity group is no longer current."
         )
-        tool_start_segment = MESSAGES_JS.split("source.addEventListener('tool',e=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
-        assert "_resetAssistantSegment();" in tool_start_segment, (
+        tool_start_segment = (REPO / "static" / "modules" / "messages" / "live-tools.js").read_text(encoding="utf-8").split("source.addEventListener('tool',event=>{", 1)[1].split("source.addEventListener('tool_complete'", 1)[0]
+        assert "resetAssistantSegment();" in tool_start_segment, (
             "Tool starts should reset the next assistant text segment without closing the current Activity burst."
         )
-        assert "_resetAssistantSegment({closeActivity:true});" not in tool_start_segment, (
+        assert "resetAssistantSegment({closeActivity:true});" not in tool_start_segment, (
             "Tool starts must not split consecutive tools into one-tool Activity rows."
         )
 
     def test_reasoning_stream_uses_one_live_renderer_path(self):
         reasoning_match = re.search(
-            r"source\.addEventListener\('reasoning',e=>\{(.*?)\n\s*\}\);",
-            MESSAGES_JS,
+            r"source\.addEventListener\('reasoning',event=>\{(.*?)\n\s*\}\);",
+            CONTENT_EVENTS_JS,
             re.S,
         )
         assert reasoning_match, "reasoning listener not found"
         reasoning_fn = reasoning_match.group(1)
         render_live_thinking_fn = _function_body(STREAM_RENDERER_JS, "_renderLiveThinking")
 
-        assert reasoning_fn.count("_liveThinkingText()") == 1, (
-            "_liveThinkingText() should be computed once inside the active-session branch."
+        assert reasoning_fn.count("turn.liveThinkingText()") == 1, (
+            "The stream-owned live thinking text should be computed once inside the active-session branch."
         )
-        assert "const liveThinkingText=_liveThinkingText();" in reasoning_fn, (
+        assert "const liveThinkingText=turn.liveThinkingText();" in reasoning_fn, (
             "Reasoning SSE updates should cache the live thinking text before routing."
         )
-        primary_call = "_upsertAnchorReasoning(liveThinkingText, anchorReasoningFallback)"
+        primary_call = "anchor.upsertReasoning(liveThinkingText,fallback)"
         assert primary_call in reasoning_fn, (
             "Anchor reasoning must remain the primary renderer path."
         )
-        fallback_call = "_updateLiveThinkingCard(liveThinkingText,{"
+        fallback_call = "renderer.updateLiveThinking(liveThinkingText,{"
         assert reasoning_fn.index(primary_call) < reasoning_fn.index(fallback_call), (
             "The legacy thinking card should only run after anchor upsert fails."
         )
-        assert "if(!_upsertAnchorReasoning(liveThinkingText, anchorReasoningFallback)){" in reasoning_fn, (
+        assert "if(!anchor.upsertReasoning(liveThinkingText,fallback)){" in reasoning_fn, (
             "The legacy thinking card should be a falsy-anchor fallback."
         )
         assert reasoning_fn.count(fallback_call) == 1, (
             "Reasoning SSE updates should call the live thinking card only in fallback."
         )
-        assert "...anchorReasoningFallback" in reasoning_fn, (
+        assert "...fallback" in reasoning_fn, (
             "The fallback renderer must receive the exact Anchor reasoning identity."
         )
-        assert "_updateLiveThinkingCard(" in render_live_thinking_fn, (
+        assert "updateLiveThinking(" in render_live_thinking_fn, (
             "Inline parsed thinking still needs the live thinking card renderer."
         )
 
     def test_live_thinking_card_is_segment_scoped_not_global_singleton(self):
-        live_thinking_fn = _function_body(UI_JS, "appendThinking")
-        placement_fn = _function_body(MESSAGES_JS, "_liveThinkingPlacement")
-        update_fn = _function_body(MESSAGES_JS, "_updateLiveThinkingCard")
-        interim_match = re.search(r"source\.addEventListener\('interim_assistant',e=>\{(.*?)\n\s*\}\);", MESSAGES_JS, re.S)
+        live_thinking_fn = _function_body(THINKING_LIFECYCLE_JS, "appendThinking")
+        placement_fn = _function_body(STREAM_JS, "_liveThinkingPlacement")
+        update_fn = _function_body(STREAM_JS, "_updateLiveThinkingCard")
+        interim_match = re.search(r"source\.addEventListener\('interim_assistant',event=>\{(.*?)\n\s*\}\);", CONTENT_EVENTS_JS, re.S)
         assert interim_match, "interim_assistant listener not found"
         interim_fn = interim_match.group(1)
 

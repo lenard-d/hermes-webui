@@ -16,6 +16,8 @@ UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
 CONTENT_EVENTS_JS = (REPO / "static" / "modules" / "messages" / "content-events.js").read_text(encoding="utf-8")
 LIVE_TOOLS_JS = (REPO / "static" / "modules" / "messages" / "live-tools.js").read_text(encoding="utf-8")
+STREAM_RENDERING_JS = (REPO / "static" / "modules" / "messages" / "rendering.js").read_text(encoding="utf-8")
+STREAM_JS = (REPO / "static" / "modules" / "messages" / "stream.js").read_text(encoding="utf-8")
 STYLE_CSS = family_source("style")
 NODE = shutil.which("node")
 
@@ -297,10 +299,11 @@ def test_pending_text_flush_syncs_existing_worklog_reason():
     assistant segment above the tool rows.
     """
     assert "function _syncLiveWorklogReasonsForAnchor(anchor, displayTextOverride)" in UI_JS
-    flush_fn = MESSAGES_JS.split("function _flushPendingSegmentRender(options={})", 1)[1].split("function _resetAssistantSegment", 1)[0]
-    assert "_syncLiveWorklogReasonsForAnchor(assistantRow, displayText)" in flush_fn
-    render_fn = MESSAGES_JS.split("const _doRender=()=>{", 1)[1].split("scrollIfPinned();", 1)[0]
-    assert "_syncLiveWorklogReasonsForAnchor(assistantRow, displayText)" in render_fn
+    flush_fn = STREAM_RENDERING_JS.split("function _flushPendingSegmentRender(options={})", 1)[1].split("function _resetAssistantSegment", 1)[0]
+    assert "syncWorklogReasons(state.assistantRow,displayText);" in flush_fn
+    render_fn = STREAM_RENDERING_JS.split("const doRender=()=>{", 1)[1].split("scrollPinned();", 1)[0]
+    assert "syncWorklogReasons(state.assistantRow,displayText);" in render_fn
+    assert "if(typeof _syncLiveWorklogReasonsForAnchor==='function') _syncLiveWorklogReasonsForAnchor(row,text);" in STREAM_JS
 
 
 def test_pending_text_flush_passes_display_text_to_worklog_reason_sync():
@@ -313,10 +316,10 @@ def test_pending_text_flush_passes_display_text_to_worklog_reason_sync():
     sync_fn = _function_source(UI_JS, "_syncLiveWorklogReasonsForAnchor")
     assert "displayTextOverride" in sync_fn
     assert "_syncWorklogReasonFromAnchor(group, anchor, displayTextOverride)" in sync_fn
-    flush_fn = MESSAGES_JS.split("function _flushPendingSegmentRender(options={})", 1)[1].split("function _resetAssistantSegment", 1)[0]
-    assert "_syncLiveWorklogReasonsForAnchor(assistantRow, displayText)" in flush_fn
-    render_fn = MESSAGES_JS.split("const _doRender=()=>{", 1)[1].split("scrollIfPinned();", 1)[0]
-    assert "_syncLiveWorklogReasonsForAnchor(assistantRow, displayText)" in render_fn
+    flush_fn = STREAM_RENDERING_JS.split("function _flushPendingSegmentRender(options={})", 1)[1].split("function _resetAssistantSegment", 1)[0]
+    assert "syncWorklogReasons(state.assistantRow,displayText);" in flush_fn
+    render_fn = STREAM_RENDERING_JS.split("const doRender=()=>{", 1)[1].split("scrollPinned();", 1)[0]
+    assert "syncWorklogReasons(state.assistantRow,displayText);" in render_fn
 
 
 def test_tool_event_does_not_create_blank_text_segment_without_pending_text():
