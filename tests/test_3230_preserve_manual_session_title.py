@@ -10,6 +10,7 @@ import api.config as config
 import api.sessions.store as models
 import api.profiles as profiles_api
 from api.runs.title_generation import lifecycle as title_generation
+from api.sessions import foreign_session_access
 from api.sessions.store import Session
 from api.sessions.operations import apply_session_title_rename, mark_session_title_generated
 
@@ -240,7 +241,7 @@ def test_clear_route_resets_manual_title_lock(monkeypatch):
 
     monkeypatch.setattr(routes, "get_session", lambda _sid: session)
     monkeypatch.setattr(routes, "edit_session", edit_session)
-    monkeypatch.setattr(routes, "_session_is_subagent_view_only", lambda _sid: False)
+    monkeypatch.setattr(foreign_session_access, "is_view_only", lambda _sid: False)
     monkeypatch.setattr(
         routes,
         "j",
