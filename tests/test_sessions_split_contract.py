@@ -56,6 +56,31 @@ def test_sessions_modules_are_individually_parseable_and_entrypoint_typechecks()
     )
 
 
+def test_sidebar_motion_publishes_its_consumer_api():
+    """Import the real ESM owner and prove every consumer binding is callable."""
+    module_url = (SESSIONS_PARTS_DIR / "sidebar-motion.js").as_uri()
+    expected_exports = (
+        "_captureSessionReflowPositions",
+        "_makeSessionSwipeAffordance",
+        "_playSessionRowsReflowFromPositions",
+        "_sessionPrefersReducedMotion",
+        "_waitForSessionMotion",
+    )
+    script = (
+        f"const motion = await import({module_url!r});"
+        f"for (const name of {list(expected_exports)!r}) {{"
+        "if (typeof motion[name] !== 'function') throw new Error(`missing motion export: ${name}`);"
+        "}"
+    )
+    subprocess.run(
+        ["deno", "eval", script],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_session_owner_import_graph_is_acyclic():
     modules = {path.name: path for path in sessions_part_paths()}
     graph = {}

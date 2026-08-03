@@ -76,3 +76,11 @@ function _makeSessionSwipeAffordance(side, icon, label){
   affordance.append(stack);
   return affordance;
 }
+
+export {
+  _captureSessionReflowPositions,
+  _makeSessionSwipeAffordance,
+  _playSessionRowsReflowFromPositions,
+  _sessionPrefersReducedMotion,
+  _waitForSessionMotion,
+};
