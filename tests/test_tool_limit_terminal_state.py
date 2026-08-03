@@ -230,13 +230,13 @@ def test_display_merge_does_not_render_synthetic_summary_prompt():
 
 
 def test_frontend_handles_tool_limit_apperror_label():
-    messages_js = (
-        ROOT / "static" / "modules" / "messages" / "stream.js"
+    terminal_events_js = (
+        ROOT / "static" / "modules" / "messages" / "terminal-events.js"
     ).read_text(encoding="utf-8")
-    start = messages_js.find("source.addEventListener('apperror'")
-    end = messages_js.find("source.addEventListener('error'", start)
+    start = terminal_events_js.find("source.addEventListener('apperror'")
+    end = terminal_events_js.find("source.addEventListener('cancel'", start)
     assert start != -1 and end != -1
-    block = messages_js[start:end]
+    block = terminal_events_js[start:end]
 
     assert "const isToolLimitReached=d.type==='tool_limit_reached';" in block
     assert "Tool iteration limit reached" in block

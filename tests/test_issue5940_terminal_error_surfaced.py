@@ -18,10 +18,10 @@ Two layers are covered:
 """
 from pathlib import Path
 
-from api import streaming
+from api.runs import provider_errors
 
 ROOT = Path(__file__).resolve().parents[1]
-STREAMING_PY = (ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+FAILURE_OWNER_PY = (ROOT / "api" / "runs" / "local_failures.py").read_text(encoding="utf-8")
 EVENT_OWNER_PY = (ROOT / "api" / "runs" / "local_events.py").read_text(encoding="utf-8")
 
 
@@ -36,7 +36,7 @@ _INVALID_MODEL_MSG = (
 def test_captured_terminal_error_classifies_as_model_not_found_not_no_response():
     """An 'invalid model' non-retryable error must classify as model_not_found —
     NOT the misleading no_response 'try again in a moment' fallback."""
-    classified = streaming._classify_provider_error(
+    classified = provider_errors._classify_provider_error(
         _INVALID_MODEL_MSG, Exception(_INVALID_MODEL_MSG)
     )
     assert classified["type"] == "model_not_found", classified
@@ -50,7 +50,7 @@ def test_captured_credential_error_classifies_as_auth_not_no_response():
     """A credential-problem non-retryable error surfaces as an auth issue, not
     a silent-rate-limit no_response."""
     msg = "\u274c Non-retryable error (HTTP 401): invalid api key for provider x"
-    classified = streaming._classify_provider_error(msg, Exception(msg))
+    classified = provider_errors._classify_provider_error(msg, Exception(msg))
     assert classified["type"] == "auth_mismatch", classified
     assert classified["type"] != "no_response"
 
@@ -58,7 +58,7 @@ def test_captured_credential_error_classifies_as_auth_not_no_response():
 def test_no_response_reserved_for_genuinely_empty_completion():
     """With no captured terminal error, an empty completion still classifies as
     no_response (the fallback is reserved for genuine silent completions)."""
-    classified = streaming._classify_provider_error("", None, silent_failure=True)
+    classified = provider_errors._classify_provider_error("", None, silent_failure=True)
     assert classified["type"] == "no_response"
 
 
@@ -74,9 +74,9 @@ def test_status_callback_captures_terminal_error():
 
 
 def test_captured_terminal_error_seeds_last_err_on_completion():
-    """At turn completion, the captured terminal error must seed `_last_err` when
+    """At turn completion, the failure owner must use the captured error when
     the agent/result carried no error — so the classifier runs on the real cause
     instead of silent_failure=True."""
-    assert "_captured_terminal_failure = bool(_captured_terminal_error[0])" in STREAMING_PY
-    assert "if not _last_err and _captured_terminal_failure:" in STREAMING_PY
-    assert "_last_err = _captured_terminal_error[0]" in STREAMING_PY
+    assert "captured_failure = bool(captured_terminal_error[0])" in FAILURE_OWNER_PY
+    assert "if not last_error and captured_failure:" in FAILURE_OWNER_PY
+    assert "last_error = captured_terminal_error[0]" in FAILURE_OWNER_PY

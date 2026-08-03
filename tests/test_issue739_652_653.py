@@ -6,19 +6,21 @@ Tests for streaming error handling fixes:
 
 All static tests (no live server required).
 """
-from tests.frontend_asset_contract import family_source
 import re
 import pathlib
 
 from api.runs.message_sanitization import _sanitize_messages_for_api
 from api.runs.provider_errors import _classify_provider_error
 
-STREAMING = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local.py'
+FAILURE_OWNER = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local_failures.py'
+SUCCESS_OWNER = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'local_success.py'
 TITLE_GENERATION = pathlib.Path(__file__).parent.parent / 'api' / 'runs' / 'title_generation' / 'lifecycle.py'
+TERMINAL_EVENTS = pathlib.Path(__file__).parent.parent / 'static' / 'modules' / 'messages' / 'terminal-events.js'
 
-streaming_src = STREAMING.read_text(encoding='utf-8')
+failure_owner_src = FAILURE_OWNER.read_text(encoding='utf-8')
+success_owner_src = SUCCESS_OWNER.read_text(encoding='utf-8')
 title_generation_src = TITLE_GENERATION.read_text(encoding='utf-8')
-messages_js_src = family_source("messages")
+terminal_events_src = TERMINAL_EVENTS.read_text(encoding='utf-8')
 
 
 # ── #739: Quota exhaustion detection ─────────────────────────────────────────
@@ -52,8 +54,8 @@ class TestQuotaDetection:
 
     def test_js_quota_label_present(self):
         """messages.js renders a 'quota_exhausted' apperror with a distinct label."""
-        assert "quota_exhausted" in messages_js_src
-        assert "Out of credits" in messages_js_src
+        assert "quota_exhausted" in terminal_events_src
+        assert "Out of credits" in terminal_events_src
 
 
 # ── #739: Error persistence across reload ─────────────────────────────────────
@@ -63,23 +65,20 @@ class TestErrorPersistence:
 
     def test_silent_failure_appends_error_message(self):
         """Silent-failure path appends an _error-marked message before returning."""
-        # Must append to s.messages with _error key
-        assert "s.messages.append(" in streaming_src
-        assert "'_error': True" in streaming_src
+        # The shared failure owner materializes every persisted terminal error.
+        assert "error_message = {" in failure_owner_src
+        assert '"_error": True' in failure_owner_src
+        assert "session.messages.append(error_message)" in failure_owner_src
 
     def test_silent_failure_calls_save_before_return(self):
         """save() must be called after appending the error message."""
-        # Find the silent-failure block and verify the persisted message is the
-        # same _error-marked object that was just constructed.
-        block_start = streaming_src.index("_error_message = {")
-        block_end = streaming_src.index(
-            "return  # apperror already closes the stream on the client side",
-            block_start,
-        )
-        block = streaming_src[block_start:block_end]
-        error_marker_pos = block.index("'_error': True")
-        append_pos = block.index("s.messages.append(_error_message)")
-        save_pos = block.index("s.save()", append_pos)
+        # The same constructed error marker is appended before session save.
+        block_start = failure_owner_src.index("error_message = {")
+        block_end = failure_owner_src.index("def _record_process_wakeup_pause", block_start)
+        block = failure_owner_src[block_start:block_end]
+        error_marker_pos = block.index('"_error": True')
+        append_pos = block.index("session.messages.append(error_message)")
+        save_pos = block.index("session.save()", append_pos)
 
         assert error_marker_pos < append_pos < save_pos, (
             "save() must be called after appending the error message in the "
@@ -88,9 +87,12 @@ class TestErrorPersistence:
 
     def test_exception_path_appends_error_message(self):
         """Exception path also persists the error to the session."""
-        # Both paths should have _error persistence
-        count = streaming_src.count("'_error': True")
-        assert count >= 2, f"Expected at least 2 _error persistence sites, found {count}"
+        # Terminal completion and exception handling use the same persistence owner.
+        terminal_start = failure_owner_src.index("def inspect_terminal_result")
+        exception_start = failure_owner_src.index("def handle_exception", terminal_start)
+        exception_end = failure_owner_src.index("def _retry_with_fresh_credentials", exception_start)
+        assert "self._persist_error(" in failure_owner_src[terminal_start:exception_start]
+        assert "self._persist_error(" in failure_owner_src[exception_start:exception_end]
 
     def test_sanitize_skips_error_messages(self):
         """_sanitize_messages_for_api must not send _error messages to the LLM."""
@@ -114,7 +116,7 @@ class TestStreamEndSessionId:
         # The fixed code: put('stream_end', {'session_id': session_id})
         # Not: put('stream_end', {'session_id': s.session_id})
         # Verify the pattern appears in the non-background-title branch
-        assert "put('stream_end', {'session_id': session_id})" in streaming_src
+        assert 'publish("stream_end", {"session_id": session_id})' in success_owner_src
 
     def test_background_title_thread_stream_end_uses_session_id_param(self):
         """Background title thread also emits stream_end with original session_id."""
@@ -125,8 +127,8 @@ class TestStreamEndSessionId:
     def test_s_session_id_not_used_in_stream_end(self):
         """s.session_id (which may be rotated after compaction) must not appear in stream_end."""
         # Find all stream_end emissions and verify none use s.session_id
-        for source in (streaming_src, title_generation_src):
-            matches = re.finditer(r"put[_a-z]*\('stream_end',[^)]+\)", source)
+        for source in (success_owner_src, title_generation_src):
+            matches = re.finditer(r"(?:publish|put_event)\(['\"]stream_end['\"],[^)]+\)", source)
             for match in matches:
                 assert 's.session_id' not in match.group(), \
                     f"stream_end uses s.session_id (may be rotated): {match.group()}"
