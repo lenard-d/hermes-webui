@@ -7,11 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.frontend_asset_contract import family_source
-
-
 ROOT = Path(__file__).resolve().parent.parent
 BOOT_JS = ROOT / "static" / "modules" / "boot" / "index.js"
+MODEL_CATALOG_JS = ROOT / "static" / "modules" / "ui" / "model-catalog.js"
+UI_STATE_JS = ROOT / "static" / "modules" / "ui" / "state.js"
 NODE = shutil.which("node")
 BOOT_MARKER_KEY = "hermes-webui-active-profile-bootstrap-401"
 
@@ -25,8 +24,9 @@ pytestmark = pytest.mark.skipif(
 _DRIVER = r"""
 const fs = require('fs');
 const bootSrc = fs.readFileSync(process.argv[2], 'utf8');
-const uiSrc = fs.readFileSync(0, 'utf8');
-const scenario = JSON.parse(process.argv[3] || '{}');
+const modelCatalogSrc = fs.readFileSync(process.argv[3], 'utf8');
+const uiStateSrc = fs.readFileSync(process.argv[4], 'utf8');
+const scenario = JSON.parse(process.argv[5] || '{}');
 globalThis.window = globalThis;
 
 function extractBlock(source, startMarker, endMarker) {
@@ -43,14 +43,6 @@ function extractFunction(source, name) {
   if (start < 0) throw new Error(`missing function: ${name}`);
   const end = source.indexOf("\n// Cache so we don't re-fetch on every page load", start);
   if (end < 0) throw new Error(`missing end marker after: ${name}`);
-  return source.slice(start, end);
-}
-
-function extractSingleLineFunction(source, marker) {
-  const start = source.indexOf(marker);
-  if (start < 0) throw new Error(`missing function marker: ${marker}`);
-  const end = source.indexOf("\n", start);
-  if (end < 0) throw new Error(`missing newline after function marker: ${marker}`);
   return source.slice(start, end);
 }
 
@@ -232,11 +224,12 @@ const bootDropdownBlock = extractBlock(
   '  const _redirectBootModelDropdownIfUnauth=(res)=>{',
   '  setTimeout(()=>{'
 );
-const redirectIfUnauthLine = extractSingleLineFunction(
-  uiSrc,
-  'function _redirectIfUnauth(res){'
+const redirectIfUnauthFunction = extractBlock(
+  uiStateSrc,
+  'function _redirectIfUnauth(res){',
+  '\n\nexport {'
 );
-const uiBlock = extractFunction(uiSrc, 'populateModelDropdown');
+const uiBlock = extractFunction(modelCatalogSrc, 'populateModelDropdown');
 
 eval(bootBlock.replace(
   '  const _bootActiveProfileUnauthRedirectBudget=(()=>{',
@@ -261,10 +254,11 @@ eval(bootDropdownBlock
     '  globalThis._startBootModelDropdown=()=>{'
   )
 );
-eval(redirectIfUnauthLine.replace(
+eval(redirectIfUnauthFunction.replace(
   'function _redirectIfUnauth(res){',
   'globalThis._redirectIfUnauth=function _redirectIfUnauth(res){'
 ));
+globalThis._dynamicModelLabels = {};
 eval(uiBlock);
 
 async function runBootAttempt(attempt, redirects, storage, fetchQueue, jsonCalls) {
@@ -414,9 +408,10 @@ def _run(driver_path, scenario):
             NODE,
             driver_path,
             str(BOOT_JS),
+            str(MODEL_CATALOG_JS),
+            str(UI_STATE_JS),
             json.dumps(scenario),
         ],
-        input=family_source("ui"),
         capture_output=True,
         text=True,
         timeout=60,
