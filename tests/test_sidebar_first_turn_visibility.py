@@ -97,7 +97,7 @@ class TestSidebarFirstTurnVisibility:
         assert "_sessionStreamingById.set(sid,false)" in clear_body.replace(" ", "")
 
     def test_backend_compact_counts_pending_first_turn_as_visible(self, tmp_path):
-        from api.sessions.store import Session
+        from api.sessions.records import Session
 
         session = Session(
             session_id="pending-first-turn",
@@ -113,25 +113,34 @@ class TestSidebarFirstTurnVisibility:
 
     def test_backend_index_filter_keeps_pending_first_turn_sessions(self, monkeypatch, tmp_path):
         import json
-        import api.sessions.store as models
+        import api.sessions.records as records
+        import api.sessions.sidebar as sidebar
 
         sid = "pending-index-turn"
-        sidecar = models.Session(
+        index_file = tmp_path / "_index.json"
+        # Session records own the durable sidecar and compact projection;
+        # sidebar owns filtering of the indexed listing. Patch both real owners
+        # so this exercises the same handoff as /api/sessions, not store.py's
+        # compatibility re-exports.
+        monkeypatch.setattr(records, "SESSION_DIR", tmp_path)
+        monkeypatch.setattr(records, "SESSION_INDEX_FILE", index_file)
+        monkeypatch.setattr(records, "SESSIONS", {})
+        monkeypatch.setattr(sidebar, "SESSION_DIR", tmp_path)
+        monkeypatch.setattr(sidebar, "SESSION_INDEX_FILE", index_file)
+        monkeypatch.setattr(sidebar, "SESSIONS", {})
+        sidecar = records.Session(
             session_id=sid,
             workspace=tmp_path,
             pending_user_message="hello",
             pending_started_at=1234,
         )
-        monkeypatch.setattr(models, "SESSION_DIR", tmp_path)
-        monkeypatch.setattr(models, "SESSION_INDEX_FILE", tmp_path / "_index.json")
-        monkeypatch.setattr(models, "SESSIONS", {})
         sidecar.save()
         row = sidecar.compact()
         row["message_count"] = 0
-        models.SESSION_INDEX_FILE.write_text(json.dumps([row]), encoding="utf-8")
-        monkeypatch.setattr(models, "_stale_snapshot_metadata_refresh_ids", lambda _rows: set())
+        index_file.write_text(json.dumps([row]), encoding="utf-8")
+        monkeypatch.setattr(sidebar, "_stale_snapshot_metadata_refresh_ids", lambda _rows: set())
 
-        result = models.all_sessions(include_lineage_metadata=False)
+        result = sidebar.all_sessions(include_lineage_metadata=False)
 
         assert [item["session_id"] for item in result] == [sid]
 

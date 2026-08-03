@@ -11,6 +11,13 @@ import pathlib
 
 UI_JS = pathlib.Path(__file__).parent.parent / 'static' / 'ui.js'
 SESSIONS_JS = pathlib.Path(__file__).parent.parent / 'static' / 'sessions.js'
+SESSION_REMOVAL_JS = (
+    pathlib.Path(__file__).parent.parent
+    / "static"
+    / "modules"
+    / "sessions"
+    / "session-removal.js"
+)
 
 ui_src = family_source("ui")
 sess_src = family_source("sessions")
@@ -97,10 +104,14 @@ class TestQueueRestore:
 
     def test_delete_session_clears_persisted_queue_after_success(self):
         """Deleting a session must clear localStorage-backed queue state after the API succeeds."""
-        start = sess_src.find("async function deleteSession(sid, beforeDelete=null)")
-        end = sess_src.find("// ── Project helpers", start)
+        # Deletion is a session-removal owner, not part of the concatenated
+        # legacy sessions.js family. Keep this assertion at the mutation seam
+        # that performs the destructive action and its queue cleanup.
+        deletion_src = SESSION_REMOVAL_JS.read_text(encoding="utf-8")
+        start = deletion_src.find("async function deleteSession(sid, beforeDelete=null)")
+        end = deletion_src.find("export { deleteSession, removeWorktree };", start)
         assert start != -1 and end != -1, "deleteSession block not found"
-        body = sess_src[start:end]
+        body = deletion_src[start:end]
         clear_pos = body.find("if(typeof _clearPersistedSessionQueue==='function') _clearPersistedSessionQueue(sid);")
         error_pos = body.find("if(deleteResult&&deleteResult.error){")
         success_pos = body.find("const response=deleteResult&&deleteResult.response;")

@@ -14,8 +14,9 @@ ROUTES = "\n".join(
         "api/http/routes/workspace_queries.py",
     )
 )
-CRON_ROUTES = Path("api/routes_parts/cron.py").read_text(encoding="utf-8")
+CRON_MANUAL_RUNS = Path("api/cron/manual_runs.py").read_text(encoding="utf-8")
 SESSION_EVENTS = Path("api/sessions/events.py").read_text(encoding="utf-8")
+SESSION_IMPORTS = Path("api/http/session_imports.py").read_text(encoding="utf-8")
 PROFILES = "\n".join(
     Path(path).read_text(encoding="utf-8")
     for path in ("api/profiles/__init__.py", "api/profiles/cron.py")
@@ -46,11 +47,11 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
         "session_branch",
     ):
         if reason == "session_import_cli":
-            assert f'publish_session_list_changed(\n        "{reason}",' in ROUTES, reason
+            assert f'publish_session_list_changed(\n        "{reason}",' in SESSION_IMPORTS, reason
         elif reason == "session_title_regenerate":
             assert 'event_reason="session_title_regenerate"' in ROUTES
         elif reason == "session_import":
-            assert f'publish_session_list_changed("{reason}")' in ROUTES, reason
+            assert f'publish_session_list_changed("{reason}")' in SESSION_IMPORTS, reason
         else:
             assert f'"{reason}",' in ROUTES, reason
 
@@ -72,7 +73,7 @@ def test_session_events_publish_for_minimal_sidebar_mutations():
     assert 'publish_session_list_changed(\n            "session_move",' in ROUTES
     assert 'session_id=getattr(' in ROUTES
     assert 'publish_session_list_changed("chat_start")' not in ROUTES
-    assert '_publish_session_list_changed("cron_complete",' in CRON_ROUTES
+    assert '_publish_session_list_changed("cron_complete",' in CRON_MANUAL_RUNS
     assert 'publish_session_list_changed("cron_complete"' in PROFILES
 
 
