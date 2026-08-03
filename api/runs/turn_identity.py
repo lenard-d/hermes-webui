@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 
@@ -106,6 +107,7 @@ def _reset_turn_session_identity(tokens) -> None:
         except Exception:
             logger.debug("per-turn approval session-key reset failed", exc_info=True)
 
+@contextlib.contextmanager
 def _bind_turn_session_identity(session_id: str):
     """Context-manager form of the per-turn session-identity binding.
 

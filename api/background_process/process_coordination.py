@@ -80,12 +80,12 @@ _PROCESS_RECOVERY_LOCK = threading.Lock()
 
 
 # ── xsession wakeup misroute defense-in-depth (Option 3) ───────────────────
-# Option 1 (api/streaming._set_turn_session_identity) is the ROOT fix: it binds
-# the per-turn session identity to a contextvar so a notify_on_complete spawn
-# can no longer capture a concurrent turn's process-global env. Option 3 is an
-# INDEPENDENT completion-time safety net at the wakeup-routing layer: even if
-# some future regression reintroduces a capture race, a positively-detected
-# mismatch must not wake the wrong session.
+# Option 1 (api.runs.turn_identity._set_turn_session_identity) is the ROOT fix:
+# it binds the per-turn session identity to a contextvar so a
+# notify_on_complete spawn can no longer capture a concurrent turn's
+# process-global env. Option 3 is an INDEPENDENT completion-time safety net at
+# the wakeup-routing layer: even if some future regression reintroduces a
+# capture race, a positively-detected mismatch must not wake the wrong session.
 #
 # The proc->owner link the WebUI drain trusts is ProcessSession.session_key,
 # which the terminal tool captured from the (historically racy) env at spawn.
@@ -147,7 +147,7 @@ def _resolve_wakeup_target(
         "session_key resolved to session %r but the env-immune spawn owner "
         "is %r — re-routing the server-side wakeup to the true owner. This "
         "means a per-turn session-identity capture race occurred upstream "
-        "(Option 1 should have prevented it); investigate streaming.py "
+        "(Option 1 should have prevented it); investigate turn_identity.py "
         "_set_turn_session_identity coverage.",
         process_id, resolved, owner,
     )

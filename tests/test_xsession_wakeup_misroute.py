@@ -2,7 +2,7 @@
 
 ROOT CAUSE (RCA t_f62ff1e8, verified line-by-line):
   WebUI's per-turn session identity was bound ONLY to the process-global
-  ``os.environ['HERMES_SESSION_KEY']`` (streaming.py turn-start), and the env
+  ``os.environ['HERMES_SESSION_KEY']`` (turn_identity.py turn-start), and the env
   lock was released BEFORE the agent ran. WebUI NEVER called
   ``gateway.session_context.set_session_vars`` so the ``_SESSION_KEY``
   contextvar stayed ``_UNSET`` and ``tools.approval.get_current_session_key``
@@ -15,10 +15,11 @@ This module proves BOTH fix layers with REAL modules (no mocks of the code
 under test), so each test is RED before the fix and GREEN after — never a
 tautology:
 
-  Option 1 (root fix, streaming.py) — ``_bind_turn_session_identity`` binds the
-    REAL ``_SESSION_KEY`` contextvar for the turn's worker thread/context and
-    clears it on exit. Under a simulated env race across two concurrent turns,
-    the REAL ``get_current_session_key`` must return each turn's OWN id.
+  Option 1 (root fix, turn_identity.py) — ``_bind_turn_session_identity``
+    binds the REAL ``_SESSION_KEY`` contextvar for the turn's worker
+    thread/context and clears it on exit. Under a simulated env race across two
+    concurrent turns, the REAL ``get_current_session_key`` must return each
+    turn's OWN id.
 
   Option 3 (defense-in-depth, background_process package) —
     ``_resolve_wakeup_target`` cross-checks the (possibly env-contaminated)
@@ -42,12 +43,12 @@ import pytest
 # Option 1 — contextvar binding makes per-turn session identity race-immune
 # ---------------------------------------------------------------------------
 
-def test_streaming_exposes_turn_session_identity_binder():
-    """streaming.py must expose the helper that binds the REAL _SESSION_KEY
-    contextvar for the agent worker thread (root fix, not env-only)."""
-    streaming = importlib.import_module("api.streaming")
-    assert hasattr(streaming, "_bind_turn_session_identity"), (
-        "Option 1 missing: streaming.py must expose _bind_turn_session_identity "
+def test_turn_identity_owner_exposes_session_identity_binder():
+    """The turn-identity owner binds the REAL _SESSION_KEY contextvar for the
+    agent worker thread (root fix, not env-only)."""
+    turn_identity = importlib.import_module("api.runs.turn_identity")
+    assert hasattr(turn_identity, "_bind_turn_session_identity"), (
+        "Option 1 missing: turn_identity.py must expose _bind_turn_session_identity "
         "to bind gateway.session_context._SESSION_KEY for the turn"
     )
 
@@ -69,13 +70,13 @@ def test_concurrent_turns_capture_their_own_session_under_env_race():
     """
     import os
 
-    streaming = importlib.import_module("api.streaming")
+    turn_identity = importlib.import_module("api.runs.turn_identity")
     pytest.importorskip("tools.approval", reason="hermes-agent not installed")
     pytest.importorskip("gateway.session_context")
     from tools.approval import get_current_session_key
     from gateway import session_context as sc
 
-    bind = getattr(streaming, "_bind_turn_session_identity", None)
+    bind = getattr(turn_identity, "_bind_turn_session_identity", None)
     if bind is None:
         pytest.fail("Option 1 not implemented: _bind_turn_session_identity missing")
 
@@ -97,7 +98,7 @@ def test_concurrent_turns_capture_their_own_session_under_env_race():
     b_stamped_env = threading.Event()
 
     def turn(my_sid: str, label: str) -> None:
-        # streaming.py turn-start still writes the process-global env as a
+        # turn_identity.py turn-start still writes the process-global env as a
         # fallback for non-contextvar consumers; the fix is that session-key
         # ROUTING now binds the contextvar so it no longer races.
         with bind(my_sid):
@@ -156,12 +157,13 @@ def test_turn_identity_binder_restores_previous_value():
     preserved, and it must NOT touch the platform/chat_id/user session vars
     (those keep their env fallback so the notify_on_complete watcher
     registration that reads HERMES_SESSION_PLATFORM still works)."""
-    streaming = importlib.import_module("api.streaming")
+    turn_identity = importlib.import_module("api.runs.turn_identity")
     pytest.importorskip("tools.approval", reason="hermes-agent not installed")
+    pytest.importorskip("gateway.session_context", reason="hermes-agent not installed")
     from tools.approval import get_current_session_key
     from gateway import session_context as sc
 
-    bind = streaming._bind_turn_session_identity
+    bind = turn_identity._bind_turn_session_identity
     assert sc._SESSION_KEY.get() is sc._UNSET
     # Platform var starts unset → env fallback path intact.
     assert sc._SESSION_PLATFORM.get() is sc._UNSET
@@ -297,11 +299,11 @@ def test_env_immune_owner_prefers_origin_ui_session_id():
 def test_turn_identity_binder_sets_ui_session_id():
     """Option 1 must also bind HERMES_UI_SESSION_ID so terminal_tool can stamp
     origin_ui_session_id on notify_on_complete spawns."""
-    streaming = importlib.import_module("api.streaming")
+    turn_identity = importlib.import_module("api.runs.turn_identity")
     pytest.importorskip("gateway.session_context", reason="hermes-agent not installed")
     from gateway import session_context as sc
 
-    bind = streaming._bind_turn_session_identity
+    bind = turn_identity._bind_turn_session_identity
     assert sc._SESSION_UI_SESSION_ID.get() is sc._UNSET
     with bind("webui-sid-42"):
         assert sc._SESSION_UI_SESSION_ID.get() == "webui-sid-42"
