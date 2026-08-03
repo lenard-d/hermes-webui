@@ -9,13 +9,6 @@ import api.config as config
 from api.sessions.anchor_scene import journal_projection as anchor_journal_owner
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_SRC = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
-ANCHOR_JOURNAL_SRC = (
-    ROOT / "api" / "sessions" / "anchor_scene" / "journal_projection.py"
-).read_text(encoding="utf-8")
-SESSION_QUERIES_SRC = (
-    ROOT / "api" / "http" / "routes" / "session_queries.py"
-).read_text(encoding="utf-8")
 WORKSPACE_QUERIES_SRC = (
     ROOT / "api" / "http" / "routes" / "workspace_queries.py"
 ).read_text(encoding="utf-8")
@@ -270,17 +263,88 @@ def test_replay_emits_event_ids_and_stale_restart_diagnostic():
     assert "stale_interrupted_event" in block
 
 
-def test_session_payload_exposes_runtime_journal_for_stale_streams():
+def test_session_payload_exposes_durable_runtime_journal_for_stale_streams(
+    monkeypatch, tmp_path
+):
+    """A stale stream clears its live projection without hiding its journal evidence."""
     import api.routes as routes
+    from api.runs import journal as run_journal
+    from api.http.routes import session_queries
+    from api.sessions.store import Session
 
-    assert routes._run_journal_live_snapshot is anchor_journal_owner._run_journal_live_snapshot
-    assert "original_stream_id = getattr(s, \"active_stream_id\", None)" in SESSION_QUERIES_SRC
-    assert '"runtime_journal"' in SESSION_QUERIES_SRC
-    assert '"runtime_journal_snapshot"' in SESSION_QUERIES_SRC
-    assert "snapshot = _run_journal_live_snapshot(original_stream_id)" in SESSION_QUERIES_SRC
-    assert 'terminal_state = "lost-worker-bookkeeping"' in ANCHOR_JOURNAL_SRC
-    assert "active=journal_active" in SESSION_QUERIES_SRC
-    assert "journal_active = bool(original_stream_id in active_stream_ids)" in SESSION_QUERIES_SRC
+    session_id = "stale-session"
+    stream_id = "stale-run"
+    run_journal.append_run_event(
+        session_id,
+        stream_id,
+        "token",
+        {"text": "durable partial output"},
+        session_dir=tmp_path,
+    )
+
+    session = Session(
+        session_id=session_id,
+        title="Stale run",
+        messages=[],
+        context_length=128_000,
+    )
+    session.active_stream_id = stream_id
+    session.pending_user_message = "continue this work"
+    session.pending_attachments = []
+    session.pending_started_at = 1.0
+    session.pending_user_source = "webui"
+    cleared_streams = []
+
+    def clear_stale_stream_state(current):
+        cleared_streams.append(current.active_stream_id)
+        current.active_stream_id = None
+        current.pending_user_message = None
+        current.pending_attachments = []
+        current.pending_started_at = None
+        current.pending_user_source = None
+        return True
+
+    monkeypatch.setattr(routes, "get_session", lambda *_args, **_kwargs: session)
+    monkeypatch.setattr(routes, "_clear_stale_stream_state", clear_stale_stream_state)
+    monkeypatch.setattr(routes, "_active_stream_ids", lambda: set())
+    monkeypatch.setattr(
+        routes,
+        "find_run_summary",
+        lambda run_id: run_journal.find_run_summary(run_id, session_dir=tmp_path),
+    )
+    monkeypatch.setattr(routes, "redact_session_data", lambda payload: payload)
+    monkeypatch.setattr(
+        session_queries.session_detail_projection,
+        "metadata_summary",
+        lambda *_args, **_kwargs: {"message_count": 0, "last_message_at": 0},
+    )
+    monkeypatch.setattr(
+        routes,
+        "j",
+        lambda _handler, payload, **_kwargs: payload,
+    )
+
+    response = routes.handle_get(
+        object(),
+        urlparse(f"/api/session?session_id={session_id}&messages=0&resolve_model=0"),
+    )
+    payload = response["session"]
+
+    assert cleared_streams == [stream_id]
+    assert payload["active_stream_id"] is None
+    assert payload["runtime_journal"] == {
+        "session_id": session_id,
+        "run_id": stream_id,
+        "last_seq": 1,
+        "last_event_id": f"{stream_id}:1",
+        "last_event": "token",
+        "terminal": False,
+        "terminal_state": "lost-worker-bookkeeping",
+    }
+    assert "runtime_journal_snapshot" not in payload
+    assert run_journal.read_run_events(session_id, stream_id, session_dir=tmp_path)[
+        "events"
+    ][0]["payload"] == {"text": "durable partial output"}
 
 
 def test_live_journal_snapshot_reconstructs_visible_progress_and_tool_aliases(monkeypatch):
