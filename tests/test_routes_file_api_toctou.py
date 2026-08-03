@@ -5,7 +5,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTES_PY = ROOT / "api" / "routes.py"
+# Escape-file HTTP handlers now belong to the workspace navigation transport
+# owner.  Keep the test pointed at that implementation rather than the legacy
+# routes facade, so the assertion continues to cover validation at point of use.
+WORKSPACE_NAVIGATION_PY = ROOT / "api" / "http" / "workspace_navigation.py"
 MEDIA_FILES_PY = ROOT / "api" / "routes_parts" / "media_files.py"
 WORKSPACE_FILES_PY = ROOT / "api" / "routes_parts" / "workspace_files.py"
 WORKSPACE_ESCAPE_PY = ROOT / "api" / "workspace" / "navigation.py"
@@ -147,7 +150,7 @@ def test_raw_and_inline_file_targets_carry_anchor_root():
 
 
 def test_escape_raw_and_read_routes_use_authorized_helpers():
-    src = ROUTES_PY.read_text(encoding="utf-8")
+    src = WORKSPACE_NAVIGATION_PY.read_text(encoding="utf-8")
     escape_read = _func_body(src, "_handle_escape_file_read")
     escape_raw = _func_body(src, "_handle_escape_file_raw")
 
