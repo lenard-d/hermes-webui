@@ -1,5 +1,22 @@
 """Regression coverage for WebUI chat upload path handoff."""
+import json
+from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
+
 from tests.frontend_asset_contract import family_source
+
+
+_SESSION_DISPLAY_MODULE = (
+    Path(__file__).resolve().parents[1]
+    / "static"
+    / "modules"
+    / "sessions"
+    / "session-display.js"
+)
+_NODE = shutil.which("node")
 
 
 def test_image_uploads_use_server_path_in_attached_files_context():
@@ -28,10 +45,28 @@ def test_attached_files_context_is_hidden_from_user_message_display():
 
 def test_attached_files_context_is_hidden_from_sidebar_titles():
     """Sidebar rows should not expose absolute uploaded image paths in titles."""
-    sessions_src = family_source("sessions")
-    assert "function _stripAttachedFilesMarker" in sessions_src
-    assert "? _stripAttachedFilesMarker" in sessions_src
-    assert "replace(/\\n\\n\\[Attached files: [^\\]]+\\]$/" in sessions_src
+    if _NODE is None:
+        pytest.skip("node is required to execute the sidebar title projection")
+
+    attachment_marker = "\n\n[Attached files: /tmp/private/Screenshot.png]"
+    rows = [
+        {"title": f"Question{attachment_marker}"},
+        {"display_title": f"Display title{attachment_marker}", "title": "fallback"},
+        {"_state_db_title": f"State DB title{attachment_marker}", "title": "fallback"},
+    ]
+    script = f"""
+import {{ _sessionDisplayTitle }} from {json.dumps(_SESSION_DISPLAY_MODULE.as_uri())};
+const rows = JSON.parse(process.argv[1]);
+console.log(JSON.stringify(rows.map(_sessionDisplayTitle)));
+"""
+    result = subprocess.run(
+        [_NODE, "--input-type=module", "-e", script, json.dumps(rows)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == ["Question", "Display title", "State DB title"]
 
 
 def test_server_provisional_titles_strip_attached_files_context():

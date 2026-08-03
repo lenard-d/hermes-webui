@@ -9,10 +9,11 @@ Covers:
 - server.py: QuietHTTPServer.handle_error suppresses client disconnect errors
 - server.py: QuietHTTPServer uses sys.exc_info() not traceback.sys.exc_info()
 - Logging: at least 5 modules add a module-level logger (B110 remediation)
-- routes.py: session titles redacted in /api/sessions list response
+- sidebar projection: session titles redacted in /api/sessions list response
 """
 import pathlib
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 GATEWAY_WATCHER_PY = (
@@ -242,20 +243,33 @@ class TestQuietHTTPServer(unittest.TestCase):
 # ── Session title redaction in /api/sessions ────────────────────────────────
 
 class TestSessionTitleRedaction(unittest.TestCase):
-    """routes.py: session titles must be redacted in the sessions list endpoint."""
+    """The sidebar response projection must redact session titles."""
 
     def test_redact_text_called_on_session_titles(self):
-        """routes.py must call _redact_text on session titles in /api/sessions."""
-        self.assertRegex(
-            ROUTES_PY,
-            r'_redact_text\([^)]*\btitle\b[^)]*\)',
-            "routes.py: session titles must be redacted via _redact_text in /api/sessions",
-        )
+        """The /api/sessions row owner redacts the emitted title exactly once."""
+        from api.sessions import session_sidebar_projection as sidebar_projection
 
-    def test_redact_text_imported_in_routes(self):
-        """routes.py must import _redact_text from api.helpers."""
-        self.assertIn(
+        title = "credential-shaped user title"
+        with patch.object(
+            sidebar_projection,
             "_redact_text",
-            ROUTES_PY,
-            "routes.py: _redact_text must be imported from api.helpers",
+            side_effect=lambda value, *, _enabled: f"[redacted:{value}]",
+        ) as redact_text:
+            row = sidebar_projection.response_item(
+                {"session_id": "session-1", "title": title},
+                redact_enabled=True,
+            )
+
+        redact_text.assert_called_once_with(title, _enabled=True)
+        self.assertEqual(row["title"], f"[redacted:{title}]")
+
+    def test_redact_text_imported_by_sidebar_projection(self):
+        """Keep the redaction dependency at the shared sidebar row owner."""
+        sidebar_projection_py = (
+            REPO_ROOT / "api" / "sessions" / "sidebar_projection.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "from api.helpers import _redact_text",
+            sidebar_projection_py,
+            "sidebar_projection.py must own the shared sidebar title redactor",
         )
