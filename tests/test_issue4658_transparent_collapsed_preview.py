@@ -13,21 +13,19 @@ expanding still worked. Caused by the interaction of two changes:
     target-carrying label nor a preview.
 
 Fix: _decorateTransparentEventRow now populates the `.tool-card-preview` span
-from tests.frontend_asset_contract import family_source
-
 from a quiet, TARGET-based summary (_transparentToolSummary) — path/command/
 query/skill, never the raw result JSON — so collapsed rows are self-describing
 again while honoring the "keep collapsed previews quiet" intent
 (test_tool_card_preview_summary.py).
 
-This drives the ACTUAL functions from static/ui.js via node + jsdom-free DOM
-shims, and runs the same render path live streaming and persisted reload share
-(both go through _decorateTransparentEventRow(buildToolCard(tc))).
+This dynamically imports the actual independently parseable ESM owners
+(`tool-card-presentation.js` and `activity-presentation.js`) via node +
+jsdom-free DOM shims, and runs the same render path live streaming and
+persisted reload share (both go through
+_decorateTransparentEventRow(buildToolCard(tc))).
 """
-from tests.frontend_asset_contract import family_source
 
 import json
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -35,87 +33,18 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
-UI_JS_PATH = REPO_ROOT / "static" / "ui.js"
+TOOL_CARD_MODULE = REPO_ROOT / "static" / "modules" / "ui" / "tool-card-presentation.js"
+ACTIVITY_MODULE = REPO_ROOT / "static" / "modules" / "ui" / "activity-presentation.js"
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not on PATH")
-
-_FN_NAMES = [
-    '_toolDisplayName', '_toolActionKind', '_toolKindIcon', '_toolPathBasename',
-    '_decodeToolLabelEntities', '_redactToolTargetLabel', '_shortToolLabel', '_toolI18n',
-    '_toolTargetLabel', '_toolReadRangeLabel', '_toolVisibleTargetLabel', '_toolCommandTitle', '_toolQueryTitle',
-    '_toolActionLabelText', '_toolArgPreviewValue', '_toolArgPreviewKeyIsHidden',
-    '_formatToolArgPreview', '_toolResultOneLiner', '_toolCardPreviewText', '_toolCardAllowsDetail',
-    '_toolDetailLeadLabel', '_toolDetailLeadText', '_toolShortName', '_transparentEventPreview',
-    '_transparentToolStatus', '_transparentToolSummary',
-    '_isMemorySave', '_isSkillUpdate', '_tcAction',
-    'buildToolCard', '_decorateTransparentEventRow',
-]
-
-
-def _function_source(src: str, name: str) -> str:
-    match = re.search(rf"function\s+{re.escape(name)}\s*\(", src)
-    if not match:
-        return ""
-    brace = src.find("{", match.end())
-    assert brace != -1, f"{name}() has no body"
-    depth = 1
-    i = brace + 1
-    in_string = None
-    escaped = False
-    in_line_comment = False
-    in_block_comment = False
-    while i < len(src) and depth:
-        ch = src[i]
-        nxt = src[i + 1] if i + 1 < len(src) else ""
-        if in_line_comment:
-            if ch == "\n":
-                in_line_comment = False
-            i += 1
-            continue
-        if in_block_comment:
-            if ch == "*" and nxt == "/":
-                in_block_comment = False
-                i += 2
-                continue
-            i += 1
-            continue
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == in_string:
-                in_string = None
-            i += 1
-            continue
-        if ch == "/" and nxt == "/":
-            in_line_comment = True
-            i += 2
-            continue
-        if ch == "/" and nxt == "*":
-            in_block_comment = True
-            i += 2
-            continue
-        if ch in "'\"`":
-            in_string = ch
-            i += 1
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-        i += 1
-    assert depth == 0, f"{name}() body did not close"
-    return src[match.start():i]
-
 
 _DRIVER_TEMPLATE = r"""
 // ── Minimal DOM shims (enough for buildToolCard + _decorateTransparentEventRow)
 function makeEl(tag){
   const el = {
     tagName: (tag||'div').toUpperCase(),
-    _attrs: {}, _classes: new Set(), children: [], style: {},
+    _attrs: {}, _classes: new Set(), children: [], style: {setProperty(){}, removeProperty(){}},
     dataset: {}, _html: '', textContent: '', parentNode: null,
     firstChild: null,
     classList: {
@@ -128,7 +57,7 @@ function makeEl(tag){
     appendChild(c){c.parentNode=el; el.children.push(c); el.firstChild=el.children[0]; return c;},
     insertBefore(c,ref){c.parentNode=el; const i=el.children.indexOf(ref); if(i<0)el.children.push(c); else el.children.splice(i,0,c); el.firstChild=el.children[0]; return c;},
     insertAdjacentHTML(){/* detail body not needed for collapsed-preview assertions */},
-    closest(){return null}, focus(){},
+    closest(){return null}, focus(){}, remove(){},
     get innerHTML(){return el._html;},
     set innerHTML(v){
       el._html=String(v);
@@ -156,23 +85,31 @@ function makeEl(tag){
   return el;
 }
 
-global.document = { createElement: (t)=>makeEl(t), querySelectorAll:()=>[], querySelector:()=>null, addEventListener:()=>{}, removeEventListener:()=>{} };
-global.window = { addEventListener:()=>{}, removeEventListener:()=>{} };
-global.CSS = { escape: s=>s };
-global.t = undefined;
-global.li = () => '<svg></svg>';
-global.esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-global.toolIcon = () => '<svg></svg>';
-global._snippetLooksLikeDiff = () => false;
-global._colorDiffLines = s => s;
-global._attachCopyButton = () => {};
-global._attachProgressBar = () => {};
-global._wireTransparentHeaderToggle = () => {};
-global._transparentToolDetailHtml = () => '<div class="tool-card-detail"></div>';
-global._toolDisclosureIdentity = () => '';
+globalThis.document = {
+  createElement: (t)=>makeEl(t), getElementById:()=>null,
+  querySelectorAll:()=>[], querySelector:()=>null,
+  addEventListener:()=>{}, removeEventListener:()=>{},
+};
+globalThis.window = {
+  addEventListener:()=>{}, removeEventListener:()=>{}, dispatchEvent:()=>{},
+  navigator:{},
+  _chatActivityDisplayMode:'transparent_stream',
+};
+globalThis.CustomEvent = class { constructor(type, init={}){ this.type=type; Object.assign(this, init); } };
+globalThis.CSS = { escape: s=>s };
+globalThis.matchMedia = () => ({matches:false, addEventListener:()=>{}, removeEventListener:()=>{}});
+globalThis.localStorage = { getItem:()=>null, setItem:()=>{}, removeItem:()=>{} };
+globalThis.sessionStorage = { getItem:()=>null, setItem:()=>{}, removeItem:()=>{} };
+globalThis.t = key => key;
+globalThis.li = () => '<svg></svg>';
 
-// ── EXTRACTED_FUNCTIONS placeholder (replaced by Python) ──
-%%EXTRACTED_FUNCTIONS%%
+// Import the production ESM owners instead of reconstructing a concatenated
+// legacy UI source. This validates their real dependency graph and exports.
+const { buildToolCard } = await import(%%TOOL_CARD_MODULE%%);
+const {
+  _decorateTransparentEventRow,
+  _transparentToolStatus,
+} = await import(%%ACTIVITY_MODULE%%);
 
 function previewFor(tc){
   const row=_decorateTransparentEventRow(buildToolCard(tc),{
@@ -216,13 +153,12 @@ CASES = {
 
 @pytest.fixture(scope="module")
 def results(tmp_path_factory):
-    ui_src = family_source("ui")
-    extracted = "\n".join(
-        _function_source(ui_src, name) for name in _FN_NAMES
-        if _function_source(ui_src, name)
+    driver_src = (
+        _DRIVER_TEMPLATE
+        .replace("%%TOOL_CARD_MODULE%%", json.dumps(TOOL_CARD_MODULE.as_uri()))
+        .replace("%%ACTIVITY_MODULE%%", json.dumps(ACTIVITY_MODULE.as_uri()))
     )
-    driver_src = _DRIVER_TEMPLATE.replace("%%EXTRACTED_FUNCTIONS%%", extracted)
-    driver = tmp_path_factory.mktemp("t4658") / "driver.js"
+    driver = tmp_path_factory.mktemp("t4658") / "driver.mjs"
     driver.write_text(driver_src, encoding="utf-8")
     proc = subprocess.run(
         [NODE, str(driver), json.dumps(CASES)],
