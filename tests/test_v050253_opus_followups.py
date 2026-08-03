@@ -13,6 +13,8 @@ Three small follow-ups landed alongside the main batch:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -20,41 +22,47 @@ REPO = Path(__file__).resolve().parents[1]
 # ── 1 + 2: /branch endpoint validation ────────────────────────────────────────
 
 
-def test_branch_endpoint_rejects_non_string_session_id():
-    """The handler must reject a non-string session_id with a 400 before
-    reaching get_session()."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-    branch_handler_idx = src.find('parsed.path == "/api/session/branch":')
-    assert branch_handler_idx != -1, "branch handler not found"
-    # Look at the next ~1500 chars
-    block = src[branch_handler_idx : branch_handler_idx + 1500]
-    assert 'isinstance(body["session_id"], str)' in block, (
-        "branch handler must isinstance-check session_id before passing to "
-        "get_session() — without this, non-string values raise TypeError "
-        "and surface as a confusing 500 instead of a 400."
+def _branch_validation_response(body, monkeypatch):
+    """Invoke the extracted branch-route owner with an observable response."""
+    import api.routes as routes
+    from api.http.routes import session_mutations
+
+    response = {}
+    context = dict(routes.__dict__)
+    context["bad"] = lambda _handler, message, status=400: response.update(
+        error=message, status=status
+    ) or True
+
+    if "keep_count" in body:
+        # A negative keep count is validated after resolving the source.  Keep
+        # that lookup side-effect free so this regression test reaches the
+        # validation boundary without touching persisted session state.
+        monkeypatch.setattr(
+            session_mutations.foreign_session_access,
+            "resolve_branch_source",
+            lambda _session_id: SimpleNamespace(refusal=None, session=object()),
+        )
+
+    result = session_mutations.handle_post(
+        object(), urlparse("/api/session/branch"), body, None, context
     )
-    assert '"session_id must be a string"' in block, (
-        "branch handler must return a clear error message for non-string "
-        "session_id, not a generic bad-request."
-    )
+    assert result is True
+    return response
 
 
-def test_branch_endpoint_rejects_negative_keep_count():
-    """The handler must reject keep_count < 0 with a 400. Otherwise Python
-    slicing would produce a "all but last N" semantic instead of a forward
-    prefix, which is confusing fork behavior."""
-    src = (REPO / "api" / "routes.py").read_text(encoding="utf-8")
-    branch_handler_idx = src.find('parsed.path == "/api/session/branch":')
-    block = src[branch_handler_idx : branch_handler_idx + 2000]
-    assert "keep_count < 0" in block, (
-        "branch handler must reject negative keep_count — Python's slice "
-        "semantics on negative values are 'all but last N', not 'prefix N', "
-        "and that's a confusing fork behavior."
-    )
-    assert '"keep_count must be non-negative"' in block, (
-        "branch handler must return a clear error message for negative "
-        "keep_count."
-    )
+def test_branch_endpoint_rejects_non_string_session_id(monkeypatch):
+    """A malformed ID produces a clear 400 instead of a lookup-time 500."""
+    assert _branch_validation_response({"session_id": 123}, monkeypatch) == {
+        "error": "session_id must be a string",
+        "status": 400,
+    }
+
+
+def test_branch_endpoint_rejects_negative_keep_count(monkeypatch):
+    """A negative count cannot reach Python's surprising negative slice path."""
+    assert _branch_validation_response(
+        {"session_id": "source", "keep_count": -1}, monkeypatch
+    ) == {"error": "keep_count must be non-negative", "status": 400}
 
 
 # ── 3: orphan wiki_* i18n keys must not return ────────────────────────────────

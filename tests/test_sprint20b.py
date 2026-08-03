@@ -2,11 +2,22 @@
 Sprint 21 Tests: Send button polish — hidden until content, pop-in animation,
 icon-only circle design.
 """
-from tests.frontend_asset_contract import family_source
+import json
 import re
+import shutil
+import subprocess
 import urllib.request
+from pathlib import Path
+
+import pytest
+
+from tests.frontend_asset_contract import family_source
 
 from tests._pytest_port import BASE
+
+
+REPO = Path(__file__).resolve().parents[1]
+NODE = shutil.which("node")
 
 
 def get_text(path):
@@ -320,15 +331,69 @@ def test_set_busy_calls_update_send_btn():
     assert 'updateSendBtn' in busy_body
 
 
-def test_render_tray_notifies_composer_primary_control():
-    """Attachment changes must notify the owner that refreshes the primary action."""
-    js, _ = get_family_text("ui", "/static/modules/ui/index.js")
-    tray_idx = js.find('function renderTray')
-    tray_end = js.find('\n}', tray_idx) + 2
-    tray_body = js[tray_idx:tray_end]
-    assert '_notifyComposerContentChanged' in tray_body
-    assert "new CustomEvent('hermes-composer-content-change')" in js
-    assert "addEventListener('hermes-composer-content-change',updateSendBtn)" in js
+def test_render_tray_refreshes_composer_primary_control_after_file_removal():
+    """Removing the final attachment updates the live primary-control state.
+
+    The upload tray now owns this connection directly, rather than emitting the
+    removed cross-module custom event.  Execute the real ES modules with a tiny
+    browser facade so this remains an interaction test across that boundary.
+    """
+    if NODE is None:
+        pytest.skip("node is required for upload-tray interaction coverage")
+
+    state_url = (REPO / "static/modules/ui/state.js").as_uri()
+    tray_url = (REPO / "static/modules/ui/upload-tray.js").as_uri()
+    script = f"""
+import assert from 'node:assert/strict';
+
+const refreshes = [];
+const chips = [];
+const tray = {{
+  innerHTML: 'stale',
+  classList: {{ add() {{}}, remove() {{ this.removed = true; }} }},
+  appendChild(chip) {{ chips.push(chip); }},
+}};
+globalThis.window = {{
+  __HERMES_CONFIG__: {{ maxUploadBytes: 20 * 1024 * 1024 }},
+  addEventListener() {{}},
+}};
+globalThis.document = {{
+  getElementById(id) {{ assert.equal(id, 'attachTray'); return tray; }},
+  addEventListener() {{}},
+  createElement() {{
+    const button = {{}};
+    return {{
+      className: '', dataset: {{}}, innerHTML: '',
+      querySelector(selector) {{ assert.equal(selector, 'button'); return button; }},
+      button,
+    }};
+  }},
+}};
+globalThis.updateSendBtn = () => refreshes.push(S.pendingFiles.length);
+globalThis.t = () => '';
+globalThis.li = () => '';
+globalThis.URL = {{ createObjectURL() {{ return 'blob:test'; }}, revokeObjectURL() {{}} }};
+
+const {{ S }} = await import({json.dumps(state_url)});
+const {{ renderTray }} = await import({json.dumps(tray_url)});
+S.pendingFiles = [{{ name: 'notes.txt' }}];
+renderTray();
+assert.deepEqual(refreshes, [1]);
+assert.equal(chips.length, 1);
+
+chips[0].button.onclick();
+assert.deepEqual(S.pendingFiles, []);
+assert.deepEqual(refreshes, [1, 0]);
+assert.equal(tray.classList.removed, true);
+"""
+    completed = subprocess.run(
+        [NODE, "--input-type=module", "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 # ── boot.js ──────────────────────────────────────────────────────────────
