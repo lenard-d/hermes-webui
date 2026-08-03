@@ -9,6 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SESSIONS_JS_PATH = ROOT / "static" / "sessions.js"
 SESSIONS_JS = family_source("sessions")
+SIDEBAR_ACTIONS_JS = (ROOT / "static/modules/sessions/sidebar-actions.js").read_text(encoding="utf-8")
 I18N_JS = family_source("i18n")
 UI_JS = family_source("ui")
 MESSAGES_JS = family_source("messages")
@@ -94,9 +95,7 @@ def test_copy_link_has_clipboard_fallback():
 
 
 def test_read_only_sessions_can_still_open_actions_for_copy_link():
-    start = SESSIONS_JS.index("function _openSessionActionMenu(session, anchorEl){")
-    end = SESSIONS_JS.index("document.addEventListener('click'", start)
-    open_menu_block = SESSIONS_JS[start:end]
+    open_menu_block = _extract_js_function(SIDEBAR_ACTIONS_JS, "_openSessionActionMenu")
     assert "Read-only imported sessions cannot be modified" not in open_menu_block
     assert "const isReadOnly = _isReadOnlySession(session);" in open_menu_block
     # Read-only sessions still get a usable menu: Copy link + Export as HTML
