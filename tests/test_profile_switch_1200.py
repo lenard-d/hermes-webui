@@ -683,7 +683,11 @@ def test_chat_start_retags_empty_session_to_request_profile(monkeypatch, tmp_pat
             self.saved = True
 
     fake = FakeSession()
-    monkeypatch.setattr(routes, "get_session", lambda sid: fake)
+    monkeypatch.setattr(
+        routes,
+        "_get_or_materialize_session",
+        lambda sid, **_kwargs: fake,
+    )
     monkeypatch.setattr(routes, "_get_active_profile_name", lambda: "work")
     monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda path: tmp_path)
     monkeypatch.setattr(
@@ -756,7 +760,11 @@ def test_chat_start_does_not_retag_non_empty_session(monkeypatch, tmp_path):
             self.saved = True
 
     fake = FakeSession()
-    monkeypatch.setattr(routes, "get_session", lambda sid: fake)
+    monkeypatch.setattr(
+        routes,
+        "_get_or_materialize_session",
+        lambda sid, **_kwargs: fake,
+    )
     monkeypatch.setattr(routes, "resolve_trusted_workspace", lambda path: tmp_path)
     monkeypatch.setattr(
         routes,
@@ -800,11 +808,10 @@ def test_chat_start_rejects_invalid_request_profile(monkeypatch):
         session_id = "sid-invalid-profile"
         profile = "default"
 
-    monkeypatch.setattr(routes, "get_session", lambda sid: FakeSession())
     monkeypatch.setattr(
         routes,
-        "get_full_session",
-        lambda _sid, session=None: session,
+        "_get_or_materialize_session",
+        lambda _sid, **_kwargs: FakeSession(),
     )
     errors = []
 
