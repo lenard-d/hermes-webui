@@ -2,7 +2,12 @@
 Sprint 9 Tests: app.js module split verification, tool cards, todo panel.
 Run: ./scripts/test.sh tests/test_sprint9.py -v
 """
-from tests.frontend_asset_contract import family_source
+from tests.frontend_asset_contract import (
+    family_asset_paths,
+    family_source,
+    module_family_paths,
+    ui_module_paths,
+)
 import json, urllib.error, urllib.request
 
 from tests._pytest_port import BASE
@@ -131,18 +136,29 @@ def test_module_load_order_correct(cleanup_test_sessions):
     assert ui_pos < ws_pos < sess_pos < msg_pos < panels_pos < boot_pos
 
 def test_no_duplicate_function_definitions(cleanup_test_sessions):
-    """No function name should appear in more than one module."""
+    """Each ESM owner scope must not define the same function twice.
+
+    Native modules may intentionally use the same public name in a port and
+    its implementation owner. Reading a family as one concatenated source
+    erases that scope boundary and reports a false duplicate.
+    """
     import re
-    modules = ["modules/ui/index.js", "workspace.js", "modules/sessions/index.js", "modules/messages/index.js", "modules/panels/index.js", "modules/boot/index.js"]
-    seen = {}
-    for m in modules:
-        src = family_source("boot") if m == "modules/boot/index.js" else get_family_source(f"/static/{m}")
+    module_paths = (
+        *ui_module_paths(),
+        *family_asset_paths("workspace"),
+        *module_family_paths("sessions"),
+        *module_family_paths("messages"),
+        *module_family_paths("panels"),
+        *module_family_paths("boot"),
+    )
+    function_count = 0
+    for path in module_paths:
+        src = path.read_text(encoding="utf-8")
         fns = re.findall(r'(?:async )?function ([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(', src)
-        for fn in fns:
-            if fn in seen:
-                assert False, f"Duplicate function {fn} in both {seen[fn]} and {m}"
-            seen[fn] = m
-    assert len(seen) > 50, f"Expected 50+ functions, got {len(seen)}"
+        duplicates = sorted({fn for fn in fns if fns.count(fn) > 1})
+        assert not duplicates, f"Duplicate functions in {path}: {duplicates}"
+        function_count += len(fns)
+    assert function_count > 50, f"Expected 50+ functions, got {function_count}"
 
 def test_all_functions_present_across_modules(cleanup_test_sessions):
     """Key functions must be present somewhere in the split modules."""

@@ -4,6 +4,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 UI_JS = family_source("ui")
 SESSIONS_JS = family_source("sessions")
+SESSION_RECOVERY_JS = (
+    REPO / "static" / "modules" / "ui" / "session-recovery.js"
+).read_text(encoding="utf-8")
 
 
 def _function_body(src: str, signature: str) -> str:
@@ -231,10 +234,10 @@ def test_same_session_reload_anchor_uses_absolute_session_message_index():
 
 
 def test_refresh_session_updates_message_window_offset_before_rerender():
-    refresh = _function_body(UI_JS, "function refreshSession")
-    messages_idx = refresh.index("S.messages = data.session.messages || [];")
-    truncated_idx = refresh.index("_messagesTruncated = !!data.session._messages_truncated;")
-    offset_idx = refresh.index("_oldestIdx = data.session._messages_offset || 0;")
+    refresh = _function_body(SESSION_RECOVERY_JS, "async function refreshSession")
+    messages_idx = refresh.index("S.messages=data.session.messages||[];")
+    truncated_idx = refresh.index("_messagesTruncated=!!data.session._messages_truncated;")
+    offset_idx = refresh.index("_oldestIdx=data.session._messages_offset||0;")
     render_idx = refresh.index("_renderMessagesWithScrollSnapshot();")
 
     assert messages_idx < truncated_idx < offset_idx < render_idx
