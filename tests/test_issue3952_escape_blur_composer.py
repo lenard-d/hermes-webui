@@ -1,13 +1,11 @@
 """Regression tests for #3952 composer Escape keyboard navigation."""
 
-from tests.frontend_asset_contract import family_source
-
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BOOT_JS = family_source("boot")
-SESSIONS_JS = family_source("sessions")
+COMPOSER_JS = (REPO_ROOT / "static/modules/boot/composer.js").read_text(encoding="utf-8")
+SESSION_NAVIGATION_EVENTS_JS = (REPO_ROOT / "static/modules/sessions/session-navigation-events.js").read_text(encoding="utf-8")
 
 
 def _block_from_opening_brace(src: str, brace: int, label: str) -> str:
@@ -25,16 +23,16 @@ def _block_from_opening_brace(src: str, brace: int, label: str) -> str:
 
 
 def _escape_block() -> str:
-    document_keydown = BOOT_JS.index("// B14: Cmd/Ctrl+K creates a new chat from anywhere")
-    start = BOOT_JS.index("if(e.key==='Escape'){", document_keydown)
-    brace = BOOT_JS.index("{", start)
-    return _block_from_opening_brace(BOOT_JS, brace, "document Escape handler")
+    document_keydown = COMPOSER_JS.index("// B14: Cmd/Ctrl+K creates a new chat from anywhere")
+    start = COMPOSER_JS.index("if(e.key==='Escape'){", document_keydown)
+    brace = COMPOSER_JS.index("{", start)
+    return _block_from_opening_brace(COMPOSER_JS, brace, "document Escape handler")
 
 
 def _composer_keydown_block() -> str:
-    start = BOOT_JS.index("$('msg').addEventListener('keydown',e=>{")
-    brace = BOOT_JS.index("{", start)
-    return _block_from_opening_brace(BOOT_JS, brace, "composer keydown handler")
+    start = COMPOSER_JS.index("$('msg').addEventListener('keydown',e=>{")
+    brace = COMPOSER_JS.index("{", start)
+    return _block_from_opening_brace(COMPOSER_JS, brace, "composer keydown handler")
 
 
 def test_escape_blurs_focused_composer_after_higher_priority_escape_actions():
@@ -59,8 +57,7 @@ def test_escape_blurs_focused_composer_after_higher_priority_escape_actions():
 
 def test_jk_session_navigation_still_ignores_interactive_targets():
     """Composer text entry still owns j/k until Escape blurs it."""
-    nav_start = SESSIONS_JS.index("// Keyboard session navigation — J/K bindings")
-    nav_block = SESSIONS_JS[nav_start:]
+    nav_block = SESSION_NAVIGATION_EVENTS_JS
     assert "if(typeof _isInteractiveSwipeTarget==='function'&&_isInteractiveSwipeTarget(e.target)) return;" in nav_block
 
 

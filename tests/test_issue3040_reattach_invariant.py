@@ -7,12 +7,14 @@ remove a persistence call or add a new INFLIGHT write without pairing it with on
 """
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_source
-
 import re
+from pathlib import Path
 
-MESSAGES_JS = family_source("messages")
-_LINES = MESSAGES_JS.splitlines()
+REPO = Path(__file__).resolve().parents[1]
+SEND_JS = (REPO / "static/modules/messages/send.js").read_text(encoding="utf-8")
+STREAM_JS = (REPO / "static/modules/messages/stream.js").read_text(encoding="utf-8")
+CONTENT_EVENTS_JS = (REPO / "static/modules/messages/content-events.js").read_text(encoding="utf-8")
+_LINES = SEND_JS.splitlines()
 
 
 def _line_window(line_no: int, radius: int = 20) -> str:
@@ -34,10 +36,10 @@ def _inflight_write_line_numbers() -> list[int]:
 
 
 def test_inflight_write_sites_exist():
-    """Sanity-check: messages.js must contain at least 3 INFLIGHT[activeSid] write sites."""
+    """Sanity-check: the send owner maintains the optimistic INFLIGHT writes."""
     sites = _inflight_write_line_numbers()
     assert len(sites) >= 3, (
-        f"Expected at least 3 INFLIGHT[activeSid] assignment sites, found {len(sites)}. "
+        f"Expected at least 3 INFLIGHT[activeSid] assignment sites in send.js, found {len(sites)}. "
         "If send() was refactored, update the expected count."
     )
 
@@ -46,11 +48,11 @@ def _extract_send_body() -> str:
     """Extract the body of the send() function up to attachLiveStream() as one string."""
     # send() starts with `async function send(` and the INFLIGHT writes in the
     # optimistic path and catch block both precede the attachLiveStream call.
-    send_start = MESSAGES_JS.find("async function send(")
-    assert send_start != -1, "async function send() not found in messages.js."
-    attach_call = MESSAGES_JS.find("attachLiveStream(activeSid, streamId", send_start)
+    send_start = SEND_JS.find("async function send(")
+    assert send_start != -1, "async function send() not found in send.js."
+    attach_call = SEND_JS.find("attachLiveStream(activeSid, streamId", send_start)
     assert attach_call != -1, "attachLiveStream call not found inside send()."
-    return MESSAGES_JS[send_start:attach_call]
+    return SEND_JS[send_start:attach_call]
 
 
 def test_send_inflight_writes_are_paired_with_saveInflightState():
@@ -90,19 +92,19 @@ def test_send_inflight_writes_are_paired_with_saveInflightState():
 def test_syncInflightAssistantMessage_calls_throttled_persist():
     """syncInflightAssistantMessage() must call _throttledPersist() to flush the live
     assistant text into persistent INFLIGHT state on every token and interim_assistant event."""
-    fn_start = MESSAGES_JS.find("function syncInflightAssistantMessage(){")
-    assert fn_start != -1, "syncInflightAssistantMessage() not found in messages.js."
-    fn_body_start = MESSAGES_JS.find("{", fn_start)
+    fn_start = STREAM_JS.find("function syncInflightAssistantMessage(){")
+    assert fn_start != -1, "syncInflightAssistantMessage() not found in stream.js."
+    fn_body_start = STREAM_JS.find("{", fn_start)
     # Walk braces to find the closing brace of the function body.
     depth = 1
     i = fn_body_start + 1
-    while i < len(MESSAGES_JS) and depth:
-        if MESSAGES_JS[i] == "{":
+    while i < len(STREAM_JS) and depth:
+        if STREAM_JS[i] == "{":
             depth += 1
-        elif MESSAGES_JS[i] == "}":
+        elif STREAM_JS[i] == "}":
             depth -= 1
         i += 1
-    fn_body = MESSAGES_JS[fn_body_start:i]
+    fn_body = STREAM_JS[fn_body_start:i]
     assert "_throttledPersist()" in fn_body, (
         "syncInflightAssistantMessage() must call _throttledPersist() so each "
         "live-text update is scheduled for persistence. Without this, a reconnect "
@@ -110,43 +112,37 @@ def test_syncInflightAssistantMessage_calls_throttled_persist():
     )
 
 
-def test_interim_assistant_calls_syncInflightAssistantMessage_after_accumulating_text():
-    """The interim_assistant event handler must call syncInflightAssistantMessage()
-    after it appends to assistantText and visibleInterimSnippets.
+def test_interim_assistant_syncs_the_stream_turn_after_accumulating_text():
+    """The interim owner must sync its stream turn after recording an update.
 
     Without this call, the INFLIGHT assistant message is not updated before a
     potential reconnect, causing already-streamed content to be lost.
     """
-    handler_start = MESSAGES_JS.find("source.addEventListener('interim_assistant',")
-    assert handler_start != -1, "interim_assistant event listener not found in messages.js."
+    handler_start = CONTENT_EVENTS_JS.find("source.addEventListener('interim_assistant',")
+    assert handler_start != -1, "interim_assistant event listener not found in content-events.js."
     # Extract the handler body up to the matching closing brace.
-    brace_pos = MESSAGES_JS.find("{", handler_start)
+    brace_pos = CONTENT_EVENTS_JS.find("{", handler_start)
     depth = 1
     i = brace_pos + 1
-    while i < len(MESSAGES_JS) and depth:
-        if MESSAGES_JS[i] == "{":
+    while i < len(CONTENT_EVENTS_JS) and depth:
+        if CONTENT_EVENTS_JS[i] == "{":
             depth += 1
-        elif MESSAGES_JS[i] == "}":
+        elif CONTENT_EVENTS_JS[i] == "}":
             depth -= 1
         i += 1
-    handler_body = MESSAGES_JS[brace_pos:i]
+    handler_body = CONTENT_EVENTS_JS[brace_pos:i]
 
-    assert "assistantText" in handler_body, (
-        "interim_assistant handler does not reference assistantText — handler may have been refactored."
-    )
-    assert "visibleInterimSnippets" in handler_body, (
-        "interim_assistant handler does not reference visibleInterimSnippets — "
-        "interim snippet tracking was removed."
-    )
-    # syncInflightAssistantMessage() must appear AFTER the accumulation lines.
-    accum_pos = handler_body.find("visibleInterimSnippets.push(")
-    sync_pos = handler_body.find("syncInflightAssistantMessage()")
+    # The event owner talks only to its injected turn port; the stream owner
+    # keeps the closure-local assistant text and snippet list.
+    accum_pos = handler_body.find("turn.pushInterimSnippet(visible)")
+    text_pos = handler_body.find("turn.appendInterimAssistantText(visible)")
+    sync_pos = handler_body.find("turn.syncInflight()")
     assert sync_pos != -1, (
-        "interim_assistant handler does not call syncInflightAssistantMessage(). "
+        "interim_assistant handler does not call the stream turn's sync port. "
         "Without this, INFLIGHT is not updated with interim text and a reconnect loses progress."
     )
-    assert accum_pos != -1 and sync_pos > accum_pos, (
-        "syncInflightAssistantMessage() must appear AFTER visibleInterimSnippets.push() "
+    assert text_pos != -1 and accum_pos != -1 and sync_pos > accum_pos > text_pos, (
+        "turn.syncInflight() must appear AFTER recording the text and interim snippet "
         "so that the persisted snapshot includes the freshly accumulated snippet."
     )
 
@@ -159,15 +155,11 @@ def test_attachLiveStream_reconnect_seeds_from_INFLIGHT_not_querySelector():
     have no rendered content, so the closure would start empty and duplicate tokens
     would overwrite the already-displayed response.
     """
-    fn_start = MESSAGES_JS.find("function attachLiveStream(")
-    assert fn_start != -1, "attachLiveStream() not found in messages.js."
-    # Capture up to 60 lines after the function signature for the seed section.
-    fn_head_end = fn_start
-    for _ in range(60):
-        fn_head_end = MESSAGES_JS.find("\n", fn_head_end + 1)
-        if fn_head_end == -1:
-            break
-    seed_section = MESSAGES_JS[fn_start:fn_head_end]
+    fn_start = STREAM_JS.find("function attachLiveStream(")
+    assert fn_start != -1, "attachLiveStream() not found in stream.js."
+    seed_end = STREAM_JS.find("let assistantRow=null;", fn_start)
+    assert seed_end != -1, "attachLiveStream() seed section did not terminate"
+    seed_section = STREAM_JS[fn_start:seed_end]
 
     # The reconnect seed must come from INFLIGHT[activeSid].
     assert "INFLIGHT[activeSid]" in seed_section, (
@@ -179,10 +171,10 @@ def test_attachLiveStream_reconnect_seeds_from_INFLIGHT_not_querySelector():
         "The reconnect path must distinguish a fresh open from a re-attach."
     )
     # The seed must NOT use querySelector to read DOM content for the initial text.
-    idx = seed_section.find("let assistantText")
-    assert idx != -1, "let assistantText not found in seed section — capture window too narrow or variable renamed"
-    seed_up_to_assistantText = seed_section[:idx]
-    assert "querySelector" not in seed_up_to_assistantText, (
+    idx = seed_section.find("assistantText = _lastLiveAssistant")
+    assert idx != -1, "assistantText is not seeded from the computed INFLIGHT value"
+    seed_up_to_assistant_text = seed_section[:idx]
+    assert "querySelector" not in seed_up_to_assistant_text, (
         "attachLiveStream() reads DOM via querySelector before seeding assistantText. "
         "Use INFLIGHT state exclusively; DOM queries are unreliable for off-screen sessions."
     )
@@ -195,16 +187,16 @@ def test_syncInflightAssistantMessage_exists_as_closure_inside_attachLiveStream(
     If it were a module-level function it could not access the per-stream state,
     breaking the token→INFLIGHT sync for every concurrent stream.
     """
-    attach_start = MESSAGES_JS.find("function attachLiveStream(")
+    attach_start = STREAM_JS.find("function attachLiveStream(")
     assert attach_start != -1, "attachLiveStream() not found."
     # syncInflightAssistantMessage definition must appear after attachLiveStream opens.
-    sync_def = MESSAGES_JS.find("function syncInflightAssistantMessage(){", attach_start)
+    sync_def = STREAM_JS.find("function syncInflightAssistantMessage(){", attach_start)
     assert sync_def != -1, (
         "syncInflightAssistantMessage() is not defined inside attachLiveStream(). "
         "It must be a closure over the stream accumulators (assistantText, reasoningText)."
     )
     # And there must NOT be a top-level definition before attachLiveStream.
-    top_level_def = MESSAGES_JS.find("function syncInflightAssistantMessage(){")
+    top_level_def = STREAM_JS.find("function syncInflightAssistantMessage(){")
     assert top_level_def == sync_def, (
         "syncInflightAssistantMessage() has a top-level definition. "
         "It must live inside attachLiveStream() to close over per-stream state."

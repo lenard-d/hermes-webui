@@ -5,15 +5,20 @@ jump came from discrete transcript rebuilds and card replacement paths, so these
 tests pin those call sites rather than the per-token renderer.
 """
 
-from tests.frontend_asset_contract import family_source
-
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = family_source("ui")
-SESSIONS_JS = family_source("sessions")
-STYLE_CSS = family_source("style")
+SESSION_RECOVERY_JS = (ROOT / "static/modules/ui/session-recovery.js").read_text(encoding="utf-8")
+HANDOFF_UI_JS = (ROOT / "static/modules/ui/handoff-ui.js").read_text(encoding="utf-8")
+COMPRESSION_UI_JS = (ROOT / "static/modules/ui/compression-ui.js").read_text(encoding="utf-8")
+ANCHOR_SCENES_JS = (ROOT / "static/modules/ui/anchor-scenes.js").read_text(encoding="utf-8")
+LIVE_ANCHOR_RECONCILIATION_JS = (ROOT / "static/modules/ui/live-anchor-reconciliation.js").read_text(encoding="utf-8")
+MESSAGE_SCROLL_SNAPSHOT_JS = (ROOT / "static/modules/ui/message-scroll-snapshot.js").read_text(encoding="utf-8")
+RENDER_SUPPORT_JS = (ROOT / "static/modules/ui/render-support.js").read_text(encoding="utf-8")
+EXISTING_SESSION_LOAD_JS = (ROOT / "static/modules/sessions/existing-session-load.js").read_text(encoding="utf-8")
+SHELL_NAVIGATION_CSS = (ROOT / "static/style_parts/003-shell-navigation.css").read_text(encoding="utf-8")
+CHAT_WORKSPACE_RESPONSIVE_CSS = (ROOT / "static/style_parts/004-chat-workspace-responsive.css").read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -39,15 +44,16 @@ def _compact(text: str) -> str:
 
 
 def test_refresh_session_uses_same_frame_scroll_snapshot_restore():
-    body = _function_body(UI_JS, "refreshSession")
+    body = _function_body(SESSION_RECOVERY_JS, "refreshSession")
 
-    assert "syncTopbar(); _renderMessagesWithScrollSnapshot();" in body
-    assert "syncTopbar(); renderMessages();" not in body
+    compact = _compact(body)
+    assert "syncTopbar();_renderMessagesWithScrollSnapshot();" in compact
+    assert "syncTopbar();renderMessages();" not in compact
 
 
 def test_handoff_rebuilds_use_same_frame_scroll_snapshot_restore():
-    clear_body = _function_body(UI_JS, "clearHandoffUi")
-    set_body = _function_body(UI_JS, "setHandoffUi")
+    clear_body = _function_body(HANDOFF_UI_JS, "clearHandoffUi")
+    set_body = _function_body(HANDOFF_UI_JS, "setHandoffUi")
 
     assert "_renderMessagesWithScrollSnapshot();" in clear_body
     assert "_renderMessagesWithScrollSnapshot();" in set_body
@@ -56,7 +62,7 @@ def test_handoff_rebuilds_use_same_frame_scroll_snapshot_restore():
 
 
 def test_live_compression_card_replacement_restores_snapshot_before_follow_settle():
-    body = _function_body(UI_JS, "appendLiveCompressionCard")
+    body = _function_body(COMPRESSION_UI_JS, "appendLiveCompressionCard")
 
     capture_idx = body.index("const scrollSnapshot=_captureMessageScrollSnapshot();")
     replace_idx = body.index("if(existing) existing.replaceWith(node);")
@@ -67,7 +73,7 @@ def test_live_compression_card_replacement_restores_snapshot_before_follow_settl
 
 
 def test_live_anchor_worklog_rebuild_restores_snapshot_before_follow_settle():
-    body = _function_body(UI_JS, "renderLiveAnchorActivityScene")
+    body = _function_body(ANCHOR_SCENES_JS, "renderLiveAnchorActivityScene")
 
     capture_idx = body.index("const scrollSnapshot=_captureMessageScrollSnapshot();")
     guard_idx = body.index("const scrollRebuildGuard=_prepareLiveAnchorScrollRebuildGuard(scrollSnapshot);")
@@ -83,7 +89,7 @@ def test_live_anchor_worklog_rebuild_restores_snapshot_before_follow_settle():
 
 
 def test_live_anchor_worklog_rebuild_guards_height_for_unpinned_reader():
-    guard = _function_body(UI_JS, "_prepareLiveAnchorScrollRebuildGuard")
+    guard = _function_body(LIVE_ANCHOR_RECONCILIATION_JS, "_prepareLiveAnchorScrollRebuildGuard")
     compact = _compact(guard)
 
     assert "constbeforeBottomDistance=Math.max(0,messagesEl.scrollHeight-messagesEl.scrollTop-messagesEl.clientHeight);" in compact
@@ -98,9 +104,9 @@ def test_live_anchor_worklog_rebuild_guards_height_for_unpinned_reader():
 
 
 def test_same_frame_snapshot_preserves_bottom_distance_and_unpinned_state():
-    capture = _function_body(UI_JS, "_captureMessageScrollSnapshot")
-    restore = _function_body(UI_JS, "_restoreMessageScrollSnapshotSameFrame")
-    wrapper = _function_body(UI_JS, "_renderMessagesWithScrollSnapshot")
+    capture = _function_body(MESSAGE_SCROLL_SNAPSHOT_JS, "_captureMessageScrollSnapshot")
+    restore = _function_body(RENDER_SUPPORT_JS, "_restoreMessageScrollSnapshotSameFrame")
+    wrapper = _function_body(RENDER_SUPPORT_JS, "_renderMessagesWithScrollSnapshot")
 
     assert "bottom" in capture
     assert "readerAwayFromBottom?false:_shouldFollowMessagesOnDomReplace()" in _compact(capture)
@@ -113,7 +119,7 @@ def test_same_frame_snapshot_preserves_bottom_distance_and_unpinned_state():
 
 
 def test_preserve_scroll_restores_reader_away_from_bottom_before_following():
-    body = _function_body(UI_JS, "_scrollAfterMessageRender")
+    body = _function_body(RENDER_SUPPORT_JS, "_scrollAfterMessageRender")
     compact = _compact(body)
 
     reader_idx = compact.index("constreaderAwayFromBottom=")
@@ -125,7 +131,7 @@ def test_preserve_scroll_restores_reader_away_from_bottom_before_following():
 
 
 def test_scroll_snapshot_restore_reinstates_unpinned_state_when_reader_is_mid_answer():
-    restore = _function_body(UI_JS, "_restoreMessageScrollSnapshot")
+    restore = _function_body(MESSAGE_SCROLL_SNAPSHOT_JS, "_restoreMessageScrollSnapshot")
     compact = _compact(restore)
 
     assert "constbottomDistance=el.scrollHeight-el.scrollTop-el.clientHeight;" in compact
@@ -135,7 +141,7 @@ def test_scroll_snapshot_restore_reinstates_unpinned_state_when_reader_is_mid_an
 
 
 def test_same_session_force_refresh_does_not_reset_scroll_direction_tracker():
-    body = _function_body(SESSIONS_JS, "loadSession")
+    body = _function_body(EXISTING_SESSION_LOAD_JS, "loadSession")
     compact = _compact(body)
 
     assert "constcurrentSid=S.session?S.session.session_id:null;" in compact
@@ -143,12 +149,13 @@ def test_same_session_force_refresh_does_not_reset_scroll_direction_tracker():
 
 
 def test_clarify_card_is_height_clamped_and_scrollable_on_mobile_viewports():
-    compact = _compact(STYLE_CSS)
+    shell_compact = _compact(SHELL_NAVIGATION_CSS)
+    responsive_compact = _compact(CHAT_WORKSPACE_RESPONSIVE_CSS)
 
-    assert ".clarify-card" in STYLE_CSS
-    assert "max-height:clamp(180px,min(68vh,calc(100vh-220px)),420px)" in compact
-    assert "@supports(height:100dvh)" in compact
-    assert "max-height:clamp(180px,min(62dvh,calc(100dvh-180px)),360px)" in compact
-    assert "overflow-y:auto" in compact
-    assert "-webkit-overflow-scrolling:touch" in compact
-    assert "overscroll-behavior:contain" in compact
+    assert ".clarify-card" in SHELL_NAVIGATION_CSS
+    assert "max-height:clamp(180px,min(68vh,calc(100vh-220px)),420px)" in shell_compact
+    assert "@supports(height:100dvh)" in shell_compact
+    assert "overflow-y:auto" in shell_compact
+    assert "-webkit-overflow-scrolling:touch" in shell_compact
+    assert "overscroll-behavior:contain" in shell_compact
+    assert "max-height:clamp(180px,min(62dvh,calc(100dvh-180px)),360px)" in responsive_compact

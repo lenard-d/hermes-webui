@@ -22,15 +22,13 @@ where all older messages have been scrolled in), ``_oldestIdx`` is 0
 and ``absoluteKeepCount`` equals ``msgIdx``, preserving existing
 behaviour.
 """
-from tests.frontend_asset_contract import family_source
-
-
 import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-COMMANDS_JS = family_source("commands")
-SESSIONS_JS = family_source("sessions")
+COMMAND_SESSION_HISTORY_JS = (REPO / "static/modules/commands/session-history.js").read_text(encoding="utf-8")
+TRANSCRIPT_WINDOW_STATE_JS = (REPO / "static/modules/sessions/transcript-window-state.js").read_text(encoding="utf-8")
+OLDER_MESSAGE_PAGINATION_JS = (REPO / "static/modules/sessions/older-message-pagination.js").read_text(encoding="utf-8")
 
 
 def _function_body(src: str, name: str) -> str:
@@ -59,7 +57,7 @@ def _function_body(src: str, name: str) -> str:
 
 def test_fork_uses_absolute_keep_count():
     """``forkFromMessage`` must add ``_oldestIdx`` to ``msgIdx`` before sending."""
-    body = _function_body(COMMANDS_JS, "forkFromMessage")
+    body = _function_body(COMMAND_SESSION_HISTORY_JS, "forkFromMessage")
     # The function must compute an absolute count that incorporates _oldestIdx.
     assert "_oldestIdx" in body, (
         "forkFromMessage must reference _oldestIdx to compute the absolute "
@@ -74,7 +72,7 @@ def test_fork_uses_absolute_keep_count():
 
 def test_fork_captures_absolute_count_before_await():
     """The absolute keep_count must be captured BEFORE any ``await`` call."""
-    body = _function_body(COMMANDS_JS, "forkFromMessage")
+    body = _function_body(COMMAND_SESSION_HISTORY_JS, "forkFromMessage")
     capture_match = re.search(r"absoluteKeepCount\s*=\s*_oldestIdx\s*\+\s*msgIdx", body)
     assert capture_match, "Missing absoluteKeepCount = _oldestIdx + msgIdx assignment"
     capture_idx = capture_match.start()
@@ -91,7 +89,7 @@ def test_fork_captures_absolute_count_before_await():
 
 def test_fork_sends_absolute_keep_count_not_raw_msgIdx():
     """The request body must use ``absoluteKeepCount``, not ``msgIdx``."""
-    body = _function_body(COMMANDS_JS, "forkFromMessage")
+    body = _function_body(COMMAND_SESSION_HISTORY_JS, "forkFromMessage")
     assert "keep_count:absoluteKeepCount" in body, (
         "forkFromMessage must send keep_count:absoluteKeepCount (not "
         "keep_count:msgIdx) so the backend receives the absolute message "
@@ -107,7 +105,7 @@ def test_fork_sends_absolute_keep_count_not_raw_msgIdx():
 
 def test_fork_calls_ensure_all_messages_loaded():
     """``forkFromMessage`` must call ``_ensureAllMessagesLoaded`` for truncated sessions."""
-    body = _function_body(COMMANDS_JS, "forkFromMessage")
+    body = _function_body(COMMAND_SESSION_HISTORY_JS, "forkFromMessage")
     assert "_ensureAllMessagesLoaded" in body, (
         "forkFromMessage must call _ensureAllMessagesLoaded so the full "
         "transcript is loaded before the fork is created. See #2184."
@@ -116,7 +114,7 @@ def test_fork_calls_ensure_all_messages_loaded():
 
 def test_fork_ensure_all_called_before_branch_api():
     """``_ensureAllMessagesLoaded`` must be called BEFORE the ``/api/session/branch`` request."""
-    body = _function_body(COMMANDS_JS, "forkFromMessage")
+    body = _function_body(COMMAND_SESSION_HISTORY_JS, "forkFromMessage")
     ensure_idx = body.index("_ensureAllMessagesLoaded")
     branch_idx = body.index("'/api/session/branch'")
     assert ensure_idx < branch_idx, (
@@ -130,21 +128,18 @@ def test_fork_ensure_all_called_before_branch_api():
 # _oldestIdx and _messagesTruncated are declared at module scope
 # ---------------------------------------------------------------------------
 
-def test_oldest_idx_declared_at_module_scope():
-    """``_oldestIdx`` must be a module-scoped variable accessible to forkFromMessage."""
-    assert "let _oldestIdx = 0;" in SESSIONS_JS, (
-        "static/sessions.js must declare `let _oldestIdx = 0;` at module "
-        "scope so forkFromMessage can read it for absolute-index "
-        "computation. See #2184."
-    )
+def test_oldest_idx_is_owned_by_transcript_window_state():
+    """The canonical transcript-window owner starts the absolute offset at zero."""
+    assert "let oldestIdx = 0;" in TRANSCRIPT_WINDOW_STATE_JS
+    assert "get oldestIdx()" in TRANSCRIPT_WINDOW_STATE_JS
+    assert "set oldestIdx(value)" in TRANSCRIPT_WINDOW_STATE_JS
 
 
-def test_messages_truncated_declared_at_module_scope():
-    """``_messagesTruncated`` must be a module-scoped variable."""
-    assert "let _messagesTruncated = false;" in SESSIONS_JS, (
-        "static/sessions.js must declare `let _messagesTruncated = false;` "
-        "at module scope. See #2184."
-    )
+def test_messages_truncated_is_owned_by_transcript_window_state():
+    """The canonical transcript-window owner starts the truncation flag false."""
+    assert "let messagesTruncated = false;" in TRANSCRIPT_WINDOW_STATE_JS
+    assert "get messagesTruncated()" in TRANSCRIPT_WINDOW_STATE_JS
+    assert "set messagesTruncated(value)" in TRANSCRIPT_WINDOW_STATE_JS
 
 
 # ---------------------------------------------------------------------------
@@ -153,9 +148,9 @@ def test_messages_truncated_declared_at_module_scope():
 
 def test_ensure_all_resets_oldest_idx_to_zero():
     """After loading all messages, ``_oldestIdx`` must be 0 — this is why we capture early."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
-    assert "_oldestIdx = 0;" in body, (
-        "_ensureAllMessagesLoaded must reset _oldestIdx to 0 after the "
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
+    assert "transcriptWindowState.oldestIdx = 0;" in body, (
+        "_ensureAllMessagesLoaded must reset the transcript window offset to 0 after the "
         "wholesale replace. This is why forkFromMessage must capture the "
         "absolute count BEFORE awaiting _ensureAllMessagesLoaded. "
         "See #2184 and #1937."
@@ -164,7 +159,7 @@ def test_ensure_all_resets_oldest_idx_to_zero():
 
 def test_ensure_all_messages_uses_extended_timeout_for_full_history_load():
     """Full-history loads for fork/export/start-jump can legitimately exceed the API default timeout."""
-    body = _function_body(SESSIONS_JS, "_ensureAllMessagesLoaded")
+    body = _function_body(OLDER_MESSAGE_PAGINATION_JS, "_ensureAllMessagesLoaded")
     full_history_call = re.search(
         r"api\((?P<url>`[^`]*messages=1&resolve_model=0[^`]*`)\s*,\s*\{(?P<opts>[^}]*)\}\s*\)",
         body,
@@ -182,7 +177,7 @@ def test_ensure_all_messages_uses_extended_timeout_for_full_history_load():
 
 def test_fork_absolute_count_reduces_to_msgIdx_when_oldestIdx_zero():
     """When ``_oldestIdx`` is 0, ``absoluteKeepCount`` equals ``msgIdx`` (no behaviour change)."""
-    body = _function_body(COMMANDS_JS, "forkFromMessage")
+    body = _function_body(COMMAND_SESSION_HISTORY_JS, "forkFromMessage")
     # The expression _oldestIdx + msgIdx evaluates to msgIdx when _oldestIdx==0.
     # Verify the expression exists (already checked above) and that there
     # is no conditional that would skip the computation for non-truncated sessions.
