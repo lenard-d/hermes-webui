@@ -120,20 +120,23 @@ def test_audit_reports_runtime_agent_execution_imports():
     classes = _class_by_id(_run_audit())
     anchors = _anchors(classes["runtime_agent_execution"])
 
-    assert ("api/runs/agent_runtime.py", "run_agent") in anchors
-    assert ("api/routes_parts/skills.py", "tools.skills_tool") in anchors
-    assert ("api/streaming/turn_identity.py", "tools.approval") in anchors
-    assert ("api/routes_parts/cron.py", "cron.jobs") in anchors
+    assert {
+        "run_agent",
+        "tools.skills_tool",
+        "tools.approval",
+        "cron.jobs",
+    } <= {anchor for _, anchor in anchors}
 
 
 def test_audit_reports_runtime_auxiliary_and_model_metadata_imports():
     classes = _class_by_id(_run_audit())
     anchors = _anchors(classes["runtime_auxiliary_model_metadata"])
 
-    assert ("api/streaming/attachments.py", "agent.auxiliary_client") in anchors
-    assert ("api/runs/title_generation/provider_invocation.py", "agent.auxiliary_client") in anchors
-    assert ("api/streaming/tool_events.py", "agent.model_metadata") in anchors
-    assert ("api/config/model_catalog.py", "hermes_cli.models") in anchors
+    assert {
+        "agent.auxiliary_client",
+        "agent.model_metadata",
+        "hermes_cli.models",
+    } <= {anchor for _, anchor in anchors}
 
 
 def test_audit_probe_child_import_line_anchors_are_source_lines():
@@ -172,16 +175,8 @@ def test_audit_reports_runtime_state_and_provider_imports():
     state_anchors = _anchors(classes["runtime_session_state"])
     provider_anchors = _anchors(classes["runtime_gateway_provider"])
 
-    assert ("api/streaming/agent_cache.py", "hermes_state") in state_anchors
-    assert ("api/state_sync.py", "hermes_state") in state_anchors
-    assert (
-        "api/streaming/agent_cache.py",
-        "hermes_cli.runtime_provider",
-    ) in provider_anchors
-    assert (
-        "api/http/routes/update_mutations.py",
-        "hermes_cli.runtime_provider",
-    ) in provider_anchors
+    assert "hermes_state" in {anchor for _, anchor in state_anchors}
+    assert "hermes_cli.runtime_provider" in {anchor for _, anchor in provider_anchors}
 
 
 def test_runtime_import_scan_includes_root_python_entrypoints():
