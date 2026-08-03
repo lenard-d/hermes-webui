@@ -3,9 +3,8 @@
 Source-contract tests verify the static files contain the expected anchors.
 Node-backed behavioral tests exercise the extracted helpers with a stub DOM.
 """
-from tests.frontend_asset_contract import family_source
-
 import json
+import re
 import shutil
 import subprocess
 import textwrap
@@ -15,6 +14,22 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 INDEX_HTML = ROOT / "static" / "index.html"
+BOOT_MODULE = ROOT / "static" / "modules" / "boot" / "index.js"
+SETTINGS_PREFERENCES_MODULE = ROOT / "static" / "modules" / "panels" / "settings-preferences.js"
+VERSION_SKEW_MODULE = ROOT / "static" / "modules" / "panels" / "kanban-board.js"
+
+
+def _exported_function_block(source: str, name: str) -> str:
+    """Return one exported ESM function from its owning module."""
+    match = re.search(
+        rf"^export (?:async )?function {re.escape(name)}\(", source, re.MULTILINE
+    )
+    assert match is not None, f"{name}() not found"
+    next_match = re.search(
+        r"^export (?:async )?function ", source[match.end() :], re.MULTILINE
+    )
+    end = match.end() + next_match.start() if next_match else len(source)
+    return source[match.start() : end]
 
 
 # ---------------------------------------------------------------------------
@@ -44,22 +59,16 @@ def test_index_html_has_stale_client_banner():
 
 def test_boot_js_calls_check_webui_version_skew():
     """boot.js calls checkWebUIVersionSkew(s) after the successful boot settings response."""
-    src = family_source("boot")
+    src = BOOT_MODULE.read_text(encoding="utf-8")
     assert "checkWebUIVersionSkew(s)" in src
 
 
 def test_panels_js_load_settings_calls_check_webui_version_skew():
     """loadSettingsPanel reaches the skew check through its appearance loader."""
-    src = family_source("panels")
-    load_settings_start = src.index("async function loadSettingsPanel()")
-    load_settings = src[
-        load_settings_start :
-        src.index("function _extensionStatusLabel", load_settings_start)
-    ]
-    appearance_loader = src[
-        src.index("function _loadSettingsAppearance(settings)") :
-        src.index("async function _loadSettingsModelControls(settings)")
-    ]
+    src = SETTINGS_PREFERENCES_MODULE.read_text(encoding="utf-8")
+    load_settings = _exported_function_block(src, "loadSettingsPanel")
+    appearance_loader = _exported_function_block(src, "_loadSettingsAppearance")
+    assert 'import { checkWebUIVersionSkew } from "./kanban-board.js";' in src
     assert "_loadSettingsAppearance(settings)" in load_settings
     assert "checkWebUIVersionSkew(settings)" in appearance_loader
 
@@ -68,11 +77,15 @@ def test_panels_js_load_settings_calls_check_webui_version_skew():
 # Node-backed behavioral harness
 # ---------------------------------------------------------------------------
 
-def _extract_skew_helpers(panels_src: str) -> str:
+def _extract_skew_helpers(version_skew_src: str) -> str:
     """Return the version-skew helper block (from _normalizeWebUIVersion to Kanban helpers)."""
-    start = panels_src.index("function _normalizeWebUIVersion(")
-    end = panels_src.index("function _kanbanLooksLikeStaleClientError(")
-    return panels_src[start:end]
+    start = version_skew_src.index("export function _normalizeWebUIVersion(")
+    end = version_skew_src.index("export function _kanbanLooksLikeStaleClientError(")
+    return re.sub(r"^export ", "", version_skew_src[start:end], flags=re.MULTILINE)
+
+
+def _version_skew_helpers() -> str:
+    return _extract_skew_helpers(VERSION_SKEW_MODULE.read_text(encoding="utf-8"))
 
 
 def _make_stub(bundle_version: str, extra_globals: str = "") -> str:
@@ -145,7 +158,7 @@ def _run_harness(stub: str, helpers: str, action: str) -> dict:
 
 def test_node_mismatch_shows_banner():
     """client=v1, server=v2 reveals staleClientBanner and writes both versions."""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     result = _run_harness(
         _make_stub("v1"),
         helpers,
@@ -163,7 +176,7 @@ def test_node_mismatch_shows_banner():
 
 def test_node_equal_versions_no_banner():
     """client=v1, server=v1 keeps banner hidden."""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     result = _run_harness(
         _make_stub("v1"),
         helpers,
@@ -174,7 +187,7 @@ def test_node_equal_versions_no_banner():
 
 def test_node_missing_server_version_no_banner():
     """Missing webui_version in settings keeps banner hidden."""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     result = _run_harness(
         _make_stub("v1"),
         helpers,
@@ -187,7 +200,7 @@ def test_node_unknown_server_version_no_banner():
     """A server that reports webui_version='unknown' (git-describe failure in a
     Docker/CI image, api/updates.py) must NOT falsely fire the stale-client
     banner against a real client version. (Codex #5480 gate)"""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     for server_val in ("unknown", "UNKNOWN", "Unknown"):
         result = _run_harness(
             _make_stub("v1"),
@@ -201,7 +214,7 @@ def test_node_unknown_server_version_no_banner():
 
 def test_node_placeholder_client_version_no_banner():
     """Unresolved __WEBUI_VERSION__ literal as bundle stamp keeps banner hidden."""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     result = _run_harness(
         _make_stub("__WEBUI_VERSION__"),
         helpers,
@@ -214,7 +227,7 @@ def test_node_placeholder_client_version_no_banner():
 
 def test_node_null_settings_no_banner():
     """null/undefined settings keeps banner hidden and does not throw."""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     result = _run_harness(
         _make_stub("v1"),
         helpers,
@@ -227,7 +240,7 @@ def test_node_null_settings_no_banner():
 
 def test_node_rejected_settings_fetch_no_banner():
     """The monitor's rejected /api/settings poll is swallowed and keeps the banner hidden."""
-    helpers = _extract_skew_helpers(family_source("panels"))
+    helpers = _version_skew_helpers()
     result = _run_harness(
         _make_stub(
             "v1",
