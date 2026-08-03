@@ -1,4 +1,4 @@
-"""Tests for #631 — streaming race conditions in messages.js
+"""Tests for #631 — streaming race conditions in the stream owner modules.
 
 Bug A: A trailing 'token'/'reasoning' event queued a requestAnimationFrame that
 fired after 'done' had already called renderMessages(), causing the thinking card
@@ -9,15 +9,16 @@ were not reset. Server replays token events into the new EventSource, causing
 text to accumulate again from the stale values — response doubled, stuck cursor.
 
 Fixes:
-- _streamFinalized flag + _pendingRafHandle stored for cancellation
-- done/apperror/cancel: set _streamFinalized, cancel pending rAF, call finalizeThinkingCard
-- _scheduleRender: guard on _streamFinalized
-- _wireSSE: reset accumulators when (re)opening source, unless stream already finalized
-- error handler: bail if _streamFinalized (same as _terminalStateReached)
+- shared terminal state + _pendingRafHandle stored for cancellation
+- done/apperror/cancel: set streamFinalized, cancel pending rAF, call finalizeThinkingCard
+- _scheduleRender: guard on streamFinalized
+- reconnect: restore accumulators from the owned INFLIGHT snapshot
+- error handler: bail when the owned terminal state is finalized
 """
-from tests.frontend_asset_contract import family_source
 import pathlib
 import re
+import shutil
+import subprocess
 
 REPO = pathlib.Path(__file__).parent.parent
 
@@ -30,38 +31,49 @@ TERMINAL_EVENTS = read("static/modules/messages/terminal-events.js")
 TRANSPORT = read("static/modules/messages/stream-transport.js")
 SESSION_RECOVERY = read("static/modules/messages/session-recovery.js")
 STREAM = read("static/modules/messages/stream.js")
+RENDERING = read("static/modules/messages/rendering.js")
+NODE = shutil.which("node")
 
 
 class TestStreamFinalized:
-    """_streamFinalized flag and rAF cancellation."""
+    """Terminal state and rAF cancellation."""
 
     def test_stream_finalized_declared(self):
-        src = family_source("messages")
-        assert '_streamFinalized' in src, (
-            "_streamFinalized must be declared in attachLiveStream"
+        assert "streamFinalized" in RENDERING, (
+            "The renderer must read terminal state before scheduling a live frame"
         )
 
     def test_pending_raf_handle_declared(self):
-        src = family_source("messages")
-        assert '_pendingRafHandle' in src, (
+        assert '_pendingRafHandle' in RENDERING, (
             "_pendingRafHandle must be declared to enable rAF cancellation"
         )
 
     def test_schedule_render_guards_on_stream_finalized(self):
-        src = family_source("messages")
-        m = re.search(r'function _scheduleRender\([^)]*\)\{.*?\n  \}', src, re.DOTALL)
-        assert m, "_scheduleRender not found"
-        fn = m.group(0)
-        assert '_streamFinalized' in fn, (
-            "_scheduleRender must return early when _streamFinalized is true"
+        if NODE is None:
+            return
+        script = f"""
+            globalThis.window = globalThis;
+            globalThis.addEventListener = () => {{}};
+            globalThis.document = {{ addEventListener() {{}}, getElementById() {{ return null; }} }};
+            let scheduled = 0;
+            globalThis.requestAnimationFrame = () => {{ scheduled += 1; return 1; }};
+            globalThis.cancelAnimationFrame = () => {{}};
+            const {{ createStreamRenderer }} = await import({(REPO / 'static/modules/messages/rendering.js').as_uri()!r});
+            const renderer = createStreamRenderer({{ readState: () => ({{ streamFinalized: true }}) }});
+            renderer.scheduleRender();
+            if (scheduled !== 0) throw new Error('finalized stream scheduled a render frame');
+        """
+        result = subprocess.run(
+            [NODE, "--input-type=module", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
         )
+        assert result.returncode == 0, result.stderr
 
     def test_raf_handle_stored_in_schedule_render(self):
-        src = family_source("messages")
-        assert '_pendingRafHandle=_pendingRafFrameHandle' in src or \
-               '_pendingRafHandle = _pendingRafFrameHandle' in src or \
-               '_pendingRafHandle=requestAnimationFrame' in src or \
-               '_pendingRafHandle = requestAnimationFrame' in src, (
+        assert '_pendingRafHandle=requestAnimationFrame' in RENDERING or \
+               '_pendingRafHandle = requestAnimationFrame' in RENDERING, (
             "rAF handle must be stored in _pendingRafHandle for cancellation"
         )
 

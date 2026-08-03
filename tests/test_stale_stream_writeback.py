@@ -81,7 +81,7 @@ def test_cancel_stream_does_not_append_marker_after_stream_ownership_rotated():
 
 
 def test_stale_stream_clear_skips_active_worker_when_sse_channel_is_gone():
-    import api.routes as routes
+    from api.sessions import runtime_recovery
 
     sid = "active_worker_missing_sse"
     stream_id = "live-worker-stream"
@@ -98,7 +98,7 @@ def test_stale_stream_clear_skips_active_worker_when_sse_channel_is_gone():
 
     config.register_active_run(stream_id, session_id=sid, phase="running")
 
-    assert routes._clear_stale_stream_state(s) is False
+    assert runtime_recovery._clear_stale_stream_state(s) is False
 
     assert s.active_stream_id == stream_id
     assert s.pending_user_message == "new prompt"
@@ -108,7 +108,7 @@ def test_stale_stream_clear_skips_active_worker_when_sse_channel_is_gone():
 
 
 def test_stale_stream_clear_skips_fresh_pending_turn_inside_grace_window(monkeypatch):
-    import api.routes as routes
+    from api.sessions import runtime_recovery
 
     sid = "fresh_pending_missing_sse"
     stream_id = "fresh-pending-stream"
@@ -122,9 +122,9 @@ def test_stale_stream_clear_skips_fresh_pending_turn_inside_grace_window(monkeyp
     s.pending_started_at = 1000.0
     s.save()
     models.SESSIONS[sid] = s
-    monkeypatch.setattr(routes.time, "time", lambda: 1005.0)
+    monkeypatch.setattr(runtime_recovery.time, "time", lambda: 1005.0)
 
-    assert routes._clear_stale_stream_state(s) is False
+    assert runtime_recovery._clear_stale_stream_state(s) is False
 
     assert s.active_stream_id == stream_id
     assert s.pending_user_message == "new prompt"
@@ -134,8 +134,8 @@ def test_stale_stream_clear_skips_fresh_pending_turn_inside_grace_window(monkeyp
 
 
 def test_stale_stream_clear_trusts_completed_run_journal_instead_of_adding_marker(monkeypatch):
-    import api.routes as routes
     from api.run_journal import append_run_event
+    from api.sessions import runtime_recovery
 
     sid = "completed_journal_late_pending_clear"
     stream_id = "completed-stream"
@@ -155,9 +155,9 @@ def test_stale_stream_clear_trusts_completed_run_journal_instead_of_adding_marke
     s.save()
     models.SESSIONS[sid] = s
     append_run_event(sid, stream_id, "done", {"session": {"session_id": sid}})
-    monkeypatch.setattr(routes.time, "time", lambda: 1400.0)
+    monkeypatch.setattr(runtime_recovery.time, "time", lambda: 1400.0)
 
-    assert routes._clear_stale_stream_state(s) is True
+    assert runtime_recovery._clear_stale_stream_state(s) is True
 
     assert s.active_stream_id is None
     assert s.pending_user_message is None

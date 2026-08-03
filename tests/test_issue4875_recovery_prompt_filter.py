@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from tests.frontend_asset_contract import family_source
 import json
 import shutil
 import subprocess
 from pathlib import Path
+
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-UI_JS = family_source("ui")
-MESSAGES_JS = family_source("messages")
+UI_ASSISTANT_TURN = ROOT / "static" / "modules" / "ui" / "assistant-turn-presentation.js"
+STREAM_TRANSCRIPT = ROOT / "static" / "modules" / "messages" / "stream-transcript.js"
 NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not available")
@@ -29,15 +29,32 @@ def _extract_function(src: str, name: str) -> str:
     raise AssertionError(f"{name} body not closed")
 
 
-def _eval_filter(src: str, name: str, cases: list[str]) -> list[bool]:
+def _eval_ui_filter(cases: list[str]) -> list[bool]:
     script = (
-        _extract_function(src, name)
+        _extract_function(UI_ASSISTANT_TURN.read_text(encoding="utf-8"), "_isRecoveryControlMessageText")
         + "\nconst cases = JSON.parse(process.argv[1]);\n"
-        + f"process.stdout.write(JSON.stringify(cases.map({name})));\n"
+        + "process.stdout.write(JSON.stringify(cases.map(_isRecoveryControlMessageText)));\n"
     )
     result = subprocess.run(
         [NODE, "-e", script, json.dumps(cases)],
         check=True, capture_output=True, text=True, timeout=15,
+    )
+    return json.loads(result.stdout)
+
+
+def _eval_stream_transcript_filter(cases: list[str]) -> list[bool]:
+    script = f"""
+        const {{ createStreamTranscriptProjection }} = await import({STREAM_TRANSCRIPT.as_uri()!r});
+        const cases = JSON.parse(process.argv[1]);
+        const projection = createStreamTranscriptProjection();
+        process.stdout.write(JSON.stringify(cases.map(projection.isRecoveryControlText)));
+    """
+    result = subprocess.run(
+        [NODE, "--input-type=module", "-e", script, json.dumps(cases)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     return json.loads(result.stdout)
 
@@ -59,21 +76,21 @@ FALSE_POSITIVES = [
 ]
 
 _PARAMS = [
-    pytest.param(UI_JS, "_isRecoveryControlMessageText", id="ui_js"),
-    pytest.param(MESSAGES_JS, "_streamRecoveryControlMessageText", id="messages_js"),
+    pytest.param(_eval_ui_filter, id="assistant_turn_owner"),
+    pytest.param(_eval_stream_transcript_filter, id="stream_transcript_owner"),
 ]
 
 
-@pytest.mark.parametrize(("src", "name"), _PARAMS)
-def test_all_continuation_variants_filtered(src, name):
-    assert _eval_filter(src, name, RECOVERY_VARIANTS) == [True, True, True]
+@pytest.mark.parametrize("evaluate", _PARAMS)
+def test_all_continuation_variants_filtered(evaluate):
+    assert evaluate(RECOVERY_VARIANTS) == [True, True, True]
 
 
-@pytest.mark.parametrize(("src", "name"), _PARAMS)
-def test_false_positives_not_filtered(src, name):
-    assert _eval_filter(src, name, FALSE_POSITIVES) == [False] * len(FALSE_POSITIVES)
+@pytest.mark.parametrize("evaluate", _PARAMS)
+def test_false_positives_not_filtered(evaluate):
+    assert evaluate(FALSE_POSITIVES) == [False] * len(FALSE_POSITIVES)
 
 
-@pytest.mark.parametrize(("src", "name"), _PARAMS)
-def test_backend_recovery_string_filtered(src, name):
-    assert _eval_filter(src, name, ["The live worker stopped before this run finished."]) == [True]
+@pytest.mark.parametrize("evaluate", _PARAMS)
+def test_backend_recovery_string_filtered(evaluate):
+    assert evaluate(["The live worker stopped before this run finished."]) == [True]
