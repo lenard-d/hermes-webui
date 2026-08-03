@@ -1,4 +1,7 @@
-from api import streaming
+from api.runs.transcript import (
+    _assistant_reply_added_after_current_turn,
+    _session_lacks_final_assistant_answer,
+)
 
 
 PRIOR_DISPLAY = [
@@ -22,7 +25,7 @@ class TestIssue5686CompletedOutputText:
                 "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "weather.lookup", "arguments": "{}"}}],
             }
         ]
-        assert streaming._assistant_reply_added_after_current_turn(
+        assert _assistant_reply_added_after_current_turn(
             result_messages,
             previous_context,
             "What is the weather?",
@@ -40,7 +43,7 @@ class TestIssue5686CompletedOutputText:
                 "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "weather.lookup", "arguments": "{}"}}],
             },
         ]
-        assert streaming._session_lacks_final_assistant_answer(messages) is False
+        assert _session_lacks_final_assistant_answer(messages) is False
 
     def test_session_lacks_final_answer_true_for_tool_only_assistant_content(self):
         messages = list(PRIOR_DISPLAY) + [
@@ -53,7 +56,7 @@ class TestIssue5686CompletedOutputText:
                 "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "weather.lookup", "arguments": "{}"}}],
             },
         ]
-        assert streaming._session_lacks_final_assistant_answer(messages) is True
+        assert _session_lacks_final_assistant_answer(messages) is True
 
     def test_session_lacks_final_answer_false_for_untyped_visible_text_with_call_metadata(self):
         messages = list(PRIOR_DISPLAY) + [
@@ -65,7 +68,7 @@ class TestIssue5686CompletedOutputText:
                 ],
             },
         ]
-        assert streaming._session_lacks_final_assistant_answer(messages) is False
+        assert _session_lacks_final_assistant_answer(messages) is False
 
     def test_session_lacks_final_answer_true_for_untyped_tool_part_with_empty_args(self):
         messages = list(PRIOR_DISPLAY) + [
@@ -77,7 +80,7 @@ class TestIssue5686CompletedOutputText:
                 ],
             },
         ]
-        assert streaming._session_lacks_final_assistant_answer(messages) is True
+        assert _session_lacks_final_assistant_answer(messages) is True
 
     def test_session_lacks_final_answer_true_for_top_level_tool_calls_without_in_content_boundary(self):
         messages = list(PRIOR_DISPLAY) + [
@@ -90,7 +93,7 @@ class TestIssue5686CompletedOutputText:
                 "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "weather.lookup", "arguments": "{}"}}],
             },
         ]
-        assert streaming._session_lacks_final_assistant_answer(messages) is True
+        assert _session_lacks_final_assistant_answer(messages) is True
 
     def test_session_lacks_final_answer_false_for_plain_output_text_parts(self):
         messages = list(PRIOR_DISPLAY) + [
@@ -102,4 +105,4 @@ class TestIssue5686CompletedOutputText:
                 ],
             },
         ]
-        assert streaming._session_lacks_final_assistant_answer(messages) is False
+        assert _session_lacks_final_assistant_answer(messages) is False

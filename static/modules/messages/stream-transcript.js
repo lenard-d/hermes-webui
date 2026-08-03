@@ -104,6 +104,7 @@ export function createStreamTranscriptProjection(options={}){
     filterRecoveryControlMessages,
     isRecoveryControlText,
     isTerminalStreamErrorMarkerMessage,
+    messageIdentityKey,
     replaceMarkerOnlyAssistantWithStreamError,
   });
 }

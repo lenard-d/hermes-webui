@@ -826,6 +826,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
     lifecycle:{
       cancelPersist:_cancelThrottledPersistTimer,
       cancelSnapshot:_cancelThrottledSnapshotTimer,
+      clearStreamEndRecovery:_clearStreamEndRecovery,
       clearApproval:_clearApprovalForOwner,
       clearClarify:_clearClarifyForOwner,
       clearOwnerInflight:_clearOwnerInflightState,
@@ -849,6 +850,7 @@ export function attachLiveStream(activeSid, streamId, uploaded=[], options={}){
       ensureSingleTerminalStreamErrorMarker:_ensureSingleTerminalStreamErrorMarker,
       filterRecoveryControls:_filterRecoveryControlMessages,
       isTerminalStreamErrorMarker:_isTerminalStreamErrorMarkerMessage,
+      messageIdentityKey:_streamTranscript.messageIdentityKey,
       replaceMarkerOnly:_replaceMarkerOnlyAssistantWithStreamError,
     },
     tools:{
