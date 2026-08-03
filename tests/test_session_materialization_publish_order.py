@@ -6,6 +6,7 @@ import pytest
 
 def _exercise_materialization_route(monkeypatch, endpoint):
     from api import routes
+    from api.sessions import materialization
 
     source = routes.Session(
         session_id=f"source_{endpoint}",
@@ -30,14 +31,18 @@ def _exercise_materialization_route(monkeypatch, endpoint):
         sessions.move_to_end(session_id)
 
     monkeypatch.setattr(routes, "SESSIONS", sessions)
-    monkeypatch.setattr(routes, "cache_full_session", cache_session)
+    monkeypatch.setattr(materialization, "cache_full_session", cache_session)
     monkeypatch.setattr(routes.Session, "save", fail_new_session_save)
     monkeypatch.setattr(
         routes.Session,
         "load",
         classmethod(lambda _cls, _sid: source),
     )
-    monkeypatch.setattr(routes, "_load_branch_source_or_refuse", lambda *_args: source)
+    monkeypatch.setattr(
+        materialization,
+        "resolve_branch_source",
+        lambda *_args: materialization.BranchSourceResolution(source),
+    )
     monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
     monkeypatch.setattr(
         routes,
@@ -143,7 +148,11 @@ def test_empty_branch_remains_intentionally_memory_only(monkeypatch):
     monkeypatch.setattr(routes, "SESSIONS", sessions)
     monkeypatch.setattr(materialization, "cache_full_session", cache_session)
     monkeypatch.setattr(routes.Session, "save", record_new_session_save)
-    monkeypatch.setattr(routes, "_load_branch_source_or_refuse", lambda *_args: source)
+    monkeypatch.setattr(
+        materialization,
+        "resolve_branch_source",
+        lambda *_args: materialization.BranchSourceResolution(source),
+    )
     monkeypatch.setattr(routes, "_check_csrf", lambda _handler: True)
     monkeypatch.setattr(
         routes,
