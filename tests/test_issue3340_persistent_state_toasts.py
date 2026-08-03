@@ -1,7 +1,10 @@
 from tests.frontend_asset_contract import family_source
 
+import logging
 from pathlib import Path
+from types import SimpleNamespace
 
+from api.runs.local_success import publish_persistent_state_changes
 from api.runs.runtime_resolution import (
     _persistent_state_changes,
     _persistent_state_snapshot,
@@ -12,7 +15,8 @@ MESSAGES_JS = family_source("messages")
 LIVE_TOOLS_JS = (
     ROOT / "static" / "modules" / "messages" / "live-tools.js"
 ).read_text(encoding="utf-8")
-STREAMING_PY = (ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
+LOCAL_CONVERSATION_PY = (ROOT / "api" / "runs" / "local_conversation.py").read_text(encoding="utf-8")
+LOCAL_STREAMING_PY = (ROOT / "api" / "runs" / "local.py").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
 
@@ -76,10 +80,34 @@ def test_backend_emits_state_saved_sse_from_file_snapshots(tmp_path):
         "memory_saved": True,
         "skills": [{"name": "demo", "path": "demo/SKILL.md", "action": "created"}],
     }
-    assert '_persistent_state_before = _persistent_state_snapshot(_profile_home)' in STREAMING_PY
-    assert 'put("state_saved", {' in STREAMING_PY
-    assert '"kind": "memory"' in STREAMING_PY
-    assert '"kind": "skill"' in STREAMING_PY
+    events = []
+    publish_persistent_state_changes(
+        session=SimpleNamespace(session_id="toast-session"),
+        session_id="toast-session",
+        profile_home=str(tmp_path),
+        before=before,
+        publish=lambda event, payload: events.append((event, payload)),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert events == [
+        ("state_saved", {"session_id": "toast-session", "kind": "memory", "action": "saved"}),
+        (
+            "state_saved",
+            {
+                "session_id": "toast-session",
+                "kind": "skill",
+                "action": "created",
+                "name": "demo",
+            },
+        ),
+    ]
+    # Snapshot ownership moved into LocalConversation during the local-run
+    # split; local.py must still pass that immutable pre-turn state through to
+    # the success writeback owner.
+    assert "persistent_state_before=_persistent_state_snapshot(profile_home)" in LOCAL_CONVERSATION_PY
+    assert "publish_persistent_state_changes(" in LOCAL_STREAMING_PY
+    assert "before=_persistent_state_before" in LOCAL_STREAMING_PY
 
 
 def test_frontend_handles_state_saved_sse_and_reuses_dedupe():
