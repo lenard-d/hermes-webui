@@ -5,6 +5,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SESSIONS_JS = family_source("sessions")
 STYLE_CSS = family_source("style")
+SIDEBAR_MOTION_JS = (ROOT / "static/modules/sessions/sidebar-motion.js").read_text(encoding="utf-8")
+SIDEBAR_STORE_JS = (ROOT / "static/modules/sessions/sidebar-store.js").read_text(encoding="utf-8")
+SESSION_ARCHIVE_ACTIONS_JS = (ROOT / "static/modules/sessions/session-archive-actions.js").read_text(encoding="utf-8")
+SESSION_REMOVAL_JS = (ROOT / "static/modules/sessions/session-removal.js").read_text(encoding="utf-8")
+SIDEBAR_CACHE_JS = (ROOT / "static/modules/sessions/sidebar-cache.js").read_text(encoding="utf-8")
+SESSION_LIST_RECONCILIATION_JS = (ROOT / "static/modules/sessions/session-list-reconciliation.js").read_text(encoding="utf-8")
+SIDEBAR_LIST_ORCHESTRATOR_JS = (ROOT / "static/modules/sessions/sidebar-list-orchestrator.js").read_text(encoding="utf-8")
 
 
 def _block(source: str, start_marker: str, end_marker: str) -> str:
@@ -265,11 +272,11 @@ def test_session_swipe_actions_use_circular_icon_badges():
 
 
 def test_session_removal_reflows_surviving_rows_smoothly():
-    assert "_pendingSessionReflowPositions: null," in SESSIONS_JS
-    assert "const _optimisticallyRemovedSessionIds = new Set();" in SESSIONS_JS
-    assert "const _sessionSwipeReturnOffsets = new Map();" in SESSIONS_JS
-    capture = _sessions_block("function _captureSessionReflowPositions(){", "function _waitForSessionMotion")
-    helper = _sessions_block("function _playSessionRowsReflowFromPositions", "function _sessionPrefersReducedMotion")
+    assert "_pendingSessionReflowPositions: null," in SIDEBAR_STORE_JS
+    assert "const _optimisticallyRemovedSessionIds = new Set();" in SIDEBAR_STORE_JS
+    assert "const _sessionSwipeReturnOffsets = new Map();" in SIDEBAR_STORE_JS
+    capture = _block(SIDEBAR_MOTION_JS, "function _captureSessionReflowPositions(){", "function _waitForSessionMotion")
+    helper = _block(SIDEBAR_MOTION_JS, "function _playSessionRowsReflowFromPositions", "function _sessionPrefersReducedMotion")
     assert "positions.set(row.dataset.sid,row.getBoundingClientRect().top);" in capture
     assert "const delta=oldTop-row.getBoundingClientRect().top;" in helper
     assert "const movingRows=[];" in helper
@@ -277,33 +284,29 @@ def test_session_removal_reflows_surviving_rows_smoothly():
     assert "row.style.transition='none';" in helper
     assert "row.classList.add('session-reflowing')" in helper
     assert "requestAnimationFrame(()=>requestAnimationFrame(()=>{" in helper
-    assert SESSIONS_JS.count("_pendingSessionReflowPositions=reflowPositions;") >= 2
-    assert "const reflowBefore=animateRefresh?flipBefore:_pendingSessionReflowPositions;" in SESSIONS_JS
-    assert "const reflowTimeout=animateRefresh?SESSION_LIST_FLIP_TIMEOUT_MS:SESSION_REFLOW_TIMEOUT_MS;" in SESSIONS_JS
-    assert "_playSessionRowsReflowFromPositions(reflowBefore,reflowTimeout,_sessionPrefersReducedMotion);" in SESSIONS_JS
-    assert "async function _archiveSession(session, archived=true, beforeListRender=null){" in SESSIONS_JS
-    assert "const renderHold=beforeListRender?Promise.resolve().then(beforeListRender):null;" in SESSIONS_JS
-    assert "const cached=(_allSessions||[]).find(s=>s&&s.session_id===session.session_id);" in SESSIONS_JS
-    assert "if(cached) cached.archived=archived;" in SESSIONS_JS
-    archive_start = SESSIONS_JS.find("async function _archiveSession(session, archived=true, beforeListRender=null){")
-    archive_end = SESSIONS_JS.find("function _openSessionActionMenu", archive_start)
-    archive_body = SESSIONS_JS[archive_start:archive_end]
+    assert SESSION_REMOVAL_JS.count("sidebarStateBindings._pendingSessionReflowPositions=reflowPositions;") >= 2
+    assert "const reflowBefore=animateRefresh?flipBefore:sidebarStateBindings._pendingSessionReflowPositions;" in SIDEBAR_LIST_ORCHESTRATOR_JS
+    assert "const reflowTimeout=animateRefresh?SESSION_LIST_FLIP_TIMEOUT_MS:SESSION_REFLOW_TIMEOUT_MS;" in SIDEBAR_LIST_ORCHESTRATOR_JS
+    assert "_playSessionRowsReflowFromPositions(reflowBefore,reflowTimeout,_sessionPrefersReducedMotion);" in SIDEBAR_LIST_ORCHESTRATOR_JS
+    assert "async function _archiveSession(session, archived=true, beforeListRender=null){" in SESSION_ARCHIVE_ACTIONS_JS
+    assert "const renderHold=beforeListRender?Promise.resolve().then(beforeListRender):null;" in SESSION_ARCHIVE_ACTIONS_JS
+    assert "const cached=(sidebarStateBindings._allSessions||[]).find(s=>s&&s.session_id===session.session_id);" in SESSION_ARCHIVE_ACTIONS_JS
+    assert "if(cached) cached.archived=archived;" in SESSION_ARCHIVE_ACTIONS_JS
+    archive_start = SESSION_ARCHIVE_ACTIONS_JS.find("async function _archiveSession(session, archived=true, beforeListRender=null){")
+    archive_body = SESSION_ARCHIVE_ACTIONS_JS[archive_start:]
     toast_idx = archive_body.find("showToast(session.archived?_sessionArchiveToast(response,session):t('session_restored'));")
     hold_idx = archive_body.find("if(renderHold) await renderHold;")
     cache_render_idx = archive_body.find("renderSessionListFromCache();")
     reconcile_idx = archive_body.find("void renderSessionList();")
     assert 0 <= toast_idx < hold_idx < cache_render_idx < reconcile_idx
-    assert "if(renderHold) await renderHold;" in SESSIONS_JS
-    assert "const serverSessions=_optimisticallyRemovedSessionIds.size" in SESSIONS_JS
-    assert "? (sessData.sessions||[]).filter(s=>s&&!_optimisticallyRemovedSessionIds.has(s.session_id))" in SESSIONS_JS
+    assert "if(renderHold) await renderHold;" in SESSION_ARCHIVE_ACTIONS_JS
+    assert "const serverSessions=_optimisticallyRemovedSessionIds.size" in SESSION_LIST_RECONCILIATION_JS
+    assert "? (sessData.sessions||[]).filter(s=>s&&!_optimisticallyRemovedSessionIds.has(s.session_id))" in SESSION_LIST_RECONCILIATION_JS
     assert ".session-item.session-reflowing{transition:background .15s,color .15s,transform .36s cubic-bezier(.2,.8,.2,1),box-shadow .15s ease;will-change:transform;}" in STYLE_CSS
-    assert "if(_showArchived&&!_sessionPrefersReducedMotion()) _sessionSwipeReturnOffsets.set(session.session_id,'0px');" in SESSIONS_JS
+    assert "if(sidebarStateBindings._showArchived&&!_sessionPrefersReducedMotion()) _sessionSwipeReturnOffsets.set(session.session_id,'0px');" in SESSION_ARCHIVE_ACTIONS_JS
     assert "const swipeReturnOffset=_sessionSwipeReturnOffsets.get(s.session_id);" in SESSIONS_JS
     assert "el.classList.add('session-swipe-returning');" in SESSIONS_JS
-    delete_start = SESSIONS_JS.find("async function deleteSession(sid, beforeDelete=null){")
-    delete_end = SESSIONS_JS.find("// ── Project helpers", delete_start)
-    assert delete_start >= 0 and delete_end > delete_start
-    delete_body = SESSIONS_JS[delete_start:delete_end]
+    delete_body = _block(SESSION_REMOVAL_JS, "async function deleteSession(sid, beforeDelete=null){", "\nexport { deleteSession, removeWorktree };")
     hold_start = delete_body.find("const beforeDeleteHold=beforeDelete?Promise.resolve().then(beforeDelete):null;")
     delete_request = delete_body.find("const deleteRequest=api('/api/session/delete'")
     hold_await = delete_body.find("await beforeDeleteHold;", hold_start)
@@ -312,8 +315,8 @@ def test_session_removal_reflows_surviving_rows_smoothly():
     response_await = delete_body.find("const deleteResult=await deleteRequest;")
     rollback = delete_body.find("_optimisticallyRemovedSessionIds.delete(sid);")
     final_render = delete_body.find("void renderSessionList().finally(()=>_optimisticallyRemovedSessionIds.delete(sid));")
-    cached_remove = _sessions_function("function _optimisticallyRemoveSessionFromList(sid){")
-    assert "_allSessions=_allSessions.filter(s=>!s||s.session_id!==sid);" in cached_remove
+    cached_remove = _block(SIDEBAR_CACHE_JS, "function _optimisticallyRemoveSessionFromList(sid){", "\n\n\nexport {")
+    assert "sidebarStateBindings._allSessions=sidebarStateBindings._allSessions.filter(s=>!s||s.session_id!==sid);" in cached_remove
     assert "renderSessionListFromCache();" in cached_remove
     assert delete_body.find("const reflowPositions=_captureSessionReflowPositions();") < hold_start < delete_request < hold_await < optimistic_set < optimistic_remove < response_await < rollback < final_render
     assert "}, error=>({error}));" in delete_body
