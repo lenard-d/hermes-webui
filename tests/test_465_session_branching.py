@@ -318,14 +318,55 @@ def test_branch_route_returns_materialized_fork_contract(monkeypatch):
 
 
 def test_branch_fork_sessions_do_not_collapse_into_parent_lineage():
-    """Fork sessions are not collapsed into compression-lineage; guard must remain in _sessionLineageKey."""
-    src = family_source("sessions")
-    fn = re.search(r'function _sessionLineageKey\(.*?\n\}', src, re.DOTALL)
-    assert fn, "Could not find _sessionLineageKey"
-    block = fn.group(0)
-    assert "if(s.session_source==='fork') return null;" in block, \
-        "Fork guard must remain in _sessionLineageKey to prevent compression-lineage merging"
-    assert block.index("if(s.session_source==='fork') return null;") < block.index('return s.parent_session_id || null')
+    """Fork rows remain distinct while their compression parent collapses.
+
+    The sidebar's lineage owner is a native module, so exercise its exported
+    behavior instead of pinning a private helper's source shape.
+    """
+    if NODE is None:
+        pytest.skip("node not on PATH")
+    lineage_module = (ROOT / "static/modules/sessions/session-lineage.js").as_uri()
+    sessions = [
+        {
+            "session_id": "parent",
+            "_lineage_root_id": "compression-root",
+            "_compression_segment_count": 1,
+            "pre_compression_snapshot": True,
+        },
+        {
+            "session_id": "continuation",
+            "parent_session_id": "parent",
+            "_lineage_root_id": "compression-root",
+            "_lineage_tip_id": "continuation",
+            "_compression_segment_count": 2,
+        },
+        {
+            "session_id": "fork",
+            "parent_session_id": "parent",
+            "session_source": "fork",
+        },
+    ]
+    script = "\n".join([
+        f"import {{ _collapseSessionLineageForSidebar }} from {lineage_module!r};",
+        f"const rows = _collapseSessionLineageForSidebar({json.dumps(sessions)});",
+        "console.log(JSON.stringify(rows));",
+    ])
+    proc = subprocess.run(
+        [NODE, "--input-type=module", "--eval", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    rows = json.loads(proc.stdout)
+
+    fork = next(row for row in rows if row["session_id"] == "fork")
+    continuation = next(row for row in rows if row["session_id"] == "continuation")
+    assert {row["session_id"] for row in rows} == {"continuation", "fork"}
+    assert fork.get("_lineage_segments") is None
+    assert [segment["session_id"] for segment in continuation["_lineage_segments"]] == [
+        "continuation",
+        "parent",
+    ]
 
 
 def test_branch_fork_sessions_nest_under_parent():
