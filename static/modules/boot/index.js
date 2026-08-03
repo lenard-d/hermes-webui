@@ -486,11 +486,15 @@ import {voiceMode} from './voice-mode.js';
   // metadata settles in parallel.
   const _workspaceListReady=loadWorkspaceList();
   const _onboardingReady=_bootSettings.onboarding_completed?Promise.resolve(false):loadOnboardingWizard();
+  const _backgroundBootReady=Promise.allSettled([_workspaceListReady,_onboardingReady]).then(results=>{
+    for(const result of results){
+      if(result.status==='rejected') console.warn('[boot] background task failed',result.reason);
+    }
+  });
+  window._backgroundBootReady=_backgroundBootReady;
   // Render the session list before restoring the saved conversation so a stale
   // saved-session/client-side boot error cannot leave the sidebar empty forever.
   await renderSessionList();
-  await _workspaceListReady;
-  await _onboardingReady;
   initResizePanels();
   // Workspace panel restore happens AFTER loadSession so we know if
   // the session has a workspace — prevents the snap-open-then-closed flash (#576).
