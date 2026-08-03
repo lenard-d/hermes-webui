@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from api import background_process, streaming
+from api import background_process
 from api.http import interactive_streams
 
 
@@ -599,7 +599,11 @@ def test_server_started_turn_payload_carries_pending_started_at(monkeypatch):
     monkeypatch.setattr(interactive_streams, "get_session", lambda session_id, metadata_only: SimpleNamespace(pending_started_at=123.5))
     monkeypatch.setattr(interactive_streams, "end_sse_headers", lambda handler: None)
     monkeypatch.setattr(interactive_streams, "_sse_set_write_deadline", lambda handler: None)
-    monkeypatch.setattr(streaming, "_sse", lambda handler, event, payload: events.append((event, payload)))
+    monkeypatch.setattr(
+        interactive_streams,
+        "_sse",
+        lambda handler, event, payload: events.append((event, payload)),
+    )
 
     interactive_streams._handle_session_sse_stream(
         Handler(), SimpleNamespace(query="session_id=session-1")

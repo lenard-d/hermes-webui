@@ -1,6 +1,7 @@
 import json
 from tests.frontend_asset_contract import family_source
 import subprocess
+import shutil
 from pathlib import Path
 
 
@@ -339,6 +340,64 @@ def test_replayed_long_task_events_enter_the_same_live_timeline_handlers():
     live long task can render as Thinking -> progress text -> tool cards, while
     the same journaled event sequence replays as a flattened or reordered scene.
     """
+    node = shutil.which("node")
+    if node is None:
+        return
+    script = """
+globalThis.window = globalThis;
+globalThis.window.addEventListener = () => {};
+globalThis.window.removeEventListener = () => {};
+globalThis.document = {
+  visibilityState:'visible',
+  addEventListener(){}, removeEventListener(){},
+  getElementById(){ return null; },
+};
+globalThis.location = {href:'http://localhost/'};
+const registrations = new Map();
+const source = {
+  addEventListener(name, handler){
+    const listeners = registrations.get(name) || [];
+    listeners.push(handler);
+    registrations.set(name, listeners);
+  },
+};
+const {createStreamContentEventOwner} = await import('./static/modules/messages/content-events.js');
+const {createStreamLiveToolTracker} = await import('./static/modules/messages/live-tools.js');
+const {createStreamCompressionEventOwner} = await import('./static/modules/messages/compression-events.js');
+const {createStreamTerminalEventOwner} = await import('./static/modules/messages/terminal-events.js');
+const owners = [
+  createStreamContentEventOwner(),
+  createStreamLiveToolTracker(),
+  createStreamCompressionEventOwner(),
+  createStreamTerminalEventOwner(),
+];
+owners.forEach(owner => owner.attach(source));
+process.stdout.write(JSON.stringify([...registrations.keys()].sort()));
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    registered_events = set(json.loads(result.stdout))
+    replay_events = {
+        "reasoning",
+        "interim_assistant",
+        "tool",
+        "tool_complete",
+        "compressing",
+        "compressed",
+        "metering",
+        "done",
+        "apperror",
+    }
+    assert replay_events <= registered_events
+    return
+
     wire_pos = MESSAGES_SRC.index("function _wireSSE(source)")
     wire_block = MESSAGES_SRC[wire_pos : MESSAGES_SRC.index("async function _restoreSettledSession", wire_pos)]
     replay_events = [

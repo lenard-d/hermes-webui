@@ -4,19 +4,80 @@ When an EventSource fails in the browser, the server normally only sees a dead
 socket or follow-up probe. Persisting a small, sanitized client event makes the
 next incident diagnosable without logging prompt text or credentials.
 """
-from tests.frontend_asset_contract import family_source
-
 from pathlib import Path
 from io import BytesIO
 from types import SimpleNamespace
+import json
+import shutil
+import subprocess
 
 import api.routes as routes
 
 
 REPO = Path(__file__).resolve().parents[1]
 WORKSPACE_JS = (REPO / "static" / "workspace.js").read_text(encoding="utf-8")
-SESSIONS_JS = family_source("sessions")
-MESSAGES_JS = family_source("messages")
+SESSIONS_JS = (REPO / "static" / "modules" / "sessions" / "sidebar-session-events.js").read_text(encoding="utf-8")
+
+
+def _run_transport_error_probe(*, stream_finalized: bool) -> dict:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node executable is required for JavaScript behavior checks")
+    script = f"""
+globalThis.window = globalThis;
+globalThis.window.addEventListener = () => {{}};
+globalThis.window.removeEventListener = () => {{}};
+globalThis.document = {{
+  visibilityState:'visible',
+  addEventListener(){{}},
+  removeEventListener(){{}},
+  getElementById(){{ return null; }},
+}};
+globalThis.location = {{href:'http://localhost/'}};
+globalThis.S = {{session:{{session_id:'session-1'}}}};
+globalThis._bailOutOfTerminalEventsFromStaleStream = () => false;
+globalThis.isOfflineBannerVisible = () => true;
+globalThis.setComposerStatus = () => {{}};
+globalThis.t = key => key;
+const reports=[];
+globalThis.recordClientSSEError = (source, details) => reports.push({{source, details}});
+const {{createStreamTransportOwner}} = await import('./static/modules/messages/stream-transport.js');
+const handlers = new Map();
+const source = {{
+  readyState:1,
+  closeCalls:0,
+  close(){{ this.closeCalls += 1; }},
+  addEventListener(name, handler){{ handlers.set(name, handler); }},
+}};
+let ownerCloseCalls=0;
+const owner=createStreamTransportOwner({{
+  sessionId:'session-1', streamId:'stream-1', state:globalThis.S,
+  terminalState:{{streamFinalized:{str(stream_finalized).lower()}, terminalStateReached:{str(stream_finalized).lower()}}},
+  lifecycle:{{
+    closeSource(){{ ownerCloseCalls += 1; }},
+    clearOwnerInflight(){{}}, clearApproval(){{}}, clearClarify(){{}},
+    setActivePaneIdle(){{}}, isActiveSession(){{ return true; }},
+    isStreamEndRecoveryPending(){{ return false; }},
+  }},
+  anchor:{{flushReasoning(){{}}, scheduleCleanup(){{}}}},
+  journal:{{replayParams(){{ return ''; }}}},
+  request:async () => ({{active:false}}), wireSource(){{}},
+  restoreSettledSession:async () => true, handleConnectionLost(){{}},
+}});
+owner.attach(source);
+await handlers.get('error')({{}});
+process.stdout.write(JSON.stringify({{reports, sourceCloseCalls:source.closeCalls, ownerCloseCalls}}));
+"""
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
 def test_client_event_log_sanitizes_and_whitelists_fields():
     payload = {
         "event": "sse_error",
@@ -144,15 +205,19 @@ def test_sessions_js_reports_gateway_sse_errors_with_browser_context():
 
 
 def test_messages_js_reports_chat_sse_errors_with_stream_identity():
-    error_block_start = MESSAGES_JS.index("source.addEventListener('error',async e=>")
-    error_block = MESSAGES_JS[error_block_start:error_block_start + 900]
-    assert "recordClientSSEError('chat-response'" in error_block
-    assert "session_id:activeSid" in error_block
-    assert "stream_id:streamId" in error_block
+    result = _run_transport_error_probe(stream_finalized=False)
+    assert result["reports"] == [{
+        "source": "chat-response",
+        "details": {
+            "ready_state": 1,
+            "session_id": "session-1",
+            "stream_id": "stream-1",
+            "reason": "chat EventSource.onerror",
+        },
+    }]
 
 
 def test_messages_js_keeps_finalized_stream_guard_before_diagnostic_report():
-    error_block_start = MESSAGES_JS.index("source.addEventListener('error',async e=>")
-    error_block = MESSAGES_JS[error_block_start:error_block_start + 900]
-    assert "_streamFinalized" in error_block
-    assert error_block.index("_streamFinalized") < error_block.index("recordClientSSEError")
+    result = _run_transport_error_probe(stream_finalized=True)
+    assert result["reports"] == []
+    assert result["ownerCloseCalls"] == 1

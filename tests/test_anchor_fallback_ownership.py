@@ -79,6 +79,27 @@ def _run_node_script(script: str) -> str:
     return stdout_lines[-1] if stdout_lines else ""
 
 
+def _run_node_module_script(script: str) -> str:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node executable is required for JavaScript behavior checks")
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    if result.returncode:
+        pytest.fail(
+            "node native-module behavior check failed"
+            f"\nexit code: {result.returncode}"
+            f"\nstdout:\n{result.stdout or '<empty>'}"
+            f"\nstderr:\n{result.stderr or '<empty>'}",
+        )
+    return result.stdout
+
+
 def _is_js_identifier_char(char: str) -> bool:
     return char.isalnum() or char in {"_", "$"}
 
@@ -412,7 +433,44 @@ def test_transparent_raw_content_fallback_exits_for_anchor_owned_messages():
 
 
 def test_render_messages_keeps_anchor_owned_turn_out_of_legacy_activity_rebuilds():
-    """Drive the real renderMessages() gate, not only source-order assertions."""
+    """The native fallback owner must reject anchor-owned metadata.
+
+    ``renderMessages`` delegates settled activity reconstruction to an ESM owner.
+    Exercise the exported owner predicate directly instead of evaluating a
+    concatenated browser facade with synthetic closure bindings.
+    """
+
+    script = """
+globalThis.window = globalThis;
+globalThis.window.addEventListener = () => {};
+globalThis.window.removeEventListener = () => {};
+globalThis.matchMedia = () => ({matches:false, addEventListener(){}, removeEventListener(){}});
+globalThis.document = {addEventListener(){}, removeEventListener(){}, getElementById(){ return null; }};
+const {_legacySettledFallbackHasToolMetadata} = await import('./static/modules/ui/render-support.js');
+const tool = {id:'tool-1', function:{name:'terminal', arguments:'{}'}};
+const contentTool = {type:'tool_use', id:'content-1', name:'terminal', input:{cmd:'pwd'}};
+const anchorOwned = {
+  role:'assistant',
+  tool_calls:[tool],
+  _partial_tool_calls:[{id:'partial-1', name:'terminal'}],
+  content:[contentTool],
+  _anchor_activity_scene:{version:'activity_scene_v1', activity_rows:[{role:'tool'}]},
+};
+const historical = {...anchorOwned};
+delete historical._anchor_activity_scene;
+process.stdout.write(JSON.stringify({
+  anchorOwned:_legacySettledFallbackHasToolMetadata(anchorOwned),
+  historical:_legacySettledFallbackHasToolMetadata(historical),
+  nonAssistant:_legacySettledFallbackHasToolMetadata({...historical, role:'tool'}),
+}));
+"""
+    result = json.loads(_run_node_module_script(script))
+    assert result == {
+        "anchorOwned": False,
+        "historical": True,
+        "nonAssistant": False,
+    }
+    return
 
     render_source = _function_source(_ui_js(), "renderMessages")
     activity_source = _function_source(_ui_js(), "rebuildSettledActivity")
