@@ -9,7 +9,8 @@ import { NO_PROJECT_FILTER, SESSION_ARCHIVED_MAX_LOADED_LIMIT, SESSION_ARCHIVED_
 import { _renderSessionListLoadErrorNote } from './session-list-loader.js';
 import { renderSessionList } from './session-list-render-port.js';
 import { sessionListViewBindings as sessionListBindings } from './session-list-skeleton.js';
-import { _sessionLineageContainsSession, _sidebarLineageKeyForRow, _syncSidebarExpansionForActiveSession } from './session-lineage.js';
+import { _syncSidebarExpansionForActiveSession } from './session-child-attachment.js';
+import { _sessionLineageContainsSession, _sidebarLineageKeyForRow } from './session-lineage.js';
 import { _sessionSearchMergeMatches, sessionSearchBindings } from './session-search.js';
 import { _serverNowMs, _sessionSidebarSortCompare, _sessionSortTimestampMs, _sessionTimeBucketLabel } from './session-time.js';
 import { _activeSessionIdForSidebar } from './session-navigation.js';

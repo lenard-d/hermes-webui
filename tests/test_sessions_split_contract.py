@@ -81,6 +81,19 @@ def test_sidebar_motion_publishes_its_consumer_api():
     )
 
 
+def test_session_entrypoint_has_no_missing_named_exports():
+    """Link the complete owner graph and reject every broken import binding."""
+    entrypoint_url = (SESSIONS_PARTS_DIR / "index.js").as_uri()
+    result = subprocess.run(
+        ["deno", "eval", f"await import({entrypoint_url!r})"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert "does not provide an export named" not in result.stderr, result.stderr
+
+
 def test_session_owner_import_graph_is_acyclic():
     modules = {path.name: path for path in sessions_part_paths()}
     graph = {}
