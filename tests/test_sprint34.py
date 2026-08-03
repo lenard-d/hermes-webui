@@ -130,18 +130,15 @@ class TestStatusFromRuntimeOAuth:
     def _call(self, provider: str, model: str, hermes_home: pathlib.Path) -> dict:
         from api.onboarding import _status_from_runtime
         import api.onboarding.status as _ob
-        orig_home = _ob.get_active_hermes_home
-        orig_found = _ob._HERMES_FOUND
-        _ob.get_active_hermes_home = lambda: hermes_home
         # Simulate hermes-agent being available so we reach the provider logic
-        # (without this, _status_from_runtime short-circuits to agent_unavailable)
-        _ob._HERMES_FOUND = True
-        try:
+        # through the current status-owner interface.
+        with unittest.mock.patch.object(
+            _ob, "get_active_hermes_home", return_value=hermes_home
+        ), unittest.mock.patch.object(
+            _ob, "is_hermes_agent_available", return_value=True
+        ):
             cfg = {"model": {"provider": provider, "default": model}}
             return _status_from_runtime(cfg, True)
-        finally:
-            _ob.get_active_hermes_home = orig_home
-            _ob._HERMES_FOUND = orig_found
 
     def test_copilot_ready_when_api_key_in_auth_json(self, tmp_path):
         """copilot configured + api_key in auth.json -> provider_ready True."""
@@ -289,7 +286,7 @@ class TestApplyOnboardingSetupUnsupportedProvider:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch("api.onboarding.setup.get_active_hermes_home",
                                      return_value=pathlib.Path(tmp)), \
-                 unittest.mock.patch("api.onboarding.setup._get_config_path",
+                 unittest.mock.patch("api.onboarding.setup.get_config_path",
                                      return_value=pathlib.Path(tmp) / "config.yaml"), \
                  unittest.mock.patch("api.onboarding.setup.save_settings") as mock_save, \
                  unittest.mock.patch("api.onboarding.setup.get_onboarding_status",

@@ -48,7 +48,7 @@ _COMMON_PATCHES = [
     ("api.onboarding.status.get_available_models", lambda: []),
     ("api.onboarding.status.is_auth_enabled",      lambda: False),
     ("api.onboarding.status.setup_catalog",        lambda cfg: {}),
-    ("api.onboarding.status._get_config_path",     lambda: __import__("pathlib").Path("/tmp/fake.yaml")),
+    ("api.onboarding.status.get_config_path",      lambda: __import__("pathlib").Path("/tmp/fake.yaml")),
 ]
 
 
@@ -140,7 +140,7 @@ class TestApplyOnboardingKeySync(unittest.TestCase):
              patch("api.onboarding.setup.write_env_values"), \
              patch("api.onboarding.setup.reload_config"), \
              patch("api.onboarding.setup.get_onboarding_status", return_value={"completed": True}), \
-             patch("api.onboarding.setup._get_config_path", return_value=pathlib.Path("/tmp/fake.yaml")), \
+             patch("api.onboarding.setup.get_config_path", return_value=pathlib.Path("/tmp/fake.yaml")), \
              patch("api.onboarding.setup.load_env_file", return_value={}), \
              patch("api.onboarding.setup.provider_api_key_present", return_value=False), \
              patch("api.onboarding.setup.get_active_hermes_home", return_value=pathlib.Path("/tmp")):
@@ -168,7 +168,7 @@ class TestApplyOnboardingKeySync(unittest.TestCase):
              patch("api.onboarding.setup.write_env_values"), \
              patch("api.onboarding.setup.reload_config"), \
              patch("api.onboarding.setup.get_onboarding_status", return_value={"completed": True}), \
-             patch("api.onboarding.setup._get_config_path", return_value=pathlib.Path("/tmp/fake.yaml")), \
+             patch("api.onboarding.setup.get_config_path", return_value=pathlib.Path("/tmp/fake.yaml")), \
              patch("api.onboarding.setup.load_env_file", return_value={"OPENAI_API_KEY": "sk-existing-key"}), \
              patch("api.onboarding.setup.provider_api_key_present", return_value=True), \
              patch("api.onboarding.setup.get_active_hermes_home", return_value=pathlib.Path("/tmp")):
@@ -219,7 +219,7 @@ class TestApplyOnboardingSkipGuard(unittest.TestCase):
              patch("api.onboarding.setup.write_env_values"), \
              patch("api.onboarding.setup.reload_config"), \
              patch("api.onboarding.setup.get_onboarding_status", return_value={"completed": True}), \
-             patch("api.onboarding.setup._get_config_path", return_value=pathlib.Path("/tmp/fake.yaml")), \
+             patch("api.onboarding.setup.get_config_path", return_value=pathlib.Path("/tmp/fake.yaml")), \
              patch("api.onboarding.setup.load_env_file", return_value={"OPENAI_API_KEY": "existing"}), \
              patch("api.onboarding.setup.provider_api_key_present", return_value=True), \
              patch("api.onboarding.setup.get_active_hermes_home", return_value=pathlib.Path("/tmp")):

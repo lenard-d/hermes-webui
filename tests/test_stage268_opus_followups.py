@@ -8,6 +8,7 @@ Pin the three SHOULD-FIX items applied during stage-268 review:
 """
 import re
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -56,6 +57,7 @@ def duplicated_legacy_session(tmp_path_factory):
     """Duplicate a legacy null-title record through the actual route owner."""
     import api.routes as route_facade
     from api.http.routes import session_creation_mutations
+    from api.sessions import foreign_session_access
 
     source = route_facade.Session(
         session_id="stage268-source",
@@ -99,13 +101,21 @@ def duplicated_legacy_session(tmp_path_factory):
         bad=bad_response,
     )
 
-    result = session_creation_mutations.handle_post(
-        object(),
-        SimpleNamespace(path="/api/session/duplicate"),
-        {"session_id": source.session_id},
-        None,
-        ctx,
-    )
+    with (
+        patch.object(foreign_session_access, "is_view_only", return_value=False),
+        patch.object(
+            foreign_session_access,
+            "publish",
+            side_effect=publish_materialized,
+        ),
+    ):
+        result = session_creation_mutations.handle_post(
+            object(),
+            SimpleNamespace(path="/api/session/duplicate"),
+            {"session_id": source.session_id},
+            None,
+            ctx,
+        )
 
     assert result is True
     assert errors == []

@@ -70,8 +70,8 @@ def _isolate_onboarding_writes(monkeypatch, tmp_path):
     monkeypatch.setattr(setup, "get_active_hermes_home", lambda: tmp_path)
     monkeypatch.setattr(status, "get_active_hermes_home", lambda: tmp_path)
     cfg_path = tmp_path / "config.yaml"
-    monkeypatch.setattr(setup, "_get_config_path", lambda: cfg_path)
-    monkeypatch.setattr(status, "_get_config_path", lambda: cfg_path)
+    monkeypatch.setattr(setup, "get_config_path", lambda: cfg_path)
+    monkeypatch.setattr(status, "get_config_path", lambda: cfg_path)
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     monkeypatch.delenv("HERMES_WEBUI_SKIP_ONBOARDING", raising=False)
     for var in (

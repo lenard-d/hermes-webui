@@ -49,10 +49,11 @@ def test_duplicate_session_handles_empty_session_id(cleanup_test_sessions):
 
 
 @pytest.fixture
-def duplicate_owner_case(tmp_path):
+def duplicate_owner_case(tmp_path, monkeypatch):
     """Run the dedicated HTTP owner with a rich source session."""
     import api.routes as route_facade
     from api.http.routes import session_creation_mutations
+    from api.sessions import foreign_session_access
 
     source = route_facade.Session(
         session_id="source-session",
@@ -101,11 +102,6 @@ def duplicate_owner_case(tmp_path):
     ctx = dict(vars(route_facade))
     ctx.update(
         Session=SessionForDuplicate,
-        _session_is_subagent_view_only=lambda _session_id: False,
-        _publish_materialized_session=lambda session, *, persist: (
-            published.append((session, persist)),
-            timeline.append(("materialize", persist)),
-        ),
         publish_session_list_changed=lambda reason, **details: timeline.append(
             ("event", reason, details)
         ),
@@ -114,6 +110,15 @@ def duplicate_owner_case(tmp_path):
             timeline.append(("response", status)),
             True,
         )[-1],
+    )
+    monkeypatch.setattr(foreign_session_access, "is_view_only", lambda _sid: False)
+    monkeypatch.setattr(
+        foreign_session_access,
+        "publish",
+        lambda session, *, persist: (
+            published.append((session, persist)),
+            timeline.append(("materialize", persist)),
+        ),
     )
     result = session_creation_mutations.handle_post(
         object(),

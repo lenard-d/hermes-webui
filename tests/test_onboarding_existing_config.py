@@ -71,7 +71,7 @@ def _make_status(
         mock.patch.object(mod, "load_workspaces", return_value=[]),
         mock.patch.object(mod, "get_last_workspace", return_value=None),
         mock.patch.object(mod, "get_available_models", return_value=[]),
-        mock.patch.object(mod, "_get_config_path", return_value=fake_config_path),
+        mock.patch.object(mod, "get_config_path", return_value=fake_config_path),
         mock.patch.object(pathlib.Path, "exists") as mock_exists,
     ):
         # Make Path(_get_config_path()).exists() return config_exists
@@ -151,7 +151,7 @@ class TestOnboardingGate:
             mock.patch.object(mod, "load_workspaces", return_value=[]),
             mock.patch.object(mod, "get_last_workspace", return_value=None),
             mock.patch.object(mod, "get_available_models", return_value=[]),
-            mock.patch.object(mod, "_get_config_path", return_value=fake_config_path),
+            mock.patch.object(mod, "get_config_path", return_value=fake_config_path),
             mock.patch.object(pathlib.Path, "exists", return_value=True),
             mock.patch.object(
                 mod, "save_settings", side_effect=OSError("read-only filesystem")
@@ -176,7 +176,7 @@ class TestApplyOnboardingSetupGuard:
         fake_config_path = tmp_path / "_test_config.yaml"
 
         with (
-            mock.patch.object(mod, "_get_config_path", return_value=fake_config_path),
+            mock.patch.object(mod, "get_config_path", return_value=fake_config_path),
             mock.patch.object(pathlib.Path, "exists", return_value=config_yaml_exists),
         ):
             return mod.apply_onboarding_setup(body)
@@ -243,7 +243,7 @@ class TestApplyOnboardingSetupGuard:
                 # Redirect both config path and hermes home into temp dirs so the
                 # test never touches the real ~/.hermes/.env.
                 with (
-                    mock.patch.object(mod, "_get_config_path", return_value=fake_config_path),
+                    mock.patch.object(mod, "get_config_path", return_value=fake_config_path),
                     mock.patch.object(mod, "get_active_hermes_home", return_value=tmp_home_path),
                 ):
                     result = mod.apply_onboarding_setup(

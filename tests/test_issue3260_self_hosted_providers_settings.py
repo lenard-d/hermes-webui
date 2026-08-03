@@ -153,8 +153,8 @@ def isolated_self_hosted_env(monkeypatch, tmp_path):
     config._cfg_mtime = 0.0
     monkeypatch.setattr(profiles, "get_active_hermes_home", lambda: tmp_path)
     monkeypatch.setattr(onboarding, "get_active_hermes_home", lambda: tmp_path)
-    monkeypatch.setattr(onboarding, "_get_config_path", lambda: fake_config_path)
-    monkeypatch.setattr(config, "_get_config_path", lambda: fake_config_path)
+    monkeypatch.setattr(onboarding, "get_config_path", lambda: fake_config_path)
+    monkeypatch.setattr(config, "get_config_path", lambda: fake_config_path)
     yield tmp_path, fake_config_path
     config.cfg.clear()
     config.cfg.update(old_cfg)
